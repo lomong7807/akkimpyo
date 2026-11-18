@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: account-book
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/accountbook}
+    username: ${DB_USERNAME:accountbook}
+    password: ${DB_PASSWORD:accountbook}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate

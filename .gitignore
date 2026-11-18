@@ -1,1 +1,7 @@
 .DS_Store
+server/build/
+server/.gradle/
+web/node_modules/
+web/dist/
+.idea/
+*.iml

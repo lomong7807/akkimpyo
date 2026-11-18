@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: accountbook
+      POSTGRES_USER: accountbook
+      POSTGRES_PASSWORD: accountbook
+    ports:
+      # 호스트의 5432는 다른 PostgreSQL이 쓰고 있어 5433으로 연다.
+      - "5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+volumes:
+  db-data:
