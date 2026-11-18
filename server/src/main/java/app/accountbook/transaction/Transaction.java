@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -78,7 +79,7 @@ public class Transaction extends BaseEntity {
         this.ledgerId = ledgerId;
         this.type = type;
         this.occurredOn = occurredOn;
-        this.occurredTime = occurredTime;
+        this.occurredTime = storableTime(occurredTime);
         this.payee = payee;
         this.memo = memo;
         this.status = TransactionStatus.POSTED;
@@ -94,14 +95,53 @@ public class Transaction extends BaseEntity {
         return new Transaction(id, ledgerId, type, occurredOn, occurredTime, payee, memo, createdBy, paidBy);
     }
 
+    /**
+     * 저장소가 실제로 보존하는 정밀도(밀리초)로 자른 시각. Hibernate는 LocalTime을 java.sql.Time으로 넘겨
+     * 밀리초 아래를 버린다. 메모리 값과 저장 값이 달라 재전송 비교가 어긋나지 않도록 미리 같은 값으로 맞춘다.
+     */
+    public static LocalTime storableTime(LocalTime time) {
+        return time == null ? null : time.truncatedTo(ChronoUnit.MILLIS);
+    }
+
     public Transaction addLine(UUID accountId, UUID categoryId, long amount) {
         lines.add(TransactionLine.of(this, accountId, categoryId, amount));
         return this;
     }
 
+    /** 라인을 모두 지운다(orphanRemoval). 수정은 라인을 통째로 교체한다. */
+    public void clearLines() {
+        lines.clear();
+    }
+
+    public void changeDetails(LocalDate occurredOn, LocalTime occurredTime, String payee, String memo,
+                              UUID paidBy) {
+        this.occurredOn = occurredOn;
+        this.occurredTime = storableTime(occurredTime);
+        this.payee = payee;
+        this.memo = memo;
+        this.paidBy = paidBy;
+    }
+
+    public void cancel() {
+        this.status = TransactionStatus.CANCELED;
+    }
+
     /** 소프트 삭제. 라인은 그대로 남는다. */
     public void markDeleted(Instant at) {
         this.deletedAt = at;
+    }
+
+    public void restore() {
+        this.deletedAt = null;
+    }
+
+    /**
+     * 조건부 UPDATE로 DB의 version을 올린 뒤 메모리 값을 맞춘다.
+     * 맞추지 않으면 flush 때 옛 version이 다시 기록된다.
+     */
+    void applyVersion(long version, Instant updatedAt) {
+        this.version = version;
+        this.updatedAt = updatedAt;
     }
 
     public UUID getLedgerId() {
