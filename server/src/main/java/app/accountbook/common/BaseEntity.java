@@ -4,7 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PostLoad;
-import jakarta.persistence.PostPersist;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Transient;
 import java.time.Instant;
 import java.util.Objects;
@@ -55,7 +55,11 @@ public abstract class BaseEntity implements Persistable<UUID> {
         return newEntity;
     }
 
-    @PostPersist
+    /**
+     * persist 시점(@PrePersist)에 새 엔터티 표시를 지운다. @PostPersist는 INSERT가 실행되는 flush 때까지 미뤄져서,
+     * 그 사이 Spring Data의 delete()가 아직 새 엔터티로 보고 아무것도 하지 않는 문제가 생긴다.
+     */
+    @PrePersist
     @PostLoad
     void markNotNew() {
         newEntity = false;

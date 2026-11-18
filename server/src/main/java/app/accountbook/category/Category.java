@@ -52,6 +52,10 @@ public class Category extends BaseEntity {
         return new Category(ledgerId, kind, UNCATEGORIZED_NAME, null, true);
     }
 
+    public void rename(String name) {
+        this.name = name;
+    }
+
     public UUID getLedgerId() {
         return ledgerId;
     }

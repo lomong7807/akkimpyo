@@ -57,6 +57,13 @@ public class Account extends BaseEntity {
         return new Account(ledgerId, name, type, openingBalance, openingDate);
     }
 
+    public void update(String name, AccountType type, long openingBalance, LocalDate openingDate) {
+        this.name = name;
+        this.type = type;
+        this.openingBalance = openingBalance;
+        this.openingDate = openingDate;
+    }
+
     public UUID getLedgerId() {
         return ledgerId;
     }

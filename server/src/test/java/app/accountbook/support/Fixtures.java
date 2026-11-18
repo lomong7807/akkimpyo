@@ -3,8 +3,12 @@ package app.accountbook.support;
 import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRole;
+import app.accountbook.transaction.Transaction;
+import app.accountbook.transaction.TransactionRepository;
+import app.accountbook.transaction.TransactionType;
 import app.accountbook.user.User;
 import app.accountbook.user.UserService;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.boot.test.context.TestComponent;
 
@@ -14,10 +18,13 @@ public class Fixtures {
 
     private final UserService userService;
     private final LedgerMemberRepository memberRepository;
+    private final TransactionRepository transactionRepository;
 
-    Fixtures(UserService userService, LedgerMemberRepository memberRepository) {
+    Fixtures(UserService userService, LedgerMemberRepository memberRepository,
+             TransactionRepository transactionRepository) {
         this.userService = userService;
         this.memberRepository = memberRepository;
+        this.transactionRepository = transactionRepository;
     }
 
     /** 가입과 같다: 사용자, 개인 장부, OWNER 구성원, 기본 카테고리가 함께 생긴다. */
@@ -37,5 +44,16 @@ public class Fixtures {
     /** 초대 기능(2단계) 없이 장부에 구성원을 직접 넣는다. */
     public void addMember(UUID ledgerId, User user, LedgerRole role) {
         memberRepository.save(LedgerMember.of(ledgerId, user.getId(), role));
+    }
+
+    /**
+     * 거래 서비스를 거치지 않고 리포지토리로 지출 1건(라인 amount = -amount)을 저장한다.
+     * 계좌·카테고리 삭제 제한처럼 "라인이 있다"는 상태만 필요한 테스트용이다.
+     */
+    public Transaction storedExpense(User actor, UUID ledgerId, UUID accountId, UUID categoryId, long amount) {
+        Transaction tx = Transaction.of(UUID.randomUUID(), ledgerId, TransactionType.EXPENSE,
+                LocalDate.of(2026, 11, 18), null, null, null, actor.getId(), actor.getId());
+        tx.addLine(accountId, categoryId, -amount);
+        return transactionRepository.save(tx);
     }
 }

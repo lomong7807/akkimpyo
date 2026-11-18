@@ -99,6 +99,11 @@ public class Transaction extends BaseEntity {
         return this;
     }
 
+    /** 소프트 삭제. 라인은 그대로 남는다. */
+    public void markDeleted(Instant at) {
+        this.deletedAt = at;
+    }
+
     public UUID getLedgerId() {
         return ledgerId;
     }
