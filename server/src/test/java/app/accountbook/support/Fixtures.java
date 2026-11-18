@@ -1,11 +1,18 @@
 package app.accountbook.support;
 
+import app.accountbook.account.Account;
+import app.accountbook.account.AccountCommand;
+import app.accountbook.account.AccountService;
+import app.accountbook.account.AccountType;
 import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRole;
 import app.accountbook.transaction.Transaction;
+import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionRepository;
+import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionType;
+import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.User;
 import app.accountbook.user.UserService;
 import java.time.LocalDate;
@@ -16,13 +23,19 @@ import org.springframework.boot.test.context.TestComponent;
 @TestComponent
 public class Fixtures {
 
+    private static final String DEVICE = "test-device";
+
     private final UserService userService;
+    private final AccountService accountService;
+    private final TransactionService transactionService;
     private final LedgerMemberRepository memberRepository;
     private final TransactionRepository transactionRepository;
 
-    Fixtures(UserService userService, LedgerMemberRepository memberRepository,
-             TransactionRepository transactionRepository) {
+    Fixtures(UserService userService, AccountService accountService, TransactionService transactionService,
+             LedgerMemberRepository memberRepository, TransactionRepository transactionRepository) {
         this.userService = userService;
+        this.accountService = accountService;
+        this.transactionService = transactionService;
         this.memberRepository = memberRepository;
         this.transactionRepository = transactionRepository;
     }
@@ -55,5 +68,51 @@ public class Fixtures {
                 LocalDate.of(2026, 11, 18), null, null, null, actor.getId(), actor.getId());
         tx.addLine(accountId, categoryId, -amount);
         return transactionRepository.save(tx);
+    }
+
+    public Account account(User actor, UUID ledgerId, String name, AccountType type, long openingBalance,
+                           LocalDate openingDate) {
+        return accountService.create(actor.getId(), ledgerId,
+                new AccountCommand(name, type, openingBalance, openingDate));
+    }
+
+    /** 지출. categoryId가 null이면 미분류. */
+    public TransactionView expense(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
+                                   long amount) {
+        return entry(actor, ledgerId, TransactionType.EXPENSE, false, accountId, categoryId, on, amount);
+    }
+
+    /** 환불: 지출 카테고리에 양수 라인. */
+    public TransactionView refund(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
+                                  long amount) {
+        return entry(actor, ledgerId, TransactionType.EXPENSE, true, accountId, categoryId, on, amount);
+    }
+
+    /** 수입. categoryId가 null이면 미분류. */
+    public TransactionView income(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
+                                  long amount) {
+        return entry(actor, ledgerId, TransactionType.INCOME, false, accountId, categoryId, on, amount);
+    }
+
+    public TransactionView transfer(User actor, UUID ledgerId, UUID fromAccountId, UUID toAccountId, LocalDate on,
+                                    long amount) {
+        return transactionService.create(actor.getId(), ledgerId,
+                new TransactionCommand.Transfer(UUID.randomUUID(), on, null, fromAccountId, toAccountId, amount,
+                        null), DEVICE);
+    }
+
+    public TransactionView cancel(User actor, TransactionView tx) {
+        return transactionService.cancel(actor.getId(), tx.id(), tx.version(), DEVICE);
+    }
+
+    public TransactionView delete(User actor, TransactionView tx) {
+        return transactionService.delete(actor.getId(), tx.id(), tx.version(), DEVICE);
+    }
+
+    private TransactionView entry(User actor, UUID ledgerId, TransactionType type, boolean refund, UUID accountId,
+                                  UUID categoryId, LocalDate on, long amount) {
+        return transactionService.create(actor.getId(), ledgerId,
+                new TransactionCommand.Entry(UUID.randomUUID(), type, on, null, accountId, categoryId, amount,
+                        refund, null, null, null), DEVICE);
     }
 }
