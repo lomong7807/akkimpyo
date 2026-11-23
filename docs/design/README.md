@@ -24,6 +24,7 @@
 3. 목업(`docs/planning/mockup/index.html`).
 
 - 화면설계서와 이 폴더가 어긋나면 화면설계서가 맞다. 어긋난 곳은 어느 쪽도 고치지 않고 owner에게 질문한다.
+- 예외: 설계서 안에서 서로 어긋난 곳을 owner가 한쪽으로 정했으면 그 결정을 따른다. 지금은 전체 화면 입력의 화면 이름 자리 하나다(결정 9). 설계서 00-common 5.5는 수정이 필요하다([components.md](components.md) 10절 C-9).
 - 목업과 화면설계서가 다르면 화면설계서 값을 따른다(owner 결정 1). 목업 CSS를 옮겨 쓰지 않는다. 다른 곳은 [mockup-differences.md](mockup-differences.md)에 모았다.
 - 각 문서 끝의 "확인 필요"는 이 폴더를 쓰며 설계서에서 정의를 찾지 못했거나 문서끼리 어긋난 곳이다. owner가 답하기 전에는 구현에서 임의로 정하지 않는다.
 
@@ -32,11 +33,14 @@
 | # | 결정 | 반영한 곳 |
 |---|------|-----------|
 | 1 | 목업과 화면설계서가 다른 곳은 화면설계서 값이 우선이다 | [mockup-differences.md](mockup-differences.md) |
-| 2 | 목업에만 있던 색 2개를 토큰으로 추가한다. `color-accent-weak`(밝은 `#E7F3EE`, 어두운 `#16322A`)는 고른 상태의 바탕이다. 확정된 쓰임은 고르는 칩의 고른 상태 바탕이다(설계서 5.11의 강조 테두리, 강조 글자, 체크 아이콘은 그대로 두고 바탕만 더한다). 그 밖의 쓰임은 화면별 지침에서 owner 확인 뒤 추가한다. `color-press`(밝은 `#EFF1F3`, 어두운 `#21262A`)는 누를 수 있는 줄(목록 줄, 메뉴 줄, 시트의 고르는 줄)을 누를 때와 마우스를 올렸을 때의 바탕, 아이콘 버튼에 마우스를 올렸을 때의 바탕이다. 목업의 트랙 색(`#E9ECEF` / `#262C31`)은 버리고 `color-border`를 쓴다 | [tokens.md](tokens.md) 1.2, 1.3, [components.md](components.md) |
+| 2 | 목업에만 있던 색 2개를 토큰으로 추가한다. `color-accent-weak`(밝은 `#E7F3EE`, 어두운 `#16322A`)는 고른 상태의 바탕이다. 확정된 쓰임은 고르는 칩의 고른 상태 바탕이다(설계서 5.11의 강조 테두리, 강조 글자, 체크 아이콘은 그대로 두고 바탕만 더한다). 그 밖의 쓰임은 화면별 지침에서 owner 확인 뒤 추가한다. `color-press`(밝은 `#EFF1F3`, 어두운 `#21262A`)는 누를 수 있는 줄(목록 줄, 메뉴 줄, 시트의 고르는 줄)을 누를 때와 마우스를 올렸을 때의 바탕, 아이콘 버튼에 마우스를 올렸을 때의 바탕이다. 목업의 트랙 색(`#E9ECEF` / `#262C31`)은 버리고 `color-border`를 쓴다. 결정 7로 유형 고르기의 고른 칸 바탕이 `color-accent-weak`의 두 번째 확정 쓰임이 되었다 | [tokens.md](tokens.md) 1.2, 1.3, [components.md](components.md) |
 | 3 | 글자 굵기 500은 쓰지 않는다(400, 600, 700만). 간격은 설계서 척도 4, 8, 12, 16, 24, 32, 40px만 쓴다. 척도에 없는 px 값은 위반이다. 예외로 허용하는 것은 1px 선, 0, 그리고 설계서가 요소 크기로 정한 수치(높이 48px 등)다 | [tokens.md](tokens.md) 2절, 3절 |
 | 4 | 빠른 입력 버튼은 모서리 10px이다(원형이 아니다). 달력의 고른 날도 설계서대로 10px이다 | [tokens.md](tokens.md) 4절, [components.md](components.md) 2절, 4절 |
 | 5 | 넓은 화면(1024px 이상)은 목업이 없다. 설계서 2.5의 수치로 지침을 쓴다. frontend가 넓은 화면을 처음 만들면 designer가 1280px 스크린샷으로 검토해 owner에게 보인다 | [tokens.md](tokens.md) 7절 |
 | 6 | 입력칸과 보조 버튼의 테두리는 `color-border-strong`이다(면과의 대비 밝은 3.48, 어두운 3.30. 3:1 이상) | [tokens.md](tokens.md) 1.2, [components.md](components.md) 3절, 4절 |
+| 7 | 유형 고르기(설계서의 "세 칸 고르기", "두 칸 고르기". D-04의 지출·수입·이체 등)의 모양은 칸을 나눈 상자다. 새 값 없이 기존 토큰만 쓴다. 상자는 높이 48px(입력칸과 같음), 1px `color-border-strong` 테두리, 모서리 10px, `color-surface` 바탕이고 칸은 같은 폭이다. 고른 칸은 `color-accent-weak` 바탕, `color-accent` 글자, `text-body-strong`(16px, 600)이고, 고르지 않은 칸은 `color-text-secondary` 글자, `text-body`(16px, 400)다. 색만으로 구분하지 않도록 굵기 차이와 `aria-checked`를 함께 쓴다(`role="radiogroup"`, 칸은 `role="radio"`). 누르는 영역은 칸마다 44px 이상, 키보드 초점은 설계서 2.6을 따르고, 동작과 비활성 조건은 화면별 설계서(02 D-04 (2) 등)를 따른다. `color-accent-weak`의 두 번째 확정 쓰임이다 | [tokens.md](tokens.md) 1.2, [components.md](components.md) 4절, 9절, 10절 C-1 |
+| 8 | D-04 (3) 금액 칸의 "20px 굵게"는 `text-title`(20px, 700, 28px)을 그대로 쓴다. 새 글자 단계는 만들지 않는다. D-06 (2)의 같은 표현도 같다 | [tokens.md](tokens.md) 2절, [components.md](components.md) 4절, 9절, 10절 C-2 |
+| 9 | 전체 화면 입력의 화면 이름은 가운데에 둔다(02의 D-04 (1), F-02 (1)과 목업이 맞다). 00-common 5.5의 "X 오른쪽"은 설계서 쪽을 고쳐야 할 곳이다 | [components.md](components.md) 6절, 8절, 10절 C-6, C-9, [mockup-differences.md](mockup-differences.md) 10번 |
 
 ## 5. 구현 방식 (frontend와 합의)
 
