@@ -41,7 +41,7 @@
 13. 마지막으로 정상이던 커밋 또는 PR (알 때만. REGRESSION이면 필수)
 14. 확인 구분(확인/추정/미확인)과 찾은 경로(탐색 세션, 수용 기준 검증, 회귀 점검)
 
-### 심각도 정의 (triage 초안, owner 승인 전)
+### 심각도 정의 (owner 승인 2026-11-24)
 
 | 심각도 | 정의 |
 |---|---|
@@ -50,4 +50,4 @@
 | S3 보통 | 우회가 있거나 부가 기능이다. |
 | S4 낮음 | 문구와 보기. |
 
-영역, 심각도, 우선순위 라벨 이름은 triage가 owner 승인을 받은 뒤 확정한다.
+라벨 이름(owner 승인 2026-11-24): 영역은 server, web, security, db, infra, design, planning, architecture, perf, test. 심각도는 S1~S4. 우선순위는 P0~P3. 제목의 [영역]은 이 영역 이름으로 쓴다. 라벨 기준과 이슈 양식은 triage의 문서(docs/triage/README.md, .github/ISSUE_TEMPLATE/bug.yml, 준비 중)가 기준이고 이 문서와 다르면 그쪽을 따른다.
