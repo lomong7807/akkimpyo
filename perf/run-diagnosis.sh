@@ -29,18 +29,29 @@ INDEX_OLD="CREATE INDEX ix_transaction_ledger_occurred_on ON transaction (ledger
 # 컨테이너가 블록 장치에서 실제로 읽은 바이트(누적). 실행 사이에 넣어 OS 캐시 읽기와 디스크 읽기를 가른다.
 IO_MARK="SELECT 'io ' || (regexp_match(pg_read_file('/sys/fs/cgroup/io.stat'), 'rbytes=([0-9]+)'))[1];"
 
-COMPOSE_FILES=(-f compose.yaml -f compose.perf.yaml)
+COMPOSE_FILES=(-f compose.yaml -f compose.perf.yaml -f perf/compose.diag.yaml)
 dc() { docker compose -p akkimpyo-perf "${COMPOSE_FILES[@]}" "$@"; }
 perfsql() { dc exec -T db psql -X -q -v ON_ERROR_STOP=1 -U accountbook "$@"; }
 sql() { local db=$1; shift; perfsql -At -F ' | ' -d "$db" "$@" < /dev/null; }
 
 load1() { uptime | sed 's/.*load averages*: *//' | awk '{print $1}' | tr -d ,; }
 mark() { printf '%s\t%s\t%s\n' "$(date '+%F %T')" "$(load1)" "$*" | tee -a "$OUT/timeline.tsv"; }
+# 컨테이너의 메모리 사용. file은 페이지 캐시(shmem 포함), shmem은 shared_buffers 등 공유 메모리다.
+mem() {
+  printf '%s\t%s\t%s\n' "$(date '+%F %T')" "$*" "$(dc exec -T db bash -c 'egrep "^(anon|file|shmem|workingset_refault_file) " /sys/fs/cgroup/memory.stat | tr "\n" " "; echo -n "current $(cat /sys/fs/cgroup/memory.current)"' < /dev/null)" >> "$OUT/memstat.tsv"
+}
+# PostgreSQL만 재시작한다. 컨테이너와 cgroup은 남는다(compose.diag.yaml이 셸로 감쌌다).
+pg_restart() {
+  # shellcheck disable=SC2016
+  dc exec -T db bash -c 'gosu postgres pg_ctl -D "$PGDATA" -m fast -w -t 120 -l /tmp/pg_restart.log restart' < /dev/null > /dev/null
+  wait_ready
+}
 wait_ready() { until dc exec -T db pg_isready -q -h localhost -U accountbook -d accountbook < /dev/null; do sleep 1; done; }
 
 # 단계가 시작될 때 그때의 조건을 남긴다.
 step() {
   # docker ps는 Docker Desktop의 Kubernetes 컨테이너를 숨긴다. docker info의 수에는 들어 있다.
+  mem "$* 시작"
   mark "== $* 시작. 다른 컨테이너(docker ps): [$(docker ps --format '{{.Names}}' | grep -v '^akkimpyo-perf' | tr '\n' ' ' || true)], 실행 중 전체(docker info): $(docker info --format '{{.ContainersRunning}}')"
 }
 
@@ -64,21 +75,28 @@ run10() {
 cells() {
   local dir=$1 db=$2 prelude=$3 file ledger mode
   shift 3
+  fresh
   for file in "$@"; do
     for ledger in "$BIG" "$NORMAL"; do
       for mode in lit gen; do run10 "$dir" "$db" "$file" "$ledger" "$mode" "$prelude"; done
     done
   done
+  mem "$dir $db 끝"
 }
 
 # 측정용 DB 파일만 OS 페이지 캐시에서 내린다(posix_fadvise DONTNEED). VM 전체 캐시는 비우지 않는다.
+# PostgreSQL을 재시작(종료 체크포인트)한 뒤라 더러운 페이지가 없다.
 evict_files() {
   # shellcheck disable=SC2016
-  dc exec -T db bash -c 'sync; find "$PGDATA/base" "$PGDATA/global" -type f -exec dd if={} iflag=nocache count=0 status=none \;' < /dev/null
+  dc exec -T db bash -c 'find "$PGDATA/base" "$PGDATA/global" -type f -exec dd if={} iflag=nocache count=0 status=none \;' < /dev/null
 }
 
-# cold <결과 폴더> <db> <쿼리 파일> <장부> <restart|evict>: 첫 실행을 세 번 되풀이한다.
-# 매번 같은 쿼리를 세 번 돌려 OS 캐시에 올린 뒤 PostgreSQL을 재시작한다. evict면 파일 캐시까지 내린다.
+# 측정을 시작하기 전의 상태를 맞춘다: PostgreSQL 재시작 + DB 파일의 OS 캐시를 내림.
+# 뒤에 세 번 버리고 재는 동안 이 컨테이너의 메모리 한도 안에서만 캐시가 쌓인다.
+fresh() { pg_restart; evict_files; }
+
+# cold <결과 폴더> <db> <쿼리 파일> <장부> <pgrestart|evict>: 첫 실행을 세 번 되풀이한다.
+# 매번 같은 쿼리를 세 번 돌려 OS 캐시에 올린 뒤 PostgreSQL만 재시작한다. evict면 DB 파일의 OS 캐시까지 내린다.
 cold() {
   local dir=$1 db=$2 file=$3 ledger=$4 kind=$5 name rep out
   name=$(basename "$file" .sql)
@@ -86,8 +104,7 @@ cold() {
   for rep in 1 2 3; do
     out="$OUT/$dir/$db/$name.$ledger.$kind.$rep.txt"
     cat "$file" "$file" "$file" | perfsql -At -d "$db" -v ledger_no="$ledger" > /dev/null
-    dc restart db > /dev/null 2>&1
-    wait_ready
+    pg_restart
     if [ "$kind" = evict ]; then evict_files; fi
     mark "$dir $db $name $ledger $kind $rep"
     { printf 'SET track_io_timing = on;\n%s\n' "$IO_MARK"; cat "$file"; printf '%s\n' "$IO_MARK"; } \
@@ -175,32 +192,33 @@ do_e1() {
   for db in "${DBS[@]}"; do cells e1 "$db" "SET track_io_timing = on;" "$BALANCES" "$BALANCE"; done
 }
 
-# (가) restart: PostgreSQL만 재시작. (나)의 VM 전체 캐시 비우기는 하지 않는다.
-# evict: 재시작한 뒤 측정용 DB 파일만 OS 캐시에서 내린다.
+# (가) pgrestart: PostgreSQL만 재시작(같은 컨테이너, 같은 cgroup). (나)의 VM 전체 캐시 비우기는 하지 않는다.
+# evict: (가)처럼 재시작한 뒤 측정용 DB 파일만 OS 캐시에서 내린다.
 do_e2() {
   local db kind
   step e2
-  for kind in restart evict; do
-    for db in "${DBS[@]}"; do cold_cells e2 "$db" "$kind" "$BALANCES" "$BALANCE"; done
+  for kind in pgrestart evict; do
+    for db in "${DBS[@]}"; do
+      fresh
+      cold_cells e2 "$db" "$kind" "$BALANCES" "$BALANCE"
+    done
   done
 }
 
 do_e3() {
   local db
   step e3
-  COMPOSE_FILES+=(-f perf/compose.big-cache.yaml)
+  export PG_SHARED_BUFFERS=2GB PG_MEM_LIMIT=4g
   dc up -d
   wait_ready
   facts e3.settings.txt postgres "SELECT name, setting, unit FROM pg_settings WHERE name IN ('shared_buffers', 'effective_cache_size')"
   for db in "${DBS[@]}"; do
-    # 앞 DB의 블록이 남아 자리를 다투지 않게 비우고 시작한다.
-    dc restart db > /dev/null 2>&1
-    wait_ready
+    # 앞 DB의 블록이 남아 자리를 다투지 않게 비우고 시작한다(cells가 fresh를 한다).
     cells e3 "$db" "" "$BALANCES" "$BALANCE"
     cells e3-io "$db" "SET track_io_timing = on;" "$BALANCES" "$BALANCE"
   done
   docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' akkimpyo-perf-db-1 > "$OUT/e3.docker-stats.txt"
-  COMPOSE_FILES=(-f compose.yaml -f compose.perf.yaml)
+  unset PG_SHARED_BUFFERS PG_MEM_LIMIT
   dc up -d
   wait_ready
 }
@@ -224,6 +242,7 @@ do_e4() {
   local db file sequence first name
   step e4
   for db in "${DBS[@]}"; do
+    fresh
     mkdir -p "$OUT/e4/$db"
     for file in "$BALANCES" "$BALANCE" "$MONTHLY" "$TRASH"; do
       name=$(basename "$file" .sql)
@@ -354,7 +373,7 @@ SQL
     after_index "$copy"
     facts "e7.sizes.$db.txt" "$copy" "SELECT 'A와 B를 만든 뒤' AS state" "$SIZES"
     cells e7/4-query-A-B "$copy" "" "$C_BALANCES" "$C_BALANCE"
-    cold_cells e7/4-query-A-B-cold "$copy" restart "$C_BALANCES" "$C_BALANCE"
+    cold_cells e7/4-query-A-B-cold "$copy" pgrestart "$C_BALANCES" "$C_BALANCE"
 
     # 큰 장부 거래의 약 1%를 고친 뒤 VACUUM 없이
     facts "e7.update.$db.txt" "$copy" \
@@ -393,6 +412,7 @@ for arg in "$@"; do
     base) do_base base ;;
     base-again) do_base base-again ;;
     e1 | e2 | e3 | e4 | e5 | e6 | e7) "do_$arg" ;;
+    fresh) fresh ;;
     sleep-log) do_sleep_log ;;
     down) dc down -v ;;
     *) echo "모르는 단계: $arg" >&2; exit 1 ;;

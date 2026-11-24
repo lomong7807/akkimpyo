@@ -7,6 +7,12 @@
 | [`../compose.perf.yaml`](../compose.perf.yaml) | `compose.yaml`을 덮어써 측정용 DB를 따로 띄운다 |
 | [`seed.sql`](seed.sql) | 시험 데이터를 만든다 |
 | [`queries/`](queries/) | 지금 코드가 보내는 SQL 그대로. `EXPLAIN (ANALYZE, BUFFERS)`로 감싸 돌린다 |
+| [`queries/candidates/`](queries/candidates/) | 후보 쿼리. 앱이 보내는 SQL이 아니다. 7번의 진단 측정만 쓴다 |
+| [`run-diagnosis.sh`](run-diagnosis.sh) | 진단 측정(7번)을 단계별로 돌린다 |
+| [`summarize-diagnosis.mjs`](summarize-diagnosis.mjs) | 진단 측정이 남긴 실행 계획 원문에서 숫자를 뽑는다 |
+| [`insert-cost.sql`](insert-cost.sql) | 거래 1,000건을 넣는 시간(진단 측정 E7) |
+| [`compose.big-cache.yaml`](compose.big-cache.yaml) | `shared_buffers` 2GB, 메모리 4g(진단 측정 E3) |
+| [`PrepareThresholdCheck.java`](PrepareThresholdCheck.java) | pgJDBC가 몇 번째 실행부터 서버 쪽 준비된 문장을 쓰는지 본다(진단 측정 E4) |
 
 > 여기서 얻는 수치는 맥 로컬 Docker에서 DB 실행 시간만 잰 것이다. API 지연도 운영 서버 수치도 아니다.
 
@@ -182,6 +188,44 @@ dc down -v
 
 DB 하나만 다시 만들 때는 `perfsql -d postgres -c "DROP DATABASE perf_l1_12k"` 뒤에 2번부터 한다.
 
+## 7. 진단 측정 (큰 장부 잔액)
+
+큰 장부의 잔액이 느린 원인을 가설별로 재고, dba가 정한 후보(쿼리와 인덱스)를 재는 절차다. 결과는 [2026-11-25 잔액 진단](../docs/perf/results/2026-11-25-balance-diagnosis.md)에 있다. 쿼리를 한 번에 하나씩 10번 돌려 뒤의 7번을 세는 방법은 5번과 같다.
+
+```sh
+OUT=~/akkimpyo-perf-out perf/run-diagnosis.sh up seed base e1 e2 e3 e4 e5 e6 e7 base-again sleep-log
+node perf/summarize-diagnosis.mjs ~/akkimpyo-perf-out
+OUT=~/akkimpyo-perf-out perf/run-diagnosis.sh down
+```
+
+`OUT`은 결과를 둘 폴더다. 레포 밖에 둔다. 단계를 나눠 돌려도 된다(`up`, `seed`가 먼저다). `down`은 측정용 컨테이너와 볼륨을 지운다.
+
+| 단계 | 하는 일 | 바꾸는 것 |
+|---|---|---|
+| `up`, `seed` | 측정용 DB를 띄우고 `perf_mix_50k`, `perf_mix_200k`를 만든다(점검 쿼리까지) | 없음 |
+| `base`, `base-again` | 기준. 처음과 끝에 한 번씩 | 없음 |
+| `e1` | 읽기 시간 | 세션 `track_io_timing=on` |
+| `e2` | 식은 캐시의 첫 실행. `restart`는 PostgreSQL만 재시작, `evict`는 재시작 뒤 측정용 DB 파일만 OS 캐시에서 내린다(`dd iflag=nocache`) | 캐시 상태, 세션 `track_io_timing=on` |
+| `e3` | 캐시 크기. 끝나면 원래 설정으로 다시 띄운다 | `compose.big-cache.yaml` |
+| `e4` | `plan_cache_mode=auto`에서 `PREPARE` 한 번, `EXECUTE` 10번 | 없음(기본값) |
+| `e5` | 인덱스 읽기 비용 | 세션 `random_page_cost=1.1` |
+| `e6` | 통계 대상 수. 사본 DB에서 하고 지운다 | `account_id SET STATISTICS 1000` |
+| `e7` | 후보 쿼리와 인덱스. 사본 DB에서 하고 지운다 | `transaction_line.ledger_id`, 후보 인덱스 A와 B |
+| `sleep-log` | 측정 구간의 절전 기록을 보여 준다(맥) | 없음 |
+
+- 스크립트는 스스로 `caffeinate -dims`를 건다. 시각, load average, 다른 컨테이너는 `OUT/timeline.tsv`에 남는다.
+- 사본 DB는 `CREATE DATABASE ... TEMPLATE ... STRATEGY FILE_COPY`로 만든다. 저장 순서와 통계가 원본과 같다.
+- 실행 사이에 컨테이너의 블록 장치 읽기 바이트(`/sys/fs/cgroup/io.stat`)를 남긴다. `read` 버퍼가 OS 캐시에서 왔는지 블록 장치에서 왔는지 가르는 데 쓴다.
+- VM 전체의 페이지 캐시(`/proc/sys/vm/drop_caches`)는 비우지 않는다. 같은 VM의 다른 컨테이너에 영향을 준다. `docker ps`는 Docker Desktop의 Kubernetes 컨테이너를 숨기므로 `docker info`의 실행 중 개수도 같이 본다.
+- 큰 장부와 보통 장부의 번호는 `BIG`(1001), `NORMAL`(1)로 바꿀 수 있다. `DBS`로 다른 DB 이름을 주면 작은 시험 데이터(`TX_PER_LEDGER`, `BIG_TX`)로 흐름만 확인할 수 있다.
+
+앱과 같은 pgJDBC가 언제 준비된 문장을 쓰는지는 이렇게 본다(JDK 21, 서버 의존성을 한 번 받은 뒤).
+
+```sh
+java -cp "$(find ~/.gradle/caches/modules-2 -name 'postgresql-42.7.11.jar' | head -1)" \
+  perf/PrepareThresholdCheck.java jdbc:postgresql://localhost:5434/perf_mix_50k 1
+```
+
 ## 쿼리 파일을 다시 가져오는 법
 
 SQL은 손으로 쓰지 않았다. 기존 테스트를 SQL 로그를 켜고 돌려 Hibernate가 보낸 문장을 가져왔고, `?`만 psql 변수로 바꿨다. 로그 설정은 환경변수로만 주고 커밋하지 않는다.
@@ -200,6 +244,7 @@ grep -h org.hibernate.SQL server/build/test-results/test/*.xml | sed 's/.*org.hi
 - **이슈 #58**(`transaction_line`에 `ledger_id` 추가)이 머지되면 `seed.sql`의 `transaction_line` INSERT에 `ledger_id`를 넣어야 한다. 안 고치면 NOT NULL 위반으로 멈춘다.
 - Spring Boot 4.2 이전(이슈 #17)이 머지되면 Hibernate 버전이 바뀐다. 쿼리 파일을 다시 가져와 같은지 본다.
 - 쿼리 코드(`BalanceQuery`, `MonthlyStatsQuery`, 리포지토리)가 바뀌면 그 파일을 다시 가져온다.
+- 이슈 #58이 머지되면 `run-diagnosis.sh`의 `e7`에서 `ledger_id`를 손으로 넣는 부분(`add_ledger_id`)을 뺀다. 후보가 채택되거나 버려지면 `queries/candidates/`를 지운다.
 
 ## 확인한 날짜와 환경
 

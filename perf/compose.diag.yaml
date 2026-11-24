@@ -1,0 +1,19 @@
+# 진단 측정용 덮어쓰기(perf/run-diagnosis.sh).
+#   docker compose -p akkimpyo-perf -f compose.yaml -f compose.perf.yaml -f perf/compose.diag.yaml up -d
+#
+# 하는 일은 두 가지다.
+# 1. PostgreSQL을 셸이 감싸 띄운다. pg_ctl로 PostgreSQL만 재시작해도 컨테이너(와 그 cgroup)가 남는다.
+#    컨테이너째 재시작하면 cgroup이 새로 생겨, 이전 컨테이너가 쓴 페이지 캐시가 메모리 한도 밖에 남는다.
+# 2. shared_buffers와 메모리 한도를 환경변수로 바꾼다(E3). 기본값은 compose.perf.yaml과 같다.
+services:
+  db:
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        trap 'gosu postgres pg_ctl -D "$$PGDATA" -m fast -w stop; exit 0' TERM INT
+        docker-entrypoint.sh postgres \
+          -c shared_preload_libraries=pg_stat_statements \
+          -c shared_buffers=${PG_SHARED_BUFFERS:-256MB} &
+        while :; do sleep 3600 & wait $$!; done
+    mem_limit: ${PG_MEM_LIMIT:-1g}
+    memswap_limit: ${PG_MEM_LIMIT:-1g}
