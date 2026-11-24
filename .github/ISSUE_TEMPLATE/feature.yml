@@ -1,0 +1,88 @@
+name: 기능·작업
+description: 만들 기능이나 할 작업을 올린다.
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        - 조각은 마일스톤으로도 건다.
+        - `ready` 라벨은 owner만 붙인다.
+  - type: dropdown
+    id: slice
+    attributes:
+      label: 조각
+      options:
+        - 1A
+        - 1B
+        - 1C
+        - 2단계
+        - 그 밖
+    validations:
+      required: true
+  - type: input
+    id: spec-ids
+    attributes:
+      label: 기능명세 ID
+      description: 기능정의서의 F-ID, P-ID를 적는다.
+      placeholder: "예: P-201, F-201~F-204"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 수용 기준
+      description: "체크 목록(`- [ ]`)으로 쓴다."
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: 범위 밖
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: 크기
+      options:
+        - S
+        - M
+        - L
+    validations:
+      required: true
+  - type: input
+    id: depends-on
+    attributes:
+      label: 선행 이슈
+      description: 번호를 적는다. 없으면 "없음"이라고 적는다.
+      placeholder: "예: #5, #13"
+    validations:
+      required: true
+  - type: textarea
+    id: new-dependencies
+    attributes:
+      label: 새 의존성
+    validations:
+      required: false
+  - type: textarea
+    id: reviewers
+    attributes:
+      label: 검토 담당
+      description: "많아도 두 곳을 적는다. dba, security, architect, designer, devops, perf, qa 중에서 고른다."
+    validations:
+      required: false
+  - type: input
+    id: notify
+    attributes:
+      label: 알림 대상
+    validations:
+      required: false
+  - type: textarea
+    id: decision-source
+    attributes:
+      label: 결정의 출처
+    validations:
+      required: false
