@@ -1,0 +1,28 @@
+# 로컬 성능 측정용 덮어쓰기 파일. compose.yaml과 함께 쓴다. 사용법은 perf/README.md.
+#   docker compose -p akkimpyo-perf -f compose.yaml -f compose.perf.yaml up -d
+#
+# 개발용 DB와 겹치지 않게 프로젝트 이름, 호스트 포트, 볼륨을 모두 따로 둔다.
+# CREATE EXTENSION pg_stat_statements는 여기 넣지 않는다. 측정할 때 손으로 한다.
+
+# -p를 빠뜨려도 개발용 프로젝트(폴더 이름)로 뜨지 않게 이름을 정해 둔다.
+name: akkimpyo-perf
+
+services:
+  db:
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - shared_buffers=256MB
+    # 운영 컨테이너 한도 초안(메모리 1GB)과 같다. CPU 상한은 두지 않는다.
+    mem_limit: 1g
+    # ports는 합쳐지는 값이라 !override가 없으면 개발용 5433도 같이 열린다.
+    ports: !override
+      - "127.0.0.1:5434:5432"
+    # 컨테이너 안 경로가 같으므로 compose.yaml의 db-data 자리를 이 볼륨이 대신한다.
+    volumes:
+      - perf-db-data:/var/lib/postgresql/data
+
+volumes:
+  perf-db-data:
