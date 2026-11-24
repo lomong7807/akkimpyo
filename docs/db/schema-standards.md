@@ -4,7 +4,7 @@ PostgreSQL 17 + Flyway 기준이다. 마이그레이션 규칙은 [migration-sta
 
 ## 1. 타입
 
-- 기록 시각(`created_at`, `updated_at`, `deleted_at` 등)은 `timestamptz`.
+- 기록 시각(`created_at`, `updated_at`, `deleted_at` 등)은 `timestamptz`. 시간대 없는 `timestamp`를 쓰지 않는다.
 - 거래의 날짜와 시각은 `date`와 `time`으로 변환 없이 저장한다(P-202). 시간대를 붙이지 않는다.
 - 문자열은 `text` + `CHECK (char_length(col) BETWEEN a AND b)`. `varchar(n)`, `char(n)`을 쓰지 않는다.
 - 금액은 `bigint` 원 단위 정수. `money`, 부동소수점 금지. 범위는 CHECK로 건다(±9,999,999,999, P-201).
@@ -82,10 +82,10 @@ dba 첫 DB 검토(main `9a31116`, 2026-11-23) 결과다.
 
 ## 7. 스키마 PR 점검표
 
-- [ ] 타입 금지 목록(`varchar(n)`, `char(n)`, `money`, 부동소수점, `serial`, identity, PostgreSQL enum)의 타입이 없다.
+- [ ] 타입 금지 목록(`varchar(n)`, `char(n)`, `money`, 부동소수점, 시간대 없는 `timestamp`, `serial`, identity, PostgreSQL enum)의 타입이 없다.
 - [ ] 새 규칙이 DB 제약으로 걸려 있다.
 - [ ] 제약과 인덱스에 이름이 있다.
 - [ ] 장부에 속한 테이블 사이의 참조는 복합 FK다.
-- [ ] 인덱스는 3컬럼 이하이고 `EXPLAIN (ANALYZE, BUFFERS)`가 첨부돼 있다.
+- [ ] 유니크가 아닌 인덱스는 3컬럼 이하이고, 새 인덱스에는 `EXPLAIN (ANALYZE, BUFFERS)`가 첨부돼 있다.
 - [ ] Java enum과 CHECK 값이 일치한다.
 - [ ] `ddl-auto=validate`를 통과한다.
