@@ -224,7 +224,7 @@ OUT=~/akkimpyo-perf-out perf/run-diagnosis.sh down
 
 ```sh
 java -cp "$(find ~/.gradle/caches/modules-2 -name 'postgresql-42.7.11.jar' | head -1)" \
-  perf/PrepareThresholdCheck.java jdbc:postgresql://localhost:5434/perf_mix_50k 1
+  perf/PrepareThresholdCheck.java jdbc:postgresql://localhost:5434/perf_mix_50k 1001
 ```
 
 ## 쿼리 파일을 다시 가져오는 법
@@ -249,7 +249,7 @@ grep -h org.hibernate.SQL server/build/test-results/test/*.xml | sed 's/.*org.hi
 
 ## 확인한 날짜와 환경
 
-위 명령은 2026-11-24에 아래 환경에서 실행해 확인했다.
+1~6번의 명령은 2026-11-24에, 7번(진단 측정)은 2026-11-25에 아래 환경에서 실행해 확인했다.
 
 - 맥(Apple M5 Pro, 메모리 48GB), macOS 27.0.1, zsh
 - Docker Desktop(Docker 29.9.2, Compose 5.6.1). Docker VM에 CPU 10개, 메모리 약 7.7GB
