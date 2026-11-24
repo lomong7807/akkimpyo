@@ -1,13 +1,17 @@
 -- 성능 측정용 시험 데이터. 명령은 perf/README.md에 있다.
 --
 -- 변수(psql -v 이름=값)
---   ledgers        장부 수                                                      기본 1
---   tx_per_ledger  장부당 거래 수                                               기본 12000
---   start_date     거래 날짜의 시작                                             기본 2016-11-01
---   years          시작 날짜부터 몇 년에 걸칠지                                 기본 10
---   one_account    on이면 모든 거래의 라인 하나가 장부의 첫 계좌에 붙는다.      기본 off
---                  첫 계좌의 라인 수 = tx_per_ledger (잔액 기준선용)
---   seed           난수 씨앗(setseed, -1~1). 같은 변수면 다시 만들어도 같은 값  기본 0.42
+--   ledgers          장부 수                                                      기본 1
+--   tx_per_ledger    장부당 거래 수                                               기본 12000
+--   start_date       거래 날짜의 시작                                             기본 2016-11-01
+--   years            시작 날짜부터 몇 년에 걸칠지                                 기본 10
+--   one_account      on이면 모든 거래의 라인 하나가 장부의 첫 계좌에 붙는다.      기본 off
+--                    첫 계좌의 라인 수 = tx_per_ledger (잔액 기준선용)
+--   big_ledger_tx    0보다 크면 그만큼의 거래를 가진 큰 장부를 하나 더 만든다.    기본 0
+--                    장부 번호는 ledgers + 1. 다른 장부의 값은 바뀌지 않는다
+--   big_one_account  on이면 큰 장부의 모든 거래의 라인 하나가 첫 계좌에 붙는다.   기본 off
+--                    one_account는 큰 장부에 적용되지 않는다
+--   seed             난수 씨앗(setseed, -1~1). 같은 변수면 다시 만들어도 같은 값  기본 0.42
 --
 -- 모두 만든 값이다. 실제 카드 내역, 사람, 가맹점 이름은 쓰지 않는다.
 -- 분포와 비율은 perf/README.md에 적었다.
@@ -39,6 +43,14 @@
 \else
   \set one_account off
 \endif
+\if :{?big_ledger_tx}
+\else
+  \set big_ledger_tx 0
+\endif
+\if :{?big_one_account}
+\else
+  \set big_one_account off
+\endif
 \if :{?seed}
 \else
   \set seed 0.42
@@ -59,6 +71,10 @@ BEGIN;
 
 SELECT setseed(:seed) \g /dev/null
 
+-- 큰 장부까지 센 장부 수와, 보통 장부들의 거래 수
+SELECT :ledgers + CASE WHEN :big_ledger_tx > 0 THEN 1 ELSE 0 END AS all_ledgers,
+       :ledgers::bigint * :tx_per_ledger AS normal_tx \gset
+
 -- 사용자, 장부, OWNER 구성원: 장부마다 1명
 INSERT INTO users (id, email, password_hash, display_name, created_at)
 SELECT md5('perf-user-' || l)::uuid,
@@ -66,14 +82,14 @@ SELECT md5('perf-user-' || l)::uuid,
        'not-a-real-hash',
        '시험 사용자 ' || l,
        :'start_date'::date::timestamp AT TIME ZONE 'Asia/Seoul'
-  FROM generate_series(1, :ledgers) AS l;
+  FROM generate_series(1, :all_ledgers) AS l;
 
 INSERT INTO ledger (id, name, timezone, created_at)
 SELECT md5('perf-ledger-' || l)::uuid,
        '시험 장부 ' || l,
        'Asia/Seoul',
        :'start_date'::date::timestamp AT TIME ZONE 'Asia/Seoul'
-  FROM generate_series(1, :ledgers) AS l;
+  FROM generate_series(1, :all_ledgers) AS l;
 
 INSERT INTO ledger_member (id, ledger_id, user_id, role, created_at)
 SELECT md5('perf-member-' || l)::uuid,
@@ -81,7 +97,7 @@ SELECT md5('perf-member-' || l)::uuid,
        md5('perf-user-' || l)::uuid,
        'OWNER',
        :'start_date'::date::timestamp AT TIME ZONE 'Asia/Seoul'
-  FROM generate_series(1, :ledgers) AS l;
+  FROM generate_series(1, :all_ledgers) AS l;
 
 -- 계좌: 장부마다 5~10개. 기준일은 거래가 시작되는 날이라 모든 거래가 잔액에 들어간다.
 INSERT INTO account (id, ledger_id, name, type, opening_balance, opening_date, currency, created_at)
@@ -93,7 +109,7 @@ SELECT md5('perf-account-' || l || '-' || a)::uuid,
        :'start_date'::date,
        'KRW',
        :'start_date'::date::timestamp AT TIME ZONE 'Asia/Seoul' + a * interval '1 minute'
-  FROM generate_series(1, :ledgers) AS l
+  FROM generate_series(1, :all_ledgers) AS l
  CROSS JOIN LATERAL generate_series(1, 5 + l % 6) AS a;
 
 -- 카테고리: 장부마다 30개.
@@ -108,12 +124,13 @@ SELECT md5('perf-category-' || l || '-' || k.kind || '-' || c)::uuid,
             THEN md5('perf-category-' || l || '-' || k.kind || '-' || (1 + (c - 1) % k.top_count))::uuid END,
        c = 0,
        :'start_date'::date::timestamp AT TIME ZONE 'Asia/Seoul' + c * interval '1 minute'
-  FROM generate_series(1, :ledgers) AS l
+  FROM generate_series(1, :all_ledgers) AS l
  CROSS JOIN (VALUES ('EXPENSE', '지출', 6, 24), ('INCOME', '수입', 2, 4)) AS k(kind, label, top_count, last_no)
  CROSS JOIN LATERAL generate_series(0, k.last_no) AS c;
 
 -- 거래 한 건의 모든 값을 여기서 정한다. 난수는 안쪽 SELECT에서 거래 순서대로 뽑는다.
 -- 장부 순서가 아니라 날짜 순서로 번갈아 만들어, 여러 장부의 거래가 섞여 쌓이는 실제 모양과 맞춘다.
+-- 큰 장부의 거래는 난수를 맨 나중에 뽑고(앞의 값이 바뀌지 않게) 기간 안의 위치(position) 순서로 끼워 넣는다.
 CREATE TEMP TABLE seed_tx ON COMMIT DROP AS
 SELECT b.*,
        CASE WHEN b.is_deleted OR b.is_canceled
@@ -121,6 +138,7 @@ SELECT b.*,
   FROM (
         SELECT d.i,
                d.ledger_no,
+               d.position,
                d.r_later,
                md5('perf-tx-' || d.i)::uuid AS id,
                d.type,
@@ -152,15 +170,23 @@ SELECT b.*,
                             WHEN r.r_type < 0.90 THEN 'INCOME'
                             ELSE 'TRANSFER' END AS type,
                        :'start_date'::date
-                           + floor((r.seq + r.r_day) * r.total_days / :tx_per_ledger)::int AS occurred_on,
+                           + floor((r.seq + r.r_day) * r.total_days / r.ledger_tx)::int AS occurred_on,
                        CASE WHEN r.r_has_time < 0.7
                             THEN time '00:00' + floor(r.r_time * 1440) * interval '1 minute' END AS occurred_time,
-                       CASE WHEN :'one_account'::boolean THEN 1
+                       CASE WHEN CASE WHEN r.is_big THEN :'big_one_account'::boolean
+                                      ELSE :'one_account'::boolean END THEN 1
                             ELSE 1 + floor(power(r.r_account, 1.5) * (5 + r.ledger_no % 6))::int END AS account_no
                   FROM (
                         SELECT g.i,
-                               (g.i % :ledgers)::int + 1 AS ledger_no,
-                               g.i / :ledgers AS seq,
+                               g.i >= :normal_tx AS is_big,
+                               CASE WHEN g.i < :normal_tx THEN (g.i % :ledgers)::int + 1
+                                    ELSE :all_ledgers END AS ledger_no,
+                               CASE WHEN g.i < :normal_tx THEN g.i / :ledgers
+                                    ELSE g.i - :normal_tx END AS seq,
+                               CASE WHEN g.i < :normal_tx THEN :tx_per_ledger
+                                    ELSE :big_ledger_tx END AS ledger_tx,
+                               CASE WHEN g.i < :normal_tx THEN g.i::float8 / :normal_tx
+                                    ELSE (g.i - :normal_tx)::float8 / nullif(:big_ledger_tx, 0) END AS position,
                                (:'start_date'::date + :years * interval '1 year')::date - :'start_date'::date
                                    AS total_days,
                                random() AS r_type,
@@ -178,10 +204,11 @@ SELECT b.*,
                                random() AS r_has_payee,
                                random() AS r_payee,
                                random() AS r_memo
-                          FROM generate_series(0, :ledgers::bigint * :tx_per_ledger - 1) AS g(i)
+                          FROM generate_series(0, :normal_tx + :big_ledger_tx - 1) AS g(i)
                        ) r
                ) d
-       ) b;
+       ) b
+ ORDER BY b.position, b.i;
 
 INSERT INTO transaction (id, ledger_id, type, occurred_on, occurred_time, payee, memo, status,
                          created_by, paid_by, version, deleted_at, created_at, updated_at)

@@ -15,8 +15,12 @@ services:
       - shared_preload_libraries=pg_stat_statements
       - -c
       - shared_buffers=256MB
-    # 운영 컨테이너 한도 초안(메모리 1GB)과 같다. CPU 상한은 두지 않는다.
+    # 운영 컨테이너 한도 초안(#52)과 같다. CPU 상한은 두지 않는다.
     mem_limit: 1g
+    # mem_limit과 같은 값이면 스왑을 쓰지 못한다. 없으면 Docker가 메모리만큼 스왑을 더 준다.
+    memswap_limit: 1g
+    # 병렬 쿼리가 쓰는 /dev/shm. Docker 기본값은 64MB다.
+    shm_size: 256m
     # ports는 합쳐지는 값이라 !override가 없으면 개발용 5433도 같이 열린다.
     ports: !override
       - "127.0.0.1:5434:5432"

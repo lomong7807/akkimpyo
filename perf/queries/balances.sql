@@ -6,11 +6,16 @@
 --
 -- 변수: ledger_no(기본 1)
 --       explain(기본 'EXPLAIN (ANALYZE, BUFFERS)', -v explain= 로 비우면 쿼리만 실행)
+--       generic(기본 off. on이면 값을 문장에 넣지 않고 PREPARE한 뒤 일반 계획을 강제해 EXECUTE한다)
 \set ON_ERROR_STOP on
 
 \if :{?explain}
 \else
   \set explain 'EXPLAIN (ANALYZE, BUFFERS)'
+\endif
+\if :{?generic}
+\else
+  \set generic off
 \endif
 \if :{?ledger_no}
 \else
@@ -19,5 +24,22 @@
 SELECT md5('perf-ledger-' || :ledger_no)::uuid AS ledger_id \gset
 \set canceled CANCELED
 
-:explain
-select tl1_0.account_id,sum(tl1_0.amount) from transaction_line tl1_0 join transaction t1_0 on t1_0.id=tl1_0.transaction_id join account a1_0 on a1_0.id=tl1_0.account_id where a1_0.ledger_id=:'ledger_id' and t1_0.occurred_on>=a1_0.opening_date and t1_0.deleted_at is null and t1_0.status<>:'canceled' group by tl1_0.account_id;
+-- PREPARE의 타입은 SQL 로그의 바인드 타입과 같다.
+\if :generic
+  \set head 'PREPARE q (uuid, varchar) AS'
+  \set p1 $1
+  \set p2 $2
+\else
+  \set head :explain
+  \set p1 :'ledger_id'
+  \set p2 :'canceled'
+\endif
+
+:head
+select tl1_0.account_id,sum(tl1_0.amount) from transaction_line tl1_0 join transaction t1_0 on t1_0.id=tl1_0.transaction_id join account a1_0 on a1_0.id=tl1_0.account_id where a1_0.ledger_id=:p1 and t1_0.occurred_on>=a1_0.opening_date and t1_0.deleted_at is null and t1_0.status<>:p2 group by tl1_0.account_id;
+
+\if :generic
+  SET plan_cache_mode = force_generic_plan;
+  :explain EXECUTE q (:'ledger_id', :'canceled');
+  DEALLOCATE q;
+\endif
