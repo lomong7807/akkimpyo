@@ -127,6 +127,8 @@ jobs:
             --lockfile "$RUNNER_TEMP/osv-server/gradle.lockfile"
 
   # main에 들어온 커밋이 머지된 PR에서 왔는지 본다. 직접 push를 막지는 못하고 실패로 알리기만 한다.
+  # PR 브랜치의 커밋을 main에 직접 push해도 GitHub이 그 PR을 머지됨으로 표시한다. 그래서 GitHub이 만들고 서명한
+  # 커밋(committer가 web-flow)인지도 본다. squash 머지만 쓰는 것을 전제로 한다.
   main-commit-from-pr:
     name: main-commit-from-pr
     if: github.event_name == 'push'
@@ -157,12 +159,21 @@ jobs:
 
           failed=0
           retries=5
-          for sha in $commits; do
-            until prs="$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls?per_page=100" \
+          passes() {
+            reason="base가 main인 머지된 PR을 찾지 못했다"
+            prs="$(gh api "repos/$GITHUB_REPOSITORY/commits/$1/pulls?per_page=100" \
               --jq '[.[] | select(.base.ref == "main" and .merged_at != null) | "#\(.number)"] | join(" ")')" \
-              && [[ -n "$prs" ]]; do
+              || return 1
+            [[ -n "$prs" ]] || return 1
+            reason="committer가 web-flow이고 서명이 검증된 커밋임을 확인하지 못했다"
+            by_github="$(gh api "repos/$GITHUB_REPOSITORY/commits/$1" \
+              --jq '.committer.login == "web-flow" and .commit.verification.verified == true')" || return 1
+            [[ "$by_github" == true ]]
+          }
+          for sha in $commits; do
+            until passes "$sha"; do
               if [[ $retries -eq 0 ]]; then
-                echo "::error::$sha: base가 main인 머지된 PR을 찾지 못했다"
+                echo "::error::$sha: $reason"
                 failed=1
                 continue 2
               fi
