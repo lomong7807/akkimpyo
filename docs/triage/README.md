@@ -88,16 +88,16 @@ security의 위험도 판정(본문)을 그대로 둔다. S 라벨만 대응시�
 
 | 라벨 | 뜻 | 누가 붙이는가 |
 |------|----|---------------|
-| needs-triage | 분류 전 | |
+| needs-triage | 분류 전 | 이슈 양식이 붙인다. gh로 올릴 때는 올린 봇 |
 | needs-info | 올린 쪽의 정보 대기 | triage |
 | needs-answer | owner 답 대기 | 담당 봇 |
 | cannot-reproduce | 재현 안 됨. 합의 전에는 닫지 않는다. | triage |
 | blocked | 선행 이슈 대기 | triage |
 | stale | 기한 넘게 움직임 없음 | triage |
-| ready | | owner만 |
-| in-progress | | 담당 봇 |
+| ready | 작업 가능. 개발 루프가 집을 수 있다. | owner만 |
+| in-progress | worker가 진행 중 | 담당 봇 |
 | duplicate | 원래 이슈를 연결하고 알린 뒤 닫는다. | triage |
-| wontfix | | owner |
+| wontfix | 하지 않기로 했다. | owner |
 
 ## 8. 조각
 
