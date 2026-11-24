@@ -46,9 +46,11 @@
 - 필드는 `type`(항상 `about:blank`), `title`(HTTP 상태 문구), `status`, `detail`(개발자가 읽는 한 줄)이고, 확장 필드는 `code`, `requestId`, 해당할 때만 `fieldErrors`, `current`다. `instance`는 넣지 않는다(경로에 토큰이 들 수 있다).
 - 오류 종류는 `code`로 구분한다. 화면은 화면설계서의 문구를 `code`로 골라 쓰고, 모르는 `code`는 `status`로 처리한다. `code`는 추가만 하고 뜻을 바꾸거나 없애지 않는다.
 - `fieldErrors`는 입력란별 검증 오류의 배열이다. 항목은 `field`(요청 본문의 경로, 예: `lines[0].amount`), `code`, `message`다. `message`와 `detail`은 개발자가 읽는 글이고 화면 문구로 쓰지 않는다.
-- `fieldErrors[].code`의 시작 목록은 `REQUIRED`, `INVALID_FORMAT`, `OUT_OF_RANGE`, `TOO_LONG`, `DUPLICATE`, `NOT_FOUND`(가리킨 계좌나 카테고리가 없음)다. 추가만 한다.
+- `fieldErrors[].code`의 시작 목록은 `REQUIRED`, `INVALID_FORMAT`, `OUT_OF_RANGE`, `TOO_LONG`, `DUPLICATE`, `NOT_FOUND`(가리킨 계좌나 카테고리가 없음), `NOT_ALLOWED`(형식은 맞지만 규칙상 받을 수 없는 값이나 조합: 같은 계좌 사이 이체, 카테고리 구분 불일치 등)다. 추가만 한다.
+- 본문을 JSON으로 읽을 수 없을 때만 400 `MALFORMED_REQUEST`다. JSON은 읽히지만 값의 형이 틀린 경우는 400 `VALIDATION_FAILED`이고 그 입력란에 `INVALID_FORMAT`을 준다.
+- 쿼리 값(`version`, `limit`, `cursor`, 달)의 오류도 400 `VALIDATION_FAILED`이고 `field`에는 쿼리 이름을 그대로 적는다. 경로의 id가 UUID 형식이 아니면 404 `NOT_FOUND`다(없는 자원과 같게).
 - `current`는 수정 충돌(409 `STALE_VERSION`) 때 서버의 최신 자원 전체다. 화면이 최신 내용과 내 입력을 나란히 보여 주는 데 쓴다(F-909).
-- `requestId`는 프록시가 만든 `X-Request-Id` 값이다. 이 헤더가 없으면(로컬 개발, 테스트) 서버가 만든다. 응답 헤더에도 같은 값을 넣는다(ADR 005).
+- `requestId`는 프록시가 만든 `X-Request-Id` 값이다. 영문, 숫자, 하이픈, 밑줄로 된 64자 이하의 문자열이고 클라이언트는 해석하지 않는다. 헤더가 없거나(로컬 개발, 테스트) 이 형식이 아니면 서버가 새로 만든다. 응답 헤더에도 같은 값을 넣는다(ADR 005).
 
 아래 예시에서 정한 것은 오류 필드의 모양이다. `detail`과 `message` 문구, `current` 안의 자원 필드는 예시이고 OpenAPI 문서가 기준이다.
 
@@ -93,11 +95,11 @@
 | 상태 | code | 언제 |
 |---|---|---|
 | 400 | `VALIDATION_FAILED` | 입력란에 붙일 수 있는 오류 전부. 겹치는 이름과 이메일도 여기에 넣는다(`fieldErrors[].code`는 `DUPLICATE`). `fieldErrors`가 항상 1개 이상 있다 |
-| 400 | `MALFORMED_REQUEST` | 해석할 수 없는 본문 |
+| 400 | `MALFORMED_REQUEST` | 본문을 JSON으로 읽을 수 없다 |
 | 401 | `UNAUTHENTICATED` | 토큰이 없거나 만료됐거나 틀렸다 |
 | 401 | `INVALID_CREDENTIALS` | 로그인 실패. 이메일과 비밀번호 중 무엇이 틀렸는지 구분하지 않는다(P-105) |
 | 403 | `FORBIDDEN` | 구성원이지만 권한이 모자란다(보기 전용의 쓰기, 소유자 전용 동작) |
-| 403 | `NO_LONGER_MEMBER` | 2단계에 추가. 내가 구성원이었던 장부(나갔거나 내보내짐, 삭제됨)(P-903, P-310, F-906). 본인이 이미 아는 사실이라 드러나는 것이 없다 |
+| 403 | `NO_LONGER_MEMBER` | 2단계에 추가. 내가 구성원이었던 장부(나갔거나 내보내짐, 삭제됨)(P-903, P-310, F-906). 본인이 이미 아는 사실이라 드러나는 것이 없다. 구성원이었다는 기록이 남아 있는 동안만 준다. 장부가 영구 삭제돼 기록이 없으면 404 `NOT_FOUND`다 |
 | 404 | `NOT_FOUND` | 없는 자원. 한 번도 구성원이 아니었던 장부와 그 데이터도 같은 응답이며 없는 것과 구분되지 않는다(P-903) |
 | 405 | `METHOD_NOT_ALLOWED` | 그 경로에서 받지 않는 메서드 |
 | 409 | `STALE_VERSION` | 낡은 version으로 고치려 했다. `current`가 있다 |
@@ -147,7 +149,7 @@
 | 오류 형식을 직접 정하기(`code`, `message`, `fieldErrors`만. 앞선 초안) | 가장 단순하다 | 표준이 아니라 클라이언트 라이브러리와 OpenAPI 도구의 기본 지원을 못 받고, 형식을 우리가 계속 설명해야 한다. RFC 9457에 `code`와 `fieldErrors`를 확장 필드로 넣으면 초안의 장점을 그대로 가져온다 |
 | RFC 9457에서 오류 종류를 `type` URI로 구분하기 | 표준에 가장 가깝다 | 종류마다 주소를 정하고 설명 문서를 호스팅해야 한다. `code` 문자열이 화면 코드에서 다루기 쉽다 |
 | 장부 id를 헤더나 서버의 "현재 장부" 상태로 넘기기 | 주소가 짧다 | 주소만으로 무엇을 가리키는지 알 수 없고, 탭 두 개에서 다른 장부를 열면 어긋나며, 권한 검사 자리가 흩어진다 |
-| 수정 충돌 검사를 `ETag`/`If-Match` 헤더로 하기 | HTTP 표준 방식이다 | 오프라인 대기열과 네이티브 앱에서 헤더와 본문 두 곳을 같이 다뤄야 한다. 본문 `version`은 자원과 함께 저장하기 쉽다 |
+| 수정 충돌 검사를 `ETag`/`If-Match` 헤더로 하기 | HTTP 표준 방식이다 | 오프라인 대기열과 네이티브 앱이 자원 본문과 따로 헤더 값을 보관하고 보내야 한다. `version`을 자원의 필드로 두면 자원과 함께 저장된다 |
 | 목록을 쪽 번호(offset)로 나누기 | 구현이 쉽다 | 불러오는 사이에 거래가 추가되면 항목이 겹치거나 빠지고, 뒤쪽으로 갈수록 느려진다 |
 
 ## 지금 코드와 다른 점
