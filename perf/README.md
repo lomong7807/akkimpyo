@@ -39,7 +39,7 @@ dc up -d
 until dc exec -T db pg_isready -q -h localhost -U accountbook -d accountbook; do sleep 1; done
 ```
 
-컨테이너 한도는 운영 초안과 같다. 메모리 1GB, `shared_buffers` 256MB, CPU 상한 없음. 스왑은 따로 정하지 않아 Docker 기본값(메모리와 합쳐 2GB)이다.
+컨테이너 한도는 운영 초안(#52)과 같다. 메모리 1GB(`mem_limit`), 스왑 없음(`memswap_limit` 1g), `/dev/shm` 256MB(`shm_size`), `shared_buffers` 256MB, CPU 상한 없음. 메모리 한도를 넘으면 느려지지 않고 OOM으로 드러난다.
 
 ## 2. 스키마 넣기
 
@@ -66,6 +66,8 @@ perfsql -d perf_l1_12k < perf/seed.sql
 | `start_date` | 거래 날짜의 시작 | 2016-11-01 |
 | `years` | 시작 날짜부터 몇 년에 걸칠지 | 10 |
 | `one_account` | `on`이면 모든 거래의 라인 하나가 장부의 첫 계좌에 붙는다. 첫 계좌의 라인 수가 `tx_per_ledger`와 같아진다(잔액 기준선용) | off |
+| `big_ledger_tx` | 0보다 크면 그만큼의 거래를 가진 큰 장부를 하나 더 만든다. 장부 번호는 `ledgers` + 1. 다른 장부의 값은 바뀌지 않고, 큰 장부의 거래는 날짜 순서로 섞여 쌓인다 | 0 |
+| `big_one_account` | `on`이면 큰 장부의 모든 거래의 라인 하나가 첫 계좌에 붙는다(`one_account`는 큰 장부에 적용되지 않는다) | off |
 | `seed` | 난수 씨앗. 변수가 같으면 다시 만들어도 값이 같다 | 0.42 |
 
 측정 계획 2장의 크기는 이렇게 만든다.
@@ -77,6 +79,15 @@ mkdb perf_one_50k   && perfsql -d perf_one_50k   -v one_account=on -v tx_per_led
 mkdb perf_one_200k  && perfsql -d perf_one_200k  -v one_account=on -v tx_per_ledger=200000 < perf/seed.sql
 mkdb perf_l1000_3m  && perfsql -d perf_l1000_3m  -v ledgers=1000 -v tx_per_ledger=3000 < perf/seed.sql
 ```
+
+여러 장부가 섞인 DB 안의 큰 장부는 이렇게 만든다. 큰 장부의 번호는 1001이다(`-v ledger_no=1001`).
+
+```sh
+mkdb perf_mix_50k   && perfsql -d perf_mix_50k   -v ledgers=1000 -v tx_per_ledger=3000 -v big_ledger_tx=50000 < perf/seed.sql
+mkdb perf_mix_200k  && perfsql -d perf_mix_200k  -v ledgers=1000 -v tx_per_ledger=3000 -v big_ledger_tx=200000 -v big_one_account=on < perf/seed.sql
+```
+
+장부 1,000개짜리 DB를 만드는 명령은 하나가 2분 안쪽이었다(80~102초).
 
 분포는 아래와 같다. 앞의 세 줄과 삭제·취소 비율은 dba와 합의한 값이고, 나머지 비율은 이 스크립트를 만들며 정했다.
 
@@ -136,6 +147,12 @@ perfsql -At -d perf_l1_12k < perf/queries/balance.sql
 | `trash-list.sql` | `TransactionService.listDeleted` (휴지통 목록) | `ledger_no`(1) |
 | `category-in-use.sql` | `TransactionLineRepository.existsByCategoryId` (카테고리 사용 여부) | `ledger_no`(1), `category_kind`(EXPENSE), `category_no`(24) |
 
+값을 문장에 넣지 않고 앱처럼 바인드 변수로 보낼 때의 계획을 보려면 `-v generic=on`을 준다. `PREPARE`한 뒤 `plan_cache_mode = force_generic_plan`으로 `EXECUTE`한다.
+
+```sh
+perfsql -At -d perf_l1_12k -v generic=on < perf/queries/balance.sql
+```
+
 `category_no`의 기본값 24는 거래가 없는 카테고리다. 거래가 있는 카테고리는 `-v category_no=1`로 잰다.
 
 한 세션에서 10번 돌려 앞의 3번(캐시 데우기)을 버리고 7번의 최솟값, 중앙값, 최댓값을 낸다.
@@ -152,6 +169,8 @@ measure perf_l1_12k perf/queries/category-in-use.sql -v category_no=1
 ```
 
 7번으로는 p95를 말할 수 없다. 백분위라고 적지 않는다.
+
+맥이 절전에 들어가면 측정이 멈추거나 깨진다. 오래 잴 때는 `caffeinate -dims`로 감싸 돌리고, 끝난 뒤 `pmset -g log`에 그 시간대의 Sleep 기록이 없는지 본다.
 
 ## 6. 내리기
 
