@@ -1,10 +1,15 @@
 name: Image
 
-# main에 들어온 커밋마다 서버·웹 이미지를 한 번 빌드해 커밋 SHA 태그로 ghcr.io에 올린다.
+# main에 머지될 때 서버·웹 이미지를 한 번 빌드해 커밋 SHA 태그로 ghcr.io에 올린다.
+# 문서만 바뀐 머지에서는 만들지 않는다. revision 라벨만 다른 같은 내용이기 때문이다.
 # 배포(#52)는 실행 요약에 출력한 digest를 쓴다.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'claudedocs/**'
+      - '**/*.md'
 
 permissions:
   contents: read
