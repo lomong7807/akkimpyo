@@ -11,7 +11,7 @@
 | [`run-diagnosis.sh`](run-diagnosis.sh) | 진단 측정(7번)을 단계별로 돌린다 |
 | [`summarize-diagnosis.mjs`](summarize-diagnosis.mjs) | 진단 측정이 남긴 실행 계획 원문에서 숫자를 뽑는다 |
 | [`insert-cost.sql`](insert-cost.sql) | 거래 1,000건을 넣는 시간(진단 측정 E7) |
-| [`compose.big-cache.yaml`](compose.big-cache.yaml) | `shared_buffers` 2GB, 메모리 4g(진단 측정 E3) |
+| [`compose.diag.yaml`](compose.diag.yaml) | 진단 측정용 덮어쓰기. 셸이 PostgreSQL을 감싸 컨테이너를 유지한 채 `pg_ctl`로만 재시작한다. `PG_SHARED_BUFFERS`, `PG_MEM_LIMIT` 환경변수로 E3의 설정을 준다 |
 | [`PrepareThresholdCheck.java`](PrepareThresholdCheck.java) | pgJDBC가 몇 번째 실행부터 서버 쪽 준비된 문장을 쓰는지 본다(진단 측정 E4) |
 
 > 여기서 얻는 수치는 맥 로컬 Docker에서 DB 실행 시간만 잰 것이다. API 지연도 운영 서버 수치도 아니다.
@@ -205,14 +205,15 @@ OUT=~/akkimpyo-perf-out perf/run-diagnosis.sh down
 | `up`, `seed` | 측정용 DB를 띄우고 `perf_mix_50k`, `perf_mix_200k`를 만든다(점검 쿼리까지) | 없음 |
 | `base`, `base-again` | 기준. 처음과 끝에 한 번씩 | 없음 |
 | `e1` | 읽기 시간 | 세션 `track_io_timing=on` |
-| `e2` | 식은 캐시의 첫 실행. `restart`는 PostgreSQL만 재시작, `evict`는 재시작 뒤 측정용 DB 파일만 OS 캐시에서 내린다(`dd iflag=nocache`) | 캐시 상태, 세션 `track_io_timing=on` |
-| `e3` | 캐시 크기. 끝나면 원래 설정으로 다시 띄운다 | `compose.big-cache.yaml` |
+| `e2` | 식은 캐시의 첫 실행. `pgrestart`는 PostgreSQL만 재시작(같은 컨테이너), `evict`는 재시작 뒤 측정용 DB 파일만 OS 캐시에서 내린다(`dd iflag=nocache`) | 캐시 상태, 세션 `track_io_timing=on` |
+| `e3` | 캐시 크기. 끝나면 원래 설정으로 다시 띄운다 | `PG_SHARED_BUFFERS=2GB`, `PG_MEM_LIMIT=4g`(`compose.diag.yaml`) |
 | `e4` | `plan_cache_mode=auto`에서 `PREPARE` 한 번, `EXECUTE` 10번 | 없음(기본값) |
 | `e5` | 인덱스 읽기 비용 | 세션 `random_page_cost=1.1` |
 | `e6` | 통계 대상 수. 사본 DB에서 하고 지운다 | `account_id SET STATISTICS 1000` |
 | `e7` | 후보 쿼리와 인덱스. 사본 DB에서 하고 지운다 | `transaction_line.ledger_id`, 후보 인덱스 A와 B |
 | `sleep-log` | 측정 구간의 절전 기록을 보여 준다(맥) | 없음 |
 
+- 컨테이너 안의 페이지 캐시는 메모리 한도(1GB)를 같이 쓴다. 컨테이너째 재시작하면 이전 컨테이너의 페이지 캐시가 한도 밖에 남아 값이 달라지므로, 재시작은 `pg_ctl`로만 한다. 잴 때마다 PostgreSQL을 재시작하고 측정용 DB 파일의 OS 캐시를 내려 상태를 맞춘 뒤(`fresh`) 세 번을 버린다.
 - 스크립트는 스스로 `caffeinate -dims`를 건다. 시각, load average, 다른 컨테이너는 `OUT/timeline.tsv`에 남는다.
 - 사본 DB는 `CREATE DATABASE ... TEMPLATE ... STRATEGY FILE_COPY`로 만든다. 저장 순서와 통계가 원본과 같다.
 - 실행 사이에 컨테이너의 블록 장치 읽기 바이트(`/sys/fs/cgroup/io.stat`)를 남긴다. `read` 버퍼가 OS 캐시에서 왔는지 블록 장치에서 왔는지 가르는 데 쓴다.
