@@ -38,7 +38,7 @@
 ### 3. 목록
 
 - 목록 응답은 최상위 배열이 아니라 객체다: `{ "items": [...] }`.
-- 계속 늘어나는 목록(거래, 휴지통, 변경 이력)은 cursor로 나눈다. 요청은 `?limit=50&cursor=...`, 응답은 `{ "items": [...], "nextCursor": "..." }`이고 마지막이면 `nextCursor`는 `null`이다. cursor는 클라이언트가 해석하지 않는 문자열이다. `limit`은 기본 50, 최대 100이다(P-232의 50건).
+- 계속 늘어나는 목록(거래, 휴지통, 변경 이력)은 cursor로 나눈다. 요청은 `?limit=50&cursor=...`, 응답은 `{ "items": [...], "nextCursor": "..." }`이고 마지막이면 `nextCursor`는 `null`이다. cursor는 클라이언트가 해석하지 않는 문자열이고 목록 안의 위치만 담는다. 어느 장부의 무엇을 볼 수 있는지는 cursor가 아니라 항상 경로와 구성원 확인으로 정한다. `limit`은 기본 50, 최대 100이다(P-232의 50건).
 - 정렬 순서는 목록마다 서버가 고정하고 같은 값이 있으면 id로 순서를 정한다. 불러오는 사이에 거래가 추가돼도 빠지거나 겹치지 않게 하기 위해서다.
 - 계좌, 카테고리처럼 작은 목록은 나누지 않고 `items`에 전부 넣는다.
 - 목록 객체에는 `items`와 `nextCursor` 말고 합계 같은 최상위 필드를 더할 수 있다. 모양은 각 API 이슈가 정한다(#15).
@@ -49,6 +49,7 @@
 - 필드는 `type`(항상 `about:blank`), `title`(HTTP 상태 문구), `status`, `detail`(개발자가 읽는 한 줄)이고, 확장 필드는 `code`, `requestId`, 해당할 때만 `fieldErrors`, `current`다. `instance`는 넣지 않는다(경로에 토큰이 들 수 있다).
 - 오류 종류는 `code`로 구분한다. 화면은 화면설계서의 문구를 `code`로 골라 쓰고, 모르는 `code`는 `status`로 처리한다. `code`는 추가만 하고 뜻을 바꾸거나 없애지 않는다.
 - `fieldErrors`는 입력란별 검증 오류의 배열이다. 항목은 `field`(요청 본문의 경로, 예: `lines[0].amount`), `code`, `message`다. `message`와 `detail`은 개발자가 읽는 글이고 화면 문구로 쓰지 않는다. 거래 요청의 줄 순서와 금액 부호 규칙은 OpenAPI 문서에 적는다(#14).
+- `detail`과 `message`에는 요청으로 받은 값을 그대로 넣지 않는다. `MALFORMED_REQUEST`의 `detail`은 고정 문구다.
 - `fieldErrors[].code`의 시작 목록은 `REQUIRED`, `INVALID_FORMAT`, `OUT_OF_RANGE`, `TOO_LONG`, `DUPLICATE`, `NOT_FOUND`(가리킨 계좌나 카테고리가 없음), `NOT_ALLOWED`(형식은 맞지만 규칙상 받을 수 없는 값이나 조합: 같은 계좌 사이 이체, 카테고리 구분 불일치 등), `INCORRECT`(현재 비밀번호가 맞지 않음)다. 추가만 한다.
 - 화면 문구가 갈리는 경우에는 `fieldErrors[].code`를 따로 둔다. 예:
   - 가입의 허용 목록 밖 이메일: `field`=`email`, `code`=`NOT_ALLOWED`
@@ -57,7 +58,7 @@
 - 본문을 JSON으로 읽을 수 없을 때만 400 `MALFORMED_REQUEST`다. JSON은 읽히지만 값의 형이 틀린 경우는 400 `VALIDATION_FAILED`이고 그 입력란에 `INVALID_FORMAT`을 준다.
 - 쿼리 값(`version`, `limit`, `cursor`, 달)의 오류도 400 `VALIDATION_FAILED`이고 `field`에는 쿼리 이름을 그대로 적는다. 경로의 id가 UUID 형식이 아니면 404 `NOT_FOUND`다(없는 자원과 같게).
 - `current`는 수정 충돌(409 `STALE_VERSION`) 때 서버의 최신 자원 전체다. 화면이 최신 내용과 내 입력을 나란히 보여 주는 데 쓴다(F-909).
-- `requestId`는 프록시가 만든 `X-Request-Id` 값이다. 영문, 숫자, 하이픈, 밑줄로 된 64자 이하의 문자열이고 클라이언트는 해석하지 않는다. 헤더가 없거나(로컬 개발, 테스트) 이 형식이 아니면 서버가 새로 만든다. 응답 헤더에도 같은 값을 넣는다(ADR 005).
+- `requestId`는 프록시가 만든 `X-Request-Id` 값이다. 프록시는 밖에서 온 `X-Request-Id`를 덮어쓴다. 영문, 숫자, 하이픈, 밑줄로 된 64자 이하의 문자열이고 클라이언트는 해석하지 않는다. 서버는 형식을 검사해, 헤더가 없거나(로컬 개발, 테스트) 이 형식이 아니면 새로 만든다. 응답 헤더에도 같은 값을 넣는다(ADR 005).
 
 아래 예시에서 정한 것은 오류 필드의 모양이다. `detail`과 `message` 문구, `current` 안의 자원 필드는 예시이고 OpenAPI 문서가 기준이다.
 
@@ -79,7 +80,7 @@
 ```json
 {
   "type": "about:blank", "title": "Conflict", "status": 409,
-  "detail": "요청의 version 3이 저장된 version 4와 다르다",
+  "detail": "요청의 version이 저장된 version과 다르다",
   "code": "STALE_VERSION", "requestId": "req-example-2",
   "current": {
     "id": "0b9f6c1e-3d52-4a7e-9c11-5f2e8a7d4b60", "version": 4, "type": "EXPENSE", "status": "POSTED",
@@ -107,7 +108,7 @@
 | 401 | `UNAUTHENTICATED` | 토큰이 없거나 만료됐거나 틀렸다. 갱신 요청이 실패했을 때도 같으며, 화면은 갱신 요청의 401을 로그인 풀림으로 처리한다 |
 | 401 | `INVALID_CREDENTIALS` | 로그인 실패. 이메일과 비밀번호 중 무엇이 틀렸는지 구분하지 않는다(P-105) |
 | 403 | `FORBIDDEN` | 구성원이지만 권한이 모자란다(보기 전용의 쓰기, 소유자 전용 동작) |
-| 403 | `NO_LONGER_MEMBER` | 2단계에 추가. 내가 구성원이었던 장부(나갔거나 내보내짐, 삭제됨)(P-903, P-310, F-906). 본인이 이미 아는 사실이라 드러나는 것이 없다. 구성원이었다는 기록이 남아 있는 동안만 준다. 장부가 영구 삭제돼 기록이 없으면 404 `NOT_FOUND`다 |
+| 403 | `NO_LONGER_MEMBER` | 2단계에 추가. 내가 구성원이었던 장부(나갔거나 내보내짐, 삭제됨)(P-903, P-310, F-906). 본인이 이미 아는 사실이라 드러나는 것이 없다. 판정은 지난 구성원 기록으로만 하고, 응답에 장부의 값(이름 등)을 넣지 않는다. 기록이 남아 있는 동안만 준다. 그 기록도 장부 영구 삭제 때 지우며, 기록이 없으면 404 `NOT_FOUND`다 |
 | 404 | `NOT_FOUND` | 없는 자원. 한 번도 구성원이 아니었던 장부와 그 데이터도 같은 응답이며 없는 것과 구분되지 않는다(P-903) |
 | 405 | `METHOD_NOT_ALLOWED` | 그 경로에서 받지 않는 메서드 |
 | 409 | `STALE_VERSION` | 낡은 version으로 고치려 했다. `current`가 있다 |
@@ -119,6 +120,8 @@
 | 429 | `LOGIN_LOCKED` | 로그인 잠금(P-105). `Retry-After` 헤더를 넣는다 |
 | 429 | `TOO_MANY_REQUESTS` | 출시 단계의 요청 횟수 제한. `Retry-After` 헤더를 넣는다 |
 | 500 | `INTERNAL_ERROR` | 서버 오류. `detail`은 고정 문구다 |
+
+검사 순서는 인증(401) → 구성원 확인(404) → 권한(403) → 입력 검증(400) → 상태와 version(409)이다. 409의 `current`는 구성원 확인을 지난 요청에만 나간다.
 
 휴지통에 있는(소프트 삭제된) 거래를 낡은 version으로 고치려 하면 404가 아니라 409 `STALE_VERSION`이고 `current`에 `deletedAt`이 채워져 온다. 완전히 지워진 거래는 404 `NOT_FOUND`다.
 
@@ -143,7 +146,7 @@
 
 ### 7. 내보내지 않는 것
 
-응답 본문과 헤더에 스택 트레이스, 예외 클래스 이름, SQL, 내부 주소를 넣지 않는다. 500의 `detail`은 고정 문구이고 원인은 `requestId`로 로그에서 찾는다. 이 규칙은 자동 테스트로 고정한다(구현 이슈에서).
+응답 본문과 헤더에 스택 트레이스, 예외 클래스 이름, SQL, 내부 주소를 넣지 않는다. Tomcat 기본 HTML 오류 페이지와 서버 제품을 드러내는 헤더도 내보내지 않는다. 모든 오류는 problem+json이다. 500의 `detail`은 고정 문구이고 원인은 `requestId`로 로그에서 찾는다. 이 규칙은 자동 테스트로 고정한다(구현 이슈에서).
 
 ### 8. 바꾸는 규칙
 
