@@ -77,6 +77,7 @@
 
 - `TransactionRepository.findByLedgerIdAndDeletedAtIsNotNullOrderByDeletedAtDesc`에 건수 제한이 없다. 이 메서드는 `@EntityGraph(attributePaths = "lines")`로 라인을 함께 읽으므로 SQL 수는 늘지 않지만, 삭제된 거래가 쌓이는 만큼 한 번에 다 올린다.
 - dba 제안은 `transaction (ledger_id, deleted_at) WHERE deleted_at IS NOT NULL` 인덱스와, API에서 50건 페이지로 나누는 것이다.
+- 이 메서드에 50건 페이지를 넣을 때 `@EntityGraph`를 그대로 두면 2.2의 메모리 페이지 나누기가 된다.
 
 ### 2.7 저장 1건의 SQL 수
 

@@ -26,7 +26,9 @@
 
 - Oracle Cloud 춘천 리전 VM, A1.Flex, 4 OCPU, 메모리 24GB, ARM.
 - 소유자의 prometheus와 grafana가 같은 VM에서 돈다.
-- 자세한 구성(DB를 같은 VM에 두는지, 디스크 종류 등)은 devops에게 확인 중이다. **미확인**.
+- devops 안(2026-11-24): 같은 VM 한 대에서 Docker Compose로 프록시(Caddy), Spring Boot, PostgreSQL 17이 모두 컨테이너로 돈다(확정 방향).
+- 컨테이너 한도는 초안이며 미확정이다: 앱 1GB(힙은 약 절반), DB 1GB(shared_buffers 256MB), CPU 상한 없음. 이 한도는 측정 결과로 조정한다.
+- 디스크 종류는 **미확인**.
 
 ## 2. 목표
 
