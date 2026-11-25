@@ -36,8 +36,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 /**
  * 거래 쓰기(생성·수정·취소·삭제·복원)와 조회. 모든 쓰기는 change_log에 1행을 남긴다.
@@ -62,15 +60,13 @@ public class TransactionService {
     private final CategoryService categoryService;
     private final LedgerAccess ledgerAccess;
     private final LedgerRepository ledgerRepository;
-    private final ObjectMapper objectMapper;
     private final Clock clock;
     private final TransactionTemplate transactionTemplate;
 
     TransactionService(TransactionRepository transactionRepository, ChangeLogRepository changeLogRepository,
                        AccountRepository accountRepository, CategoryRepository categoryRepository,
                        CategoryService categoryService, LedgerAccess ledgerAccess,
-                       LedgerRepository ledgerRepository, ObjectMapper objectMapper, Clock clock,
-                       TransactionTemplate transactionTemplate) {
+                       LedgerRepository ledgerRepository, Clock clock, TransactionTemplate transactionTemplate) {
         this.transactionRepository = transactionRepository;
         this.changeLogRepository = changeLogRepository;
         this.accountRepository = accountRepository;
@@ -78,7 +74,6 @@ public class TransactionService {
         this.categoryService = categoryService;
         this.ledgerAccess = ledgerAccess;
         this.ledgerRepository = ledgerRepository;
-        this.objectMapper = objectMapper;
         this.clock = clock;
         this.transactionTemplate = transactionTemplate;
     }
@@ -131,9 +126,8 @@ public class TransactionService {
         // 앞의 확인 뒤에 같은 id가 만들어지고 완전히 지워졌으면 부딪힐 행이 없어 INSERT가 된다. INSERT는 그 삭제의 커밋을
         // 기다리므로 여기서는 기록이 보인다.
         requireNotPurged(content.id());
-        TransactionView after = TransactionView.of(tx);
-        appendLog(tx, ChangeAction.CREATE, actorId, deviceId, null, after);
-        return new CreateResult(after, true);
+        appendLog(tx, ChangeAction.CREATE, actorId, deviceId, null);
+        return new CreateResult(TransactionView.of(tx), true);
     }
 
     /** 완전히 지운 거래의 id는 어느 장부의 것이었든 다시 쓸 수 없다(ADR 007 결정 7). */
@@ -254,23 +248,22 @@ public class TransactionService {
      */
     private TransactionView write(Transaction tx, long expectedVersion, ChangeAction action, UUID actorId,
                                   String deviceId, Consumer<Instant> change) {
-        TransactionView before = TransactionView.of(tx);
+        ChangeLogValue before = ChangeLogValue.of(tx);
         Instant now = Times.now();
         if (transactionRepository.advanceVersion(tx.getId(), expectedVersion, now) == 0) {
             throw new StaleVersionException();
         }
         tx.applyVersion(expectedVersion + 1, now);
         change.accept(now);
-        TransactionView after = TransactionView.of(tx);
-        appendLog(tx, action, actorId, deviceId, before, after);
-        return after;
+        appendLog(tx, action, actorId, deviceId, before);
+        return TransactionView.of(tx);
     }
 
-    /** 거래의 version이 이 변경 뒤의 값이 된 다음에 부른다. 이력의 번호가 그 값이다. */
+    /** 거래가 이 변경 뒤의 내용과 version이 된 다음에 부른다. 이력의 후 값과 번호가 그 값이다. */
     private void appendLog(Transaction tx, ChangeAction action, UUID actorId, String deviceId,
-                           TransactionView before, TransactionView after) {
+                           ChangeLogValue before) {
         changeLogRepository.save(ChangeLog.of(tx.getId(), tx.getLedgerId(), tx.getVersion(), action, actorId,
-                deviceId, toJson(before), toJson(after), nextLogTime(tx.getId())));
+                deviceId, before, ChangeLogValue.of(tx), nextLogTime(tx.getId())));
     }
 
     /**
@@ -284,10 +277,6 @@ public class TransactionService {
                 .filter(last -> !now.isAfter(last))
                 .map(last -> last.plus(1, ChronoUnit.MICROS))
                 .orElse(now);
-    }
-
-    private JsonNode toJson(TransactionView view) {
-        return view == null ? null : objectMapper.valueToTree(view);
     }
 
     /** 없는 거래와 구성원이 아닌 장부의 거래를 구분하지 않는다. */
