@@ -40,15 +40,20 @@
   display: none;
 }
 
+.input[aria-invalid='true'] {
+  --border-width: var(--border-width-strong);
+  --border-color: var(--color-danger);
+}
+
+/* 오류 칸도 초점이 있는 동안은 초점의 색이다 */
 .input:focus {
   --border-width: var(--border-width-strong);
   --border-color: var(--color-accent);
 }
 
-/* 초점이 함께 있어도 오류를 보인다. 초점은 바깥 테두리(base.css)로 보인다 */
-.input[aria-invalid='true'] {
-  --border-width: var(--border-width-strong);
-  --border-color: var(--color-danger);
+/* 초점은 안쪽 테두리 하나로 보인다. 색이 강제되는 고대비 모드에서는 투명한 바깥 테두리가 보이게 된다 */
+.input:focus-visible {
+  outline-color: transparent;
 }
 
 .withAction {

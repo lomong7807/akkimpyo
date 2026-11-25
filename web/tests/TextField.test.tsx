@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PasswordField, TextField } from '../src/components/TextField'
 import { readCssRule } from './support/cssRule'
+import { readWebFile } from './support/webFile'
 
 const ruleBody = (selector: string) => readCssRule('src/components/TextField.module.css', selector)
 
@@ -91,13 +92,27 @@ describe.each(fields)('%s', (_, Field) => {
     ['평소', false, undefined, ['1px', 'var(--color-border-strong)']],
     ['초점', true, undefined, ['var(--border-width-strong)', 'var(--color-accent)']],
     ['오류', false, '오류 문장', ['var(--border-width-strong)', 'var(--color-danger)']],
-    ['오류 칸의 초점', true, '오류 문장', ['var(--border-width-strong)', 'var(--color-danger)']],
+    ['오류 칸의 초점', true, '오류 문장', ['var(--border-width-strong)', 'var(--color-accent)']],
   ])('%s일 때의 테두리는 설계서 5.2의 굵기와 색이다', (_, focused, error, expected) => {
     render(<Field label="이메일" error={error} />)
     const input = screen.getByLabelText('이메일')
     if (focused) input.focus()
     const style = getComputedStyle(input)
     expect([style.getPropertyValue('--border-width'), style.getPropertyValue('--border-color')]).toEqual(expected)
+  })
+
+  it('오류 칸은 초점이 벗어나면 위험색으로 돌아간다', () => {
+    render(<Field label="이메일" error="오류 문장" />)
+    const input = screen.getByLabelText('이메일')
+    input.focus()
+    input.blur()
+    expect(getComputedStyle(input).getPropertyValue('--border-color')).toBe('var(--color-danger)')
+  })
+
+  it('초점은 안쪽 테두리 하나로 보인다. 바깥 테두리는 고대비 모드에서 남도록 없애지 않고 투명하게 둔다', () => {
+    const rule = ruleBody('.input:focus-visible')
+    expect(rule).toContain('outline-color: transparent')
+    expect(readWebFile('src/components/TextField.module.css')).not.toMatch(/outline(-style|-width)?:/)
   })
 
   it('테두리가 굵어진 만큼 안쪽 여백을 줄여 글자가 움직이지 않는다', () => {
@@ -128,6 +143,11 @@ describe.each(fields)('%s', (_, Field) => {
     expect(input!.readOnly).toBe(true)
     expect(input!.autocomplete).toBe('username')
   })
+})
+
+it('비밀번호 보기 버튼의 초점은 다른 버튼처럼 바깥 테두리다', () => {
+  expect(readWebFile('src/components/TextField.module.css')).not.toMatch(/\.action[^{]*:focus/)
+  expect(readWebFile('src/components/Button.module.css')).not.toContain('outline')
 })
 
 describe('비밀번호 보기', () => {
