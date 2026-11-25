@@ -66,10 +66,14 @@ export default function FullScreenForm({ title, guard, onSubmit, bottom, childre
   )
 }
 
-/** 한글을 조합하는 중의 Esc와 열린 모달을 닫는 Esc는 화면의 것이 아니다. */
+/**
+ * 한글을 조합하는 중의 Esc와 열린 모달을 닫는 Esc는 화면의 것이 아니다.
+ * Safari는 조합이 끝났다고 먼저 알리고 그 keydown의 isComposing을 거짓으로 줄 수 있다. 입력기가 받은 키는 keyCode가 229다.
+ */
 function useEscape(onEscape: () => void) {
   const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (event.key !== 'Escape' || event.isComposing || event.repeat || isModalOpen()) return
+    const composing = event.isComposing || event.keyCode === 229
+    if (event.key !== 'Escape' || composing || event.repeat || isModalOpen()) return
     // 그냥 두면 브라우저가 이 Esc로 막 연 확인 창을 닫는다
     event.preventDefault()
     onEscape()

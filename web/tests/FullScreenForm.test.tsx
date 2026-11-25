@@ -328,12 +328,20 @@ describe('Esc', () => {
   function pressEscape(init: KeyboardEventInit) {
     const event = createEvent.keyDown(name(), { key: 'Escape', bubbles: true, cancelable: true, ...init })
     if (init.isComposing) Object.defineProperty(event, 'isComposing', { value: true })
+    if (init.keyCode) Object.defineProperty(event, 'keyCode', { value: init.keyCode })
     act(() => void fireEvent(name(), event))
   }
 
   it('한글을 조합하는 중이면 무시한다', async () => {
     await openFromList()
     pressEscape({ isComposing: true })
+    await settle()
+    expect(path()).toBe('/new')
+  })
+
+  it('조합이 끝났다고 먼저 알리는 브라우저(Safari)에서도 조합을 끝낸 Esc면 무시한다', async () => {
+    await openFromList()
+    pressEscape({ keyCode: 229 })
     await settle()
     expect(path()).toBe('/new')
   })
