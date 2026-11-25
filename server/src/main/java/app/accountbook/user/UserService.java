@@ -13,7 +13,7 @@ import java.util.Locale;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class UserService {
@@ -26,15 +26,17 @@ public class UserService {
     private final LedgerMemberRepository memberRepository;
     private final CategoryService categoryService;
     private final PasswordHasher passwordHasher;
+    private final TransactionTemplate transactionTemplate;
 
     UserService(UserRepository userRepository, LedgerRepository ledgerRepository,
                 LedgerMemberRepository memberRepository, CategoryService categoryService,
-                PasswordHasher passwordHasher) {
+                PasswordHasher passwordHasher, TransactionTemplate transactionTemplate) {
         this.userRepository = userRepository;
         this.ledgerRepository = ledgerRepository;
         this.memberRepository = memberRepository;
         this.categoryService = categoryService;
         this.passwordHasher = passwordHasher;
+        this.transactionTemplate = transactionTemplate;
     }
 
     /**
@@ -46,8 +48,8 @@ public class UserService {
      * 표시 이름은 앞뒤 공백을 지운 1~{@value User#DISPLAY_NAME_MAX_LENGTH}자다(P-101).
      * 비밀번호는 NFKC로 맞춘 값으로 규칙({@link PasswordPolicy})을 보고 Argon2id 해시로만 저장한다.
      * 해시는 비싸므로 입력 검사와 중복 확인이 끝난 뒤에 한다(ADR 001 결정 7).
+     * 해시와 그 자리를 기다리는 동안 DB 연결을 잡지 않도록 저장만 트랜잭션으로 한다. 이 메서드를 트랜잭션 안에서 부르지 않는다.
      */
-    @Transactional
     public User createUser(String rawEmail, String rawPassword, String rawDisplayName) {
         String email = normalizeEmail(rawEmail);
         String displayName = Names.normalize(rawDisplayName, User.DISPLAY_NAME_MAX_LENGTH);
@@ -56,7 +58,13 @@ public class UserService {
         if (userRepository.existsByEmail(email)) {
             throw new DuplicateEmailException();
         }
-        User user = saveUnlessDuplicate(User.of(email, passwordHasher.hash(rawPassword), displayName));
+        String passwordHash = passwordHasher.hash(rawPassword);
+        return transactionTemplate.execute(status ->
+                saveWithPersonalLedger(User.of(email, passwordHash, displayName)));
+    }
+
+    private User saveWithPersonalLedger(User newUser) {
+        User user = saveUnlessDuplicate(newUser);
         Ledger ledger = ledgerRepository.save(Ledger.personal());
         memberRepository.save(LedgerMember.of(ledger.getId(), user.getId(), LedgerRole.OWNER));
         categoryService.createDefaults(user.getId(), ledger.getId());
@@ -65,7 +73,7 @@ public class UserService {
 
     /**
      * 바로 flush해서 DB 제약 위반을 이 메서드 안에서 받는다.
-     * 동시 가입이 둘 다 중복 확인을 통과하면 나중 것이 유니크 제약에 걸리는데, 그것도 같은 이메일 오류로 알린다.
+     * 중복 확인과 저장 사이(해시하는 동안)에 같은 이메일이 들어오면 나중 것이 유니크 제약에 걸리는데, 그것도 같은 이메일 오류로 알린다.
      */
     private User saveUnlessDuplicate(User user) {
         try {

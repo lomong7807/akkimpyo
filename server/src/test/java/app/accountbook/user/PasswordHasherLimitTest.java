@@ -2,17 +2,11 @@ package app.accountbook.user;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.awaitility.Awaitility.await;
 
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.PasswordHashBusyException;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterEach;
@@ -44,13 +38,13 @@ class PasswordHasherLimitTest {
     @Test
     void fifthHashWaitsForSlotAndRunsWhenOneIsFree() throws Exception {
         PasswordHasher hasher = hasher(4, LONG);
-        List<Running<String>> four = IntStream.rangeClosed(1, 4)
-                .mapToObj(i -> start(() -> hasher.hash("password" + i)))
+        List<RunningTask<String>> four = IntStream.rangeClosed(1, 4)
+                .mapToObj(i -> RunningTask.start(() -> hasher.hash("password" + i)))
                 .toList();
         encoder.awaitEntered(4);
 
-        Running<String> fifth = start(() -> hasher.hash("password5"));
-        awaitWaitingForSlot(fifth);
+        RunningTask<String> fifth = RunningTask.start(() -> hasher.hash("password5"));
+        fifth.awaitWaitingForSlot();
         assertThat(encoder.order()).hasSize(4).doesNotContain("password5");
 
         encoder.open(1);
@@ -59,7 +53,7 @@ class PasswordHasherLimitTest {
 
         encoder.open(4);
         assertThat(fifth.result()).isEqualTo("hash");
-        for (Running<String> one : four) {
+        for (RunningTask<String> one : four) {
             assertThat(one.result()).isEqualTo("hash");
         }
         assertThat(encoder.maxRunning()).isEqualTo(4);
@@ -68,7 +62,7 @@ class PasswordHasherLimitTest {
     @Test
     void failsWhenNoSlotIsFreeWithinMaxWait() throws Exception {
         PasswordHasher hasher = hasher(1, SHORT);
-        start(() -> hasher.hash("password1"));
+        RunningTask.start(() -> hasher.hash("password1"));
         encoder.awaitEntered(1);
 
         long startedAt = System.nanoTime();
@@ -85,13 +79,13 @@ class PasswordHasherLimitTest {
     @Test
     void hashAndMatchesShareSlots() throws Exception {
         PasswordHasher hasher = hasher(1, SHORT);
-        Running<String> hashing = start(() -> hasher.hash("password1"));
+        RunningTask<String> hashing = RunningTask.start(() -> hasher.hash("password1"));
         encoder.awaitEntered(1);
         assertThatThrownBy(() -> hasher.matches("password2", STORED)).isInstanceOf(PasswordHashBusyException.class);
         encoder.open(1);
         hashing.result();
 
-        Running<Boolean> matching = start(() -> hasher.matches("password3", STORED));
+        RunningTask<Boolean> matching = RunningTask.start(() -> hasher.matches("password3", STORED));
         encoder.awaitEntered(1);
         assertThatThrownBy(() -> hasher.hash("password4")).isInstanceOf(PasswordHashBusyException.class);
         encoder.open(1);
@@ -102,7 +96,7 @@ class PasswordHasherLimitTest {
     @Test
     void cheapRejectionsDoNotNeedSlot() throws Exception {
         PasswordHasher hasher = hasher(1, SHORT);
-        start(() -> hasher.hash("password1"));
+        RunningTask.start(() -> hasher.hash("password1"));
         encoder.awaitEntered(1);
 
         // 자리가 필요했다면 PasswordHashBusyException이 난다.
@@ -127,17 +121,17 @@ class PasswordHasherLimitTest {
     @Test
     void interruptedWaiterFailsTheSameWayAndStaysInterrupted() throws Exception {
         PasswordHasher hasher = hasher(1, LONG);
-        Running<String> holder = start(() -> hasher.hash("password1"));
+        RunningTask<String> holder = RunningTask.start(() -> hasher.hash("password1"));
         encoder.awaitEntered(1);
         AtomicBoolean interrupted = new AtomicBoolean();
-        Running<String> waiter = start(() -> {
+        RunningTask<String> waiter = RunningTask.start(() -> {
             try {
                 return hasher.hash("password2");
             } finally {
                 interrupted.set(Thread.currentThread().isInterrupted());
             }
         });
-        awaitWaitingForSlot(waiter);
+        waiter.awaitWaitingForSlot();
 
         waiter.thread().interrupt();
 
@@ -153,10 +147,10 @@ class PasswordHasherLimitTest {
     @Test
     void waitersGetSlotInArrivalOrder() throws Exception {
         PasswordHasher hasher = hasher(1, LONG);
-        start(() -> hasher.hash("password1"));
+        RunningTask.start(() -> hasher.hash("password1"));
         encoder.awaitEntered(1);
         for (String password : List.of("password2", "password3", "password4")) {
-            awaitWaitingForSlot(start(() -> hasher.hash(password)));
+            RunningTask.start(() -> hasher.hash(password)).awaitWaitingForSlot();
         }
 
         for (int i = 0; i < 3; i++) {
@@ -171,36 +165,6 @@ class PasswordHasherLimitTest {
 
     private PasswordHasher hasher(int maxConcurrent, Duration maxWait) {
         return new PasswordHasher(encoder, new PasswordHashProperties(maxConcurrent, maxWait));
-    }
-
-    private static <T> Running<T> start(Callable<T> task) {
-        FutureTask<T> future = new FutureTask<>(task);
-        Thread thread = new Thread(future);
-        thread.setDaemon(true);
-        thread.start();
-        return new Running<>(thread, future);
-    }
-
-    /** 그 스레드가 입구 안에서 시간을 정해 기다리고 있을 때까지 본다. 해시 중에는 이 상태가 아니다(문은 시간 없이 기다린다). */
-    private static void awaitWaitingForSlot(Running<?> running) {
-        await().pollInterval(Duration.ofMillis(5)).atMost(Duration.ofSeconds(10)).until(() ->
-                running.thread().getState() == Thread.State.TIMED_WAITING
-                        && Arrays.stream(running.thread().getStackTrace())
-                                .anyMatch(frame -> frame.getClassName().equals(PasswordHasher.class.getName())));
-    }
-
-    private record Running<T>(Thread thread, FutureTask<T> future) {
-
-        T result() throws Exception {
-            try {
-                return future.get(10, TimeUnit.SECONDS);
-            } catch (ExecutionException e) {
-                if (e.getCause() instanceof Exception cause) {
-                    throw cause;
-                }
-                throw e;
-            }
-        }
     }
 
     private static final class FailingEncoder implements PasswordEncoder {
