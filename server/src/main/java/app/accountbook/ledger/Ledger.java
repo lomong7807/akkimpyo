@@ -16,7 +16,7 @@ public class Ledger extends BaseEntity {
     @Column(name = "name", nullable = false)
     private String name;
 
-    /** 거래 날짜·시각을 해석하는 장부 시간대(IANA 이름). */
+    /** 장부 시간대(IANA 이름). 서버가 "오늘"을 정할 때만 쓴다. 거래의 날짜·시각은 이 값으로 변환하지 않는다(P-202). */
     @Column(name = "timezone", nullable = false)
     private String timezone;
 
