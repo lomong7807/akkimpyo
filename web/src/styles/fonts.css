@@ -4,6 +4,7 @@
  *
  * optional: 글꼴이 제때 오지 않으면 그 화면은 대체 글꼴로 끝까지 두고, 다음에 열 때 받아 둔 글꼴을 쓴다.
  * 이미 그린 글자를 중간에 바꾸지 않으므로 줄과 금액의 자리가 움직이지 않는다.
+ * 받아 둔 글꼴을 첫 그리기에 맞춰 쓰려면 index.html의 preload가 필요하다.
  */
 @font-face {
   font-family: "Pretendard Variable";
