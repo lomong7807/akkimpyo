@@ -39,14 +39,20 @@ export function signup(registration: Registration): Promise<void> {
   return startSession((lost) => requestSignup(registration, lost))
 }
 
+/** 로그인이나 가입을 보내는 동안 사용자가 로그아웃했으면 받은 토큰을 쓰지 않고 오류로 끝낸다. */
 async function startSession(requestToken: (lost: AbortSignal) => Promise<string>): Promise<void> {
   const logoutSeen = logoutValue()
+  let accepted = false
   await withSessionLock('steal', async (lost) => {
     const token = await requestToken(lost)
     if (lost.aborted) return
     settleLogout(logoutSeen)
+    if (loggedOutSince(logoutSeen)) return
     accessToken = token
+    accepted = true
   })
+  // 잠금을 놓고 여기에 오기까지 사이에 로그아웃했으면 토큰이 없다
+  if (!accepted || accessToken === undefined) throw ApiError.timeout()
 }
 
 /** 이 기기에서 로그아웃한다. 서버의 답을 기다리지 않는다. */
@@ -117,40 +123,54 @@ export async function withAccessToken<T>(sendWith: (accessToken: string | undefi
 /** `stale` 다음의 access token. 로그인이 필요하면 없다. 그사이 토큰이 바뀌었으면 갱신하지 않고 그것을 준다. */
 function renew(stale: string | undefined): Promise<string | undefined> {
   if (accessToken !== stale) return Promise.resolve(accessToken)
-  renewal ??= withSessionLock('fail', async (lost) =>
-    accessToken === stale ? refresh(stale, lost) : accessToken,
-  ).finally(() => {
+  renewal ??= renewUnlessLoggedOut(stale).finally(() => {
     renewal = undefined
   })
   return renewal
 }
 
+/** 시작한 뒤에 로그아웃이 있었으면 서버의 답과 상관없이 이 탭의 로그인도 끝난 것이다. */
+async function renewUnlessLoggedOut(stale: string | undefined): Promise<string | undefined> {
+  const logoutSeen = logoutValue()
+  const loggedOut = () => loggedOutSince(logoutSeen)
+  if (!loggedOut()) {
+    try {
+      await withSessionLock('fail', async (lost) => {
+        if (accessToken === stale && !loggedOut()) await refresh(stale, lost, loggedOut)
+      })
+    } catch (error) {
+      if (!loggedOut()) throw error
+    }
+  }
+  if (accessToken === stale && loggedOut()) endSession('logged-out')
+  return accessToken
+}
+
 /**
- * 늦게 온 응답은 버리고 지금 토큰을 준다. 잠금을 빼앗겼거나, 잠금 없이 보내는 동안 이 탭에서 로그인해 토큰이
- * `stale`에서 바뀐 때다.
+ * 늦게 온 응답은 버린다. 잠금을 빼앗겼거나, 잠금 없이 보내는 동안 이 탭에서 로그인해 토큰이 `stale`에서 바뀌었거나,
+ * 로그아웃이 있었을 때다.
  */
-async function refresh(stale: string | undefined, lost: AbortSignal): Promise<string | undefined> {
-  const isCurrent = () => !lost.aborted && accessToken === stale
+async function refresh(stale: string | undefined, lost: AbortSignal, loggedOut: () => boolean): Promise<void> {
+  const isCurrent = () => !lost.aborted && accessToken === stale && !loggedOut()
   try {
-    const renewed = await requestRefreshTwice(lost)
+    const renewed = await requestRefreshTwice(lost, loggedOut)
     if (isCurrent()) acceptRenewed(renewed)
   } catch (error) {
     // 연결 문제와 서버 오류는 로그인 풀림이 아니다
     if (!(error instanceof ApiError && error.status === 401)) throw error
     if (isCurrent()) endSession('ended')
   }
-  return accessToken
 }
 
 /**
  * 답이 없으면 한 번만 더 보낸다. 앞 요청이 서버에서 회전을 마치고 응답만 못 왔다면 쿠키는 옛것이고,
  * 옛 쿠키는 회전 시각부터 10초 안에만 받아들여진다(ADR 001 결정 3). 어떤 답이든 받았으면 다시 보내지 않는다.
  */
-async function requestRefreshTwice(lost: AbortSignal): Promise<string> {
+async function requestRefreshTwice(lost: AbortSignal, loggedOut: () => boolean): Promise<string> {
   try {
     return await requestRefresh(lost)
   } catch (error) {
-    if (!(error instanceof ApiError && error.kind === 'timeout')) throw error
+    if (loggedOut() || !(error instanceof ApiError && error.kind === 'timeout')) throw error
     return requestRefresh(lost)
   }
 }
@@ -159,6 +179,11 @@ async function requestRefreshTwice(lost: AbortSignal): Promise<string> {
 function acceptRenewed(renewed: string) {
   if (accessToken !== undefined && !isSameUser(accessToken, renewed)) endSession('ended')
   else accessToken = renewed
+}
+
+/** `logoutSeen`을 본 뒤로 로그아웃이 있었거나, 서버에 닿지 않았을 수 있는 로그아웃이 있다. */
+function loggedOutSince(logoutSeen: string | undefined): boolean {
+  return logoutValue() !== logoutSeen || pendingLogout() !== undefined
 }
 
 function endSession(end: SessionEnd) {

@@ -1,9 +1,19 @@
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ApiError } from '../src/api/apiError'
 import { delayed, startBackend, type Backend } from './support/backend'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
+import {
+  answerRegardlessOfAbort,
+  credentials,
+  errorOf,
+  openSignedInTab,
+  openTab,
+  pass,
+  settle,
+  stopClock,
+  type Tab,
+} from './support/sessionTab'
 import { createFakeLocks, createStuckLocks, installLocks, removeLocks, SESSION_LOCK } from './support/webLocks'
 
 const server = startMockServer()
@@ -24,47 +34,6 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const credentials = { email: 'name@example.com', password: 'pass1234' }
-
-/** 탭 하나. 모듈을 새로 불러와 메모리를 다른 탭과 나누지 않는다. 저장소와 잠금은 함께 쓴다. */
-async function openTab() {
-  vi.resetModules()
-  const session = await import('../src/api/session')
-  const marks = await import('../src/api/sessionMarks')
-  const { request } = await import('../src/api/request')
-  return { ...session, ...marks, request }
-}
-type Tab = Awaited<ReturnType<typeof openTab>>
-
-async function openSignedInTab() {
-  const tab = await openTab()
-  await tab.login(credentials)
-  return tab
-}
-
-async function errorOf(promise: Promise<unknown>): Promise<ApiError> {
-  return promise.then(
-    () => {
-      throw new Error('실패해야 하는 요청이 성공했다')
-    },
-    (error: ApiError) => error,
-  )
-}
-
-/** 요청이 서버를 다녀올 만큼 기다린다. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 30))
-
-/** 시계를 멈춘 채, 실제 시간이 걸리는 가짜 서버의 일이 끝나기를 기다린다. */
-async function settleServer() {
-  for (let turn = 0; turn < 30; turn += 1) await new Promise((resolve) => setImmediate(resolve))
-}
-const stopClock = () => void vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-async function pass(ms: number) {
-  await settleServer()
-  await vi.advanceTimersByTimeAsync(ms)
-  await settleServer()
-}
-
 /** 다른 탭이 세션 잠금을 쥐고 있다. 돌려받은 함수를 부르면 놓는다. */
 function holdLock() {
   const released = Promise.withResolvers<void>()
@@ -73,19 +42,6 @@ function holdLock() {
 }
 
 const steal = () => locks.request(SESSION_LOCK, { steal: true }, async () => {})
-
-/** 요청을 중단해도 응답이 오는 경우까지 보려고, 중단 신호를 무시하는 fetch로 바꾼다. */
-function answerRegardlessOfAbort(path: string) {
-  const arrived = Promise.withResolvers<AbortSignal>()
-  const answer = Promise.withResolvers<Response>()
-  const realFetch = fetch
-  vi.stubGlobal('fetch', (input: string, init: RequestInit) => {
-    if (input !== `/api/v1${path}`) return realFetch(input, init)
-    arrived.resolve(init.signal!)
-    return answer.promise
-  })
-  return { arrived: arrived.promise, with: answer.resolve }
-}
 
 /** 로그아웃이 서버에 닿지 않은 기기 */
 async function leavePendingLogout(tab: Tab) {
@@ -163,7 +119,7 @@ describe('로그아웃 요청', () => {
     ['본문 없는 200', () => new HttpResponse(null, { status: 200 })],
     ['JSON 200', () => HttpResponse.json({})],
     ['다른 주소로 보내는 302', () => new HttpResponse(null, { status: 302, headers: { Location: '/login' } })],
-  ])('%s이면 실패다. 대기가 남고 다시 보내지 않는다', async (_, respond) => {
+  ])('%s이면 실패다. 대기가 남고 다시 보내지 않으며 이 기기는 로그아웃돼 있다', async (_, respond) => {
     const tab = await openSignedInTab()
     const unhandled = vi.fn()
     process.on('unhandledRejection', unhandled)
@@ -173,6 +129,8 @@ describe('로그아웃 요청', () => {
     await settle()
     expect(backend.requests.logout).toHaveLength(1)
     expect(tab.pendingLogout()).toBe(tab.logoutValue())
+    expect(await tab.restoreSession()).toBe(false)
+    expect(backend.requests.refresh).toHaveLength(0)
     expect(unhandled).not.toHaveBeenCalled()
     process.off('unhandledRejection', unhandled)
   })
@@ -380,7 +338,7 @@ describe('저장소를 쓸 수 없어도', () => {
           throw new DOMException('가득 참', 'QuotaExceededError')
         }),
     ],
-  ])('%s: 이 탭은 로그아웃되고 요청을 보낸다. 닿지 못하면 이 탭은 대기를 안다', async (_, block) => {
+  ])('%s: 이 탭은 로그아웃되고 요청을 보낸다. 닿지 못하면 이 탭은 되찾지 않는다', async (_, block) => {
     block()
     const tab = await openSignedInTab()
     const ended = vi.fn()
@@ -390,7 +348,8 @@ describe('저장소를 쓸 수 없어도', () => {
     expect(ended).toHaveBeenCalledExactlyOnceWith('logged-out')
     await vi.waitFor(() => expect(backend.requests.logout).toHaveLength(1))
     await settle()
-    expect(tab.pendingLogout()).toBeTruthy()
+    expect(await tab.restoreSession()).toBe(false)
+    expect(backend.requests.refresh).toHaveLength(0)
     await errorOf(tab.request('/me'))
     expect(backend.requests.me).toEqual(['만료'])
   })
