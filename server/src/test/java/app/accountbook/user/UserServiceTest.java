@@ -24,6 +24,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -32,6 +34,7 @@ import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -154,6 +157,17 @@ class UserServiceTest {
         assertThat(userRepository.findAll()).extracting(User::getEmail).containsOnlyOnce("dup@example.com");
     }
 
+    @Test
+    void createUser_doesNotTranslateOtherUniqueViolationToDuplicateEmail() {
+        // 유일 위반이라도 이메일 제약이 아니면 그대로 올린다. 제약은 테스트 트랜잭션과 함께 롤백된다.
+        jdbc.execute("ALTER TABLE users ADD CONSTRAINT uq_test_users_display_name UNIQUE (display_name)");
+        userService.createUser("other1@example.com", PASSWORD, "같은이름");
+
+        assertThatThrownBy(() -> userService.createUser("other2@example.com", PASSWORD, "같은이름"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("uq_test_users_display_name");
+    }
+
     // --- 이메일 (P-101): 앞뒤 공백을 지우고 소문자로 저장하며 그 값으로 중복을 검사한다 ---
 
     @Test
@@ -213,18 +227,6 @@ class UserServiceTest {
     }
 
     @Test
-    void createUser_countsEmailLengthInUnicodeCharactersLikeTheColumn() {
-        // 😀는 UTF-16으로 2단위다. VARCHAR(255)는 글자 수로 세므로 글자 수 254자는 저장돼야 한다.
-        String email = "😀".repeat(254 - "@example.com".length()) + "@example.com";
-
-        User user = userService.createUser(email, PASSWORD, "주인");
-        userRepository.flush();
-
-        assertThat(user.getEmail()).isEqualTo(email);
-        assertThat(email.codePointCount(0, email.length())).isEqualTo(254);
-    }
-
-    @Test
     void createUser_rejectsEmailLongerThanMaxLengthWithoutEchoingIt() {
         String email = "a".repeat(255 - "@example.com".length()) + "@example.com";
         long usersBefore = userRepository.count();
@@ -235,6 +237,58 @@ class UserServiceTest {
                 .hasMessage("이메일은 254자 이하여야 합니다.");
         assertThat(userRepository.count()).isEqualTo(usersBefore);
         assertThat(ledgerRepository.count()).isEqualTo(ledgersBefore);
+    }
+
+    // --- 이메일 글자 (P-101): 앞뒤 공백을 지운 값에 ASCII 인쇄 가능 문자(U+0021~U+007E)만 있어야 한다 ---
+
+    @Test
+    void createUser_storesEmailWithEveryPrintableAsciiCharacter() {
+        // 앱이 통과시킨 값은 DB 제약(ck_users_email_normalized)도 지난다. 경계는 !(U+0021)와 ~(U+007E)다.
+        String local = IntStream.rangeClosed(0x21, 0x7E)
+                .filter(ch -> ch != '@')
+                .mapToObj(Character::toString)
+                .collect(Collectors.joining());
+
+        User user = userService.createUser(local + "@example.com", PASSWORD, "주인");
+        userRepository.flush();
+
+        assertThat(jdbc.queryForObject("select email from users where id = ?", String.class, user.getId()))
+                .isEqualTo(local.toLowerCase(Locale.ROOT) + "@example.com");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "0000", "0009", "000A", "000D", "001F",          // 제어 문자
+            "0020", "007F",                                  // 범위 바로 밖(가운데 공백, DEL)
+            "0080", "00A0",                                  // C1 제어 문자, 줄바꿈 없는 공백
+            "200B", "200D", "202E", "FEFF",                  // 보이지 않는 글자
+            "00E9", "0130", "0131", "AC00", "FF20", "1F600", // é, İ, ı, 가, 전각 @, 이모지
+            "212A",                                          // 켈빈 기호. 소문자로 바꾸면 ASCII k가 된다
+            "D800"})                                         // 짝 없는 서로게이트
+    void createUser_rejectsEmailWithCharacterOutsidePrintableAsciiInTheMiddle(String codePoint) {
+        assertEmailRejected("ow" + character(codePoint) + "ner@example.com");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "owner@예시.com",               // 도메인
+            "owner\uFF20example.com",       // @ 자리에 전각 @
+            "\u00A0owner@example.com",      // 앞에 붙은, strip()이 지우지 않는 글자
+            "owner@example.com\u200B",      // 뒤에 붙은, strip()이 지우지 않는 글자
+            "owner@example.com\r\nBcc:x"})  // 줄바꿈 뒤에 이어진 값
+    void createUser_rejectsEmailWithCharacterOutsidePrintableAsciiAtAnyPosition(String email) {
+        assertEmailRejected(email);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0009", "000A", "000D", "001F", "0020", "2003", "2028", "3000"})
+    void createUser_stripsSurroundingUnicodeSpaceBeforeJudgingEmail(String codePoint) {
+        String space = character(codePoint);
+
+        User user = userService.createUser(space + "Owner@example.com" + space, PASSWORD, "주인");
+        userRepository.flush();
+
+        assertThat(user.getEmail()).isEqualTo("owner@example.com");
     }
 
     // --- 표시 이름 (P-101): 앞뒤 공백을 지운 1~20자, 다른 사람과 겹쳐도 된다 ---
@@ -380,5 +434,21 @@ class UserServiceTest {
 
         assertThat(passwordEncoder.matches(" abc1234 ", user.getPasswordHash())).isTrue();
         assertThat(passwordEncoder.matches("abc1234", user.getPasswordHash())).isFalse();
+    }
+
+    private void assertEmailRejected(String email) {
+        long usersBefore = userRepository.count();
+        long ledgersBefore = ledgerRepository.count();
+
+        // 문구를 글자 그대로 고정한다. 입력값이 들어가면 실패한다.
+        assertThatThrownBy(() -> userService.createUser(email, PASSWORD, "주인"))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("이메일 형식이 올바르지 않습니다.");
+        assertThat(userRepository.count()).isEqualTo(usersBefore);
+        assertThat(ledgerRepository.count()).isEqualTo(ledgersBefore);
+    }
+
+    private static String character(String codePoint) {
+        return Character.toString(Integer.parseInt(codePoint, 16));
     }
 }
