@@ -5,6 +5,7 @@ import { formatDate, today } from './calendarDate'
 import Field, { type FieldLabels } from './Field'
 import FieldPanel from './FieldPanel'
 import Icon from './Icon'
+import { wideScreen } from './wideScreen'
 import styles from './DateField.module.css'
 
 interface DateFieldProps extends FieldLabels {
@@ -77,10 +78,6 @@ export default function DateField({ value, onChange, readOnly = false, ref, ...l
       )}
     </>
   )
-}
-
-function wideScreen(): MediaQueryList {
-  return window.matchMedia('(width >= 1024px)')
 }
 
 /** 날짜를 고른 키를 누르고 있으면 초점이 돌아온 칸에 되풀이해서 들어온다. 다시 열리지 않게 한다. */

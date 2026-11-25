@@ -86,6 +86,7 @@
   --width-list-min: 22.5rem; /* 360 목록 칸의 최소 폭 */
   --width-side-panel: 27.5rem; /* 440 오른쪽 칸 */
   --width-field-panel: 20rem; /* 320 칸 아래 펼친 판 */
+  --width-dialog: 30rem; /* 480 가운데 창 */
 
   /* 2px 선 (tokens.md 확인 필요 T-1) */
   --focus-ring-width: 2px;

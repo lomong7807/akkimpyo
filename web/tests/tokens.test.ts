@@ -72,6 +72,7 @@ const widths = {
   '--width-list-min': 360,
   '--width-side-panel': 440,
   '--width-field-panel': 320,
+  '--width-dialog': 480,
 } as const
 
 interface Situation {
