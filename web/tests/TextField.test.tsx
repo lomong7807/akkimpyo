@@ -201,12 +201,13 @@ describe('비밀번호 보기', () => {
     expect(screen.getByLabelText<HTMLInputElement>('비밀번호').value).toBe(' pass 1234 ')
   })
 
-  it('보이는 동안에도 맞춤법 검사와 자동 대문자를 끈다', async () => {
+  it('보이는 동안에도 맞춤법 검사와 자동 대문자, 자동 고침을 끈다', async () => {
     const user = userEvent.setup()
     render(<PasswordField label="비밀번호" />)
     await user.click(screen.getByRole('button', { name: '비밀번호 보기' }))
     const input = screen.getByLabelText('비밀번호')
     expect(input.getAttribute('spellcheck')).toBe('false')
     expect(input.getAttribute('autocapitalize')).toBe('none')
+    expect(input.getAttribute('autocorrect')).toBe('off')
   })
 })

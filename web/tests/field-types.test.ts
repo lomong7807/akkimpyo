@@ -8,7 +8,7 @@ describe('입력칸의 타입', () => {
   it('정해진 쓰임은 통과한다', () => {
     expect(
       typeErrors(`
-        <TextField label="이메일" type="email" autoComplete="username" help="도움말" error="오류" onBlur={() => {}} readOnly />
+        <TextField label="이메일" inputMode="email" autoComplete="username" help="도움말" error="오류" onBlur={() => {}} readOnly />
         <PasswordField label="비밀번호" autoComplete="current-password" ref={() => {}} />
       `),
     ).toEqual([])
@@ -24,7 +24,7 @@ describe('입력칸의 타입', () => {
     ['설명의 연결 덮어쓰기', '<TextField label="이메일" aria-describedby="a" />', 'undefined'],
     ['오류 표시 덮어쓰기', '<TextField label="이메일" aria-invalid />', 'undefined'],
     ['이름 대신 aria-label', '<TextField label="이메일" aria-label="다른 이름" />', 'undefined'],
-    ['입력칸이 아닌 종류', '<TextField label="이메일" type="checkbox" />', 'checkbox'],
+    ['입력칸의 종류 바꾸기', '<TextField label="이메일" type="checkbox" />', 'type'],
     ['비밀번호 칸의 종류 바꾸기', '<PasswordField label="비밀번호" type="text" />', 'type'],
     ['비밀번호 칸의 모양 덮어쓰기', '<PasswordField label="비밀번호" className="a" />', 'className'],
   ])('%s는 타입 오류다', (_, jsx, word) => {

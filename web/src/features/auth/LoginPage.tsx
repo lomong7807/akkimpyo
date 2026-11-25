@@ -76,9 +76,10 @@ export default function LoginPage() {
           {...fieldProps('email')}
           ref={emailInput}
           label="이메일"
-          type="email"
+          inputMode="email"
           autoComplete="username"
           autoCapitalize="none"
+          autoCorrect="off"
           spellCheck={false}
           placeholder="name@example.com"
           autoFocus

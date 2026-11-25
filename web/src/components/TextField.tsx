@@ -15,8 +15,9 @@ type FieldProps = InputProps & {
   error?: string
 }
 
-export function TextField({ type = 'text', ...rest }: FieldProps & { type?: 'text' | 'email' }) {
-  return <Field {...rest} type={type} />
+/** 브라우저가 쓴 값을 바꾸지 않도록 종류는 늘 text다. 화면 키보드는 inputMode로 고른다. */
+export function TextField(props: FieldProps) {
+  return <Field {...props} type="text" />
 }
 
 /** 칸 오른쪽 끝의 버튼으로 값을 보거나 가린다. */
@@ -26,9 +27,10 @@ export function PasswordField(props: FieldProps) {
     <Field
       {...props}
       type={visible ? 'text' : 'password'}
-      // 보이는 동안 브라우저가 값을 맞춤법 검사에 보내거나 첫 글자를 바꾸지 않게 한다
+      // 보이는 동안 브라우저가 값을 맞춤법 검사에 보내거나 고치지 않게 한다
       spellCheck={false}
       autoCapitalize="none"
+      autoCorrect="off"
       action={
         <Button
           kind="icon"

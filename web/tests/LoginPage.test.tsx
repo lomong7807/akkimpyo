@@ -70,9 +70,12 @@ describe('로그인(A-02)의 요소', () => {
     expect(screen.queryByRole('banner')).toBeNull()
   })
 
-  it('이메일 칸은 입력 형식 이메일, 자동 완성 username이고 자동 대문자와 맞춤법 검사를 끈다', () => {
+  it('이메일 칸은 입력 형식 이메일, 자동 완성 username이고 자동 대문자와 맞춤법 검사, 자동 고침을 끈다', () => {
     openLogin()
-    expect(email().type).toBe('email')
+    // type="email"이면 브라우저가 값을 바꿔(한글 도메인을 xn--으로) 쓴 값을 검사할 수 없다
+    expect(email().type).toBe('text')
+    expect(email().getAttribute('inputmode')).toBe('email')
+    expect(email().getAttribute('autocorrect')).toBe('off')
     expect(email().autocomplete).toBe('username')
     expect(email().getAttribute('autocapitalize')).toBe('none')
     expect(email().getAttribute('spellcheck')).toBe('false')
@@ -119,24 +122,36 @@ describe('입력값 검사', () => {
     ['name@', emailFormat],
     ['name@@example.com', emailFormat],
     ['a@b@c', emailFormat],
+    ['na me@example.com', emailFormat],
+    ['name@exam ple.com', emailFormat],
+    ['이름@example.com', emailFormat],
+    ['name@한글.kr', emailFormat],
+    ['na\u200bme@example.com', emailFormat],
+    ['na\u0007me@example.com', emailFormat],
+    // 소문자로 바꾸면 ASCII k가 되는 켈빈 기호
+    ['\u212Aim@example.com', emailFormat],
   ])('이메일 "%s"로 칸을 벗어나면 "%s"를 보인다', async (value, message) => {
     const { user } = openLogin()
-    if (value) await user.type(email(), value)
+    if (value) await user.paste(value)
     await user.tab()
     expect(screen.getByText(message)).toBeTruthy()
     expect(email().getAttribute('aria-invalid')).toBe('true')
     expect(password().hasAttribute('aria-invalid')).toBe(false)
   })
 
-  it.each(['name@example.com', '  Name@Example.COM  ', 'a@b', '이름@한글.example'])(
-    '이메일 "%s"는 맞는 형식이다',
-    async (value) => {
-      const { user } = openLogin()
-      await user.type(email(), value)
-      await user.tab()
-      expect(email().hasAttribute('aria-invalid')).toBe(false)
-    },
-  )
+  it.each([
+    'name@example.com',
+    '  Name@Example.COM  ',
+    '\u00a0name@example.com\u00a0',
+    'a@b',
+    "!#$%&'*+/=?^_`{|}~.-@xn--bj0bj06e.kr",
+  ])('이메일 "%s"는 맞는 형식이다', async (value) => {
+    const { user } = openLogin()
+    await user.paste(value)
+    await user.tab()
+    expect(email().value).toBe(value)
+    expect(email().hasAttribute('aria-invalid')).toBe(false)
+  })
 
   it('비밀번호가 빈 채로 칸을 벗어나면 "비밀번호를 입력해 주세요"를 보인다', async () => {
     const { user } = openLogin()
@@ -251,11 +266,11 @@ describe('보내기', () => {
   it('이메일은 앞뒤 공백을 지우고 소문자로 바꿔 보내고, 화면의 값과 비밀번호는 그대로다', async () => {
     const bodies = respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
     const { user } = openLogin()
-    await fill(user, 'Name@Example.COM', ' Pass 1234 ')
+    await fill(user, ' Name@Example.COM ', ' Pass 1234 ')
     await user.click(loginButton())
     await screen.findByText(refused)
     expect(bodies).toEqual([{ email: 'name@example.com', password: ' Pass 1234 ' }])
-    expect(email().value).toBe('Name@Example.COM')
+    expect(email().value).toBe(' Name@Example.COM ')
     expect(password().value).toBe(' Pass 1234 ')
   })
 
