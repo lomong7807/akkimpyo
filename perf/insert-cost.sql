@@ -1,6 +1,6 @@
--- 거래 1,000건(라인 1,100건)을 넣는 시간. perf/run-diagnosis.sh의 e7이 쓴다.
+-- 거래 1,000건(라인 1,100건)을 넣는 시간. perf/run-diagnosis.sh의 insert와 e7이 쓴다.
 -- 장부 1~1000에 하나씩, 날짜는 2026-10-31, 지출 850 / 수입 50 / 이체 100. 커밋까지 한다.
--- transaction_line.ledger_id를 손으로 넣은 측정용 DB에서만 돈다.
+-- V12와 V9까지의 스키마에서 모두 돈다. transaction_line에 ledger_id가 있으면(V10부터) 그 값도 넣는다.
 --
 -- 변수: run_no(회차. id가 겹치지 않게 회차마다 다르게 준다)
 \set ON_ERROR_STOP on
@@ -12,6 +12,16 @@ BEGIN
     END IF;
 END
 $$;
+
+SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'transaction_line' AND column_name = 'ledger_id') AS has_line_ledger \gset
+\if :has_line_ledger
+  \set ledger_column ', ledger_id'
+  \set ledger_value ', md5(''perf-ledger-'' || i.ledger_no)::uuid'
+\else
+  \set ledger_column ''
+  \set ledger_value ''
+\endif
 
 CREATE TEMP TABLE ins_tx AS
 SELECT g AS ledger_no,
@@ -33,7 +43,7 @@ SELECT id, md5('perf-ledger-' || ledger_no)::uuid, type, date '2026-10-31', time
        1, NULL, now(), now()
   FROM ins_tx;
 EXPLAIN (ANALYZE, BUFFERS, WAL)
-INSERT INTO transaction_line (id, transaction_id, account_id, category_id, amount, created_at, ledger_id)
+INSERT INTO transaction_line (id, transaction_id, account_id, category_id, amount, created_at :ledger_column)
 SELECT md5('perf-ins-line-' || i.id || '-' || n.line_no)::uuid,
        i.id,
        md5('perf-account-' || i.ledger_no || '-'
@@ -41,8 +51,7 @@ SELECT md5('perf-ins-line-' || i.id || '-' || n.line_no)::uuid,
        CASE WHEN i.type <> 'TRANSFER'
             THEN md5('perf-category-' || i.ledger_no || '-' || i.type || '-1')::uuid END,
        CASE n.line_no WHEN 1 THEN -10000 ELSE 10000 END * CASE WHEN i.type = 'INCOME' THEN -1 ELSE 1 END,
-       now(),
-       md5('perf-ledger-' || i.ledger_no)::uuid
+       now() :ledger_value
   FROM ins_tx i
  CROSS JOIN (VALUES (1), (2)) AS n(line_no)
  WHERE n.line_no = 1 OR i.type = 'TRANSFER';

@@ -52,7 +52,8 @@ public class PrepareThresholdCheck {
     private static void execute(Connection connection, String sql, UUID ledgerId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setObject(1, ledgerId);
-            statement.setString(2, "CANCELED");
+            statement.setObject(2, ledgerId);
+            statement.setString(3, "CANCELED");
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) {
                     rows.getLong(2);
