@@ -1,0 +1,96 @@
+/*
+ * 칸만 스크롤하고 저장 자리를 맨 아래에 고정한다. 저장 자리의 높이는 오류 문구와 글자 크기에 따라 바뀌므로, 화면 전체를
+ * 스크롤하며 덮으면 초점이 간 칸이 그 뒤에 가려진다.
+ * 화면이 낮고 글자가 커도 칸 하나는 보이게 남긴다. 그래도 넘치면 화면 전체를 스크롤한다.
+ */
+.screen {
+  position: fixed;
+  top: var(--visible-top, 0);
+  inset-inline: 0;
+  display: grid;
+  grid-template-rows: auto minmax(min-content, 1fr);
+  height: var(--visible-height, 100dvh);
+  overflow-y: auto;
+  background-color: var(--color-bg);
+  animation: rise var(--motion-sheet-duration) var(--motion-sheet-easing);
+}
+
+/* 다 올라오면 움직임을 남기지 않는다. 남으면 안의 고정된 요소가 화면이 아니라 이 요소를 기준으로 놓인다 */
+@keyframes rise {
+  from {
+    translate: 0 100%;
+  }
+}
+
+/* 글자를 키워 자리가 모자라면 오른쪽 빈자리부터 줄인다 */
+.head {
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  min-height: calc(var(--size-topbar) + env(safe-area-inset-top));
+  padding-block: env(safe-area-inset-top) 0;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+/* 누르는 영역 44px의 안쪽 여백만큼 당겨 아이콘을 내용의 왼쪽 선에 맞춘다 */
+.close {
+  margin-inline-start: calc(-1 * var(--space-12));
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.main {
+  display: grid;
+}
+
+.form {
+  display: grid;
+  grid-template-rows: minmax(calc(2 * var(--size-field)), 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding-block: var(--space-24);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding-block: var(--space-12) calc(var(--space-12) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+/* 넓은 화면에는 사이드바가 그대로 있고 내용 영역에 놓인다. 위아래 안전 영역은 공통 틀이 띄운다 */
+@media (width >= 1024px) {
+  .screen {
+    position: relative;
+    height: calc(var(--visible-height, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    background-color: transparent;
+    animation: none;
+  }
+
+  .head {
+    min-height: var(--size-topbar);
+    padding-block: 0;
+    border-bottom: 0;
+    background-color: transparent;
+  }
+
+  .bottom {
+    padding-block: var(--space-12);
+  }
+}

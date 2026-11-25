@@ -23,10 +23,14 @@ export function installDialog(): void {
     queueMicrotask(() => this.dispatchEvent(new Event('close')))
   }
 
+  // 브라우저는 keydown을 받는 곳이 모두 받은 뒤에 닫으려 한다
   document.addEventListener('keydown', (event) => {
     const top = opened.at(-1)?.dialog
-    if (event.key !== 'Escape' || event.defaultPrevented || !top) return
-    if (top.dispatchEvent(new Event('cancel', { cancelable: true }))) top.close()
+    if (event.key !== 'Escape' || !top) return
+    queueMicrotask(() => {
+      if (event.defaultPrevented) return
+      if (top.dispatchEvent(new Event('cancel', { cancelable: true }))) top.close()
+    })
   })
 }
 

@@ -17,22 +17,22 @@ interface AppLayoutProps {
  * 상단 바의 형태는 안쪽 화면이 MainScreen이나 SubScreen으로 고른다.
  */
 export default function AppLayout({ navigation, ledgerName, onLogout }: AppLayoutProps) {
-  const screenItem = useScreenItem()
+  const { navigationItem: screenItem, fullScreen } = useScreenHandle()
   const currentTab = useCurrentTab(navigation, screenItem)
   return (
-    <div className={`${styles.frame} ${styles.withTabs}`}>
+    <div className={fullScreen ? styles.frame : `${styles.frame} ${styles.withTabs}`}>
       <Sidebar items={navigation.sidebar} current={screenItem} ledgerName={ledgerName} onLogout={onLogout} />
       <div className={styles.screen}>
         <LedgerNameContext value={ledgerName}>
           <Outlet />
         </LedgerNameContext>
       </div>
-      <TabBar tabs={navigation.tabs} current={currentTab} />
+      {!fullScreen && <TabBar tabs={navigation.tabs} current={currentTab} />}
     </div>
   )
 }
 
-function useScreenItem() {
-  const handles = useMatches().map((match) => match.handle as ScreenHandle | undefined)
-  return handles.findLast((handle) => handle?.navigationItem)?.navigationItem
+/** 안쪽 라우트에 적은 것이 바깥쪽에 적은 것보다 앞선다. */
+function useScreenHandle(): ScreenHandle {
+  return Object.assign({}, ...useMatches().map((match) => match.handle as ScreenHandle | undefined))
 }

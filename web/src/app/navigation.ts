@@ -23,9 +23,12 @@ export interface Navigation {
   }
 }
 
-/** 라우트의 handle. 화면이 속한 항목을 적으면 하단 탭과 사이드바가 그 항목을 강조한다. */
+/** 라우트의 handle */
 export interface ScreenHandle {
+  /** 화면이 속한 항목. 하단 탭과 사이드바가 강조한다. */
   navigationItem?: NavigationItem
+  /** 전체 화면 입력. 하단 탭이 없다. */
+  fullScreen?: boolean
 }
 
 export const moreItem: MainNavigationItem = { label: '더보기', to: '/more', icon: 'DotsThree' }
