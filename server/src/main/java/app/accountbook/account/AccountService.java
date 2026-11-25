@@ -5,7 +5,6 @@ import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
 import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.ledger.LedgerAccess;
-import app.accountbook.transaction.TransactionLineRepository;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -15,13 +14,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class AccountService {
 
     private final AccountRepository accountRepository;
-    private final TransactionLineRepository lineRepository;
+    private final AccountUsage accountUsage;
     private final LedgerAccess ledgerAccess;
 
-    AccountService(AccountRepository accountRepository, TransactionLineRepository lineRepository,
+    AccountService(AccountRepository accountRepository, AccountUsage accountUsage,
                    LedgerAccess ledgerAccess) {
         this.accountRepository = accountRepository;
-        this.lineRepository = lineRepository;
+        this.accountUsage = accountUsage;
         this.ledgerAccess = ledgerAccess;
     }
 
@@ -45,7 +44,7 @@ public class AccountService {
     @Transactional
     public void delete(UUID actorId, UUID accountId) {
         Account account = loadForMember(actorId, accountId);
-        if (lineRepository.existsByAccountId(accountId)) {
+        if (accountUsage.isUsed(accountId)) {
             throw new InUseException("거래가 있는 계좌는 지울 수 없습니다.");
         }
         accountRepository.delete(account);
