@@ -49,19 +49,21 @@ export async function withAccessToken<T>(sendWith: (accessToken: string | undefi
 /** `stale` 다음의 access token. 로그인이 필요하면 없다. 그사이 토큰이 바뀌었으면 갱신하지 않고 그것을 준다. */
 function renew(stale: string | undefined): Promise<string | undefined> {
   if (accessToken !== stale) return Promise.resolve(accessToken)
-  renewal ??= withSessionLock(async () => (accessToken === stale ? refresh() : accessToken)).finally(() => {
+  renewal ??= withSessionLock(async () => (accessToken === stale ? refresh(stale) : accessToken)).finally(() => {
     renewal = undefined
   })
   return renewal
 }
 
-async function refresh(): Promise<string | undefined> {
+/** 잠금 없이 보내는 동안 이 탭에서 로그인해 토큰이 `stale`에서 바뀌었으면, 늦게 온 응답을 버리고 지금 토큰을 준다. */
+async function refresh(stale: string | undefined): Promise<string | undefined> {
   try {
-    accessToken = await requestRefresh()
+    const renewed = await requestRefresh()
+    if (accessToken === stale) accessToken = renewed
   } catch (error) {
     // 연결 문제와 서버 오류는 로그인 풀림이 아니다
     if (!(error instanceof ApiError && error.status === 401)) throw error
-    endSession()
+    if (accessToken === stale) endSession()
   }
   return accessToken
 }

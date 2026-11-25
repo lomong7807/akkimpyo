@@ -403,6 +403,56 @@ describe('새로고침한 뒤 로그인 상태 되찾기', () => {
   })
 })
 
+describe('잠금 없이 갱신과 로그인이 겹칠 때', () => {
+  /** 갱신의 응답을 `answer`로 미룬 채 이 탭에서 로그인에 성공한다. Web Locks는 없다. */
+  async function loginDuringRefresh(refreshResponse: Response) {
+    const backend = startBackend()
+    const answer = Promise.withResolvers<Response>()
+    backend.refreshResponse = () => answer.promise
+    const tab = await openTab()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    const restored = tab.restoreSession()
+    await vi.waitFor(() => expect(backend.requests.refresh).toHaveLength(1))
+    await tab.login(credentials)
+    backend.refreshResponse = undefined
+    answer.resolve(refreshResponse)
+    return { backend, tab, ended, restored: await restored }
+  }
+
+  it('늦게 온 갱신의 401이 방금 한 로그인을 지우지 않는다', async () => {
+    const { backend, tab, ended, restored } = await loginDuringRefresh(problem(401, 'UNAUTHENTICATED'))
+    expect(restored).toBe(true)
+    expect(ended).not.toHaveBeenCalled()
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['Bearer token-1'])
+    expect(backend.requests.refresh).toHaveLength(1)
+  })
+
+  it('늦게 온 갱신의 토큰이 방금 한 로그인을 덮지 않는다', async () => {
+    const { backend, tab, restored } = await loginDuringRefresh(HttpResponse.json({ accessToken: 'late-token' }))
+    expect(restored).toBe(true)
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['Bearer token-1'])
+    expect(backend.requests.refresh).toHaveLength(1)
+  })
+
+  it('쓰던 토큰이 만료돼 갱신하는 동안 다시 로그인해도, 늦은 401이 새 로그인을 풀지 않고 기다리던 요청은 새 토큰으로 보낸다', async () => {
+    const { backend, tab } = await openTabWithExpiredToken()
+    const answer = Promise.withResolvers<Response>()
+    backend.refreshResponse = () => answer.promise
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    const waiting = tab.request('/ledgers')
+    await vi.waitFor(() => expect(backend.requests.refresh).toHaveLength(1))
+    await tab.login(credentials)
+    answer.resolve(problem(401, 'UNAUTHENTICATED'))
+    await waiting
+    expect(ended).not.toHaveBeenCalled()
+    expect(backend.requests.ledgers).toEqual(['Bearer token-1', 'Bearer token-2'])
+  })
+})
+
 describe('탭 사이의 잠금', () => {
   beforeEach(() => installLocks(createFakeLocks()))
 
