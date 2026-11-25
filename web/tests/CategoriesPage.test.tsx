@@ -477,7 +477,7 @@ describe('오류', () => {
     ['거부', () => problem(404, 'NOT_FOUND')],
     ['연결 실패', () => HttpResponse.error()],
     ['약속과 다른 응답', () => HttpResponse.json({ items: [{ ...items[0], kind: 'TRANSFER' }] })],
-  ])('%s면 고르기 아래에 안내와 "다시 시도"를 보이고, 누르면 다시 받는다', async (_, response) => {
+  ])('%s: 고르기 아래에 안내와 "다시 시도"를 보이고, 누르면 다시 받는다', async (_, response) => {
     api.response = response
     const { user } = await open()
     await failure()

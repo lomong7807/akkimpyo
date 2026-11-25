@@ -29,7 +29,7 @@
   overflow-wrap: anywhere;
 }
 
-/* 선은 내용의 좌우 여백만큼 넓혀 화면 끝까지 닿게 한다 */
+/* 휴대폰 배치에서는 내용의 좌우 여백만큼 넓혀 선이 화면 끝까지 닿게 한다 */
 .fixed {
   margin-top: var(--space-24);
   margin-inline: calc(-1 * var(--space-16));
@@ -38,7 +38,7 @@
   border-top: 1px solid var(--color-border);
 }
 
-/* 내용이 화면보다 좁아지면 선도 내용 폭이다 */
+/* 내용을 가운데로 모으는 폭에서는 선이 내용 폭에 맞는다 */
 @media (width >= 768px) {
   .fixed {
     margin-inline: 0;

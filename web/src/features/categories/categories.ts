@@ -7,7 +7,7 @@ const kinds = ['EXPENSE', 'INCOME'] as const
 
 export type CategoryKind = (typeof kinds)[number]
 
-export interface SubCategory {
+interface SubCategory {
   id: string
   name: string
 }
