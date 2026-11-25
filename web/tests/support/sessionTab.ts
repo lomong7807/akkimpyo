@@ -45,6 +45,9 @@ export function answerRegardlessOfAbort(path: string) {
 /** 요청이 서버를 다녀올 만큼 기다린다. */
 export const settle = () => new Promise((resolve) => setTimeout(resolve, 30))
 
+/** 다시 보내는 로그아웃이 표시를 읽기까지 기다렸다가 서버를 다녀올 만큼 기다린다. */
+export const settleResent = () => new Promise((resolve) => setTimeout(resolve, 200))
+
 /** 시계를 멈춘다. 요청은 흐른다. */
 export const stopClock = () => void vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 

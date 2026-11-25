@@ -11,6 +11,7 @@ import {
   openTab,
   pass,
   settle,
+  settleResent,
   stopClock,
   type Tab,
 } from './support/sessionTab'
@@ -203,7 +204,7 @@ describe('기다리던 로그아웃은 로그인 뒤에 나가지 않는다', ()
     expect(backend.requests.login).toHaveLength(1)
     release()
     await login
-    await settle()
+    await settleResent()
     expect(backend.requests.login).toHaveLength(2)
     expect(backend.requests.logout).toHaveLength(0)
     expect(tab.pendingLogout()).toBeUndefined()
@@ -213,11 +214,82 @@ describe('기다리던 로그아웃은 로그인 뒤에 나가지 않는다', ()
   })
 })
 
+describe('다른 프로세스의 탭이 쓴 표시가 잠금보다 늦게 보여도', () => {
+  /** 다음 잠금을 얻은 직후 `ms` 동안 이 탭에는 지금의 표시가 그대로 보인다. */
+  function showStaleMarksAfterNextLock(ms: number) {
+    const snapshot: Record<string, string> = { ...localStorage }
+    installLocks({
+      request: (name, options, callback) =>
+        locks.request(name, options, () => {
+          const read = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key) => snapshot[key] ?? null)
+          setTimeout(() => read.mockRestore(), ms)
+          return callback()
+        }),
+    })
+  }
+
+  /** 다른 탭의 로그인이 잠금을 쥔 동안 다시 보내기가 줄을 섰다. */
+  async function resendBehindLogin() {
+    const tab = await openSignedInTab()
+    await leavePendingLogout(tab)
+    const login = delayed()
+    backend.loginResponse = login.respond
+    const other = await openTab()
+    const signedIn = other.login(credentials)
+    await login.arrived
+    showStaleMarksAfterNextLock(20)
+    const waiting = await openTab()
+    waiting.resendLogout()
+    login.answer(backend.issue('user-1'))
+    await signedIn
+    return { other }
+  }
+
+  it('다시 보내는 로그아웃은 다른 탭이 방금 한 로그인을 끝내지 않는다', async () => {
+    const { other } = await resendBehindLogin()
+    await settleResent()
+    expect(backend.requests.logout).toHaveLength(0)
+    expect(other.pendingLogout()).toBeUndefined()
+    await other.request('/me')
+    expect(backend.requests.me).toEqual(['user-1'])
+  })
+})
+
+describe('다시 보내는 로그아웃이 표시를 읽기까지 기다리는 동안', () => {
+  it('잠금을 빼앗기면 보내지 않고 대기를 남긴다', async () => {
+    const tab = await openSignedInTab()
+    const value = await leavePendingLogout(tab)
+    tab.resendLogout()
+    await steal()
+    await settleResent()
+    expect(backend.requests.logout).toHaveLength(0)
+    expect(tab.pendingLogout()).toBe(value)
+  })
+
+  it('로그인은 그 잠금이 끝난 뒤에 나가고, 로그아웃은 그보다 먼저 끝난다', async () => {
+    const tab = await openSignedInTab()
+    await leavePendingLogout(tab)
+    tab.resendLogout()
+    await tab.login(credentials)
+    expect(backend.requests.logout).toHaveLength(1)
+    await tab.request('/me')
+    expect(backend.requests.me).toEqual(['user-1'])
+  })
+})
+
+it('사용자가 누른 로그아웃은 잠금을 얻으면 기다리지 않고 보낸다', async () => {
+  const tab = await openSignedInTab()
+  stopClock()
+  tab.logout()
+  await pass(0)
+  expect(backend.requests.logout).toHaveLength(1)
+})
+
 describe('닿지 못한 로그아웃을 다시 보내기', () => {
   it('대기가 없으면 보내지 않는다', async () => {
     const tab = await openSignedInTab()
     tab.resendLogout()
-    await settle()
+    await settleResent()
     expect(backend.requests.logout).toHaveLength(0)
   })
 
@@ -236,7 +308,7 @@ describe('닿지 못한 로그아웃을 다시 보내기', () => {
     const value = await leavePendingLogout(tab)
     backend.logoutResponse = () => problem(500, 'INTERNAL_ERROR')
     tab.resendLogout()
-    await settle()
+    await settleResent()
     expect(backend.requests.logout).toHaveLength(1)
     expect(tab.pendingLogout()).toBe(value)
   })
@@ -247,10 +319,10 @@ describe('닿지 못한 로그아웃을 다시 보내기', () => {
     backend.logoutResponse = () => problem(500, 'INTERNAL_ERROR')
     tab.resendLogout()
     tab.resendLogout()
-    await settle()
+    await settleResent()
     expect(backend.requests.logout).toHaveLength(1)
     tab.resendLogout()
-    await settle()
+    await settleResent()
     expect(backend.requests.logout).toHaveLength(2)
   })
 
@@ -259,7 +331,7 @@ describe('닿지 못한 로그아웃을 다시 보내기', () => {
     const tabs = [await openTab(), await openTab(), await openTab()]
     tabs.forEach((tab) => tab.resendLogout())
     await vi.waitFor(() => expect(tabs[0].pendingLogout()).toBeUndefined())
-    await settle()
+    await settleResent()
     expect(backend.requests.logout).toHaveLength(1)
   })
 })

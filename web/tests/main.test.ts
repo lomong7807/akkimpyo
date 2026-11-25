@@ -54,7 +54,8 @@ describe('앱 시작', () => {
     backend.logoutResponse = () => HttpResponse.error()
     await startApp()
     expect(await screen.findByRole('heading', { level: 1, name: '로그인' })).toBeTruthy()
-    await new Promise((resolve) => setTimeout(resolve, 30))
+    // 다시 보내는 로그아웃은 표시를 읽기까지 잠깐 기다린다
+    await new Promise((resolve) => setTimeout(resolve, 250))
     expect(backend.requests.logout).toHaveLength(1)
     expect(backend.requests.refresh).toHaveLength(0)
   })

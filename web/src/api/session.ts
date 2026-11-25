@@ -84,22 +84,35 @@ async function startSession(requestToken: (lost: AbortSignal) => Promise<string>
 export function logout(): void {
   const value = recordLogout()
   endSession('logged-out')
-  // 앞 탭이 멈춰 있어도 사용자가 누른 로그아웃은 서버에 닿게 한다
-  void sendLogout(value, 'steal')
+  void sendLogout(value, 'pressed')
 }
 
 /** 닿지 못한 로그아웃이 있으면 한 번 다시 보낸다. 실패해도 되풀이하지 않는다. */
 export function resendLogout(): void {
   const value = pendingLogout()
   if (value === undefined) return
-  resending ??= sendLogout(value, 'fail').finally(() => {
+  resending ??= sendLogout(value, 'resent').finally(() => {
     resending = undefined
   })
 }
 
-async function sendLogout(value: string, whenStuck: 'fail' | 'steal'): Promise<void> {
+/**
+ * 다시 보내는 로그아웃이 잠금을 얻은 뒤 표시를 읽기까지 기다리는 시간.
+ * localStorage의 값이 다른 프로세스의 탭에 보이는 것과 그 탭이 잠금을 넘겨받는 것은 순서가 정해져 있지 않다. 얻자마자 읽은 값은
+ * 150번 중 33번 낡았고 늦어도 약 7ms 뒤에 새 값이 보였다(Chrome 158, 2026-11-26에 잼). 낡은 대기를 보고 보내면 다른 탭이
+ * 방금 한 로그인을 끝낸다. 잰 값에 여유를 둔 것이며, 순서가 보장되지 않으므로 완전히 막지는 못한다.
+ */
+const MARKS_ARRIVE_MS = 100
+
+/**
+ * - pressed: 사용자가 눌렀다. 앞 탭이 멈춰 있어도 서버에 닿게 잠금을 빼앗는다. 자기 값이 가장 새것이고 탭을 바로 닫을 수
+ *   있으므로 기다리지 않고 보낸다
+ * - resent: 닿지 못한 것을 저절로 다시 보낸다
+ */
+async function sendLogout(value: string, how: 'pressed' | 'resent'): Promise<void> {
   try {
-    await withSessionLock(whenStuck, async (lost) => {
+    await withSessionLock(how === 'pressed' ? 'steal' : 'fail', async (lost) => {
+      if (how === 'resent') await new Promise((resolve) => setTimeout(resolve, MARKS_ARRIVE_MS))
       // 기다리는 사이 로그인이 끝났으면 방금 한 로그인을 끝내게 되고, 새 로그아웃이 있으면 그것이 보낸다
       if (pendingLogout() !== value) return
       await requestLogout(lost)

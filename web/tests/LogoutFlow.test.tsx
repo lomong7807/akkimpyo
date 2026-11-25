@@ -43,6 +43,8 @@ const addressOf = ({ router }: Opened) => router.state.location.pathname + route
 const loginHeading = () => screen.findByRole('heading', { level: 1, name: '로그인' })
 const press = (user: Opened['user'], name: string) => user.click(screen.getByRole('button', { name }))
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+/** 다시 보내는 로그아웃이 표시를 읽기까지 기다렸다가 서버를 다녀올 만큼 기다린다. */
+const settleResent = () => act(() => new Promise((resolve) => setTimeout(resolve, 250)))
 
 /** 이 탭의 로그아웃. 화면의 줄이 부르는 것과 같다. */
 async function logOut() {
@@ -272,7 +274,7 @@ describe('로그아웃이 서버에 닿지 않은 채 앱을 열면', () => {
     backend.cookieUser = 'user-1'
     await open('/login')
     await waitFor(() => expect(backend.cookieUser).toBeUndefined())
-    await settle()
+    await settleResent()
     expect(backend.requests.logout).toHaveLength(1)
     expect(backend.requests.logout[0].headers.has('Authorization')).toBe(false)
   })
@@ -283,18 +285,18 @@ describe('로그아웃이 서버에 닿지 않은 채 앱을 열면', () => {
     backend.logoutResponse = () => HttpResponse.error()
     await open('/secret')
     await loginHeading()
-    await settle()
+    await settleResent()
     expect(backend.requests.logout).toHaveLength(1)
 
     act(() => void window.dispatchEvent(new Event('online')))
-    await settle()
+    await settleResent()
     expect(backend.requests.logout).toHaveLength(2)
 
     backend.logoutResponse = undefined
     act(() => void window.dispatchEvent(new Event('online')))
     await waitFor(() => expect(backend.cookieUser).toBeUndefined())
     act(() => void window.dispatchEvent(new Event('online')))
-    await settle()
+    await settleResent()
     expect(backend.requests.logout).toHaveLength(3)
   })
 
@@ -310,12 +312,12 @@ describe('로그아웃이 서버에 닿지 않은 채 앱을 열면', () => {
     backend.logoutResponse = () => HttpResponse.error()
     const { user } = await open('/list')
     await loginHeading()
-    await settle()
+    await settleResent()
     backend.logoutResponse = undefined
     await logIn(user, 'user-2')
     await screen.findByText(itemOf('user-2'))
     act(() => void window.dispatchEvent(new Event('online')))
-    await settle()
+    await settleResent()
     expect(backend.requests.logout).toHaveLength(1)
     expect(screen.getByText(itemOf('user-2'))).toBeTruthy()
   })
@@ -329,13 +331,14 @@ describe('로그아웃이 서버에 닿지 않은 채 앱을 열면', () => {
     backend.logoutResponse = () => HttpResponse.error()
     const { user } = await open('/list')
     await loginHeading()
-    await settle()
+    await settleResent()
     backend.logoutResponse = undefined
     await logIn(user, 'user-2')
     await login.arrived
     act(() => void window.dispatchEvent(new Event('online')))
     login.answer(backend.issue('user-2'))
     await screen.findByText(itemOf('user-2'))
+    await settleResent()
     await locks.request(SESSION_LOCK, {}, async () => {})
     expect(backend.requests.logout).toHaveLength(1)
   })
