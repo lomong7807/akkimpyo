@@ -37,17 +37,32 @@ SELECT md5('tx' || i)::uuid, md5('ledger' || (1 + i % 2))::uuid,
        'CONFIRMED', md5('user' || (1 + i % 2))::uuid, 0, now(), now()
   FROM generate_series(1, 5000) i;
 
-INSERT INTO transaction_line (id, transaction_id, account_id, category_id, amount, created_at)
-SELECT md5('line' || i)::uuid, md5('tx' || i)::uuid, md5('account' || (1 + i % 2) || '-1')::uuid,
-       CASE i % 5 WHEN 0 THEN NULL
-                  WHEN 1 THEN md5('system' || (1 + i % 2) || 'INCOME')::uuid
-                  ELSE md5('cafe' || (1 + i % 2))::uuid END,
-       CASE i % 5 WHEN 1 THEN 1000 + i ELSE -(1000 + i) END, now()
-  FROM generate_series(1, 5000) i;
+-- 라인의 ledger_id는 그 컬럼이 있는 스키마에만 들어간다(#58). jsonb_populate_record는 테이블에 없는 이름을 무시한다.
+INSERT INTO transaction_line
+SELECT r.*
+  FROM (SELECT md5('line' || i)::uuid AS id,
+               md5('tx' || i)::uuid AS transaction_id,
+               md5('ledger' || (1 + i % 2))::uuid AS ledger_id,
+               md5('account' || (1 + i % 2) || '-1')::uuid AS account_id,
+               CASE i % 5 WHEN 0 THEN NULL
+                          WHEN 1 THEN md5('system' || (1 + i % 2) || 'INCOME')::uuid
+                          ELSE md5('cafe' || (1 + i % 2))::uuid END AS category_id,
+               CASE i % 5 WHEN 1 THEN 1000 + i ELSE -(1000 + i) END AS amount,
+               now() AS created_at
+          FROM generate_series(1, 5000) i) l,
+       jsonb_populate_record(NULL::transaction_line, to_jsonb(l)) r;
 
-INSERT INTO transaction_line (id, transaction_id, account_id, amount, created_at)
-SELECT md5('line-in' || i)::uuid, md5('tx' || i)::uuid, md5('account' || (1 + i % 2) || '-2')::uuid, 1000 + i, now()
-  FROM generate_series(5, 5000, 5) i;
+-- 이체의 받는 쪽 라인
+INSERT INTO transaction_line
+SELECT r.*
+  FROM (SELECT md5('line-in' || i)::uuid AS id,
+               md5('tx' || i)::uuid AS transaction_id,
+               md5('ledger' || (1 + i % 2))::uuid AS ledger_id,
+               md5('account' || (1 + i % 2) || '-2')::uuid AS account_id,
+               1000 + i AS amount,
+               now() AS created_at
+          FROM generate_series(5, 5000, 5) i) l,
+       jsonb_populate_record(NULL::transaction_line, to_jsonb(l)) r;
 
 INSERT INTO change_log (id, transaction_id, ledger_id, action, actor_id, after_value, created_at)
 SELECT md5('log' || i)::uuid, md5('tx' || i)::uuid, md5('ledger' || (1 + i % 2))::uuid, 'CREATE',
