@@ -1,7 +1,7 @@
 # ADR 002: API 공통 규칙과 오류 응답 형식
 
 - 상태: 제안됨 (2026-11-24)
-- 보완: 2026-11-25, 5절에서 `TOO_MANY_REQUESTS`에 비밀번호 해시의 상한을 더하고 예외 목록을 main과 맞춘다. "지금 코드와 다른 점"의 `IdConflictException` 줄을 맞춘다(이 PR)
+- 보완: 2026-11-25, 5절에서 `TOO_MANY_REQUESTS`에 비밀번호 해시의 상한을 더하고 예외 목록을 main과 맞춘다. "지금 코드와 다른 점"의 `IdConflictException` 줄을 맞춘다(PR #167)
 - 결정한 사람: architect (검토: owner, 의견: frontend)
 
 ## 배경
