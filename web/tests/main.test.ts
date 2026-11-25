@@ -62,13 +62,13 @@ describe('앱 시작', () => {
 
   it('개발 때의 StrictMode에서도 로그인하면 원래 주소의 화면이 열린다', async () => {
     const backend = startBackend(server)
-    window.history.replaceState(null, '', '/accounts?month=2026-11')
+    window.history.replaceState(null, '', '/no-such-screen?month=2026-11')
     await startApp()
     await userEvent.type(await screen.findByLabelText('이메일'), 'name@example.com')
     await userEvent.type(screen.getByLabelText('비밀번호'), 'pass1234')
     await userEvent.click(screen.getByRole('button', { name: '로그인' }))
     expect(await screen.findByRole('heading', { level: 1, name: '찾을 수 없어요.' })).toBeTruthy()
-    expect(window.location.pathname + window.location.search).toBe('/accounts?month=2026-11')
+    expect(window.location.pathname + window.location.search).toBe('/no-such-screen?month=2026-11')
     expect(backend.requests.refresh).toHaveLength(1)
     expect(sessionStorage.length).toBe(0)
   })

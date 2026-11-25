@@ -1,0 +1,75 @@
+/* 휴대폰 배치에서는 내용의 좌우 여백만큼 넓혀 묶음 사이의 선이 화면 끝까지 닿게 한다 */
+.accounts {
+  --bleed: var(--space-16);
+
+  margin-inline: calc(-1 * var(--bleed));
+}
+
+/* 내용을 가운데로 모으는 폭에서는 선이 내용 폭에 맞는다 */
+@media (width >= 768px) {
+  .accounts {
+    --bleed: 0px;
+  }
+}
+
+/* 이름 칸이 줄의 1/3보다 좁아지면 금액을 다음 줄 오른쪽으로 내린다 */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  align-content: center;
+  column-gap: var(--space-12);
+  margin: 0;
+  padding-inline: var(--bleed);
+}
+
+.name {
+  flex: 1 1 calc(100% / 3);
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.amount {
+  flex: none;
+  margin-inline-start: auto;
+  font: var(--text-body-strong);
+}
+
+.total {
+  padding-block: var(--space-24);
+}
+
+.total .amount {
+  font: var(--text-title);
+}
+
+.group {
+  padding-top: var(--space-24);
+  border-top: 1px solid var(--color-border);
+}
+
+.group + .group {
+  margin-top: var(--space-24);
+}
+
+.head {
+  padding-bottom: var(--space-8);
+}
+
+.head .name {
+  font: var(--text-label);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account {
+  min-height: var(--size-row);
+  padding-block: var(--space-8);
+}
