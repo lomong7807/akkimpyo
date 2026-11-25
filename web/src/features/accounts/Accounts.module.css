@@ -12,7 +12,7 @@
   }
 }
 
-/* 이름 칸이 줄의 1/3보다 좁아지면 금액을 다음 줄 오른쪽으로 내린다 */
+/* 금액은 이름의 첫 줄에 맞추고, 이름 자리가 줄의 절반보다 좁아지면 다음 줄 오른쪽으로 내린다 */
 .row {
   display: flex;
   flex-wrap: wrap;
@@ -24,12 +24,10 @@
 }
 
 .name {
-  flex: 1 1 calc(100% / 3);
+  flex: 1 1 50%;
   min-width: 0;
-  overflow: hidden;
   font: var(--text-body);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .amount {

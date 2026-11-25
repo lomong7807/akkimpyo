@@ -172,7 +172,7 @@ describe('계좌 목록(G-01)', () => {
     for (const amount of content().getAllByText(/원$/)) expect(amount.classList.contains('tabular-nums')).toBe(true)
   })
 
-  it('긴 이름은 글자를 자르지 않고 넣는다(화면 읽기에 전체가 읽힌다). 이름은 글자로만 그린다', async () => {
+  it('긴 이름도 글자를 자르지 않고, 글자로만 그린다', async () => {
     const long = '<b>이름이 아주 길어서 한 줄에 다 들어가지 않는 생활비 통장</b>'
     await open([accountOf(long, 'BANK', 1)])
     expect(content().getByText(long)).toBeTruthy()
@@ -252,21 +252,37 @@ describe('계좌 목록의 모양', () => {
     expect(styleOf(totalRow().parentElement!).getPropertyValue('--bleed')).toBe('0px')
   })
 
-  it('자산 합계, 묶음 머리, 계좌 줄은 기준선을 맞추고 이름 칸이 줄의 1/3보다 좁아지면 금액을 다음 줄 오른쪽으로 내린다', async () => {
+  it('이름은 줄을 바꾸고 줄임표를 쓰지 않는다. 띄어쓰기가 없어도 칸 안에서 줄을 바꾼다', async () => {
+    await open()
+    for (const row of [totalRow(), headOf('은행'), within(group('은행')).getAllByRole('listitem')[0]]) {
+      const name = styleOf(row.children[0])
+      expect(name.getPropertyValue('overflow-wrap')).toBe('anywhere')
+      expect(name.textOverflow).not.toBe('ellipsis')
+      expect(name.overflow).not.toBe('hidden')
+      expect(name.whiteSpace).not.toBe('nowrap')
+    }
+  })
+
+  it('금액은 이름의 첫 줄에 맞추고, 이름 자리가 줄의 절반보다 좁아지면 다음 줄 오른쪽으로 내린다', async () => {
     await open()
     for (const row of [totalRow(), headOf('은행'), within(group('은행')).getAllByRole('listitem')[0]]) {
       expect(styleOf(row).display).toBe('flex')
       expect(styleOf(row).flexWrap).toBe('wrap')
       expect(styleOf(row).alignItems).toBe('baseline')
       const [name, amount] = row.children
-      expect(styleOf(name).flex).toBe('1 1 calc(33.3333%)')
+      expect(styleOf(name).flex).toBe('1 1 50%')
       expect(styleOf(name).minWidth).toBe('0px')
-      expect(styleOf(name).overflow).toBe('hidden')
-      expect(styleOf(name).textOverflow).toBe('ellipsis')
-      expect(styleOf(name).whiteSpace).toBe('nowrap')
       expect(styleOf(amount).flex).toBe('0 0 auto')
       expect(styleOf(amount).getPropertyValue('margin-inline-start')).toBe('auto')
     }
+  })
+
+  it('계좌 줄은 여러 줄이면 위아래 안쪽 8px을 지키고 커진다', async () => {
+    await open()
+    const [row] = within(group('은행')).getAllByRole('listitem')
+    expect(styleOf(row).getPropertyValue('padding-block')).toBe('var(--space-8)')
+    expect(styleOf(row).height).toBe('auto')
+    expect(styleOf(row).maxHeight).toBe('none')
   })
 })
 
