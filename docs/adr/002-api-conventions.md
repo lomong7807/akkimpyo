@@ -45,8 +45,11 @@
 
 ### 4. 오류 응답: RFC 9457 problem+json을 채택한다
 
-- Content-Type은 `application/problem+json`이다. Spring의 `ProblemDetail`로 만들 수 있어 새 의존성이 없다(확인: 지금 쓰는 spring-web 6.2.19에 있다. Spring Boot 4.2(#17)에서의 동작은 미확인).
+- Content-Type은 `application/problem+json`이다. Spring의 `ProblemDetail`로 만들 수 있어 새 의존성이 없다(확인: spring-web 7.1.0에 있다. Spring Boot 4.2.0에서 확장 필드가 최상위에 나가는 것을 PR #100의 임시 테스트로 확인했다).
 - 필드는 `type`(항상 `about:blank`), `title`(HTTP 상태 문구), `status`, `detail`(개발자가 읽는 한 줄)이고, 확장 필드는 `code`, `requestId`, 해당할 때만 `fieldErrors`, `current`다. `instance`는 넣지 않는다(경로에 토큰이 들 수 있다).
+- `type`은 직접 `about:blank`로 넣는다(Spring Boot 4.2는 넣지 않으면 본문에서 뺀다, PR #100).
+- 오류 응답은 전부 서버의 공통 처리기가 만들고, 프레임워크의 기본 오류 응답(`spring.mvc.problemdetails` 포함)은 그대로 내보내지 않는다(`code`와 `requestId`가 없고 `detail`에 요청 값이 들어간다, PR #100).
+- 필드 순서는 정하지 않으며, 본문 문자열을 통째로 비교하는 테스트는 쓰지 않는다.
 - 오류 종류는 `code`로 구분한다. 화면은 화면설계서의 문구를 `code`로 골라 쓰고, 모르는 `code`는 `status`로 처리한다. `code`는 추가만 하고 뜻을 바꾸거나 없애지 않는다.
 - `fieldErrors`는 입력란별 검증 오류의 배열이다. 항목은 `field`(요청 본문의 경로, 예: `lines[0].amount`), `code`, `message`다. `message`와 `detail`은 개발자가 읽는 글이고 화면 문구로 쓰지 않는다. 거래 요청의 줄 순서와 금액 부호 규칙은 OpenAPI 문서에 적는다(#14).
 - `detail`과 `message`에는 요청으로 받은 값을 그대로 넣지 않는다. `MALFORMED_REQUEST`의 `detail`은 고정 문구다.
@@ -150,6 +153,8 @@
 
 응답 본문과 헤더에 스택 트레이스, 예외 클래스 이름, SQL, 내부 주소를 넣지 않는다. Tomcat 기본 HTML 오류 페이지와 서버 제품을 드러내는 헤더도 내보내지 않는다. 모든 오류는 problem+json이다. 다만 프록시가 직접 내는 오류(502, 504 등)는 problem+json이 아닐 수 있다. 화면은 본문을 읽지 못하면 상태 코드(status)로 처리한다. 500의 `detail`은 고정 문구이고 원인은 `requestId`로 로그에서 찾는다. 이 규칙은 자동 테스트로 고정한다(구현 이슈에서).
 
+500, Whitelabel HTML, Tomcat 단계의 400은 설정만으로 problem+json이 되지 않으므로 따로 처리한다(#12, 확인한 곳은 PR #100).
+
 ### 8. 바꾸는 규칙
 
 - `/api/v1` 안에서는 더하기만 한다(필드, 경로, code 추가). 필드를 없애거나 뜻을 바꾸는 변경은 `/api/v2`로 한다. 화면은 모르는 필드를 무시해야 한다.
@@ -177,6 +182,7 @@
 - 거래 서비스의 조회, 수정, 취소, 삭제, 복원은 거래 id만 받는다. 거래 API는 경로의 `ledgerId`와 거래의 장부가 같은지 확인해야 한다. 다르면 404다.
 - 거래에 마지막으로 고친 사람을 담는 값이 없다. V1의 `transaction`과 `TransactionView`에는 고친 시각만 있고, 바꾼 사람은 `change_log.actor_id`에만 남는다.
 - `TransactionService.update`는 version을 입력 검증보다 먼저 본다. 검사 순서(검증 400 → version 409)와 맞춰야 한다.
+- UUID가 아닌 경로 id는 프레임워크 기본이 400이라 404로 바꾸는 처리가 필요하다(#12, 확인한 곳은 PR #100).
 
 ## 결과
 
