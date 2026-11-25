@@ -160,21 +160,26 @@ class ChangeLogStoredValueTest {
                 .doesNotContain(DEVICE, notListed, DeviceIds.UNKNOWN));
     }
 
-    /** 앱의 매핑과 컬럼 기본값을 거치지 않고, main이 저장했던 글자 그대로의 행을 넣는다. 형식 버전은 없던 때라 비운다. */
+    /** 전용 타입이 생기기 전의 main(c606135)이 이체를 휴지통에 넣으며 저장한 값이다. 형식 버전이 없던 때의 행은 버전 1이다. */
     @Test
     void 전용_타입_이전에_저장된_전후_값도_저장된_그대로_읽힌다() {
         transactionService.create(owner.getId(), ledgerId, expense(12_000), DEVICE);
         flushAndClear();
         String before = """
-                {"id": "00000000-0000-4000-8000-00000000100a", "memo": "나", "type": "EXPENSE", "lines": [{"amount": -12000, "accountId": "00000000-0000-4000-8000-0000000000c1", "categoryId": "00000000-0000-4000-8000-0000000000d3"}], "payee": "가", "paidBy": "00000000-0000-4000-8000-0000000000a1", "status": "POSTED", "deleted": false, "version": 1, "ledgerId": "00000000-0000-4000-8000-0000000000b1", "createdAt": "2026-11-24T08:30:43.292600Z", "createdBy": "00000000-0000-4000-8000-0000000000a1", "updatedAt": "2026-11-24T08:30:43.292600Z", "occurredOn": "2026-11-18", "occurredTime": "07:05:09.12"}
+                {"id": "00000000-0000-4000-8000-000000001024", "memo": "메모", "type": "TRANSFER",
+                 "lines": [{"amount": -30000, "accountId": "00000000-0000-4000-8000-0000000000c2", "categoryId": null},
+                           {"amount": 30000, "accountId": "00000000-0000-4000-8000-0000000000c1", "categoryId": null}],
+                 "payee": null, "paidBy": null, "status": "CANCELED", "deleted": false, "version": 3,
+                 "ledgerId": "00000000-0000-4000-8000-0000000000b1", "createdAt": "2026-11-24T08:30:43.120Z",
+                 "createdBy": "00000000-0000-4000-8000-0000000000a1", "updatedAt": "2026-11-24T08:30:43.292600Z",
+                 "occurredOn": "2026-11-18", "occurredTime": "07:05:09.12"}
                 """;
-        String after = """
-                {"id": "00000000-0000-4000-8000-00000000100a", "memo": null, "type": "EXPENSE", "lines": [{"amount": -1, "accountId": "00000000-0000-4000-8000-0000000000c1", "categoryId": null}], "payee": "가", "paidBy": null, "status": "POSTED", "deleted": true, "version": 2, "ledgerId": "00000000-0000-4000-8000-0000000000b1", "createdAt": "2026-11-24T08:30:43.292600Z", "createdBy": "00000000-0000-4000-8000-0000000000a1", "updatedAt": "2026-11-30T15:00:00Z", "occurredOn": "2026-11-18", "occurredTime": null}
-                """;
+        String after = before.replace("\"deleted\": false, \"version\": 3", "\"deleted\": true, \"version\": 4")
+                .replace("08:30:43.292600Z", "08:30:43.000001Z");
         jdbc.update("""
                 insert into change_log (id, transaction_id, ledger_id, version, action, actor_id, before_value,
                                         after_value, created_at)
-                values (?, ?, ?, 2, 'UPDATE', ?, cast(? as jsonb), cast(? as jsonb), now())
+                values (?, ?, ?, 4, 'DELETE', ?, cast(? as jsonb), cast(? as jsonb), now())
                 """, UUID.randomUUID(), id, ledgerId, owner.getId(), before, after);
 
         ChangeLogView read = transactionService.history(owner.getId(), id).getLast();
