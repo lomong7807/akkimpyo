@@ -61,6 +61,7 @@ const sizes = {
   '--size-icon-20': 20,
   '--size-icon-24': 24,
   '--size-row': 56,
+  '--size-sheet-handle': 36,
 } as const
 
 const widths = {

@@ -1,0 +1,67 @@
+.sheet {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 90%;
+  padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+  border-radius: var(--radius-12) var(--radius-12) 0 0;
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sheet);
+  translate: 0 var(--drag, 0);
+  transition: translate var(--motion-sheet-duration) var(--motion-sheet-easing);
+  animation: rise var(--motion-sheet-duration) var(--motion-sheet-easing);
+}
+
+@keyframes rise {
+  from {
+    translate: 0 100%;
+  }
+}
+
+/* 끄는 동안은 손가락을 바로 따라간다 */
+.sheet[data-dragging] {
+  transition: none;
+}
+
+.closing {
+  translate: 0 100%;
+  pointer-events: none;
+}
+
+.head {
+  flex: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.handle {
+  width: var(--size-sheet-handle);
+  height: var(--space-4);
+  margin: var(--space-8) auto 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-border-strong);
+}
+
+/* 닫기 버튼은 누르는 영역 44px의 안쪽 여백만큼 당겨 아이콘을 16px 선에 가깝게 둔다 */
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-4) 0 var(--space-16);
+}
+
+.title {
+  min-width: 0;
+  font: var(--text-title);
+}
+
+/* 머리와의 간격 4px을 스크롤되는 안쪽에 두어 맨 위 버튼의 초점 테두리가 잘리지 않게 한다 */
+.content {
+  min-height: 0;
+  padding-block: var(--space-4) calc(var(--space-8) + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
