@@ -11,7 +11,7 @@ SELECT md5('ledger' || i)::uuid, '장부 ' || i, now() FROM generate_series(1, 2
 INSERT INTO ledger_member (id, ledger_id, user_id, role, created_at)
 VALUES (md5('m1')::uuid, md5('ledger1')::uuid, md5('user1')::uuid, 'OWNER', now()),
        (md5('m2')::uuid, md5('ledger2')::uuid, md5('user2')::uuid, 'OWNER', now()),
-       (md5('m3')::uuid, md5('ledger1')::uuid, md5('user2')::uuid, 'EDITOR', now());
+       (md5('m3')::uuid, md5('ledger1')::uuid, md5('user2')::uuid, 'MEMBER', now());
 
 INSERT INTO account (id, ledger_id, name, type, opening_balance, opening_date, created_at)
 SELECT md5('account' || l || '-' || a)::uuid, md5('ledger' || l)::uuid, '계좌 ' || a, 'BANK', 1000000 * a, '2026-01-01', now()
@@ -34,7 +34,7 @@ SELECT md5('tx' || i)::uuid, md5('ledger' || (1 + i % 2))::uuid,
        CASE i % 5 WHEN 0 THEN 'TRANSFER' WHEN 1 THEN 'INCOME' ELSE 'EXPENSE' END,
        date '2026-01-01' + i % 300, '가맹점 ' || i % 50,
        md5(random()::text) || md5(random()::text) || md5(random()::text),
-       'CONFIRMED', md5('user' || (1 + i % 2))::uuid, 0, now(), now()
+       'POSTED', md5('user' || (1 + i % 2))::uuid, 1, now(), now()
   FROM generate_series(1, 5000) i;
 
 -- 라인의 ledger_id는 그 컬럼이 있는 스키마에만 들어간다(#58). jsonb_populate_record는 테이블에 없는 이름을 무시한다.
@@ -64,7 +64,31 @@ SELECT r.*
           FROM generate_series(5, 5000, 5) i) l,
        jsonb_populate_record(NULL::transaction_line, to_jsonb(l)) r;
 
-INSERT INTO change_log (id, transaction_id, ledger_id, action, actor_id, after_value, created_at)
-SELECT md5('log' || i)::uuid, md5('tx' || i)::uuid, md5('ledger' || (1 + i % 2))::uuid, 'CREATE',
-       md5('user' || (1 + i % 2))::uuid, jsonb_build_object('amount', 1000 + i), now()
-  FROM generate_series(1, 5000) i;
+-- 이력의 전후 값은 서버가 저장하는 모양(TransactionView의 JSON)이다. 거래 행에서 만들어 version이 서로 같다.
+-- version과 format_version은 그 컬럼이 있는 스키마에만 들어간다(#60).
+INSERT INTO change_log
+SELECT r.*
+  FROM (SELECT md5('log' || i)::uuid AS id,
+               t.id AS transaction_id,
+               t.ledger_id,
+               t.version,
+               1 AS format_version,
+               'CREATE' AS action,
+               t.created_by AS actor_id,
+               jsonb_build_object(
+                   'id', t.id, 'ledgerId', t.ledger_id, 'type', t.type,
+                   'occurredOn', t.occurred_on, 'occurredTime', t.occurred_time,
+                   'payee', t.payee, 'memo', t.memo, 'status', t.status,
+                   'createdBy', t.created_by, 'paidBy', t.paid_by,
+                   'version', t.version, 'deleted', t.deleted_at IS NOT NULL,
+                   'createdAt', to_char(t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+                   'updatedAt', to_char(t.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+                   'lines', (SELECT jsonb_agg(jsonb_build_object('accountId', l.account_id,
+                                                                 'categoryId', l.category_id,
+                                                                 'amount', l.amount) ORDER BY l.amount)
+                               FROM transaction_line l
+                              WHERE l.transaction_id = t.id)) AS after_value,
+               now() AS created_at
+          FROM generate_series(1, 5000) i
+          JOIN transaction t ON t.id = md5('tx' || i)::uuid) c,
+       jsonb_populate_record(NULL::change_log, to_jsonb(c)) r;
