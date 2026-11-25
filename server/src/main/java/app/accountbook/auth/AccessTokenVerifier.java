@@ -53,12 +53,12 @@ public class AccessTokenVerifier {
     }
 
     /**
-     * 만료 시각부터 통하지 않는다(RFC 7519 4.1.4절). 라이브러리의 JwtTimestampValidator는 허용 오차를 0으로 해도
-     * 만료 시각과 같은 순간을 받고, 만료가 없는 토큰을 받는 것이 기본이라 쓰지 않는다.
+     * 만료 시각부터 통하지 않는다(RFC 7519 4.1.4절). 값이 없으면 JwtClaimValidator가 거절한다.
+     * 라이브러리의 JwtTimestampValidator는 허용 오차를 0으로 해도 만료 시각과 같은 순간을 받고,
+     * 만료가 없는 토큰을 받는 것이 기본이라 쓰지 않는다.
      */
     private static OAuth2TokenValidator<Jwt> notExpired(Clock clock) {
-        return new JwtClaimValidator<Instant>(JwtClaimNames.EXP,
-                expiresAt -> expiresAt != null && clock.instant().isBefore(expiresAt));
+        return new JwtClaimValidator<Instant>(JwtClaimNames.EXP, expiresAt -> clock.instant().isBefore(expiresAt));
     }
 
     /** id는 소문자 UUID다(ADR 002 2절). UUID.fromString은 줄인 표기도 읽으므로 다시 적어 비교한다. */
@@ -68,7 +68,7 @@ public class AccessTokenVerifier {
 
     private static boolean isUserId(String subject) {
         try {
-            return subject != null && UUID.fromString(subject).toString().equals(subject);
+            return UUID.fromString(subject).toString().equals(subject);
         } catch (IllegalArgumentException e) {
             return false;
         }
