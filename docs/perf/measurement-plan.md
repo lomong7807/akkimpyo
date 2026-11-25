@@ -1,8 +1,8 @@
 # 아낌표 성능 측정 계획
 
-> **실측은 아직 하나도 없다.** 이 문서는 어떻게 잴지를 정한다. 결과가 생기면 6장의 양식으로 `docs/perf/results/`에 남긴다.
+> **쿼리 기준선 한 번만 쟀다**([결과](results/2026-11-24-query-baseline.md)). API와 화면 실측은 없다. 이 문서는 어떻게 잴지를 정한다. 결과는 7장의 양식으로 `docs/perf/results/`에 남긴다.
 
-- 상태: 초안, 실측 전
+- 상태: 초안, 쿼리 기준선만 실측(2026-11-24)
 - 작성일: 2026-11-24
 - 목표는 [README](README.md), 위험은 [risks.md](risks.md)에 있다.
 
@@ -43,8 +43,9 @@
 - 워크플로를 바꾸는 PR은 devops가 검토한다.
 - 부하 테스트는 CI 장비에서 수치가 흔들리므로 넣지 않는다. 조각(1A, 1B, 1C)이 끝날 때 손으로 돌린다.
 
-## 5. pg_stat_statements (미결정)
+## 5. pg_stat_statements
 
+- perf가 정함(2026-11-24, 결정 기록 이슈 #102): 로컬 측정용으로 `compose.perf.yaml`에 넣는다. 쓰는 법은 [perf/README.md](../../perf/README.md)에 있다.
 - 볼 쿼리를 총 실행 시간 순으로 고르는 데 쓴다.
 - 로컬 측정용으로 켜는 것에 dba는 동의했다. 조건은 두 가지다.
   - 공용 `compose.yaml`이 아니라 측정용 덮어쓰기 파일에 넣는다.
@@ -54,14 +55,14 @@
   - 실행은 `docker compose -f compose.yaml -f compose.perf.yaml up -d`이다.
   - `shared_preload_libraries`는 그 파일의 `command`로 준다. `CREATE EXTENSION`은 측정 절차에서 손으로 한다.
 - 운영 DB는 라이브러리 preload만 처음부터 켜 두길 devops가 권한다. dba 판단을 따른다.
-- 1단계 운영 모니터링에는 지연 백분위와 DB 연결 지표를 볼 곳이 없다. 어디서 볼지는 소유자 결정을 기다린다(미결정).
-- 두 의견을 받았고 소유자 결정을 기다린다(미결정).
+- 1단계는 로컬 측정만 하고, 운영에서 지연 지표를 어디서 볼지는 공개 전에 다시 정한다(perf가 정함, 2026-11-24, #102).
 
 ## 6. 다시 재는 시점
 
-- Spring Boot 4.2 이전(이슈 #17) 앞뒤.
+- Spring Boot 4.2 이전(이슈 #17) 앞뒤. → 쟀다: [2026-11-25 V6과 Spring Boot 4.2 뒤 다시 재기](results/2026-11-25-remeasure-v6-boot42.md)(SQL이 같은지와 pgJDBC 동작만 봤다. 쿼리 시간은 다시 재지 않았다)
 - `transaction_line`에 `ledger_id`를 넣는 결정이 난 뒤.
 - 조각(1A, 1B, 1C)이 끝날 때마다.
+- 이슈 #6이 머지된 뒤: 장부 전체 잔액에서 `account` 전체 훑기가 없어지는지(dba, PR #107). → 쟀다: [2026-11-25 V6과 Spring Boot 4.2 뒤 다시 재기](results/2026-11-25-remeasure-v6-boot42.md)
 
 ## 7. 결과 기록 양식
 
@@ -77,4 +78,4 @@
 - 목표 대비 판정
 - 확인/추정 구분
 
-결과 파일은 `docs/perf/results/YYYY-MM-DD-주제.md`에 둔다. 이번 PR에서는 이 폴더를 만들지 않는다.
+결과 파일은 `docs/perf/results/YYYY-MM-DD-주제.md`에 둔다. 첫 결과는 [2026-11-24 쿼리 기준선](results/2026-11-24-query-baseline.md)이다.

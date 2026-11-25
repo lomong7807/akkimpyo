@@ -1,0 +1,38 @@
+.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  /* 내용 아래 여백 24px과 짝을 맞춰 세로로도 가운데에 둔다 */
+  padding-top: var(--space-24);
+}
+
+.notice {
+  margin-bottom: var(--space-24);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  margin-block: var(--space-24) var(--space-8);
+}
+
+/* 글자가 오류 문구의 글자와 같은 선에서 시작한다 */
+.retry {
+  margin-inline-start: var(--space-16);
+}
+
+.signup {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+}
+
+@media (width >= 1024px) {
+  .page {
+    justify-content: center;
+    width: 100%;
+    max-width: var(--width-auth);
+    margin-inline: auto;
+  }
+}

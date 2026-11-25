@@ -9,7 +9,10 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.util.UUID;
 
-/** 분개 라인. amount는 계좌 잔액을 늘리면 양수, 줄이면 음수다. 이체 라인은 category가 없다. */
+/**
+ * 분개 라인. amount는 계좌 잔액을 늘리면 양수, 줄이면 음수다. 이체 라인은 category가 없다.
+ * ledgerId는 언제나 거래의 장부다. DB의 복합 FK(V12)가 거래·계좌·카테고리와 같은 장부인지 확인한다.
+ */
 @Entity
 @Table(name = "transaction_line")
 public class TransactionLine extends BaseEntity {
@@ -17,6 +20,9 @@ public class TransactionLine extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "transaction_id", nullable = false, updatable = false)
     private Transaction transaction;
+
+    @Column(name = "ledger_id", nullable = false, updatable = false)
+    private UUID ledgerId;
 
     @Column(name = "account_id", nullable = false, updatable = false)
     private UUID accountId;
@@ -33,6 +39,7 @@ public class TransactionLine extends BaseEntity {
     private TransactionLine(Transaction transaction, UUID accountId, UUID categoryId, long amount) {
         super(UUID.randomUUID());
         this.transaction = transaction;
+        this.ledgerId = transaction.getLedgerId();
         this.accountId = accountId;
         this.categoryId = categoryId;
         this.amount = amount;

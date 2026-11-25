@@ -1,6 +1,7 @@
 # ADR 002: API 공통 규칙과 오류 응답 형식
 
 - 상태: 제안됨 (2026-11-24)
+- 보완: 2026-11-25, 5절에서 `TOO_MANY_REQUESTS`에 비밀번호 해시의 상한과 `Retry-After`의 값을 더하고 예외 목록을 main과 맞춘다. "지금 코드와 다른 점"의 `IdConflictException` 줄을 맞춘다(PR #167)
 - 결정한 사람: architect (검토: owner, 의견: frontend)
 
 ## 배경
@@ -60,7 +61,7 @@
   - 비밀번호 바꾸기에서 현재 비밀번호가 틀림: 401이 아니라 400 `VALIDATION_FAILED`, `field`=`currentPassword`, `code`=`INCORRECT`(화면의 "401이면 토큰 갱신"과 섞이지 않게)
 - 본문을 JSON으로 읽을 수 없을 때만 400 `MALFORMED_REQUEST`다. JSON은 읽히지만 값의 형이 틀린 경우는 400 `VALIDATION_FAILED`이고 그 입력란에 `INVALID_FORMAT`을 준다.
 - 쿼리 값(`version`, `limit`, `cursor`, 달)의 오류도 400 `VALIDATION_FAILED`이고 `field`에는 쿼리 이름을 그대로 적는다. 경로의 id가 UUID 형식이 아니면 404 `NOT_FOUND`다(없는 자원과 같게).
-- `current`는 수정 충돌(409 `STALE_VERSION`) 때 서버의 최신 자원 전체다. 화면이 최신 내용과 내 입력을 나란히 보여 주는 데 쓴다(F-909).
+- `current`는 수정 충돌(409 `STALE_VERSION`) 때 서버의 최신 자원 전체다. 화면이 최신 내용과 내 입력을 나란히 보여 주는 데 쓴다(F-909). 409 `ID_CONFLICT` 가운데 같은 장부에서 내가 만든 거래일 때도 있다(ADR 006).
 - `requestId`는 프록시가 만든 `X-Request-Id` 값이다. 프록시는 밖에서 온 `X-Request-Id`를 덮어쓴다. 영문, 숫자, 하이픈, 밑줄로 된 64자 이하의 문자열이고 클라이언트는 해석하지 않는다. 서버는 형식을 검사해, 헤더가 없거나(로컬 개발, 테스트) 이 형식이 아니면 새로 만든다. 응답 헤더에도 같은 값을 넣는다(ADR 005).
 
 아래 예시에서 정한 것은 오류 필드의 모양이다. `detail`과 `message` 문구, `current` 안의 자원 필드는 예시이고 OpenAPI 문서가 기준이다.
@@ -112,30 +113,33 @@
 | 401 | `INVALID_CREDENTIALS` | 로그인 실패. 이메일과 비밀번호 중 무엇이 틀렸는지 구분하지 않는다(P-105) |
 | 403 | `FORBIDDEN` | 구성원이지만 권한이 모자란다(보기 전용의 쓰기, 소유자 전용 동작) |
 | 403 | `NO_LONGER_MEMBER` | 2단계에 추가. 내가 구성원이었던 장부(나갔거나 내보내짐, 삭제됨)(P-903, P-310, F-906). 본인이 이미 아는 사실이라 드러나는 것이 없다. 판정은 지난 구성원 기록으로만 하고, 응답에 장부의 값(이름 등)을 넣지 않는다. 기록이 남아 있는 동안만 준다. 그 기록은 장부 영구 삭제와 탈퇴 때 지우며, 기록이 없으면 404 `NOT_FOUND`다 |
+| 403 | `ORIGIN_NOT_ALLOWED` | 인증 경로에 다른 출처에서 왔거나 전용 헤더가 없는 요청. ADR 001 결정 5 |
 | 404 | `NOT_FOUND` | 없는 자원. 한 번도 구성원이 아니었던 장부와 그 데이터도 같은 응답이며 없는 것과 구분되지 않는다(P-903) |
 | 405 | `METHOD_NOT_ALLOWED` | 그 경로에서 받지 않는 메서드 |
 | 409 | `STALE_VERSION` | 낡은 version으로 고치려 했다. `current`가 있다 |
-| 409 | `ID_CONFLICT` | 같은 id로 다른 내용을 만들려 했다 |
+| 409 | `ID_CONFLICT` | 그 id로 만들 수 없다. 같은 id로 다른 내용을 만들려 했거나(이때 `current`가 있다), 그 id를 쓸 수 없다(`current` 없음). 판정은 ADR 006 |
 | 409 | `INVALID_STATE` | 입력란과 무관한 상태 오류("이미 취소된 거래" 등) |
 | 409 | `IN_USE` | 쓰이고 있어 지울 수 없다 |
 | 413 | `PAYLOAD_TOO_LARGE` | 본문이 너무 크다 |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | 지원하지 않는 Content-Type |
 | 429 | `LOGIN_LOCKED` | 로그인 잠금(P-105). `Retry-After` 헤더를 넣는다 |
-| 429 | `TOO_MANY_REQUESTS` | 출시 단계의 요청 횟수 제한. `Retry-After` 헤더를 넣는다 |
+| 429 | `TOO_MANY_REQUESTS` | 동시에 도는 비밀번호 해시의 상한(1단계부터, ADR 001 결정 7)과 출시 단계의 요청 횟수 제한. `Retry-After` 헤더를 넣는다. 초 단위 정수이고 해시 상한은 1이다 |
 | 500 | `INTERNAL_ERROR` | 서버 오류. `detail`은 고정 문구다 |
 
 검사 순서는 인증(401) → 구성원 확인(404) → 권한(403) → 입력 검증(400) → 상태와 version(409)이다. 409의 `current`는 구성원 확인을 지난 요청에만 나간다.
 
-요청 형식 자체의 오류(405, 413, 415, `MALFORMED_REQUEST`)는 인증보다 먼저 나올 수 있다. 대상 자원이 없는 404는 구성원 확인 다음이고, `ID_CONFLICT`는 409 단계다.
+만들기는 입력 검증을 형식 검증과 참조 검증으로 나누고 그 사이에 같은 id 조회를 둔다(ADR 006).
+
+요청 형식 자체의 오류(405, 413, 415, `MALFORMED_REQUEST`)는 인증보다 먼저 나올 수 있다. 대상 자원이 없는 404는 구성원 확인 다음이고, 만들기에서 `ID_CONFLICT`가 나오는 자리는 ADR 006 결정 4를 따른다.
 
 휴지통에 있는(소프트 삭제된) 거래를 낡은 version으로 고치려 하면 404가 아니라 409 `STALE_VERSION`이고 `current`에 `deletedAt`이 채워져 온다. 완전히 지워진 거래는 404 `NOT_FOUND`다.
 
 이슈 #24의 목록(400, 401, 403, 404, 409)에 405, 413, 415, 429, 500을 더했다. 로그인 잠금을 429로 둔 것은 architect 판단이며 security가 429에 동의했다(PR #97 검토, 2026-11-24). 잠금 응답이 계정의 존재를 드러내지 않게 하는 방법은 ADR 001에서 security와 정한다.
 
-지금 `common` 패키지에 있는 예외 8개는 다음 code가 된다(클래스 이름 확인, main `baaa2a4`).
+지금 `common` 패키지에 있는 예외 9개와 `transaction` 패키지의 `IdConflictException`은 다음 code가 된다(클래스 이름 확인, main `38a65a3`).
 
-- `DuplicateEmailException` → 400 `VALIDATION_FAILED`(`fieldErrors[].code`=`DUPLICATE`)
-- `IdConflictException` → 409 `ID_CONFLICT`
+- `DuplicateAccountNameException`, `DuplicateCategoryNameException`, `DuplicateEmailException` → 400 `VALIDATION_FAILED`(`fieldErrors[].code`=`DUPLICATE`)
+- `IdConflictException`(`transaction`) → 409 `ID_CONFLICT`
 - `InUseException` → 409 `IN_USE`
 - `InvalidRequestException` → 400 `VALIDATION_FAILED`(상태 오류는 409 `INVALID_STATE`)
 - `NotFoundException` → 404 `NOT_FOUND`
@@ -143,11 +147,11 @@
 - `NotLedgerOwnerException` → 403 `FORBIDDEN`
 - `StaleVersionException` → 409 `STALE_VERSION`
 
-남의 장부에 관한 정보를 응답으로 구분할 수 없어야 한다. 다른 장부에 이미 있는 id로 만들려 할 때도 장부의 존재가 드러나지 않아야 하며, 이때의 응답은 #21이 정한다.
+남의 장부에 관한 정보를 응답으로 구분할 수 없어야 한다. 다른 장부에 이미 있는 id로 만들려 할 때도 장부의 존재가 드러나지 않아야 하며, 이때의 응답은 ADR 006 결정 3이 정한다.
 
 ### 6. 만들기의 멱등 규칙
 
-기기가 id를 만드는 자원(거래)은 `POST`로 만들고 본문에 id를 넣는다. 같은 id와 같은 내용을 다시 보내면 새로 만들지 않고 저장된 자원을 돌려준다(처음은 201, 다시 보낸 것은 200). 같은 id에 다른 내용이면 409 `ID_CONFLICT`다. 오프라인에서 쌓아 둔 입력을 다시 보내도 겹치지 않게 하기 위한 규칙이다(P-225). 세부는 ADR 006(#72)이 다룬다. 다시 보낸 요청과 그사이 다른 기기의 수정이 겹칠 때, 검증과 기존 거래 조회의 순서는 ADR 006(#72)에서 정한다.
+기기가 id를 만드는 자원(거래)은 `POST`로 만들고 본문에 id를 넣는다. 같은 id와 같은 내용을 다시 보내면 새로 만들지 않고 저장된 자원을 돌려준다(처음은 201, 다시 보낸 것은 200). 판정은 ADR 006 결정 3의 표를 따른다. 오프라인에서 쌓아 둔 입력을 다시 보내도 겹치지 않게 하기 위한 규칙이다(P-225). 판정과 검사 순서는 ADR 006을 따른다.
 
 ### 7. 내보내지 않는 것
 
@@ -177,7 +181,7 @@
 구현 이슈에서 맞춘다. 이 PR은 코드를 바꾸지 않는다(확인, main `baaa2a4`).
 
 - `LedgerAccess.requireOwner`는 구성원이 아니어도 `NotLedgerOwnerException`을 던진다. 404가 먼저여야 한다.
-- `IdConflictException`은 내용이 다를 때와 다른 장부의 id일 때를 함께 다룬다(#21).
+- `IdConflictException`이 내용이 다를 때와 다른 장부의 id일 때를 함께 다루던 것은 끝났다(#21, PR #151). 이제 앞의 경우만 저장된 거래(`current`)를 담는다(확인, main `38a65a3`).
 - `InvalidRequestException`은 입력란 정보가 없고 상태 오류에도 쓰인다. `VALIDATION_FAILED`와 `INVALID_STATE`로 나눠야 한다.
 - 거래 서비스의 조회, 수정, 취소, 삭제, 복원은 거래 id만 받는다. 거래 API는 경로의 `ledgerId`와 거래의 장부가 같은지 확인해야 한다. 다르면 404다.
 - 거래에 마지막으로 고친 사람을 담는 값이 없다. V1의 `transaction`과 `TransactionView`에는 고친 시각만 있고, 바꾼 사람은 `change_log.actor_id`에만 남는다.
