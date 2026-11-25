@@ -1,0 +1,70 @@
+.sidebar {
+  display: none;
+}
+
+@media (width >= 1024px) {
+  .sidebar {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--space-16);
+    width: var(--width-sidebar);
+    height: 100dvh;
+    padding-block: max(var(--space-24), env(safe-area-inset-top)) max(var(--space-24), env(safe-area-inset-bottom));
+    padding-inline: var(--space-16);
+    overflow-y: auto;
+    border-inline-end: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+  }
+}
+
+.ledgerName {
+  flex: none;
+  margin: 0;
+  padding-inline: var(--space-8);
+  overflow: hidden;
+  font: var(--text-body-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.more {
+  margin-top: var(--space-8);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-height: var(--size-touch);
+  padding-inline: var(--space-8);
+  color: var(--color-text);
+  font: var(--text-body);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.row:active {
+  background-color: var(--color-press);
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .row:hover {
+    background-color: var(--color-press);
+  }
+}
+
+.row[aria-current] {
+  color: var(--color-accent);
+}

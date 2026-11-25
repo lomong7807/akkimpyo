@@ -203,13 +203,14 @@ describe('간격, 모서리, 크기, 선', () => {
 })
 
 describe('움직임', () => {
-  it('시트 200ms, 누름 100ms와 0.98배, 토스트 150ms', () => {
+  it('시트 200ms, 누름 100ms와 0.98배, 토스트 150ms, 처리 중 원 800ms', () => {
     const token = tokensIn()
     expect(token('--motion-sheet-duration')).toBe('200ms')
     expect(token('--motion-sheet-easing')).toBe(compact('cubic-bezier(0.2, 0, 0, 1)'))
     expect(token('--motion-press-duration')).toBe('100ms')
     expect(token('--motion-press-scale')).toBe('0.98')
     expect(token('--motion-toast-duration')).toBe('150ms')
+    expect(token('--motion-spinner-duration')).toBe('800ms')
   })
 
   it('움직임 줄이기를 켜면 눌러도 크기가 바뀌지 않는다', () => {

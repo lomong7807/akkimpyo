@@ -37,6 +37,12 @@ describe('기본 스타일', () => {
     expect(body.getPropertyValue('font')).toBe('var(--text-body)')
   })
 
+  it('한국어는 낱말 단위로 줄을 바꾸고, 한 줄보다 긴 낱말은 끊어 넘치지 않게 한다', () => {
+    const body = styleOf('body')
+    expect(body.getPropertyValue('word-break')).toBe('keep-all')
+    expect(body.getPropertyValue('overflow-wrap')).toBe('break-word')
+  })
+
   it('화면 제목은 text-title이다', () => {
     expect(styleOf('h1').getPropertyValue('font')).toBe('var(--text-title)')
   })
@@ -62,17 +68,28 @@ describe('기본 스타일', () => {
     expect(getComputedStyle(amount).fontVariantNumeric).toBe('tabular-nums')
   })
 
-  it('움직임 줄이기를 켜면 모든 요소의 애니메이션과 전환이 바로 끝난다', () => {
-    const media = baseRules().find(
-      (rule): rule is CSSMediaRule =>
-        rule instanceof CSSMediaRule && rule.media.mediaText === '(prefers-reduced-motion: reduce)',
-    )
-    const all = styleOf('*, ::before, ::after', [...(media?.cssRules ?? [])])
+  const reducedMotionRules = () =>
+    baseRules()
+      .filter((rule) => rule instanceof CSSMediaRule)
+      .filter((rule) => rule.media.mediaText === '(prefers-reduced-motion: reduce)')
+      .flatMap((rule) => [...rule.cssRules])
+
+  it('움직임 줄이기를 켜면 애니메이션과 전환이 바로 끝난다', () => {
+    const all = styleOf('*:not(.status-motion), ::before, ::after', reducedMotionRules())
     for (const name of ['animation-duration', 'animation-delay', 'transition-duration', 'transition-delay']) {
       expect(all.getPropertyValue(name), name).toBe('0s')
       expect(all.getPropertyPriority(name), name).toBe('important')
     }
     expect(all.getPropertyValue('scroll-behavior')).toBe('auto')
+  })
+
+  it('움직임 줄이기를 켜도 상태를 알리는 움직임(status-motion)은 남는다', () => {
+    document.body.innerHTML = '<span class="status-motion"></span><span></span>'
+    const [status, other] = document.body.children
+    const selectors = reducedMotionRules().flatMap((rule) => (rule instanceof CSSStyleRule ? [rule.selectorText] : []))
+    expect(selectors.length).toBeGreaterThan(0)
+    expect(selectors.some((selector) => other.matches(selector))).toBe(true)
+    expect(selectors.some((selector) => status.matches(selector))).toBe(false)
   })
 })
 

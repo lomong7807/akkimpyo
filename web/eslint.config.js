@@ -4,6 +4,14 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
+// 의존 방향은 app → features → components다. 거꾸로 불러오지 않는다.
+function importsFrom(folder) {
+  return {
+    regex: `^\\.\\.?/(.*/)?${folder}(/|$)`,
+    message: `의존 방향은 app → features → components다. 여기서 ${folder}를 불러오지 않는다.`,
+  }
+}
+
 export default tseslint.config(
   { ignores: ['dist'] },
   {
@@ -26,5 +34,13 @@ export default tseslint.config(
         },
       ],
     },
+  },
+  {
+    files: ['src/features/**/*.{ts,tsx}'],
+    rules: { 'no-restricted-imports': ['error', { patterns: [importsFrom('app')] }] },
+  },
+  {
+    files: ['src/components/**/*.{ts,tsx}'],
+    rules: { 'no-restricted-imports': ['error', { patterns: [importsFrom('app'), importsFrom('features')] }] },
   },
 )

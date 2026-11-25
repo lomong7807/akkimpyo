@@ -15,6 +15,11 @@ describe('index.html', () => {
     expect(page.documentElement.lang).toBe('ko')
   })
 
+  it('화면을 안전 영역까지 넓혀 env(safe-area-inset-*)가 값을 갖게 한다', () => {
+    const viewport = page.querySelector('meta[name="viewport"]')?.getAttribute('content') ?? ''
+    expect(viewport.split(/,\s*/)).toEqual(['width=device-width', 'initial-scale=1.0', 'viewport-fit=cover'])
+  })
+
   it('브라우저 위쪽 색은 밝은 화면과 어두운 화면 각각 color-bg 값이다', () => {
     expect(themeColor('light')).toBe('#F6F7F8')
     expect(themeColor('dark')).toBe('#0F1214')
