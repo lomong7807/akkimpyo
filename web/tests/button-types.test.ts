@@ -1,25 +1,8 @@
 // @vitest-environment node
-import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
-import { webPath } from './support/webFile'
+import { typeErrorsOf } from './support/typeErrors'
 
-/** `src/`에 이 JSX를 쓴 파일이 있다면 나올 타입 오류를 읽는다. 파일은 만들지 않는다. */
-function typeErrors(jsx: string): string[] {
-  const fileName = webPath('src/ButtonTypeSample.tsx')
-  const source = `import { Button, ButtonLink } from './components/Button'\nexport const sample = <>${jsx}</>\nexport { Button, ButtonLink }\n`
-  const { config } = ts.readConfigFile(webPath('tsconfig.app.json'), ts.sys.readFile)
-  const { options } = ts.parseJsonConfigFileContent(config, ts.sys, webPath('.'))
-  const host = ts.createCompilerHost(options)
-  const { fileExists, readFile, getSourceFile } = host
-  host.fileExists = (name) => name === fileName || fileExists(name)
-  host.readFile = (name) => (name === fileName ? source : readFile(name))
-  host.getSourceFile = (name, ...rest) =>
-    name === fileName ? ts.createSourceFile(name, source, rest[0]) : getSourceFile(name, ...rest)
-  const program = ts.createProgram([fileName, webPath('node_modules/vite/client.d.ts')], options, host)
-  return program
-    .getSemanticDiagnostics(program.getSourceFile(fileName))
-    .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'))
-}
+const typeErrors = (jsx: string) => typeErrorsOf(`import { Button, ButtonLink } from './components/Button'`, jsx)
 
 describe('버튼의 타입', () => {
   it('정해진 쓰임은 통과한다', () => {
