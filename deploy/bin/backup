@@ -189,6 +189,7 @@ manifest=$manifest
 META
 files=(meta.txt manifest.txt integrity-checks.sql globals.sql db.dump)
 (cd -- "$plain" && sha256sum -- "${files[@]}" >SHA256SUMS)
+# 같은 초에 두 번 돌면 이름이 겹쳐 올리기가 실패한다. 잠금이 있고 올리는 데 몇 초 걸려, 로컬 폴더 시험에서만 생긴다.
 bundle=akkimpyo-$(date -d "@$now" +%Y%m%dT%H%M%S)KST.tar.age
 tar -C "$plain" -cf - SHA256SUMS "${files[@]}" |
   "$AGE_BIN" --encrypt --recipients-file "$AGE_RECIPIENTS_FILE" --output "$work/$bundle.partial"
