@@ -17,6 +17,8 @@ export interface SendOptions extends RequestOptions {
   timeoutMs?: number
   /** 이 상태만 성공으로 본다. 없으면 2xx가 모두 성공이다. */
   successStatus?: number
+  /** 보내고 바로 탭을 닫아도 요청이 끝까지 나간다. */
+  keepalive?: boolean
 }
 
 /** /api/v1 아래로 요청을 한 번 보낸다. 앱에서 fetch를 부르는 곳은 여기뿐이다. 실패하면 ApiError를 던진다. */
@@ -38,7 +40,7 @@ export async function send(path: `/${string}`, options: SendOptions = {}): Promi
 
 async function exchange(
   path: `/${string}`,
-  { method = 'GET', body, accessToken, signal, timeoutMs = TIMEOUT_MS }: SendOptions,
+  { method = 'GET', body, accessToken, signal, timeoutMs = TIMEOUT_MS, keepalive }: SendOptions,
 ) {
   if (signal?.aborted) throw ApiError.timeout()
 
@@ -63,6 +65,7 @@ async function exchange(
       redirect: 'error',
       // 브라우저의 HTTP 캐시가 앞 사용자의 응답을 주지 않게 한다
       cache: 'no-store',
+      keepalive,
     })
     return { response, text: await response.text() }
   } catch {

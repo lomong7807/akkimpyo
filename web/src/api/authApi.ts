@@ -1,5 +1,5 @@
 import { ApiError } from './apiError'
-import { send } from './http'
+import { send, type SendOptions } from './http'
 
 /*
  * 로그인, 가입, 갱신, 로그아웃의 경로와 필드 이름. ADR과 서버 이슈에 적히지 않은 이름은 이 파일에만 있다.
@@ -42,8 +42,8 @@ export async function requestRefresh(signal: AbortSignal): Promise<string> {
 const LOGOUT_TIMEOUT_MS = 5_000
 
 /** refresh 쿠키가 가리키는 로그인을 서버에서 끝낸다. 서버는 이미 끝난 로그인에도 204로 답하므로 204만 성공이다(#28). */
-export async function requestLogout(signal: AbortSignal): Promise<void> {
-  await send('/auth/logout', { method: 'POST', signal, timeoutMs: LOGOUT_TIMEOUT_MS, successStatus: 204 })
+export async function requestLogout(signal: AbortSignal, { keepalive }: Pick<SendOptions, 'keepalive'>): Promise<void> {
+  await send('/auth/logout', { method: 'POST', signal, timeoutMs: LOGOUT_TIMEOUT_MS, successStatus: 204, keepalive })
 }
 
 /** Authorization 헤더에 넣을 수 있는 글자만 받는다(RFC 6750 2.1절 b64token). */

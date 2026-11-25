@@ -214,6 +214,39 @@ describe('기다리던 로그아웃은 로그인 뒤에 나가지 않는다', ()
   })
 })
 
+describe('탭을 바로 닫아도 요청이 나가게 하는 것(keepalive)은', () => {
+  /** 부른 뒤부터 보낸 요청의 경로와 keepalive */
+  function watchKeepalive() {
+    const fetch = vi.spyOn(globalThis, 'fetch')
+    return () => fetch.mock.calls.map(([path, init]) => [String(path).replace('/api/v1', ''), init?.keepalive === true])
+  }
+
+  it('사용자가 누른 로그아웃에만 준다', async () => {
+    const sent = watchKeepalive()
+    const tab = await openSignedInTab()
+    backend.expireTokens()
+    await tab.request('/me')
+    tab.logout()
+    await vi.waitFor(() => expect(tab.pendingLogout()).toBeUndefined())
+    expect(sent()).toEqual([
+      ['/auth/login', false],
+      ['/me', false],
+      ['/auth/refresh', false],
+      ['/me', false],
+      ['/auth/logout', true],
+    ])
+  })
+
+  it('다시 보내는 로그아웃에는 주지 않는다', async () => {
+    const tab = await openSignedInTab()
+    await leavePendingLogout(tab)
+    const sent = watchKeepalive()
+    tab.resendLogout()
+    await settleResent()
+    expect(sent()).toEqual([['/auth/logout', false]])
+  })
+})
+
 describe('다른 프로세스의 탭이 쓴 표시가 잠금보다 늦게 보여도', () => {
   /** 다음 잠금을 얻은 직후 `ms` 동안 이 탭에는 지금의 표시가 그대로 보인다. */
   function showStaleMarksAfterNextLock(ms: number) {

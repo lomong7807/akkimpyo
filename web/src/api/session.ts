@@ -106,16 +106,17 @@ const MARKS_ARRIVE_MS = 100
 
 /**
  * - pressed: 사용자가 눌렀다. 앞 탭이 멈춰 있어도 서버에 닿게 잠금을 빼앗는다. 자기 값이 가장 새것이고 탭을 바로 닫을 수
- *   있으므로 기다리지 않고 보낸다
+ *   있으므로 기다리지 않고 보내며, 보낸 뒤에 닫아도 나가게 한다(keepalive)
  * - resent: 닿지 못한 것을 저절로 다시 보낸다
  */
 async function sendLogout(value: string, how: 'pressed' | 'resent'): Promise<void> {
+  const pressed = how === 'pressed'
   try {
-    await withSessionLock(how === 'pressed' ? 'steal' : 'fail', async (lost) => {
-      if (how === 'resent') await new Promise((resolve) => setTimeout(resolve, MARKS_ARRIVE_MS))
+    await withSessionLock(pressed ? 'steal' : 'fail', async (lost) => {
+      if (!pressed) await new Promise((resolve) => setTimeout(resolve, MARKS_ARRIVE_MS))
       // 기다리는 사이 로그인이 끝났으면 방금 한 로그인을 끝내게 되고, 새 로그아웃이 있으면 그것이 보낸다
       if (pendingLogout() !== value) return
-      await requestLogout(lost)
+      await requestLogout(lost, { keepalive: pressed })
       if (!lost.aborted) settleLogout(value)
     })
   } catch {
