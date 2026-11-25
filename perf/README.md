@@ -279,7 +279,7 @@ SQL은 손으로 쓰지 않았다. 기존 테스트를 SQL 로그를 켜고 돌�
 grep -h org.hibernate.SQL server/build/test-results/test/*.xml | sed 's/.*org.hibernate.SQL[^:]*: //' | sort -u
 ```
 
-지금 파일은 2026-11-26에 main a55e96f(V12, Spring Boot 4.2.0, Hibernate 7.4.15.Final, PostgreSQL JDBC 42.7.14)에서 가져왔다. 다섯 문장이 로그의 문장과 글자 단위로 같고 `PREPARE`의 타입은 로그의 바인드 타입과 같다. 앞의 파일(main 48aa00e)과 달라진 것은 넷이다.
+지금 파일은 2026-11-26에 main a55e96f(V12, Spring Boot 4.2.0, Hibernate 7.4.15.Final, PostgreSQL JDBC 42.7.14)에서 가져왔다(c3ef222에서도 같다). 다섯 문장이 로그의 문장과 글자 단위로 같고 `PREPARE`의 타입은 로그의 바인드 타입과 같다. 앞의 파일(main 48aa00e)과 달라진 것은 넷이다.
 
 - `balance.sql`, `balances.sql`: PR #154의 `cast(... as numeric(38,0))`와 PR #170의 장부 조건(바인드가 5개, 3개로 늘었다)
 - `monthly-stats.sql`: PR #154의 `cast`
@@ -296,7 +296,7 @@ grep -h org.hibernate.SQL server/build/test-results/test/*.xml | sed 's/.*org.hi
 
 ## 확인한 날짜와 환경
 
-1~6번의 명령은 2026-11-24에, 7번(진단 측정)은 2026-11-25에 아래 환경에서 처음 실행해 확인했다. 2026-11-26에 main a55e96f(V12)에서 시드와 7번의 모든 단계(작은 DB `perf_small`), 8번의 모든 단계를 돌렸다.
+1~6번의 명령은 2026-11-24에, 7번(진단 측정)은 2026-11-25에 아래 환경에서 처음 실행해 확인했다. 2026-11-26에 main a55e96f(V12)에서 시드와 7번의 모든 단계(작은 DB `perf_small`), 8번의 모든 단계를 돌렸다. main c3ef222(V13~V15는 `change_log`만 바꾼다)에서도 작은 DB로 시드와 `base`가 돌고, 다섯 문장이 글자 단위로 같다.
 
 - 맥(Apple M5 Pro, 메모리 48GB), macOS 27.0.1, zsh
 - Docker Desktop(Docker 29.9.2, Compose 5.6.1). Docker VM에 CPU 10개, 메모리 약 7.7GB

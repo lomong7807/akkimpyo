@@ -15,7 +15,7 @@
 |---|---|
 | 날짜 | 2026-11-26 |
 | 잰 사람 | perf가 맡긴 작업자. 6장(왜 이 수치인지)은 perf가 쓴다 |
-| 커밋 | 서버 코드와 마이그레이션(V1~V12), `perf/queries/`는 main a55e96f(PR #170). #58 앞의 문장(`perf/queries/before-58/`)은 bc91001(a55e96f의 바로 앞, V9)에서 가져왔다. V9 DB의 시드는 c415677의 `perf/seed.sql`이다. 측정 스크립트는 이 PR의 89ce89a로 돌렸다 |
+| 커밋 | 서버 코드와 마이그레이션(V1~V12), `perf/queries/`는 main a55e96f(PR #170). #58 앞의 문장(`perf/queries/before-58/`)은 bc91001(a55e96f의 바로 앞, V9)에서 가져왔다. V9 DB의 시드는 c415677의 `perf/seed.sql`이다. 측정 스크립트는 이 PR의 89ce89a로 돌렸다. 이 PR에 main c3ef222(V13~V15, `change_log`만 바꾼다)를 merge한 뒤 다섯 문장을 다시 가져와 보았고 글자 단위로 같다. V15에서 `perf_small15`(작은 DB)로 시드와 `base`가 돈다(측정 DB는 V12다) |
 | 이슈 | [#171](https://github.com/lomong7807/akkimpyo/issues/171). 앞선 측정: [2026-11-24 쿼리 기준선](2026-11-24-query-baseline.md), [2026-11-25 잔액 진단](2026-11-25-balance-diagnosis.md), [2026-11-25 V6과 Spring Boot 4.2 뒤 다시 재기](2026-11-25-remeasure-v6-boot42.md) |
 
 ## 1. 결과 요약
