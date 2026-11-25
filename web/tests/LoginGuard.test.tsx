@@ -175,6 +175,7 @@ describe('로그인 없이 볼 수 있는 주소', () => {
   ])('/login은 %s이면 알림 없이 그대로 있다', async (_, respond) => {
     backend.refreshResponse = respond
     const { router } = await open('/login')
+    await waitFor(() => expect(backend.requests.refresh).toHaveLength(1))
     await settle()
     expect(backend.requests.refresh).toHaveLength(1)
     expect(router.state.location.pathname).toBe('/login')
@@ -187,6 +188,7 @@ describe('로그인 없이 볼 수 있는 주소', () => {
     const { router } = await open('/signup')
     setViewportWidth(width)
     await notFound()
+    await waitFor(() => expect(backend.requests.refresh).toHaveLength(1))
     await settle()
     expect(router.state.location.pathname).toBe('/signup')
     expect(screen.queryByRole('navigation')).toBeNull()
@@ -206,10 +208,10 @@ describe('로그인 없이 볼 수 있는 주소', () => {
     it('기억한 주소를 쓰지 않고 지운다', async () => {
       sessionStorage.setItem(RETURN_ADDRESS, '/secret')
       const { router } = await open(path)
+      await waitFor(() => expect(router.state.location.pathname).toBe('/home'))
+      await waitFor(() => expect(sessionStorage.length).toBe(0))
       await notFound()
-      await settle()
       expect(router.state.location.pathname).toBe('/home')
-      expect(sessionStorage.length).toBe(0)
     })
   })
 
@@ -219,8 +221,8 @@ describe('로그인 없이 볼 수 있는 주소', () => {
     await screen.findByText(secret)
     sessionStorage.setItem(RETURN_ADDRESS, '/secret')
     await router.navigate(path)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/home'))
     await notFound()
-    expect(router.state.location.pathname).toBe('/home')
   })
 })
 

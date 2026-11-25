@@ -121,6 +121,7 @@ describe('내 정보를 받지 못하면', () => {
     const me = delayed()
     backend.meResponse = me.respond
     await user.click(retryButton())
+    await me.arrived
     await settle()
     expect(screen.getByRole('heading', { level: 1 })).toBe(heading)
     expect(retryButton().getAttribute('aria-busy')).toBe('true')

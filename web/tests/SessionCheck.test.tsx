@@ -213,6 +213,7 @@ describe('확인하지 못함', () => {
     await user.click(retryButton())
     expect(retryButton().getAttribute('aria-busy')).toBe('true')
     expect(document.activeElement).toBe(retryButton())
+    await refresh.arrived
     await settle()
     expect(screen.getByRole('heading', { level: 1 })).toBe(heading)
     expect(dom.sawElement('[role="status"]')).toBe(false)
