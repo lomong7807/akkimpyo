@@ -10,6 +10,12 @@
   background-color: var(--color-surface);
 }
 
+/* 칸의 바깥은 상자가 자르므로 칸의 키보드 초점을 상자에 그린다 */
+.box:has(:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-ring-offset);
+}
+
 .option {
   padding: 0;
   border: 0;
@@ -18,8 +24,6 @@
   color: var(--color-text-secondary);
   font: var(--text-body);
   cursor: pointer;
-  transition: transform var(--motion-press-duration);
-  /* 눌림은 아래의 크기 변화로 보인다 */
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -33,11 +37,18 @@
   font: var(--text-body-strong);
 }
 
-.option:active {
-  transform: scale(var(--motion-press-scale));
+.option[aria-checked='false']:active {
+  background-color: var(--color-press);
 }
 
-/* 상자가 넘치는 부분을 잘라 바깥에 그리면 보이지 않는다 */
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .option[aria-checked='false']:hover {
+    background-color: var(--color-press);
+  }
+}
+
+/* 초점은 상자의 테두리로 보인다. 색이 강제되는 고대비 모드에서는 투명한 테두리가 보이게 된다 */
 .option:focus-visible {
-  outline-offset: calc(-1 * var(--focus-ring-width));
+  outline-color: transparent;
 }

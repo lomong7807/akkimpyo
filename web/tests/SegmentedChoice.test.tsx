@@ -183,14 +183,28 @@ describe('유형 고르기의 모양(components.md 4절)', () => {
     expect(styleOf(option('수입')).font).toBe('var(--text-body)')
   })
 
-  it('키보드 초점 테두리는 상자가 잘라 내지 않게 칸 안쪽에 그린다', () => {
-    expect(readCssRule(CSS, '.option:focus-visible')).toContain('outline-offset: calc(-1 * var(--focus-ring-width))')
+  it('칸에 키보드 초점이 있으면 상자 바깥에 다른 컴포넌트와 같은 초점 테두리를 그린다', () => {
+    const ring = readCssRule(CSS, '.box:has(:focus-visible)')
+    expect(ring).toContain('outline: var(--focus-ring-width) solid var(--color-accent)')
+    expect(ring).toContain('outline-offset: var(--focus-ring-offset)')
   })
 
-  it('누르는 동안 100ms에 걸쳐 조금 작아진다. 마우스를 올린 모양과 비활성 모양은 없다', () => {
-    expect(readCssRule(CSS, '.option:active')).toContain('transform: scale(var(--motion-press-scale))')
-    renderChoice()
-    expect(styleOf(option('지출')).transition).toContain('transform var(--motion-press-duration)')
-    expect(readWebFile(CSS)).not.toMatch(/:hover|disabled/)
+  it('칸 자신의 초점 테두리는 투명하다. 지우지는 않아 고대비 모드에서 남는다', () => {
+    const own = readCssRule(CSS, '.option:focus-visible')
+    expect(own).toContain('outline-color: transparent')
+    expect(own).not.toContain('outline-offset')
+  })
+
+  it('고르지 않은 칸은 누르는 동안과 마우스를 올린 동안 color-press 바탕이다. 손가락으로 누른 뒤에는 남지 않는다', () => {
+    expect(readCssRule(CSS, ".option[aria-checked='false']:active")).toContain('background-color: var(--color-press)')
+    expect(readWebFile(CSS)).toMatch(
+      /@media \(hover: hover\) \{\s*\.option\[aria-checked='false'\]:hover \{\s*background-color: var\(--color-press\);\s*\}\s*\}/,
+    )
+  })
+
+  it('고른 칸은 누르거나 마우스를 올려도 그대로이고, 칸은 작아지지 않는다. 비활성 모양은 없다', () => {
+    const css = readWebFile(CSS)
+    expect(css.match(/:(active|hover)/g)).toHaveLength(2)
+    expect(css).not.toMatch(/transform|transition|disabled/)
   })
 })
