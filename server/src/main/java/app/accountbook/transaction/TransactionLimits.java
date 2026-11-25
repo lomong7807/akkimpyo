@@ -1,6 +1,7 @@
 package app.accountbook.transaction;
 
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.ledger.LedgerDates;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -10,7 +11,6 @@ final class TransactionLimits {
 
     static final long MIN_AMOUNT = 1L;
     static final long MAX_AMOUNT = 9_999_999_999L;
-    static final LocalDate MIN_DATE = LocalDate.of(2000, 1, 1);
 
     private TransactionLimits() {
     }
@@ -22,14 +22,8 @@ final class TransactionLimits {
         }
     }
 
-    /**
-     * 2000-01-01부터 오늘로부터 1년 뒤까지(양 끝 포함). "오늘"은 주입한 시계의 지금을 장부 시간대의 날짜로 본 값이다.
-     * 1년 뒤는 달력 기준({@link LocalDate#plusYears})이라 오늘이 2월 29일이면 다음 해 2월 28일이다.
-     */
+    /** 범위는 {@link LedgerDates}가 정한다. */
     static void requireDateInRange(LocalDate occurredOn, Clock clock, ZoneId ledgerZone) {
-        LocalDate today = LocalDate.ofInstant(clock.instant(), ledgerZone);
-        if (occurredOn.isBefore(MIN_DATE) || occurredOn.isAfter(today.plusYears(1))) {
-            throw new InvalidRequestException("날짜는 2000-01-01부터 오늘로부터 1년 뒤까지 입력할 수 있습니다.");
-        }
+        LedgerDates.requireInRange("날짜는", occurredOn, clock, ledgerZone);
     }
 }

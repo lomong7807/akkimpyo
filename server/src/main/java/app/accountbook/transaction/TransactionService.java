@@ -393,8 +393,7 @@ public class TransactionService {
     /** "오늘"은 서버 시계의 지금을 그 장부의 시간대로 본 날짜다(P-202). */
     private void requireDateInRange(UUID ledgerId, LocalDate occurredOn) {
         ZoneId ledgerZone = ledgerRepository.findById(ledgerId)
-                .map(Ledger::getTimezone)
-                .map(ZoneId::of)
+                .map(Ledger::zoneId)
                 .orElseThrow(NotFoundException::new);
         TransactionLimits.requireDateInRange(occurredOn, clock, ledgerZone);
     }
