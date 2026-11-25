@@ -1,11 +1,12 @@
 import { useRef, type SubmitEvent } from 'react'
 import { Button } from '../../components/Button'
+import { keepFocusInField } from '../../components/keepFocusInField'
 import layout from '../../components/layout.module.css'
+import RetryMessage from '../../components/RetryMessage'
 import { TitleBar } from '../../components/Screen'
 import { PasswordField, TextField } from '../../components/TextField'
+import { useFormFields } from '../../components/useFormFields'
 import AuthLink from './AuthLink'
-import { keepFocusInField } from './keepFocusInField'
-import RetryMessage from './RetryMessage'
 import {
   DISPLAY_NAME_MAX,
   displayNameLength,
@@ -15,7 +16,6 @@ import {
   validateSignup,
 } from './signupForm'
 import { rejectedFields } from './signupRejection'
-import { useFormFields } from './useFormFields'
 import { useSignup, type SignUp } from './useSignup'
 import styles from './SignupPage.module.css'
 

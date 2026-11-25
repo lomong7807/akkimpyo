@@ -1,5 +1,5 @@
-import { Button } from '../../components/Button'
-import ErrorMessage from '../../components/ErrorMessage'
+import { Button } from './Button'
+import ErrorMessage from './ErrorMessage'
 import styles from './RetryMessage.module.css'
 
 interface RetryMessageProps {

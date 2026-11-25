@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { hasUnusableCharacter, trimWhiteSpace } from '../src/features/auth/visibleText'
+import { hasUnusableCharacter, lengthOf, normalizeName, trimWhiteSpace } from '../src/components/visibleText'
 
 /** 보이지 않는 글자를 시험 이름에서 알아보게 적는다. */
 const named = (text: string) =>
@@ -176,5 +176,18 @@ describe('앞뒤의 공백류 글자(유니코드 White_Space)', () => {
 
   it.each(table(['\u200B', '\uFEFF', '\u180E', '\u3164', '\u2800']))('공백류가 아닌 %s는 남긴다', (_, text) => {
     expect(trimWhiteSpace(`${text}가${text}`)).toBe(`${text}가${text}`)
+  })
+})
+
+describe('이름(P-214)', () => {
+  it('앞뒤의 공백류를 지우고 조합형으로 맞춘다', () => {
+    expect(normalizeName('\u3000 급여 통장\u00A0')).toBe('급여 통장')
+    expect(normalizeName('급여통장'.normalize('NFD'))).toBe('급여통장')
+  })
+
+  it('코드포인트로 센다', () => {
+    expect(lengthOf('급여통장')).toBe(4)
+    expect(lengthOf('\u{1F600}')).toBe(1)
+    expect(lengthOf('')).toBe(0)
   })
 })

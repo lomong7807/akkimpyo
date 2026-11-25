@@ -9,6 +9,16 @@ export function trimWhiteSpace(text: string): string {
   return trimEnds(text, (character) => whiteSpace.test(character))
 }
 
+/** 서버가 검사하고 저장하는 이름. 앞뒤의 공백류를 지우고 조합형으로 맞춘다. */
+export function normalizeName(name: string): string {
+  return trimWhiteSpace(name).normalize('NFC')
+}
+
+/** 서버와 같이 코드포인트를 센다. */
+export function lengthOf(text: string): number {
+  return [...text].length
+}
+
 /** 제어 문자, 서식 문자, 짝 없는 서로게이트, 줄·문단 구분 문자, 보이지 않는 글자. 변형 선택자가 여기에 든다. */
 const unusable =
   /[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029\u115F\u1160\u2800\u3164\uFFA0]|[\u034F\u17B4\u17B5\u180B-\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/u
