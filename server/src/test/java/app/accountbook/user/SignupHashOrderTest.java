@@ -12,7 +12,6 @@ import static org.mockito.Mockito.verify;
 
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.InvalidRequestException;
-import app.accountbook.common.PasswordHashBusyException;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.support.IntegrationTest;
 import java.time.Duration;

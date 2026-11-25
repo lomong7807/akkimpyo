@@ -1,6 +1,5 @@
 package app.accountbook.user;
 
-import app.accountbook.common.PasswordHashBusyException;
 import java.time.Duration;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;

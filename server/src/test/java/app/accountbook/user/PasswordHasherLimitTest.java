@@ -6,7 +6,6 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.spy;
 
 import app.accountbook.common.InvalidRequestException;
-import app.accountbook.common.PasswordHashBusyException;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Semaphore;
