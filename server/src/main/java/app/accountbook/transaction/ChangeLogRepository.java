@@ -1,5 +1,6 @@
 package app.accountbook.transaction;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,4 +17,7 @@ public interface ChangeLogRepository extends Repository<ChangeLog, UUID> {
     List<ChangeLog> findByTransactionIdOrderByVersionAsc(UUID transactionId);
 
     Optional<ChangeLog> findFirstByTransactionIdOrderByVersionDesc(UUID transactionId);
+
+    /** 장부를 가리지 않는다. 거래 id는 모든 장부에서 하나다. */
+    boolean existsByTransactionIdAndActionIn(UUID transactionId, Collection<ChangeAction> actions);
 }
