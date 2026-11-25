@@ -185,6 +185,7 @@ describe('access token이 머무는 곳', () => {
     vi.stubGlobal('indexedDB', { open: openDatabase })
     const methods = ['log', 'info', 'warn', 'error', 'debug', 'trace'] as const
     const consoleSpies = methods.map((method) => vi.spyOn(console, method))
+    localStorage.clear()
 
     const { backend, tab } = await openTabWithExpiredToken()
     await tab.request('/ledgers')
@@ -193,7 +194,8 @@ describe('access token이 머무는 곳', () => {
     await errorOf(tab.request('/ledgers'))
 
     expect(backend.requests.ledgers).toContain('token-2')
-    expect(localStorage.length).toBe(0)
+    // 로그인했음을 다른 화면이 아는, 뜻이 없는 임의 값 하나만 남는다
+    expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f]{32}$/) })
     expect(sessionStorage.length).toBe(0)
     expect(openDatabase).not.toHaveBeenCalled()
     expect(document.cookie).toBe('')

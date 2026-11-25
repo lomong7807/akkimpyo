@@ -1,3 +1,5 @@
+import { vi } from 'vitest'
+
 const originals = new Map<HTMLStyleElement, string>()
 
 function matchesWidth(media: string, width: number): boolean {
@@ -29,4 +31,26 @@ export function setViewportWidth(width: number): void {
 export function resetViewport(): void {
   for (const [style, css] of originals) style.textContent = css
   originals.clear()
+}
+
+/**
+ * 창 폭이 `width`px인 matchMedia를 흉내 낸다(jsdom에는 없다). `resizeTo`로 창 폭을 바꾸면 결과가 바뀐 조건에만 알린다.
+ * 되돌릴 때는 `vi.unstubAllGlobals`를 부른다.
+ */
+export function installMatchMedia(width: number) {
+  const queries: { media: string; target: EventTarget }[] = []
+  vi.stubGlobal('matchMedia', (media: string) => {
+    const target = new EventTarget()
+    queries.push({ media, target })
+    return Object.defineProperty(target, 'matches', { get: () => matchesWidth(media, width) })
+  })
+  return {
+    resizeTo(next: number) {
+      const before = queries.map(({ media }) => matchesWidth(media, width))
+      width = next
+      queries.forEach(({ media, target }, index) => {
+        if (matchesWidth(media, width) !== before[index]) target.dispatchEvent(new Event('change'))
+      })
+    },
+  }
 }

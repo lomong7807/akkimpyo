@@ -1,9 +1,12 @@
 import caretLeft from '../assets/icons/phosphor/caret-left.svg?raw'
+import caretRight from '../assets/icons/phosphor/caret-right.svg?raw'
 import check from '../assets/icons/phosphor/check.svg?raw'
+import dotsThree from '../assets/icons/phosphor/dots-three.svg?raw'
 import eyeSlash from '../assets/icons/phosphor/eye-slash.svg?raw'
 import eye from '../assets/icons/phosphor/eye.svg?raw'
 import info from '../assets/icons/phosphor/info.svg?raw'
 import plus from '../assets/icons/phosphor/plus.svg?raw'
+import signOut from '../assets/icons/phosphor/sign-out.svg?raw'
 import warningCircle from '../assets/icons/phosphor/warning-circle.svg?raw'
 import x from '../assets/icons/phosphor/x.svg?raw'
 import styles from './Icon.module.css'
@@ -11,11 +14,14 @@ import styles from './Icon.module.css'
 // Phosphor Icons Regular (phosphor-icons/core v2.0.8, MIT). 라이선스: ../assets/icons/phosphor/LICENSE
 const svgs = {
   CaretLeft: caretLeft,
+  CaretRight: caretRight,
   Check: check,
+  DotsThree: dotsThree,
   Eye: eye,
   EyeSlash: eyeSlash,
   Info: info,
   Plus: plus,
+  SignOut: signOut,
   WarningCircle: warningCircle,
   X: x,
 }

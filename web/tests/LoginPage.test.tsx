@@ -564,12 +564,14 @@ describe('성공', () => {
   })
 
   it('로그인 뒤 저장소와 쿠키, 주소, 캐시에 토큰과 비밀번호가 남지 않는다', async () => {
+    localStorage.clear()
     respondToLogin(success)
     const queryClient = createQueryClient()
     const { user, router } = openLogin({ queryClient })
     await fillAndSubmit(user)
     await vi.waitFor(() => expect(router.state.location.pathname).toBe('/home'))
-    expect(localStorage.length).toBe(0)
+    // 로그인했음을 다른 화면이 아는, 뜻이 없는 임의 값 하나만 남는다
+    expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f]{32}$/) })
     expect(sessionStorage.length).toBe(0)
     expect(document.cookie).toBe('')
     expect(JSON.stringify(router.state.location)).not.toMatch(/token-1|pass1234/)
