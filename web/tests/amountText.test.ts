@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { formatAmount, joinDigits, positionAfterDigits } from '../src/components/amountText'
+import { formatAmount, joinDigits, pastedDigits, positionAfterDigits } from '../src/components/amountText'
 
 describe('보이는 금액', () => {
   it.each([
@@ -49,6 +49,51 @@ describe('커서 앞뒤의 글자에서 숫자를 골라 잇기', () => {
     ['99999999999', '9'],
   ])('10자리를 넘으면 없다: "%s"와 "%s"', (before, after) => {
     expect(joinDigits(before, after)).toBeUndefined()
+  })
+})
+
+describe('붙여넣은 글의 숫자', () => {
+  it.each([
+    // 점과 숫자 한두 자리로 끝나면 그 부분을 버린다
+    ['12,000.50', '12000'],
+    ['12,000.5', '12000'],
+    ['12,000.5원', '12000'],
+    ['12,000.50 원 ', '12000'],
+    ['₩12,000.00', '12000'],
+    ['12.50', '12'],
+    ['0.5', '0'],
+    ['1.234.56', '1234'],
+    ['12,000.50.', '12000'],
+    ['9,999,999,999.99', '9999999999'],
+    ['12345678901.5', '12345678901'],
+    // 세 자리면 자릿수를 나눈 점이다
+    ['12.000', '12000'],
+    ['1.234.567', '1234567'],
+    ['12.000원', '12000'],
+    ['0.500', '0500'],
+    // 끝이 아니면 버리지 않는다
+    ['12.5 34', '12534'],
+    ['1.5만 2000', '152000'],
+    ['12,000', '12000'],
+    ['12,50', '1250'],
+    ['12,000.', '12000'],
+    ['12 . 50', '1250'],
+    // 전각 숫자는 숫자가 아니다
+    ['12,000.５０', '12000'],
+    // 남는 것이 없다
+    ['.50', ''],
+    ['.5원', ''],
+    ['-.50', ''],
+    ['없음', ''],
+    ['', ''],
+  ])('"%s"은 "%s"이다', (text, digits) => {
+    expect(pastedDigits(text)).toBe(digits)
+  })
+
+  it('아주 긴 글에서도 느려지지 않는다', () => {
+    const startedAt = performance.now()
+    pastedDigits(`${'.1a'.repeat(100_000)}${'.'.repeat(100_000)}${' '.repeat(100_000)}5x`)
+    expect(performance.now() - startedAt).toBeLessThan(1000)
   })
 })
 

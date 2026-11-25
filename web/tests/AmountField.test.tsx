@@ -305,7 +305,10 @@ describe('붙여넣기', () => {
     ['-5,000', '5,000', 5000],
     ['0012', '12', 12],
     ['00000000012000', '12,000', 12000],
-    ['12,000.50', '1,200,050', 1200050],
+    ['12,000.50', '12,000', 12000],
+    ['12,000.5원', '12,000', 12000],
+    ['12.000', '12,000', 12000],
+    ['9,999,999,999.99', '9,999,999,999', 9_999_999_999],
     ['１２345', '345', 345],
   ])('"%s"는 숫자만 골라 넣는다', async (text, shown, value) => {
     const { user, onChange } = renderField()
@@ -331,10 +334,10 @@ describe('붙여넣기', () => {
     expect(selection()).toEqual([1, 1])
   })
 
-  it('숫자가 하나도 없으면 고른 부분도 그대로다', async () => {
+  it.each(['없음 -', '.50', '.5원'])('넣을 숫자가 없으면 고른 부분도 그대로다: "%s"', async (text) => {
     const { user, onChange } = renderField({ initial: 1234 })
     putCaret(0, 5)
-    await user.paste('없음 -')
+    await user.paste(text)
     expect(input().value).toBe('1,234')
     expect(onChange).not.toHaveBeenCalled()
     expect(errorOf()).toBeUndefined()
@@ -342,6 +345,7 @@ describe('붙여넣기', () => {
 
   it.each([
     ['11자리', undefined, '12345678901'],
+    ['소수를 버려도 11자리', undefined, '12,345,678,901.50'],
     ['넣으면 11자리', 123456, '78901'],
   ])('%s는 넣지 않고 알린다', async (_, initial, text) => {
     const { user, onChange } = renderField({ initial })
@@ -360,6 +364,14 @@ describe('붙여넣기', () => {
     await user.paste('9999999999')
     expect(input().value).toBe('9,999,999,999')
     expect(errorOf()).toBeUndefined()
+  })
+})
+
+describe('손으로 치는 점', () => {
+  it('점은 들어가지 않고 뒤에 친 숫자는 그대로 이어진다', async () => {
+    const { user } = renderField()
+    await user.type(input(), '12.50')
+    expect(input().value).toBe('1,250')
   })
 })
 

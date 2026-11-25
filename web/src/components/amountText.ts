@@ -17,6 +17,14 @@ export function digitsOf(text: string): string {
 }
 
 /**
+ * 붙여넣은 글에서 넣을 숫자. 끝이 점과 숫자 한두 자리이면(그 뒤의 공백과 "원" 같은 글자는 보지 않는다) 원 아래의 자리로 보고
+ * 버린다. 점 뒤가 세 자리면 자릿수를 나눈 점이다. 손으로 치는 점은 그냥 들어가지 않는다(planner 결정 2026-11-26).
+ */
+export function pastedDigits(text: string): string {
+  return digitsOf(text.replace(/\.[0-9]{1,2}[^0-9]*$/, ''))
+}
+
+/**
  * 커서 앞과 뒤의 글자에서 숫자만 골라 잇고 앞자리 0을 지운다.
  * 커서 앞에 남은 숫자의 수를 함께 준다. 최대 자릿수를 넘으면 없다.
  */

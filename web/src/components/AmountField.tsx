@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type ChangeEvent, type ClipboardEvent, type CompositionEvent, type Ref } from 'react'
-import { amountTooLarge, digitsOf, formatAmount, joinDigits, positionAfterDigits } from './amountText'
+import { amountTooLarge, digitsOf, formatAmount, joinDigits, pastedDigits, positionAfterDigits } from './amountText'
 import { Button } from './Button'
 import Field, { type FieldLabels } from './Field'
 import styles from './AmountField.module.css'
@@ -89,7 +89,7 @@ export default function AmountField({
 
   function handlePaste(event: ClipboardEvent<HTMLInputElement>) {
     event.preventDefault()
-    const pasted = digitsOf(event.clipboardData.getData('text'))
+    const pasted = pastedDigits(event.clipboardData.getData('text'))
     if (readOnly || pasted === '') return
     const input = event.currentTarget
     write(input, input.value.slice(0, input.selectionStart!) + pasted, input.value.slice(input.selectionEnd!))
