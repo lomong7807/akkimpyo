@@ -4,7 +4,7 @@ Flyway 마이그레이션(`server/src/main/resources/db/migration/`) 기준이�
 
 ## 1. 지금부터 지킨다
 
-- main에 들어간 V 파일은 고치지 않는다. 고칠 것은 새 파일로 앞으로 고친다.
+- main에 들어간 V 파일은 고치지 않는다. 고칠 것은 새 파일로 앞으로 고친다. 예외는 복원 절차뿐이다([restore-runbook.md](restore-runbook.md) 4번).
 - 파일 이름은 `V<다음 번호>__<동사>_<대상>.sql`. 번호는 PR을 올리기 직전 main 기준으로 잡고, 다른 PR과 겹치면 나중에 머지되는 쪽이 번호를 올린다.
 - schema-standards의 타입과 제약 기준을 따른다.
 - 기존 데이터를 채우는 문장은 스키마 변경과 다른 파일에 둔다.
