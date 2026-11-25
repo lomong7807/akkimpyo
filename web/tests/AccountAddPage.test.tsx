@@ -3,7 +3,7 @@ import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountOf, accountsBody, startAccounts, type Accounts } from './support/accounts'
 import { delayed, startBackend, type Backend } from './support/backend'
-import { untilOpened } from './support/dialog'
+import { untilOpened, untilUnshielded } from './support/dialog'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -767,10 +767,10 @@ describe('닫기', () => {
     expect(dialog()).toBeNull()
   })
 
-  it.each(edits)('%s을 바꿨으면 묻는다', async (_, edit) => {
+  it.each(edits)('바꾼 값이 있으면 묻는다: %s', async (_, edit) => {
     const opened = await openFromList()
     await edit(opened.user)
-    await untilOpened()
+    await untilUnshielded()
     await opened.user.click(closeButton())
     expect(dialog()).toBeTruthy()
   })

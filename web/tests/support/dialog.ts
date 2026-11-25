@@ -1,4 +1,4 @@
-import { act } from '@testing-library/react'
+import { waitFor } from '@testing-library/react'
 
 /**
  * jsdom에 없는 `<dialog>`의 showModal과 close를 규격의 순서대로 흉내 낸다.
@@ -35,4 +35,16 @@ export function installDialog(): void {
 }
 
 /** 시트나 판이 다 열려 누르기를 받을 때까지 기다린다. */
-export const untilOpened = () => act(() => new Promise((resolve) => setTimeout(resolve, 350)))
+export const untilOpened = () =>
+  waitFor(() => {
+    if (!document.querySelector('dialog[open]:not([data-opening])')) throw new Error('아직 여는 중이다')
+  })
+
+/** 닫은 뒤의 덮개. 이어서 누른 것이 뒤 화면에 닿지 않게 한다. */
+export const shield = () => document.querySelector('body > [class*="shield"]')
+
+/** 닫은 뒤의 덮개가 걷힐 때까지 기다린다. */
+export const untilUnshielded = () =>
+  waitFor(() => {
+    if (shield()) throw new Error('아직 덮여 있다')
+  })

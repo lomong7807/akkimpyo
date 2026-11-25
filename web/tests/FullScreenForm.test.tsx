@@ -9,7 +9,7 @@ import FullScreenForm from '../src/components/FullScreenForm'
 import { TextField } from '../src/components/TextField'
 import { useLeaveGuard } from '../src/components/useLeaveGuard'
 import { readCssRule } from './support/cssRule'
-import { untilOpened } from './support/dialog'
+import { shield, untilOpened, untilUnshielded } from './support/dialog'
 import { recordDom } from './support/recordDom'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
@@ -306,8 +306,6 @@ describe('두 번 누르기', () => {
 })
 
 describe('떠난 뒤', () => {
-  const shield = () => document.querySelector('body > [class*="shield"]')
-
   it.each(ways)('%s로 떠나면 이어서 누른 것이 앞 화면에 닿지 않게 잠깐 덮는다', async (_, close) => {
     const user = await openFromList()
     expect(shield()).toBeNull()
@@ -315,8 +313,7 @@ describe('떠난 뒤', () => {
     await screen.findByText('목록')
     expect(fireEvent.mouseDown(shield()!)).toBe(false)
     expect(fireEvent.touchStart(shield()!)).toBe(false)
-    await act(() => new Promise((resolve) => setTimeout(resolve, 350)))
-    expect(shield()).toBeNull()
+    await untilUnshielded()
   })
 
   it('저장을 마치고 떠나도 같다', async () => {

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DateField from '../src/components/DateField'
 import { TextField } from '../src/components/TextField'
 import { readCssRule } from './support/cssRule'
-import { untilOpened } from './support/dialog'
+import { shield, untilOpened, untilUnshielded } from './support/dialog'
 import { installMatchMedia } from './support/viewport'
 
 const PHONE = 390
@@ -276,10 +276,9 @@ describe('고르기', () => {
     it('고른 뒤 이어서 누른 것이 뒤 화면에 닿지 않게 덮었다가 푼다', async () => {
       const user = await open()
       await user.click(day('2026년 11월 3일'))
-      expect(document.querySelector('[class*="shield"]')).toBeTruthy()
+      expect(shield()).toBeTruthy()
       expect(document.activeElement).toBe(field())
-      await untilOpened()
-      expect(document.querySelector('[class*="shield"]')).toBeNull()
+      await untilUnshielded()
     })
 
     it.each(['Enter', ' '])('고른 키 "%s"를 누르고 있어도 다시 열리지 않는다', async (key) => {

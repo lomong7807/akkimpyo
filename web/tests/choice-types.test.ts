@@ -8,8 +8,12 @@ const props = `label="구분" options={[{ value: 'A', label: '가' }]} value="A"
 
 describe('유형 고르기의 타입', () => {
   it('정해진 쓰임은 통과한다', () => {
-    expect(typeErrors(`<SegmentedChoice ${props} />`)).toEqual([])
-    expect(typeErrors(`<SegmentedChoice ${props} readOnly aria-describedby="a" ref={() => {}} />`)).toEqual([])
+    expect(
+      typeErrors(`
+        <SegmentedChoice ${props} />
+        <SegmentedChoice ${props} readOnly aria-describedby="a" ref={() => {}} />
+      `),
+    ).toEqual([])
   })
 
   it.each([
