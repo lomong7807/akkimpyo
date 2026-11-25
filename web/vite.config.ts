@@ -15,6 +15,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['tests/**/*.test.{ts,tsx}'],
+    setupFiles: 'tests/support/setup.ts',
     // 컴포넌트 CSS를 실제로 넣어, 화면에 적용된 값을 테스트에서 읽는다.
     css: true,
   },

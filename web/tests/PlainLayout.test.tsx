@@ -11,7 +11,7 @@ afterEach(() => {
   resetViewport()
 })
 
-describe('틀이 없는 화면의 틀(로그인, 가입, 첫 실행 안내)', () => {
+describe('틀이 없는 화면의 틀(로그인, 첫 실행 안내)', () => {
   it.each([390, 768, 1280])('폭 %dpx에서 주 메뉴와 상단 바 없이 내용만 그린다', (width) => {
     renderRoutes(routes, '/login')
     setViewportWidth(width)

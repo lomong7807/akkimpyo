@@ -148,7 +148,7 @@ describe('쓰던 로그인이 풀리면', () => {
     expect(screen.getByText(ended)).toBeTruthy()
 
     await opened.user.click(screen.getByRole('link', { name: '가입' }))
-    await screen.findByText('찾을 수 없어요.')
+    await screen.findByRole('heading', { level: 1, name: '가입' })
     expect(screen.queryByText(ended)).toBeNull()
     await opened.router.navigate('/login')
     await screen.findByRole('heading', { level: 1, name: '로그인' })

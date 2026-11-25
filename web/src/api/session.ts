@@ -1,5 +1,5 @@
 import { ApiError } from './apiError'
-import { requestLogin, requestRefresh, type Credentials } from './authApi'
+import { requestLogin, requestRefresh, requestSignup, type Credentials, type Registration } from './authApi'
 import { withSessionLock } from './sessionLock'
 import { isSameUser } from './tokenUser'
 
@@ -12,9 +12,18 @@ let renewal: Promise<string | undefined> | undefined
 const endedListeners = new Set<() => void>()
 
 /** 실패하면 ApiError를 던진다. */
-export async function login(credentials: Credentials): Promise<void> {
+export function login(credentials: Credentials): Promise<void> {
+  return startSession((lost) => requestLogin(credentials, lost))
+}
+
+/** 가입하고 그 사용자로 로그인한 상태가 된다. 실패하면 ApiError를 던진다. */
+export function signup(registration: Registration): Promise<void> {
+  return startSession((lost) => requestSignup(registration, lost))
+}
+
+async function startSession(requestToken: (lost: AbortSignal) => Promise<string>): Promise<void> {
   await withSessionLock('steal', async (lost) => {
-    const token = await requestLogin(credentials, lost)
+    const token = await requestToken(lost)
     if (!lost.aborted) accessToken = token
   })
 }

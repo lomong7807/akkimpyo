@@ -1,7 +1,8 @@
 import { useEffect, useReducer, type ReactNode } from 'react'
 import { TIMEOUT_MS } from '../api/http'
-import { login, onSessionEnded, restoreSession } from '../api/session'
+import { login, onSessionEnded, restoreSession, signup } from '../api/session'
 import type { SignIn } from '../features/auth/useLogin'
+import type { SignUp } from '../features/auth/useSignup'
 import { initialSession, nextSession, type SessionEvent } from './sessionState'
 import { SessionContext } from './SessionContext'
 
@@ -29,12 +30,18 @@ export default function SessionProvider({ children }: { children: ReactNode }) {
     dispatch('signed-in')
   }
 
+  const signUp: SignUp = async (account) => {
+    dispatch('login-submitted')
+    await signup(account)
+    dispatch('signed-in')
+  }
+
   function retry() {
     dispatch('retried')
     void checkSession().then(dispatch)
   }
 
-  return <SessionContext value={{ session, signIn, retry }}>{children}</SessionContext>
+  return <SessionContext value={{ session, signIn, signUp, retry }}>{children}</SessionContext>
 }
 
 /** 진행 중인 확인이 있으면 새로 보내지 않고 그 결과를 같이 받는다(api/session의 renew). */

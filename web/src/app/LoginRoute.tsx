@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router'
 import LoginPage from '../features/auth/LoginPage'
+import { passedEmail } from './passedEmail'
 import { readReturnAddress } from './returnAddress'
 import { useSession } from './SessionContext'
 
@@ -14,6 +15,7 @@ export default function LoginRoute() {
       signIn={signIn}
       onSignedIn={() => navigate(readReturnAddress(), { replace: true })}
       sessionEnded={state?.sessionEnded === true}
+      initialEmail={passedEmail(state)}
     />
   )
 }

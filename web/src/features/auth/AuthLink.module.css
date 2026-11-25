@@ -1,0 +1,15 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-12);
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+}
+
+/* 글자를 키워 두 줄이 되어도 링크의 글자가 묻는 말과 같은 선에서 시작하게 링크의 안쪽 여백만큼 당긴다 */
+.link {
+  display: flex;
+  margin-inline-start: calc(-1 * var(--space-8));
+}
