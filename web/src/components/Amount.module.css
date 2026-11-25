@@ -1,7 +1,6 @@
-/* 쉼표 뒤(wbr)가 아닌 곳에서는 폭이 모자라도 끊지 않는다 */
+/* 줄 폭보다 길 때만 끊는다. 놓는 칸은 그 전에 다음 줄로 내려가게 한다 */
 .amount {
-  word-break: keep-all;
-  overflow-wrap: normal;
+  overflow-wrap: anywhere;
 }
 
 .expense,
