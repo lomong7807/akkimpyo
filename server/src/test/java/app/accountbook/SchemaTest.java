@@ -77,4 +77,14 @@ class SchemaTest {
                 .isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("uq_category_name");
     }
+
+    @Test
+    void categoryNameWithSurroundingSpaceIsRejectedByDatabase() {
+        Ledger ledger = ledgerRepository.save(Ledger.personal());
+        Category trailingSpace = Category.of(ledger.getId(), CategoryKind.EXPENSE, "식비 ", null);
+
+        assertThatThrownBy(() -> categoryRepository.saveAndFlush(trailingSpace))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_category_name_trimmed");
+    }
 }
