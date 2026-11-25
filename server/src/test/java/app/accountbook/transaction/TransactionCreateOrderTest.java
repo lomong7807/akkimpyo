@@ -98,6 +98,23 @@ class TransactionCreateOrderTest {
     }
 
     @Test
+    void 기기_값의_형식이_틀린_요청은_같은_id가_있어도_형식_오류다() {
+        Entry mine = expense(UUID.randomUUID(), 12_000, null);
+        transactionService.create(owner.getId(), ledgerId, mine, DEVICE);
+        UUID others = UUID.randomUUID();
+        transactionService.create(stranger.getId(), strangerLedgerId,
+                new Entry(others, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 5_000, false,
+                        null, null, null), DEVICE);
+
+        // 내용까지 같은 재전송이든 쓸 수 없는 id든, 이미 저장된 거래를 돌려주거나 충돌로 답하지 않는다.
+        assertThatThrownBy(() -> transactionService.create(owner.getId(), ledgerId, mine, "iphone.safari\n"))
+                .isInstanceOf(InvalidRequestException.class);
+        assertThatThrownBy(() -> transactionService.create(owner.getId(), ledgerId, expense(others, 5_000, null),
+                "iphone.safari\n"))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
     void 재전송은_참조_검증보다_먼저_답한다() {
         User member = fixtures.user("member@example.com");
         fixtures.addMember(ledgerId, member, LedgerRole.MEMBER);
