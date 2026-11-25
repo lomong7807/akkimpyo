@@ -54,15 +54,15 @@ describe('더보기(M-01)', () => {
     expect(screen.queryByRole('heading')).toBeNull()
   })
 
-  it('1A에는 계좌 묶음과 맨 아래의 로그아웃 묶음만 있고 자리 표시가 없다', async () => {
+  it('1A에는 계좌와 카테고리 묶음, 맨 아래의 로그아웃 묶음만 있고 자리 표시가 없다', async () => {
     await open('/more')
     const groups = content()
       .getAllByRole('list')
       .map((list) => within(list).getAllByRole('listitem').map((item) => item.textContent))
-    expect(groups).toEqual([['계좌'], ['로그아웃']])
-    expect(content().getAllByRole('link')).toHaveLength(1)
+    expect(groups).toEqual([['계좌', '카테고리'], ['로그아웃']])
+    expect(content().getAllByRole('link')).toHaveLength(2)
     expect(content().getAllByRole('button')).toHaveLength(1)
-    expect(screen.getByRole('main').textContent).toBe('계좌로그아웃')
+    expect(screen.getByRole('main').textContent).toBe('계좌카테고리로그아웃')
   })
 
   it('계좌 줄은 아이콘과 화살표가 있고 누르면 계좌 목록으로 간다', async () => {
@@ -73,6 +73,14 @@ describe('더보기(M-01)', () => {
     await user.click(row)
     expect(await screen.findByRole('heading', { level: 1, name: '계좌' })).toBeTruthy()
     expect(router.state.location.pathname).toBe('/accounts')
+  })
+
+  it('카테고리 줄은 카테고리 화면으로 가는 링크이고 앞에 아이콘, 뒤에 화살표가 있다', async () => {
+    await open('/more')
+    const row = content().getByRole('link', { name: '카테고리' })
+    expect(row.getAttribute('href')).toBe('/categories')
+    expect(row.querySelectorAll('svg')).toHaveLength(2)
+    expect(row.lastElementChild!.querySelector('svg')).toBeTruthy()
   })
 
   it('로그아웃 줄은 본문 글자색의 목록 줄이고 화살표가 없다. 첫 묶음 위는 8px이고 묶음 사이에 선이 있다', async () => {
@@ -141,12 +149,12 @@ describe('계좌 항목', () => {
     expect(currentNames()).toEqual(['더보기'])
   })
 
-  it('사이드바에는 아이콘 없이 이름만 있고 로그아웃 위에 있다', async () => {
+  it('사이드바에는 아이콘 없이 이름만 있고 카테고리와 로그아웃 위에 있다', async () => {
     await open('/home', 1280)
     const link = within(menu()).getByRole('link', { name: '계좌' })
     expect(link.querySelector('svg')).toBeNull()
-    const rows = within(menu()).getAllByText(/^(계좌|로그아웃)$/)
-    expect(rows.map((row) => row.textContent)).toEqual(['계좌', '로그아웃'])
+    const rows = within(menu()).getAllByText(/^(계좌|카테고리|로그아웃)$/)
+    expect(rows.map((row) => row.textContent)).toEqual(['계좌', '카테고리', '로그아웃'])
   })
 
   it('사이드바에서 누르면 계좌 목록으로 가고 지금 항목이 된다. 바뀌는 것은 색뿐이다', async () => {

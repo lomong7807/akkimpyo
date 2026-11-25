@@ -30,10 +30,11 @@ export interface ScreenHandle {
 
 export const moreItem: MainNavigationItem = { label: '더보기', to: '/more', icon: 'DotsThree' }
 export const accountsItem: NavigationItem = { label: '계좌', to: '/accounts' }
+export const categoriesItem: NavigationItem = { label: '카테고리', to: '/categories' }
 
 /** 하단 탭과 사이드바의 항목. 화면을 만드는 이슈가 자기 항목을 더한다. */
 export const navigation: Navigation = {
   tabs: [moreItem],
   fallbackTab: moreItem,
-  sidebar: { main: [], more: [accountsItem] },
+  sidebar: { main: [], more: [accountsItem, categoriesItem] },
 }
