@@ -61,4 +61,28 @@ class SignupHashOrderTest {
 
         verify(passwordEncoder, times(1)).encode(any());
     }
+
+    @Test
+    void createUser_hashesNormalizedPassword() {
+        userService.createUser("normalized@example.com", "ａｂｃｄ１２３４", "주인");
+
+        verify(passwordEncoder, times(1)).encode(any());
+        verify(passwordEncoder).encode("abcd1234");
+    }
+
+    @Test
+    void createUser_doesNotHashWhenPasswordIsTooLongToNormalize() {
+        assertThatThrownBy(() -> userService.createUser("toolong@example.com", "a1" + "x".repeat(511), "주인"))
+                .isInstanceOf(InvalidRequestException.class);
+
+        verify(passwordEncoder, never()).encode(any());
+    }
+
+    @Test
+    void createUser_doesNotHashPasswordWithUnpairedSurrogate() {
+        assertThatThrownBy(() -> userService.createUser("surrogate@example.com", "password1\uD800", "주인"))
+                .isInstanceOf(InvalidRequestException.class);
+
+        verify(passwordEncoder, never()).encode(any());
+    }
 }

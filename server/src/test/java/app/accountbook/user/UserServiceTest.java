@@ -3,6 +3,7 @@ package app.accountbook.user;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 
 import app.accountbook.category.Category;
 import app.accountbook.category.CategoryCommand;
@@ -20,6 +21,8 @@ import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.ledger.LedgerRole;
 import app.accountbook.support.IntegrationTest;
 import java.sql.Timestamp;
+import java.text.Normalizer;
+import java.text.Normalizer.Form;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -29,6 +32,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -345,7 +349,7 @@ class UserServiceTest {
         assertThat(first.getId()).isNotEqualTo(second.getId());
     }
 
-    // --- 비밀번호 (P-101): 8~72자(유니코드 글자 수), 영문과 숫자를 모두 포함. Argon2id 해시로만 저장한다 ---
+    // --- 비밀번호 (P-101): NFKC로 맞춘 값이 8~72자(유니코드 글자 수), 영문과 숫자를 모두 포함. Argon2id 해시로만 저장한다 ---
 
     static Stream<String> acceptedPasswords() {
         return Stream.of(
@@ -370,8 +374,35 @@ class UserServiceTest {
                 "12345678",                       // 숫자만
                 "가나다라마바사1",                   // 한글과 숫자(영문 없음)
                 "가나다라마바사a",                   // 한글과 영문(숫자 없음)
-                "ａｂｃｄ１２３４",                  // 전각 영문과 숫자는 영문·숫자로 보지 않는다
-                "        ");                      // 공백만
+                "        ",                       // 공백만
+                "가나다라마바사①",                  // ①은 숫자 1이 되지만 영문이 없다
+                "abc123\u1100\u1161",             // 8자를 넣어도 분해형 '가'가 한 글자가 되어 7자다
+                "a1" + "x".repeat(69) + "ﬁ",      // 72자를 넣어도 합자가 두 글자가 되어 73자다
+                "a1" + "x".repeat(510),           // 512자: 정규화까지 가고 72자 규칙에서 거부된다
+                "a1" + "x".repeat(511),           // 513자: 정규화하지 않고 거부한다
+                "password1\uD800",                // 짝 없는 서로게이트
+                "\uDC00password1");
+    }
+
+    /** 입력값과, 같은 비밀번호로 저장돼야 하는 값(이미 NFKC). */
+    static Stream<Arguments> passwordsAcceptedAfterNormalization() {
+        return Stream.of(
+                argumentSet("전각 영문·숫자도 영문·숫자다", "ａｂｃｄ１２３４", "abcd1234"),
+                argumentSet("분해형 한글", "\u1112\u1161\u11ABabcdef1", "한abcdef1"),
+                argumentSet("7자가 합자 때문에 8자가 된다", "abc123ﬁ", "abc123fi"),
+                argumentSet("10자가 분해형 때문에 8자가 된다", "abc1234\u1112\u1161\u11AB", "abc1234한"),
+                argumentSet("74자가 분해형 때문에 72자가 된다", "a1" + "x".repeat(69) + "\u1112\u1161\u11AB",
+                        "a1" + "x".repeat(69) + "한"),
+                argumentSet("분해형 한글로 채운 72자(입력 212자)", "a1" + "\u1112\u1161\u11AB".repeat(70),
+                        "a1" + "한".repeat(70)),
+                argumentSet("앞뒤 전각 공백은 일반 공백으로 남는다", "\u3000abc123\u3000", " abc123 "));
+    }
+
+    /** 같은 비밀번호를 다른 유니코드 형태로 넣은 것. 앞의 것이 이미 NFKC다. */
+    static Stream<Arguments> samePasswordInTwoForms() {
+        return Stream.of(
+                argumentSet("한글 조합형과 분해형", "비밀번호abc1", Normalizer.normalize("비밀번호abc1", Form.NFD)),
+                argumentSet("영문·숫자 반각과 전각", "abcd1234", "ａｂｃｄ１２３４"));
     }
 
     @ParameterizedTest
@@ -380,6 +411,41 @@ class UserServiceTest {
         User user = userService.createUser("accepted@example.com", password, "주인");
 
         assertThat(passwordEncoder.matches(password, user.getPasswordHash())).isTrue();
+    }
+
+    @ParameterizedTest
+    @MethodSource("passwordsAcceptedAfterNormalization")
+    void createUser_appliesRuleAndHashToNormalizedPassword(String raw, String normalized) {
+        User user = userService.createUser("normalized@example.com", raw, "주인");
+
+        assertThat(passwordEncoder.matches(normalized, user.getPasswordHash())).isTrue();
+        assertThat(passwordEncoder.matches(raw, user.getPasswordHash())).isFalse();
+    }
+
+    @ParameterizedTest
+    @MethodSource("samePasswordInTwoForms")
+    void createUser_treatsTwoUnicodeFormsAsSamePassword(String normalizedForm, String otherForm) {
+        assertThat(otherForm).isNotEqualTo(normalizedForm);
+        User first = userService.createUser("form1@example.com", normalizedForm, "처음");
+        User second = userService.createUser("form2@example.com", otherForm, "두번째");
+
+        // 다른 형태로 가입했어도 저장된 것은 같은 비밀번호의 해시다.
+        assertThat(passwordEncoder.matches(normalizedForm, second.getPasswordHash())).isTrue();
+        // 비밀번호를 받는 다른 곳도 같은 함수를 거치면 어느 형태로 넣어도 맞는다.
+        assertThat(passwordEncoder.matches(PasswordNormalizer.normalize(otherForm).orElseThrow(),
+                first.getPasswordHash())).isTrue();
+    }
+
+    @Test
+    void createUser_distinguishesPasswordsDifferingOnlyInLastOfSeventyTwoCharacters() {
+        // UTF-8로 212바이트다. 뒤를 자르는 방식이면 마지막 글자만 다른 비밀번호가 같아진다.
+        String common = "a1" + "가".repeat(69);
+
+        User user = userService.createUser("long@example.com", common + "나", "주인");
+
+        assertThat(passwordEncoder.matches(common + "나", user.getPasswordHash())).isTrue();
+        assertThat(passwordEncoder.matches(common + "다", user.getPasswordHash())).isFalse();
+        assertThat(passwordEncoder.matches(common, user.getPasswordHash())).isFalse();
     }
 
     @ParameterizedTest

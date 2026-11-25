@@ -45,14 +45,14 @@ public class UserService {
      * 이메일은 앞뒤 공백을 지우고 소문자로 바꾼 값으로 저장하고 중복을 검사한다(P-101).
      * 같은 이메일로 동시에 가입하면 한 건만 성공하고 나머지는 {@link DuplicateEmailException}이다.
      * 표시 이름은 앞뒤 공백을 지운 1~{@value User#DISPLAY_NAME_MAX_LENGTH}자다(P-101).
-     * 비밀번호는 입력 그대로 받아 규칙({@link PasswordPolicy})을 본 뒤 Argon2id 해시로만 저장한다.
+     * 비밀번호는 NFKC로 맞춘 값으로 규칙({@link PasswordPolicy})을 보고 Argon2id 해시로만 저장한다.
      * 해시는 비싸므로 입력 검사와 중복 확인이 끝난 뒤에 한다(ADR 001 결정 7).
      */
     @Transactional
-    public User createUser(String rawEmail, String password, String rawDisplayName) {
+    public User createUser(String rawEmail, String rawPassword, String rawDisplayName) {
         String email = normalizeEmail(rawEmail);
         String displayName = Names.normalize(rawDisplayName, User.DISPLAY_NAME_MAX_LENGTH);
-        PasswordPolicy.validate(password);
+        String password = PasswordPolicy.normalizeAndValidate(rawPassword);
         if (userRepository.existsByEmail(email)) {
             throw new DuplicateEmailException();
         }
