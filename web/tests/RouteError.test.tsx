@@ -2,10 +2,13 @@ import { cleanup, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { RouteObject } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { routes } from '../src/app/routes'
-import { renderRoutes } from './support/renderRoutes'
+import { startBackend } from './support/backend'
+import { startMockServer } from './support/mockServer'
+import { openApp } from './support/openApp'
 
 vi.stubGlobal('scrollTo', vi.fn())
+
+const server = startMockServer()
 
 function Broken(): never {
   throw new Error('화면 코드의 예외')
@@ -17,11 +20,10 @@ function breakScreen(route: RouteObject, path: string): RouteObject {
   return { ...route, children: route.children?.map((child) => breakScreen(child, path)) } as RouteObject
 }
 
-function openBroken(path: string, at: string) {
-  return renderRoutes(
-    routes.map((route) => breakScreen(route, path)),
-    at,
-  )
+async function openBroken(path: string, at: string) {
+  startBackend(server).cookieUser = path === '/login' ? undefined : 'user-1'
+  await openApp(at, (routes) => routes.map((route) => breakScreen(route, path)))
+  await screen.findByRole('heading', { level: 1, name: '불러오지 못했어요.' })
 }
 
 beforeEach(() => {
@@ -40,33 +42,33 @@ describe.each([
   ['공통 틀이 없는 화면', '/login', '/login'],
   ['공통 틀이 있는 화면', '*', '/어떤-주소'],
 ])('%s의 코드가 예외를 던지면', (_, path, at) => {
-  it('영어 기본 화면 대신 F-907의 문구를 보인다', () => {
-    openBroken(path, at)
+  it('영어 기본 화면 대신 F-907의 문구를 보인다', async () => {
+    await openBroken(path, at)
     expect(screen.getByRole('heading', { level: 1, name: '불러오지 못했어요.' })).toBeTruthy()
     expect(screen.getByRole('main').textContent).toBe('불러오지 못했어요.잠시 후 다시 시도해 주세요.다시 시도')
   })
 
-  it('예외의 글자를 보이지 않는다', () => {
-    openBroken(path, at)
+  it('예외의 글자를 보이지 않는다', async () => {
+    await openBroken(path, at)
     expect(document.body.textContent).not.toContain('화면 코드의 예외')
-    expect(document.body.textContent).not.toMatch(/[a-z]{3,}/i)
+    expect(screen.getByRole('main').textContent).not.toMatch(/[a-z]{3,}/i)
   })
 
   it('"다시 시도"를 누르면 새로고침한다', async () => {
     const reload = vi.fn()
+    await openBroken(path, at)
     vi.stubGlobal('location', { ...window.location, reload })
-    openBroken(path, at)
     await userEvent.click(screen.getByRole('button', { name: '다시 시도' }))
     expect(reload).toHaveBeenCalledTimes(1)
   })
 })
 
-it('공통 틀이 있는 화면에서는 내용 자리만 바뀌고 틀은 그대로 보인다', () => {
-  openBroken('*', '/어떤-주소')
+it('공통 틀이 있는 화면에서는 내용 자리만 바뀌고 틀은 그대로 보인다', async () => {
+  await openBroken('*', '/어떤-주소')
   expect(screen.getByRole('navigation', { name: '주 메뉴' })).toBeTruthy()
 })
 
-it('공통 틀이 없는 화면에서는 틀 없이 보인다', () => {
-  openBroken('/login', '/login')
+it('공통 틀이 없는 화면에서는 틀 없이 보인다', async () => {
+  await openBroken('/login', '/login')
   expect(screen.queryByRole('navigation')).toBeNull()
 })

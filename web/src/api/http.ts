@@ -56,6 +56,8 @@ async function exchange(
       signal: aborter.signal,
       // API는 다른 주소로 보내지 않는다. 따라가면 본문과 토큰이 다른 곳으로 갈 수 있다
       redirect: 'error',
+      // 브라우저의 HTTP 캐시가 앞 사용자의 응답을 주지 않게 한다
+      cache: 'no-store',
     })
     return { response, text: await response.text() }
   } catch {

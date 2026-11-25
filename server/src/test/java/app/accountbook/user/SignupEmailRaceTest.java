@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import app.accountbook.common.DuplicateEmailException;
+import app.accountbook.support.CapturedLogs;
 import app.accountbook.support.IntegrationTest;
 import java.time.Duration;
 import java.util.List;
@@ -45,7 +46,8 @@ class SignupEmailRaceTest {
     @Timeout(60)
     void createUser_letsOnlyOneOfTwoOverlappingSignupsSucceed() {
         List<Long> before = SignupRows.counts(jdbc);
-        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+        String logged;
+        try (CapturedLogs logs = CapturedLogs.start(); ExecutorService executor = Executors.newSingleThreadExecutor()) {
             Future<User> second = transactionTemplate.execute(status -> {
                 userService.createUser(EMAIL, "password1", "먼저");
                 Future<User> overlapping = executor.submit(
@@ -57,7 +59,11 @@ class SignupEmailRaceTest {
             // 여기서는 먼저 온 가입이 커밋된 뒤다.
             assertThatThrownBy(() -> second.get(10, TimeUnit.SECONDS))
                     .hasCauseExactlyInstanceOf(DuplicateEmailException.class);
+            logged = logs.text();
         }
+
+        // 진 쪽의 유일 위반이 로그에 남지만 제약 이름뿐이고 이메일과 이름은 없다(#20).
+        assertThat(logged).contains("users_email_key").doesNotContain(EMAIL, "나중");
 
         assertThat(jdbc.queryForList("select display_name from users where email = ?", String.class, EMAIL))
                 .containsExactly("먼저");

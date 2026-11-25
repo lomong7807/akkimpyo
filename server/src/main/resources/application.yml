@@ -5,6 +5,10 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/accountbook}
     username: ${DB_USERNAME:accountbook}
     password: ${DB_PASSWORD:accountbook}
+    hikari:
+      data-source-properties:
+        # 제약 위반의 상세에는 그 행의 값(이메일, 비밀번호 해시, 이름, 메모 등)이 들어 있다. 예외와 로그에 싣지 않는다(#20).
+        logServerErrorDetail: false
   jpa:
     open-in-view: false
     hibernate:
