@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 삭제되거나 취소(CANCELED)된 거래의 라인은 빠진다. 합계는 DB가 계산한다.
  * 합계나 잔액이 long을 넘으면 틀린 값 대신 {@link ArithmeticException}이 난다. DB의 합계는 numeric이라 넘치지 않으며,
  * Long으로 바로 읽으면 드라이버의 예외 메시지에 금액이 들어가므로 BigInteger로 읽어 바꾼다.
+ * 라인과 거래에 장부 조건을 각각 건다. 조인으로만 장부를 좁히면 큰 장부에서 느리다(docs/db/schema-standards.md 4절).
  */
 @Component
 @Transactional(readOnly = true)
@@ -45,10 +46,13 @@ public class BalanceQuery {
                            and t.occurredOn >= :openingDate
                            and t.deletedAt is null
                            and t.status <> :canceled
+                           and l.ledgerId = :ledgerId
+                           and t.ledgerId = :ledgerId
                         """, BigInteger.class)
                 .setParameter("accountId", accountId)
                 .setParameter("openingDate", account.getOpeningDate())
                 .setParameter("canceled", TransactionStatus.CANCELED)
+                .setParameter("ledgerId", account.getLedgerId())
                 .getSingleResult();
         return Math.addExact(account.getOpeningBalance(), lineSum.longValueExact());
     }
@@ -61,7 +65,8 @@ public class BalanceQuery {
                           from TransactionLine l
                           join l.transaction t
                           join Account a on a.id = l.accountId
-                         where a.ledgerId = :ledgerId
+                         where l.ledgerId = :ledgerId
+                           and t.ledgerId = :ledgerId
                            and t.occurredOn >= a.openingDate
                            and t.deletedAt is null
                            and t.status <> :canceled
