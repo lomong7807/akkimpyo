@@ -1,0 +1,73 @@
+/*
+ * 휴대폰 배치에서는 칸만 스크롤하고 가입 버튼을 화면 맨 아래에 고정한다. 고정한 영역의 높이는 오류 문구와 글자 크기에
+ * 따라 바뀌므로, 화면 전체를 스크롤하며 덮으면 초점이 간 칸이 그 뒤에 가려진다.
+ * 화면이 낮고 글자가 커도 칸 하나는 보이게 남긴다. 그래도 넘치면 화면 전체를 스크롤한다.
+ */
+.form {
+  display: grid;
+  grid-template-rows: minmax(calc(2 * var(--size-field)), 1fr) auto;
+  height: calc(100dvh - var(--size-topbar) - env(safe-area-inset-top));
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding-block: var(--space-24);
+  overflow-y: auto;
+  /* 초점이 간 칸의 이름과 도움말도 보이게 한다 */
+  scroll-padding-block: var(--space-32);
+}
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding-block: var(--space-12) calc(var(--space-12) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.login {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+}
+
+/* 화면 전체를 스크롤할 때 키보드로 옮긴 초점이 상단 바 뒤에 가려지지 않게 한다 */
+:root:has(.page) {
+  scroll-padding-top: calc(var(--size-topbar) + env(safe-area-inset-top) + var(--space-4));
+}
+
+@media (width >= 1024px) {
+  .page {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 100%;
+    /* 좌우 여백 24px을 뺀 내용 폭이 400px이다 */
+    max-width: calc(var(--width-auth) + 2 * var(--space-24));
+    min-height: 100dvh;
+    margin-inline: auto;
+    padding-block: calc(var(--space-24) + env(safe-area-inset-top)) calc(var(--space-24) + env(safe-area-inset-bottom));
+  }
+
+  .form {
+    display: block;
+    height: auto;
+  }
+
+  .fields {
+    overflow-y: visible;
+  }
+
+  .bottom {
+    padding-block: 0;
+    border-top: 0;
+    background-color: transparent;
+  }
+
+  :root:has(.page) {
+    scroll-padding-top: 0;
+  }
+}

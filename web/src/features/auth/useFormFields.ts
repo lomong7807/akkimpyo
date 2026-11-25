@@ -15,6 +15,8 @@ export function useFormFields<Field extends string>({ fields, initialValues, val
   const [values, setValues] = useState(initialValues)
   /** 칸을 벗어나거나 제출해 오류 문구를 보이고 있는 칸 */
   const [shown, setShown] = useState<Set<Field>>(new Set())
+  /** 서버가 거부한 칸의 문구 */
+  const [rejected, setRejected] = useState<FieldErrors<Field>>({})
   const inputs = useRef<Partial<Record<Field, HTMLInputElement | null>>>({})
   const errors = validate(values)
 
@@ -24,6 +26,7 @@ export function useFormFields<Field extends string>({ fields, initialValues, val
     setValues(changed)
     // 맞게 고치면 바로 지운다. 다시 틀려도 칸을 벗어나기 전에는 띄우지 않는다.
     setShown((current) => new Set([...current].filter((name) => remaining[name])))
+    setRejected((current) => ({ ...current, [field]: undefined }))
   }
 
   /** 칸을 벗어났을 때의 검사 */
@@ -33,11 +36,21 @@ export function useFormFields<Field extends string>({ fields, initialValues, val
 
   /** 제출할 때의 검사. 오류가 있으면 위에서부터 첫 오류 칸으로 초점을 옮긴다. 모두 맞으면 true다. */
   function checkAll(): boolean {
-    const invalid = fields.filter((field) => errors[field])
-    setShown(new Set(invalid))
-    if (invalid.length === 0) return true
-    inputs.current[invalid[0]]?.focus()
-    return false
+    setRejected({})
+    setShown(new Set(fields.filter((field) => errors[field])))
+    return !focusFirst(errors)
+  }
+
+  /** 서버가 거부한 칸에 문구를 보이고 위에서부터 첫 칸으로 초점을 옮긴다. 문구는 그 칸을 고치면 사라진다. */
+  function reject(messages: FieldErrors<Field>) {
+    setRejected(messages)
+    focusFirst(messages)
+  }
+
+  function focusFirst(messages: FieldErrors<Field>): boolean {
+    const first = fields.find((field) => messages[field])
+    if (first) inputs.current[first]?.focus()
+    return first !== undefined
   }
 
   function fieldProps(field: Field) {
@@ -46,11 +59,11 @@ export function useFormFields<Field extends string>({ fields, initialValues, val
         inputs.current[field] = input
       },
       value: values[field],
-      error: shown.has(field) ? errors[field] : undefined,
+      error: (shown.has(field) && errors[field]) || rejected[field],
       onChange: (event: ChangeEvent<HTMLInputElement>) => change(field, event.target.value),
       onBlur: () => check(field),
     }
   }
 
-  return { values, fieldProps, checkAll }
+  return { values, fieldProps, check, checkAll, reject }
 }
