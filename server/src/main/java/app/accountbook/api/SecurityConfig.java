@@ -18,6 +18,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.firewall.HttpFirewall;
 import org.springframework.security.web.firewall.StrictHttpFirewall;
+import org.springframework.security.web.header.HeaderWriterFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
@@ -34,13 +35,15 @@ class SecurityConfig {
     };
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, AccessTokenVerifier verifier) {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, AccessTokenVerifier verifier, WebOrigin webOrigin) {
         return http
                 .authorizeHttpRequests(requests -> requests
                         // 오류 응답을 그리는 전달이다. 밖에서 직접 부른 /error는 여기에 들지 않는다.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(PUBLIC).permitAll()
                         .anyRequest().authenticated())
+                // 거절하는 응답에도 Cache-Control이 붙게 헤더를 쓰는 필터 바로 다음에 둔다.
+                .addFilterAfter(new AuthRequestFilter(webOrigin), HeaderWriterFilter.class)
                 .addFilterBefore(new AccessTokenFilter(verifier), AnonymousAuthenticationFilter.class)
                 .exceptionHandling(handling -> handling.authenticationEntryPoint(SecurityConfig::unauthenticated))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

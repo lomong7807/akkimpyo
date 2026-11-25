@@ -11,6 +11,7 @@ enum ErrorCode {
     MALFORMED_REQUEST(HttpStatus.BAD_REQUEST, "요청을 읽을 수 없다"),
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "유효한 access token이 없다"),
     FORBIDDEN(HttpStatus.FORBIDDEN, "이 동작을 할 권한이 없다"),
+    ORIGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "다른 출처에서 왔거나 전용 헤더가 없는 요청이다"),
     NOT_FOUND(HttpStatus.NOT_FOUND, "대상을 찾을 수 없다"),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "이 경로에서 받지 않는 메서드다"),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 Content-Type이다"),
