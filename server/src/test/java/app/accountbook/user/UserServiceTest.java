@@ -15,6 +15,7 @@ import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.ledger.LedgerRole;
 import app.accountbook.support.IntegrationTest;
 import java.util.List;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
@@ -60,6 +61,54 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.createUser("dup@example.com", "hash2", "두번째"))
                 .isInstanceOf(DuplicateEmailException.class);
         assertThat(userRepository.findAll()).extracting(User::getEmail).containsOnlyOnce("dup@example.com");
+    }
+
+    // --- 이메일 (P-101): 앞뒤 공백을 지우고 소문자로 저장하며 그 값으로 중복을 검사한다 ---
+
+    @Test
+    void createUser_storesEmailTrimmedAndLowercased() {
+        User user = userService.createUser("  Owner@Example.COM ", "hash", "주인");
+        userRepository.flush();
+
+        assertThat(user.getEmail()).isEqualTo("owner@example.com");
+        assertThat(userRepository.existsByEmail("owner@example.com")).isTrue();
+    }
+
+    @Test
+    void createUser_rejectsEmailDifferingOnlyByCaseAndSurroundingSpace() {
+        userService.createUser("A@x.com", "hash", "처음");
+
+        assertThatThrownBy(() -> userService.createUser(" a@X.com ", "hash2", "두번째"))
+                .isInstanceOf(DuplicateEmailException.class);
+        assertThat(userRepository.findAll()).extracting(User::getEmail).containsOnlyOnce("a@x.com");
+    }
+
+    @Test
+    void createUser_lowercasesEmailRegardlessOfDefaultLocale() {
+        Locale original = Locale.getDefault();
+        // 터키어 로캘에서는 "I".toLowerCase()가 점 없는 ı(U+0131)가 된다.
+        Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+        try {
+            User user = userService.createUser("INFO@MAIL.COM", "hash", "주인");
+
+            assertThat(user.getEmail()).isEqualTo("info@mail.com");
+        } finally {
+            Locale.setDefault(original);
+        }
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", "   ", "owner.example.com", "a@b@example.com", "a@@example.com",
+            "@example.com", "owner@"})
+    void createUser_rejectsEmailWithoutExactlyOneAtBetweenTwoParts(String email) {
+        long usersBefore = userRepository.count();
+        long ledgersBefore = ledgerRepository.count();
+
+        assertThatThrownBy(() -> userService.createUser(email, "hash", "주인"))
+                .isInstanceOf(InvalidRequestException.class);
+        assertThat(userRepository.count()).isEqualTo(usersBefore);
+        assertThat(ledgerRepository.count()).isEqualTo(ledgersBefore);
     }
 
     // --- 표시 이름 (P-101): 앞뒤 공백을 지운 1~20자, 다른 사람과 겹쳐도 된다 ---
