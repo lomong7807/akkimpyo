@@ -323,6 +323,22 @@ describe('브라우저가 강제로 닫으면', () => {
     expect(showModal).toHaveBeenCalledTimes(3)
   })
 
+  it('부르는 쪽이 닫으면 다시 열지 않는다', async () => {
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal')
+    function Closing() {
+      const [open, setOpen] = useState(true)
+      return (
+        <BottomSheet title="기준일" open={open} onClose={() => setOpen(false)}>
+          내용
+        </BottomSheet>
+      )
+    }
+    render(<Closing />)
+    await forceClose()
+    expect(dialog()).toBeNull()
+    expect(showModal).toHaveBeenCalledTimes(1)
+  })
+
   it('부르는 쪽이 늦게 닫아도 닫힌다', async () => {
     function Late() {
       const [open, setOpen] = useState(true)

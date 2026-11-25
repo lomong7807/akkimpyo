@@ -15,14 +15,11 @@ const CLOSE_RATIO = 1 / 4
  */
 export default function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<{ id: number; message: string }>()
-  const cancelWaiting = useRef(() => {})
 
   // 모달은 화면 전체를 덮고 그 밖은 읽히지 않으므로, 닫힌 뒤에 알린다
   const showToast = useCallback((message: string) => {
-    cancelWaiting.current()
-    cancelWaiting.current = afterModals(() => setToast((last) => ({ id: (last?.id ?? 0) + 1, message })))
+    afterModals(() => setToast((last) => ({ id: (last?.id ?? 0) + 1, message })))
   }, [])
-  useEffect(() => () => cancelWaiting.current(), [])
 
   const removeToast = useCallback(() => setToast(undefined), [])
 
@@ -46,14 +43,14 @@ function Toast({ message, onClosed }: { message: string; onClosed: () => void })
   const swipeHandlers = useSwipeDown(() => setClosing(true))
 
   useEffect(() => {
-    if (paused || closing) return
+    if (paused) return
     const startedAt = performance.now()
     const timer = setTimeout(() => setClosing(true), remaining.current)
     return () => {
       clearTimeout(timer)
       remaining.current -= performance.now() - startedAt
     }
-  }, [paused, closing])
+  }, [paused])
 
   useEffect(() => {
     if (!closing) return

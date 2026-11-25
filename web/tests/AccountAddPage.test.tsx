@@ -556,6 +556,17 @@ describe('처리 중', () => {
     expect(screen.getByRole('main').parentElement!.hasAttribute('aria-busy')).toBe(false)
   })
 
+  it('저장에 성공해 목록으로 갈 때까지 저장 버튼이 풀리지 않는다', async () => {
+    const { answer } = await startSaving()
+    const changes: MutationRecord[] = []
+    const observer = new MutationObserver((records) => void changes.push(...records))
+    observer.observe(saveButton(), { attributeFilter: ['aria-busy'] })
+    answer.answer(HttpResponse.json(accountOf('급여통장', 'BANK', 350000), { status: 201 }))
+    await screen.findByText('급여통장')
+    expect([...changes, ...observer.takeRecords()]).toEqual([])
+    observer.disconnect()
+  })
+
   it('닫기, 뒤로, Esc로 닫히지 않고 묻지 않으며, 끝나면 목록으로 간다', async () => {
     const opened = await startSaving()
     await opened.user.click(closeButton())

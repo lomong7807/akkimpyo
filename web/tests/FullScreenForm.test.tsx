@@ -10,6 +10,7 @@ import { TextField } from '../src/components/TextField'
 import { useLeaveGuard } from '../src/components/useLeaveGuard'
 import { readCssRule } from './support/cssRule'
 import { untilOpened } from './support/dialog'
+import { recordDom } from './support/recordDom'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
@@ -383,11 +384,12 @@ describe('처리 중', () => {
     const user = await openFromList()
     await user.type(name(), '급여통장')
     toggleBusy()
+    const dom = recordDom()
     await close(user)
     await settle()
     expect(path()).toBe('/new')
     expect(window.location.pathname).toBe('/new')
-    expect(dialog()).toBeNull()
+    expect(dom.sawElement('dialog')).toBe(false)
   })
 
   it('바꾼 값이 없어도 닫지 않는다', async () => {

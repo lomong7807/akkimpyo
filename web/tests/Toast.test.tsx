@@ -315,6 +315,12 @@ describe('아래로 밀어 닫기', () => {
     expect(message()).not.toBe('')
   })
 
+  it('미는 동안 닿은 두 번째 손가락은 보지 않는다', async () => {
+    start()
+    await move(100, { pointerId: 2, isPrimary: false })
+    expect(message()).not.toBe('')
+  })
+
   it('두 번째 손가락과 마우스 오른쪽 버튼으로는 밀지 않는다', async () => {
     start()
     fireEvent.pointerUp(toast()!, pointer)

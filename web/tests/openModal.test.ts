@@ -57,13 +57,4 @@ describe('열린 모달이 닫힌 뒤', () => {
     await settle()
     expect(callback).toHaveBeenCalledTimes(1)
   })
-
-  it('그만두면 부르지 않는다', async () => {
-    const callback = vi.fn()
-    const dialog = openDialog()
-    afterModals(callback)()
-    dialog.close()
-    await settle()
-    expect(callback).not.toHaveBeenCalled()
-  })
 })

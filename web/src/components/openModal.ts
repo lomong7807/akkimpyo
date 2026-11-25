@@ -5,17 +5,13 @@ export function isModalOpen(): boolean {
   return document.querySelector('dialog[open]') !== null
 }
 
-/** 열린 모달이 모두 닫힌 뒤에 한 번 부른다. 열린 것이 없으면 바로 부른다. 돌려받은 함수로 그만둔다. */
-export function afterModals(callback: () => void): () => void {
-  if (!isModalOpen()) {
-    callback()
-    return () => {}
-  }
+/** 열린 모달이 모두 닫힌 뒤에 한 번 부른다. 열린 것이 없으면 바로 부른다. */
+export function afterModals(callback: () => void): void {
+  if (!isModalOpen()) return callback()
   const observer = new MutationObserver(() => {
     if (isModalOpen()) return
     observer.disconnect()
     callback()
   })
   observer.observe(document.body, { subtree: true, childList: true, attributeFilter: ['open'] })
-  return () => observer.disconnect()
 }
