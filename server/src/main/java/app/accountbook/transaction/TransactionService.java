@@ -11,13 +11,17 @@ import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.StaleVersionException;
 import app.accountbook.common.Times;
+import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerAccess;
+import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
 import app.accountbook.transaction.TransactionView.Line;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -48,18 +52,23 @@ public class TransactionService {
     private final CategoryRepository categoryRepository;
     private final CategoryService categoryService;
     private final LedgerAccess ledgerAccess;
+    private final LedgerRepository ledgerRepository;
     private final ObjectMapper objectMapper;
+    private final Clock clock;
 
     TransactionService(TransactionRepository transactionRepository, ChangeLogRepository changeLogRepository,
                        AccountRepository accountRepository, CategoryRepository categoryRepository,
-                       CategoryService categoryService, LedgerAccess ledgerAccess, ObjectMapper objectMapper) {
+                       CategoryService categoryService, LedgerAccess ledgerAccess,
+                       LedgerRepository ledgerRepository, ObjectMapper objectMapper, Clock clock) {
         this.transactionRepository = transactionRepository;
         this.changeLogRepository = changeLogRepository;
         this.accountRepository = accountRepository;
         this.categoryRepository = categoryRepository;
         this.categoryService = categoryService;
         this.ledgerAccess = ledgerAccess;
+        this.ledgerRepository = ledgerRepository;
         this.objectMapper = objectMapper;
+        this.clock = clock;
     }
 
     /**
@@ -241,10 +250,11 @@ public class TransactionService {
     /** 라인 부호: 지출 -amount, 환불(지출) +amount, 수입 +amount. 카테고리가 없으면 미분류. */
     private Content resolveEntry(UUID ledgerId, Entry entry, UUID defaultPaidBy) {
         requireHeader(entry.id(), entry.occurredOn());
+        requireDateInRange(ledgerId, entry.occurredOn());
         if (entry.type() != TransactionType.EXPENSE && entry.type() != TransactionType.INCOME) {
             throw new InvalidRequestException("지출 또는 수입만 입력할 수 있습니다.");
         }
-        requirePositive(entry.amount());
+        TransactionLimits.requireAmountInRange(entry.amount());
         if (entry.refund() && entry.type() == TransactionType.INCOME) {
             throw new InvalidRequestException("환불은 지출에만 표시할 수 있습니다.");
         }
@@ -266,7 +276,8 @@ public class TransactionService {
     /** 이체: from 라인 -amount, to 라인 +amount. 카테고리·paidBy·payee가 없다. */
     private Content resolveTransfer(UUID ledgerId, Transfer transfer) {
         requireHeader(transfer.id(), transfer.occurredOn());
-        requirePositive(transfer.amount());
+        requireDateInRange(ledgerId, transfer.occurredOn());
+        TransactionLimits.requireAmountInRange(transfer.amount());
         requireMaxLength(transfer.memo(), MEMO_MAX_LENGTH, "메모");
         requireAccountInLedger(ledgerId, transfer.fromAccountId());
         requireAccountInLedger(ledgerId, transfer.toAccountId());
@@ -288,10 +299,13 @@ public class TransactionService {
         }
     }
 
-    private static void requirePositive(long amount) {
-        if (amount <= 0) {
-            throw new InvalidRequestException("금액은 0보다 커야 합니다.");
-        }
+    /** "오늘"은 서버 시계의 지금을 그 장부의 시간대로 본 날짜다(P-202). */
+    private void requireDateInRange(UUID ledgerId, LocalDate occurredOn) {
+        ZoneId ledgerZone = ledgerRepository.findById(ledgerId)
+                .map(Ledger::getTimezone)
+                .map(ZoneId::of)
+                .orElseThrow(NotFoundException::new);
+        TransactionLimits.requireDateInRange(occurredOn, clock, ledgerZone);
     }
 
     private static void requireMaxLength(String text, int maxLength, String label) {
