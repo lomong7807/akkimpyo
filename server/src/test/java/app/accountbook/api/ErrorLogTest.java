@@ -194,7 +194,7 @@ class ErrorLogTest {
         server.get("/" + EMAIL, "X-Request-Id", "log-4xx").assertProblem(404, "Not Found", "NOT_FOUND");
 
         assertThat(atLeast(Level.INFO)).isEmpty();
-        ILoggingEvent event = logs.events().getLast();
+        ILoggingEvent event = atLeast(Level.DEBUG).getLast();
         assertThat(event.getLevel()).isEqualTo(Level.DEBUG);
         assertThat(event.getFormattedMessage()).isEqualTo("NOT_FOUND NoResourceFoundException");
         assertThat(event.getThrowableProxy()).isNull();
