@@ -21,8 +21,8 @@ public class IdConflictException extends RuntimeException {
     }
 
     /**
-     * 다른 장부의 id이거나 다른 사람이 만든 거래의 id다. 이유를 구분할 수 없게 문구가 고정이고 아무 값도 담지 않는다.
-     * 이유가 늘어도(완전히 지운 거래의 id 등) 이것을 쓴다.
+     * 다른 장부의 id, 다른 사람이 만든 거래의 id, 완전히 지운 거래의 id다.
+     * 이유를 구분할 수 없게 문구가 고정이고 아무 값도 담지 않는다. 이유가 늘어도 이것을 쓴다.
      */
     static IdConflictException unusableId() {
         return new IdConflictException("이 id는 쓸 수 없습니다.", null);

@@ -17,17 +17,25 @@ import tools.jackson.databind.JsonNode;
 @Table(name = "change_log")
 public class ChangeLog extends BaseEntity {
 
+    /** 전후 값의 형식 버전. 전후 값의 필드를 바꾸면 올린다(ADR 007 결정 4). */
+    private static final short FORMAT_VERSION = 1;
+
     @Column(name = "transaction_id", nullable = false, updatable = false)
     private UUID transactionId;
 
     @Column(name = "ledger_id", nullable = false, updatable = false)
     private UUID ledgerId;
 
+    /** 그 변경 뒤의 거래 version. 한 거래 안에서 겹치지 않고, 1씩 이어지지는 않는다(ADR 008 결정 10). */
+    @Column(name = "version", nullable = false, updatable = false)
+    private long version;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "action", nullable = false, updatable = false)
     private ChangeAction action;
 
-    @Column(name = "actor_id", nullable = false, updatable = false)
+    /** 서버가 한 일과 탈퇴한 사람은 null이다(ADR 007 결정 5, 6). */
+    @Column(name = "actor_id", updatable = false)
     private UUID actorId;
 
     @Column(name = "device_id", updatable = false)
@@ -41,26 +49,31 @@ public class ChangeLog extends BaseEntity {
     @Column(name = "after_value", updatable = false)
     private JsonNode afterValue;
 
+    @Column(name = "format_version", nullable = false, updatable = false)
+    private short formatVersion;
+
     protected ChangeLog() {
     }
 
-    private ChangeLog(UUID transactionId, UUID ledgerId, ChangeAction action, UUID actorId, String deviceId,
-                      JsonNode beforeValue, JsonNode afterValue, Instant createdAt) {
+    private ChangeLog(UUID transactionId, UUID ledgerId, long version, ChangeAction action, UUID actorId,
+                      String deviceId, JsonNode beforeValue, JsonNode afterValue, Instant createdAt) {
         super(UUID.randomUUID(), createdAt);
         this.transactionId = transactionId;
         this.ledgerId = ledgerId;
+        this.version = version;
         this.action = action;
         this.actorId = actorId;
         this.deviceId = deviceId;
         this.beforeValue = beforeValue;
         this.afterValue = afterValue;
+        this.formatVersion = FORMAT_VERSION;
     }
 
     /** 이력 행을 만드는 유일한 길이다. 기기 값은 여기서 목록의 값이나 unknown으로 바뀐다({@link DeviceIds#storable}). */
-    public static ChangeLog of(UUID transactionId, UUID ledgerId, ChangeAction action, UUID actorId,
+    public static ChangeLog of(UUID transactionId, UUID ledgerId, long version, ChangeAction action, UUID actorId,
                                String deviceId, JsonNode beforeValue, JsonNode afterValue, Instant createdAt) {
-        return new ChangeLog(transactionId, ledgerId, action, actorId, DeviceIds.storable(deviceId), beforeValue,
-                afterValue, createdAt);
+        return new ChangeLog(transactionId, ledgerId, version, action, actorId, DeviceIds.storable(deviceId),
+                beforeValue, afterValue, createdAt);
     }
 
     public UUID getTransactionId() {
