@@ -11,6 +11,8 @@ export function useCreateAccount() {
   return useMutation({
     mutationFn: (account: NewAccount) => createAccount(ledger.id, account),
     onSuccess: (created) => {
+      // 저장하기 전에 보낸 목록 요청의 답은 쓰지 않는다
+      void queryClient.cancelQueries({ queryKey })
       // 목록을 다시 받는 동안에도 새 계좌가 보이게 한다. 서버는 만든 순서로 준다
       queryClient.setQueryData<Account[]>(queryKey, (accounts) => accounts && [...accounts, created])
       void queryClient.invalidateQueries({ queryKey })

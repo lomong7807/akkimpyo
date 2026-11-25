@@ -383,6 +383,22 @@ describe('저장', () => {
     expect(screen.getByText('급여통장')).toBeTruthy()
   })
 
+  it('저장하기 전에 보낸 목록 요청이 뒤늦게 답해도 새 계좌가 빠지지 않는다', async () => {
+    const before = delayed()
+    accounts.response = before.respond
+    const { user } = await openApp('/accounts')
+    await before.arrived
+    await user.click(screen.getByRole('link', { name: '추가' }))
+    await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+    accounts.response = undefined
+    await fillAndSave(user)
+    expect(await screen.findByText('급여통장')).toBeTruthy()
+    before.answer(accountsBody(accountOf('비상금', 'BANK', 1000000)))
+    await settle()
+    expect(screen.getByText('급여통장')).toBeTruthy()
+    expect(accounts.requests).toHaveLength(2)
+  })
+
   it('첫 계좌를 추가하면 빈 상태 대신 목록이 보인다', async () => {
     accounts.items = []
     const opened = await openApp('/accounts')
