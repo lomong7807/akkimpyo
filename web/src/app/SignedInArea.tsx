@@ -11,6 +11,7 @@ import { createQueryClient } from './queryClient'
 import { forgetReturnAddress, rememberReturnAddress } from './returnAddress'
 import { useSession } from './SessionContext'
 import type { Session } from './sessionState'
+import ToastProvider from './ToastProvider'
 
 /**
  * 로그인이 필요한 주소의 문. 로그인을 확인하고 내 정보를 받기 전에는 안쪽 화면과 공통 틀을 그리지 않는다.
@@ -70,7 +71,9 @@ function Gate() {
     // 1단계에는 장부가 하나다
     return (
       <CurrentLedgerContext value={me.data.ledgers[0]}>
-        <Outlet />
+        <ToastProvider>
+          <Outlet />
+        </ToastProvider>
       </CurrentLedgerContext>
     )
   }

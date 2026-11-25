@@ -100,7 +100,7 @@ describe('더보기(M-01)', () => {
     await act(() => new Promise((resolve) => setTimeout(resolve, 30)))
     expect(backend.requests.me).toHaveLength(1)
     expect(accounts.requests).toEqual([])
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(content().queryByRole('status')).toBeNull()
   })
 
   it('로그인하지 않았으면 로그인 화면으로 보내고 로그인하면 돌아온다', async () => {

@@ -20,7 +20,7 @@ export default function AppLayout({ navigation, ledgerName, onLogout }: AppLayou
   const screenItem = useScreenItem()
   const currentTab = useCurrentTab(navigation, screenItem)
   return (
-    <div className={styles.frame}>
+    <div className={`${styles.frame} ${styles.withTabs}`}>
       <Sidebar items={navigation.sidebar} current={screenItem} ledgerName={ledgerName} onLogout={onLogout} />
       <div className={styles.screen}>
         <LedgerNameContext value={ledgerName}>
