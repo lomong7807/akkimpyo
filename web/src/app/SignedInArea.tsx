@@ -30,9 +30,14 @@ export default function SignedInArea() {
  * 지금 캐시에 들어올 길이 없다.
  */
 function SessionData({ children }: { children: ReactNode }) {
+  const { resumed } = useSession().session
   const [queryClient] = useState(createQueryClient)
   // 비우면 진행 중인 요청의 결과도 버린다
   useEffect(() => () => queryClient.clear(), [queryClient])
+  // 되살아난 화면을 그대로 열었으면 조회를 다시 보내, 그사이 서버가 로그인을 끝냈으면 바로 안다
+  useEffect(() => {
+    if (resumed > 0) void queryClient.refetchQueries({ type: 'active' }, { cancelRefetch: false })
+  }, [resumed, queryClient])
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 }
 
