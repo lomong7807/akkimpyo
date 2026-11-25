@@ -12,13 +12,10 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import tools.jackson.databind.JsonNode;
 
-/** 거래 변경 이력. 추가만 하고 고치거나 지우지 않는다. 전후 값은 TransactionView의 JSON이다. */
+/** 거래 변경 이력. 추가만 하고 고치거나 지우지 않는다. 전후 값은 {@link ChangeLogValue}의 JSON이다. */
 @Entity
 @Table(name = "change_log")
 public class ChangeLog extends BaseEntity {
-
-    /** 전후 값의 형식 버전. 전후 값의 필드를 바꾸면 올린다(ADR 007 결정 4). */
-    private static final short FORMAT_VERSION = 1;
 
     @Column(name = "transaction_id", nullable = false, updatable = false)
     private UUID transactionId;
@@ -66,14 +63,18 @@ public class ChangeLog extends BaseEntity {
         this.deviceId = deviceId;
         this.beforeValue = beforeValue;
         this.afterValue = afterValue;
-        this.formatVersion = FORMAT_VERSION;
+        this.formatVersion = ChangeLogValue.FORMAT_VERSION;
     }
 
     /** 이력 행을 만드는 유일한 길이다. 기기 값은 여기서 목록의 값이나 unknown으로 바뀐다({@link DeviceIds#storable}). */
     public static ChangeLog of(UUID transactionId, UUID ledgerId, long version, ChangeAction action, UUID actorId,
-                               String deviceId, JsonNode beforeValue, JsonNode afterValue, Instant createdAt) {
+                               String deviceId, ChangeLogValue before, ChangeLogValue after, Instant createdAt) {
         return new ChangeLog(transactionId, ledgerId, version, action, actorId, DeviceIds.storable(deviceId),
-                beforeValue, afterValue, createdAt);
+                toJson(before), toJson(after), createdAt);
+    }
+
+    private static JsonNode toJson(ChangeLogValue value) {
+        return value == null ? null : value.toJson();
     }
 
     public UUID getTransactionId() {
