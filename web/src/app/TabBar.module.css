@@ -32,6 +32,8 @@
   min-height: var(--size-touch);
   color: var(--color-text-secondary);
   font: var(--text-caption);
+  /* 글자를 키워 이름이 칸보다 길어지면 낱말 중간에서라도 줄을 바꿔 옆 칸과 겹치지 않게 한다 */
+  overflow-wrap: anywhere;
   text-align: center;
   text-decoration: none;
   transition: transform var(--motion-press-duration);

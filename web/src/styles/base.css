@@ -9,6 +9,9 @@ body {
   background-color: var(--color-bg);
   color: var(--color-text);
   font: var(--text-body);
+  /* 한국어를 낱말 단위로 줄바꿈한다 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* 브라우저 기본 제목 크기는 글자 토큰에 없으므로 지운다. 화면 제목만 정해 둔다 */

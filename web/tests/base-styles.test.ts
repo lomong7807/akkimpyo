@@ -37,6 +37,12 @@ describe('기본 스타일', () => {
     expect(body.getPropertyValue('font')).toBe('var(--text-body)')
   })
 
+  it('한국어는 낱말 단위로 줄을 바꾸고, 한 줄보다 긴 낱말은 끊어 넘치지 않게 한다', () => {
+    const body = styleOf('body')
+    expect(body.getPropertyValue('word-break')).toBe('keep-all')
+    expect(body.getPropertyValue('overflow-wrap')).toBe('break-word')
+  })
+
   it('화면 제목은 text-title이다', () => {
     expect(styleOf('h1').getPropertyValue('font')).toBe('var(--text-title)')
   })

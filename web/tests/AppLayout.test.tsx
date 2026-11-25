@@ -292,6 +292,8 @@ describe('하단 탭', () => {
     for (const link of within(menu()).getAllByRole('link')) {
       expect(styleOf(link).font).toBe('var(--text-caption)')
       expect(styleOf(link.querySelector('svg')!).width).toBe('var(--size-icon-24)')
+      // 본문의 낱말 단위 줄바꿈(keep-all)에서도 글자를 키우면 칸 안에서 줄을 바꾼다.
+      expect(styleOf(link).overflowWrap).toBe('anywhere')
     }
   })
 
