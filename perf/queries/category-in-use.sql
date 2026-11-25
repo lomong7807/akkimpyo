@@ -2,7 +2,7 @@
 -- 코드: TransactionLineRepository.existsByCategoryId (CategoryService.delete)
 -- SQL은 손으로 쓴 것이 아니다. 테스트를 SQL 로그를 켜고 돌려 Hibernate가 보낸 문장을 그대로 가져왔고,
 -- ?만 psql 변수로 바꿨다(CategoryServiceTest).
--- 가져온 날 2026-11-24, 코드 main 48aa00e, Spring Boot 3.5.16, Hibernate 6.6.53.Final.
+-- 가져온 날 2026-11-26, 코드 main a55e96f, Spring Boot 4.2.0, Hibernate 7.4.15.Final, pgJDBC 42.7.14.
 --
 -- 변수: ledger_no(기본 1), category_kind(기본 EXPENSE), category_no(기본 24 = 거래가 없는 카테고리)
 --       explain(기본 'EXPLAIN (ANALYZE, BUFFERS)', -v explain= 로 비우면 쿼리만 실행)
