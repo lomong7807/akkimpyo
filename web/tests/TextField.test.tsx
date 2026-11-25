@@ -5,7 +5,7 @@ import { PasswordField, TextField } from '../src/components/TextField'
 import { readCssRule } from './support/cssRule'
 import { readWebFile } from './support/webFile'
 
-const ruleBody = (selector: string) => readCssRule('src/components/TextField.module.css', selector)
+const ruleBody = (selector: string) => readCssRule('src/components/Field.module.css', selector)
 
 afterEach(cleanup)
 
@@ -110,14 +110,15 @@ describe.each(fields)('%s', (_, Field) => {
   })
 
   it('초점은 안쪽 테두리 하나로 보인다. 바깥 테두리는 고대비 모드에서 남도록 없애지 않고 투명하게 둔다', () => {
-    const rule = ruleBody('.input:focus-visible')
+    const rule = ruleBody('.control:focus-visible')
     expect(rule).toContain('outline-color: transparent')
-    expect(readWebFile('src/components/TextField.module.css')).not.toMatch(/outline(-style|-width)?:/)
+    expect(readWebFile('src/components/Field.module.css')).not.toMatch(/outline(-style|-width)?:/)
+    expect(readWebFile('src/components/TextField.module.css')).not.toContain('outline')
   })
 
   it('테두리가 굵어진 만큼 안쪽 여백을 줄여 글자가 움직이지 않는다', () => {
-    expect(ruleBody('.input')).toContain('border: var(--border-width) solid var(--border-color)')
-    expect(ruleBody('.input')).toContain('padding: 0 calc(var(--space-12) + 1px - var(--border-width))')
+    expect(ruleBody('.control')).toContain('border: var(--border-width) solid var(--border-color)')
+    expect(ruleBody('.control')).toContain('padding: 0 calc(var(--space-12) + 1px - var(--border-width))')
   })
 
   it('칸보다 긴 글자는 말줄임표로 줄인다', () => {
