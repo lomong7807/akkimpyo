@@ -18,8 +18,11 @@ import app.accountbook.transaction.TransactionType;
 import app.accountbook.user.User;
 import app.accountbook.user.UserRepository;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -210,6 +213,51 @@ class SchemaTest {
         assertThatThrownBy(() -> insertUser("space@example.com", "주인 "))
                 .isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("ck_users_display_name_trimmed");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "A@example.com", "Z@example.com", "owner@Example.com",         // 대문자
+            " owner@example.com", "owner@example.com ",                    // 앞뒤 공백
+            "ow ner@example.com",                                          // 가운데 공백
+            "ow\tner@example.com", "owner@example.com\n", "ow\u007Fner@example.com", // 제어 문자
+            "ow\u200Bner@example.com",                                     // 보이지 않는 글자
+            "\u00E9@example.com", "가@example.com", "\u0130@example.com", "owner\uFF20example.com", // ASCII 밖
+            ""})
+    void emailOutsideNormalizedPrintableAsciiIsRejectedByDatabase(String email) {
+        assertThatThrownBy(() -> insertUser(email, "스키마"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_users_email_normalized");
+    }
+
+    @Test
+    void emailWithBoundaryCharactersIsAcceptedByDatabase() {
+        // 허용 범위의 양 끝(!와 ~)과 대문자 구간의 바로 앞뒤(@와 [)다.
+        List<String> emails = List.of("!@example.com", "~@example.com", "[@example.com");
+
+        emails.forEach(email -> insertUser(email, "스키마"));
+
+        assertThat(jdbc.queryForList("select email from users", String.class)).containsAll(emails);
+    }
+
+    @Test
+    void emailOverTwoHundredFiftyFourCharactersIsRejectedByDatabase() {
+        String domain = "@example.com";
+        insertUser("a".repeat(254 - domain.length()) + domain, "스키마");
+
+        assertThatThrownBy(() -> insertUser("a".repeat(255 - domain.length()) + domain, "스키마"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_users_email_length");
+    }
+
+    @Test
+    void sameEmailIsRejectedByNamedUniqueConstraint() {
+        // 이름은 V1의 UNIQUE (email)에 PostgreSQL이 붙인 것이다. UserService가 이 이름으로 동시 가입을 구분한다.
+        insertUser("same@example.com", "처음");
+
+        assertThatThrownBy(() -> insertUser("same@example.com", "두번째"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("users_email_key");
     }
 
     @Test
