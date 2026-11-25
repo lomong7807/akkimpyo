@@ -19,6 +19,9 @@ public class AccountService {
     /** V6 마이그레이션의 유니크 제약 이름. */
     private static final String NAME_UNIQUE_CONSTRAINT = "uq_account_name";
 
+    /** 시작 잔액 크기의 상한(P-201의 최대값, F-502). DB의 ck_account_opening_balance_range와 같은 값이다. */
+    private static final long MAX_OPENING_BALANCE = 9_999_999_999L;
+
     private final AccountRepository accountRepository;
     private final AccountUsage accountUsage;
     private final LedgerAccess ledgerAccess;
@@ -30,7 +33,10 @@ public class AccountService {
         this.ledgerAccess = ledgerAccess;
     }
 
-    /** 이름은 앞뒤 공백을 지운 1~50자이고 같은 장부 안에서 겹칠 수 없다(P-220). */
+    /**
+     * 이름은 앞뒤 공백을 지운 1~50자이고 같은 장부 안에서 겹칠 수 없다(P-220).
+     * 시작 잔액은 음수도 되고 크기는 9,999,999,999원까지다(F-502).
+     */
     @Transactional
     public Account create(UUID actorId, UUID ledgerId, AccountCommand cmd) {
         ledgerAccess.requireMember(actorId, ledgerId);
@@ -105,6 +111,11 @@ public class AccountService {
         }
         if (cmd.openingDate() == null) {
             throw new InvalidRequestException("기준일이 없습니다.");
+        }
+        // Math.abs는 Long.MIN_VALUE에서 음수를 돌려주므로 양 끝과 직접 비교한다.
+        if (cmd.openingBalance() < -MAX_OPENING_BALANCE || cmd.openingBalance() > MAX_OPENING_BALANCE) {
+            throw new InvalidRequestException(
+                    "시작 잔액은 -9,999,999,999원부터 9,999,999,999원까지 입력할 수 있습니다.");
         }
         return Names.normalize(cmd.name());
     }

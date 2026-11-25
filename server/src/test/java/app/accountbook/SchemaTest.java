@@ -307,6 +307,36 @@ class SchemaTest {
                 .hasMessageContaining("ck_account_name_trimmed");
     }
 
+    @Test
+    void openingBalanceAtRangeEdgesIsAcceptedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        insertAccount(ledger, "최대", 9_999_999_999L);
+        insertAccount(ledger, "최소", -9_999_999_999L);
+
+        assertThat(jdbc.queryForList(
+                "select opening_balance from account where ledger_id = ? order by opening_balance",
+                Long.class, ledger)).containsExactly(-9_999_999_999L, 9_999_999_999L);
+    }
+
+    @Test
+    void openingBalanceOverMaxIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, "생활비", 10_000_000_000L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_opening_balance_range");
+    }
+
+    @Test
+    void openingBalanceUnderMinIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, "생활비", -10_000_000_000L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_opening_balance_range");
+    }
+
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 장부와 사용자를 새로 만들고 거래 id를 돌려준다. */
     private UUID insertTransaction(LocalDate occurredOn) {
         UUID user = UUID.randomUUID();

@@ -18,7 +18,10 @@ import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @IntegrationTest
 class AccountServiceTest {
@@ -29,6 +32,7 @@ class AccountServiceTest {
     @Autowired AccountRepository accountRepository;
     @Autowired CategoryService categoryService;
     @Autowired Fixtures fixtures;
+    @Autowired JdbcTemplate jdbc;
 
     User owner;
     UUID ledgerId;
@@ -170,6 +174,62 @@ class AccountServiceTest {
         Account stored = accountRepository.findById(account.getId()).orElseThrow();
         assertThat(stored.getName()).isEqualTo("생활비");
         assertThat(stored.getOpeningBalance()).isEqualTo(50_000);
+    }
+
+    @Test
+    void create_storesOpeningBalanceAtRangeEdges() {
+        // 은행과 현금의 시작 잔액은 음수도 저장된다(마이너스 통장). 0도 저장된다.
+        Account bankMin = accountService.create(owner.getId(), ledgerId,
+                new AccountCommand("마이너스 통장", AccountType.BANK, -9_999_999_999L, OPENING));
+        Account cashNegative = accountService.create(owner.getId(), ledgerId,
+                new AccountCommand("지갑", AccountType.CASH, -1, OPENING));
+        Account cashMax = accountService.create(owner.getId(), ledgerId,
+                new AccountCommand("금고", AccountType.CASH, 9_999_999_999L, OPENING));
+        Account zero = accountService.create(owner.getId(), ledgerId,
+                new AccountCommand("새 통장", AccountType.BANK, 0, OPENING));
+
+        assertThat(storedOpeningBalance(bankMin)).isEqualTo(-9_999_999_999L);
+        assertThat(storedOpeningBalance(cashNegative)).isEqualTo(-1);
+        assertThat(storedOpeningBalance(cashMax)).isEqualTo(9_999_999_999L);
+        assertThat(storedOpeningBalance(zero)).isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {10_000_000_000L, -10_000_000_000L, Long.MAX_VALUE, Long.MIN_VALUE})
+    void create_rejectsOpeningBalanceOutsideRange(long openingBalance) {
+        assertThatThrownBy(() -> accountService.create(owner.getId(), ledgerId, command("생활비", openingBalance)))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("시작 잔액은 -9,999,999,999원부터 9,999,999,999원까지 입력할 수 있습니다.");
+        assertThat(accountService.list(owner.getId(), ledgerId)).isEmpty();
+    }
+
+    @Test
+    void update_storesOpeningBalanceAtRangeEdges() {
+        Account account = accountService.create(owner.getId(), ledgerId, command("생활비", 0));
+
+        accountService.update(owner.getId(), account.getId(), command("생활비", 9_999_999_999L));
+        assertThat(storedOpeningBalance(account)).isEqualTo(9_999_999_999L);
+
+        accountService.update(owner.getId(), account.getId(), command("생활비", -9_999_999_999L));
+        assertThat(storedOpeningBalance(account)).isEqualTo(-9_999_999_999L);
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {10_000_000_000L, -10_000_000_000L})
+    void update_rejectsOpeningBalanceOutsideRange(long openingBalance) {
+        Account account = accountService.create(owner.getId(), ledgerId, command("생활비", 1_000));
+
+        assertThatThrownBy(() -> accountService.update(owner.getId(), account.getId(),
+                command("생활비", openingBalance)))
+                .isInstanceOf(InvalidRequestException.class);
+        assertThat(storedOpeningBalance(account)).isEqualTo(1_000);
+    }
+
+    /** 영속성 컨텍스트를 거치지 않고 DB에 저장된 값을 읽는다. */
+    private long storedOpeningBalance(Account account) {
+        accountRepository.flush();
+        return jdbc.queryForObject("select opening_balance from account where id = ?", Long.class,
+                account.getId());
     }
 
     private static AccountCommand command(String name, long openingBalance) {
