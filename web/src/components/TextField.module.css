@@ -69,8 +69,19 @@
   inset-inline-start: auto;
 }
 
-.help {
+/* 도움말은 왼쪽, 글자 수는 같은 줄의 오른쪽 */
+.hint {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.hint > p {
   margin: 0;
   color: var(--color-text-secondary);
   font: var(--text-caption);
+}
+
+.hint > .count {
+  flex: none;
+  margin-inline-start: auto;
 }

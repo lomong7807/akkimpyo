@@ -63,10 +63,21 @@ function passwordConfirmError(password: string, passwordConfirm: string): string
 }
 
 function displayNameError(displayName: string): string | undefined {
-  const name = trimWhiteSpace(displayName).normalize('NFC')
+  const name = normalizeDisplayName(displayName)
   if (name === '') return nameRequired
   if (hasUnusableCharacter(name)) return nameUnusable
-  if (lengthOf(name) > 20) return nameTooLong
+  if (displayNameLength(displayName) > DISPLAY_NAME_MAX) return nameTooLong
+}
+
+export const DISPLAY_NAME_MAX = 20
+
+export function displayNameLength(displayName: string): number {
+  return lengthOf(normalizeDisplayName(displayName))
+}
+
+/** 서버가 검사하고 저장하는 표시 이름(P-101, P-214) */
+function normalizeDisplayName(displayName: string): string {
+  return trimWhiteSpace(displayName).normalize('NFC')
 }
 
 /** 서버가 검사하고 저장하는 비밀번호(P-101) */

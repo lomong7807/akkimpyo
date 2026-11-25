@@ -363,6 +363,64 @@ describe('표시 이름 검사', () => {
   })
 })
 
+describe('표시 이름의 글자 수', () => {
+  const count = () => screen.queryByText(/^\d+\/\d+$/)?.textContent
+
+  async function paste(value: string) {
+    const { user } = openSignup()
+    await user.click(displayName())
+    await user.paste(value)
+    return user
+  }
+
+  it('16자까지는 보이지 않고 17자부터 보인다', async () => {
+    const user = await paste('가'.repeat(16))
+    expect(count()).toBeUndefined()
+    await user.keyboard('나')
+    expect(count()).toBe('17/20')
+  })
+
+  it('20자를 넘어도 입력을 막지 않고 넘은 값을 그대로 보인다. 오류는 칸을 벗어날 때 보인다', async () => {
+    const user = await paste('가'.repeat(21))
+    expect(displayName().value).toBe('가'.repeat(21))
+    expect(count()).toBe('21/20')
+    expect(errorOf(displayName())).toBeUndefined()
+    await user.tab()
+    expect(errorOf(displayName())).toBe(nameTooLong)
+    expect(count()).toBe('21/20')
+  })
+
+  it.each([
+    ['앞뒤의 공백류를 빼고 센다', `  ${'가'.repeat(17)}\u{A0}\u{3000}`, '17/20'],
+    ['분해형 한글은 맞춘 글자로 센다', '가'.normalize('NFD').repeat(17), '17/20'],
+    ['이모지는 코드포인트로 센다', '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}'.repeat(3), '21/20'],
+    ['공백류만 있으면 보이지 않는다', ' '.repeat(30), undefined],
+  ])('%s', async (_, value, expected) => {
+    await paste(value)
+    expect(count()).toBe(expected)
+  })
+
+  it('표시 이름의 설명에 들어간다', async () => {
+    await paste('가'.repeat(17))
+    const described = displayName()
+      .getAttribute('aria-describedby')!
+      .split(' ')
+      .map((id) => document.getElementById(id)!.textContent)
+    expect(described).toEqual(['장부를 함께 쓰는 사람에게 보여요.', '17/20'])
+  })
+
+  it('이메일과 비밀번호에는 없다', async () => {
+    const { user } = openSignup()
+    await fill(user, {
+      email: `${'a'.repeat(242)}@example.com`,
+      password: 'a1'.repeat(36),
+      confirm: 'a1'.repeat(36),
+      displayName: '이서연',
+    })
+    expect(count()).toBeUndefined()
+  })
+})
+
 describe('검사하는 때', () => {
   it('입력하는 동안에는 새 오류를 띄우지 않고, 보이는 오류는 맞게 고치면 바로 지운다', async () => {
     const { user } = openSignup()

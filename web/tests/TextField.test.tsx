@@ -211,3 +211,69 @@ describe('비밀번호 보기', () => {
     expect(input.getAttribute('autocorrect')).toBe('off')
   })
 })
+
+describe('글자 수(설계서 00-common 4.4)', () => {
+  const name = () => screen.getByLabelText('이름')
+  const descriptions = () =>
+    (name().getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .filter(Boolean)
+      .map((id) => document.getElementById(id)?.textContent)
+
+  it.each([
+    [0, 20],
+    [16, 20],
+    [80, 100],
+    [400, 500],
+  ])('%d자이면 최대 %d자의 80퍼센트를 넘지 않아 보이지 않는다', (current, max) => {
+    render(<TextField label="이름" help="도움말 문장" count={{ current, max }} />)
+    expect(descriptions()).toEqual(['도움말 문장'])
+    expect(screen.queryByText(`${current}/${max}`)).toBeNull()
+  })
+
+  it.each([
+    [17, 20, '17/20'],
+    [20, 20, '20/20'],
+    [21, 20, '21/20'],
+    [81, 100, '81/100'],
+    [401, 500, '401/500'],
+  ])('%d자이면 최대 %d자의 80퍼센트를 넘어 "%s"를 보인다', (current, max, text) => {
+    render(<TextField label="이름" count={{ current, max }} />)
+    expect(screen.getByText(text)).toBeTruthy()
+  })
+
+  it('칸의 설명에 도움말, 글자 수, 오류 문구 순서로 넣는다', () => {
+    render(<TextField label="이름" help="도움말 문장" error="오류 문장" count={{ current: 21, max: 20 }} />)
+    expect(descriptions()).toEqual(['도움말 문장', '21/20', '오류 문장'])
+  })
+
+  it('글자를 칠 때마다 읽히지 않게 알림으로 두지 않는다', () => {
+    const { container } = render(<TextField label="이름" count={{ current: 17, max: 20 }} />)
+    expect(container.querySelector('[aria-live], [role]')).toBeNull()
+  })
+
+  it('입력을 막지 않는다', () => {
+    render(<TextField label="이름" count={{ current: 20, max: 20 }} />)
+    expect(name().hasAttribute('maxlength')).toBe(false)
+  })
+
+  it('도움말은 왼쪽, 글자 수는 같은 줄의 오른쪽이고 오류 문구는 그 줄 아래다', () => {
+    render(<TextField label="이름" help="도움말 문장" error="오류 문장" count={{ current: 21, max: 20 }} />)
+    const help = screen.getByText('도움말 문장')
+    const count = screen.getByText('21/20')
+    const row = help.parentElement!
+    expect([...row.children]).toEqual([help, count])
+    expect(getComputedStyle(row).display).toBe('flex')
+    expect(getComputedStyle(count).getPropertyValue('margin-inline-start')).toBe('auto')
+    expect(row.contains(screen.getByText('오류 문장'))).toBe(false)
+    expect(row.compareDocumentPosition(screen.getByText('오류 문장'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+
+  it('글자는 작은 설명 글자와 보조 글자색이고 숫자 폭이 같다', () => {
+    render(<TextField label="이름" count={{ current: 17, max: 20 }} />)
+    const count = screen.getByText('17/20')
+    expect(getComputedStyle(count).font).toBe('var(--text-caption)')
+    expect(getComputedStyle(count).color).toBe('var(--color-text-secondary)')
+    expect(count.classList.contains('tabular-nums')).toBe(true)
+  })
+})

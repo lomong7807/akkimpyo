@@ -5,7 +5,14 @@ import { TitleBar } from '../../components/Screen'
 import { PasswordField, TextField } from '../../components/TextField'
 import { keepFocusInField } from './keepFocusInField'
 import RetryMessage from './RetryMessage'
-import { passwordRule, signupFields, toNewAccount, validateSignup } from './signupForm'
+import {
+  DISPLAY_NAME_MAX,
+  displayNameLength,
+  passwordRule,
+  signupFields,
+  toNewAccount,
+  validateSignup,
+} from './signupForm'
 import { rejectedFields } from './signupRejection'
 import { useFormFields } from './useFormFields'
 import { useSignup, type SignUp } from './useSignup'
@@ -100,6 +107,7 @@ export default function SignupPage({ signUp, onSignedUp, initialEmail }: SignupP
               readOnly={busy}
               label="표시 이름"
               help="장부를 함께 쓰는 사람에게 보여요."
+              count={{ current: displayNameLength(values.displayName), max: DISPLAY_NAME_MAX }}
               autoCorrect="off"
               spellCheck={false}
             />
