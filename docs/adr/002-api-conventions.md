@@ -1,7 +1,7 @@
 # ADR 002: API 공통 규칙과 오류 응답 형식
 
 - 상태: 제안됨 (2026-11-24)
-- 보완: 2026-11-25, 5절에서 `TOO_MANY_REQUESTS`에 비밀번호 해시의 상한을 더하고 예외 목록을 main과 맞춘다. "지금 코드와 다른 점"의 `IdConflictException` 줄을 맞춘다(PR #167)
+- 보완: 2026-11-25, 5절에서 `TOO_MANY_REQUESTS`에 비밀번호 해시의 상한과 `Retry-After`의 값을 더하고 예외 목록을 main과 맞춘다. "지금 코드와 다른 점"의 `IdConflictException` 줄을 맞춘다(PR #167)
 - 결정한 사람: architect (검토: owner, 의견: frontend)
 
 ## 배경
@@ -123,7 +123,7 @@
 | 413 | `PAYLOAD_TOO_LARGE` | 본문이 너무 크다 |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | 지원하지 않는 Content-Type |
 | 429 | `LOGIN_LOCKED` | 로그인 잠금(P-105). `Retry-After` 헤더를 넣는다 |
-| 429 | `TOO_MANY_REQUESTS` | 동시에 도는 비밀번호 해시의 상한(1단계부터, ADR 001 결정 7)과 출시 단계의 요청 횟수 제한. `Retry-After` 헤더를 넣는다 |
+| 429 | `TOO_MANY_REQUESTS` | 동시에 도는 비밀번호 해시의 상한(1단계부터, ADR 001 결정 7)과 출시 단계의 요청 횟수 제한. `Retry-After` 헤더를 넣는다. 초 단위 정수이고 해시 상한은 1이다 |
 | 500 | `INTERNAL_ERROR` | 서버 오류. `detail`은 고정 문구다 |
 
 검사 순서는 인증(401) → 구성원 확인(404) → 권한(403) → 입력 검증(400) → 상태와 version(409)이다. 409의 `current`는 구성원 확인을 지난 요청에만 나간다.
