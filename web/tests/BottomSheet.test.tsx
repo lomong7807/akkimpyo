@@ -317,6 +317,10 @@ describe('아래로 끌기', () => {
 })
 
 describe('모양', () => {
+  it('고대비 모드에서도 경계가 보이게 투명한 테두리를 둔다', () => {
+    expect(rule('.sheet')).toContain('outline: 1px solid transparent')
+  })
+
   it('아래에 붙은 면이고 위쪽 두 모서리만 12px이며 높이는 화면의 90%까지다', async () => {
     await openSheet()
     const style = getComputedStyle(dialog()!.firstElementChild!)

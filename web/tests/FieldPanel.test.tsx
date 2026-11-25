@@ -148,6 +148,10 @@ describe('자리', () => {
 })
 
 describe('모양', () => {
+  it('고대비 모드에서도 경계가 보이게 투명한 테두리를 둔다', () => {
+    expect(rule('.panel')).toContain('outline: 1px solid transparent')
+  })
+
   it('폭 320px, 모서리 12px, 펼친 판 그림자이고 가림막이 없다', async () => {
     const user = userEvent.setup()
     render(<Sample />)

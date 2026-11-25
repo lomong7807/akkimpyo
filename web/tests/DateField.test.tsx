@@ -211,6 +211,21 @@ describe('고르기', () => {
       expect(document.activeElement).toBe(field())
     })
 
+    it.each([
+      ['눌러서', false],
+      ['키보드로', true],
+    ])('%s 열면 초점 테두리를 보이는지가 %s이다', async (_, visible) => {
+      const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+      // 칸에 초점 테두리가 보이는지는 브라우저가 정한다
+      const matches = Element.prototype.matches
+      vi.spyOn(Element.prototype, 'matches').mockImplementation(function (this: Element, selector) {
+        return selector === ':focus-visible' ? visible : matches.call(this, selector)
+      })
+      await open()
+      const moved = focus.mock.contexts.indexOf(day('2026년 11월 26일'))
+      expect(focus.mock.calls[moved]).toEqual([{ focusVisible: visible }])
+    })
+
     it('다시 열면 새 값에서 시작한다', async () => {
       const user = await open()
       await user.click(day('2026년 11월 3일'))

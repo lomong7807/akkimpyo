@@ -9,6 +9,8 @@
   border-radius: var(--radius-12) var(--radius-12) 0 0;
   background-color: var(--color-surface);
   box-shadow: var(--shadow-sheet);
+  /* 그림자와 가림막이 없는 고대비 모드에서는 투명한 테두리가 보이게 된다 */
+  outline: 1px solid transparent;
   translate: 0 var(--drag, 0);
   transition: translate var(--motion-sheet-duration) var(--motion-sheet-easing);
   animation: rise var(--motion-sheet-duration) var(--motion-sheet-easing);

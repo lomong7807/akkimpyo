@@ -13,7 +13,7 @@ function deviceToday(year: number, month: number, day: number, hour = 12, minute
 
 function open(value: string) {
   const onSelect = vi.fn()
-  render(<Calendar value={value} onSelect={onSelect} />)
+  render(<Calendar value={value} focusVisible onSelect={onSelect} />)
   return { onSelect, user: userEvent.setup() }
 }
 

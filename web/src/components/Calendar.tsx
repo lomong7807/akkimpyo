@@ -31,11 +31,13 @@ const moves: Partial<Record<string, (date: string) => string>> = {
 interface CalendarProps {
   /** 고른 날. 없으면 빈 글자 */
   value: string
+  /** 열 때 초점 테두리를 보이는지. 브라우저에 따라 눌러서 열어도 보이므로 연 칸이 알려 준다. */
+  focusVisible: boolean
   onSelect: (date: string) => void
 }
 
 /** 한 달 달력. 열리는 시트나 판 안에 열 때마다 새로 그린다. 그때의 오늘을 쓰고, 초점이 고른 날(없으면 오늘)로 간다. */
-export default function Calendar({ value, onSelect }: CalendarProps) {
+export default function Calendar({ value, focusVisible, onSelect }: CalendarProps) {
   const [openedOn] = useState(today)
   const range = selectableRange(openedOn)
   const isSelectable = (date: string) => clampDate(date, range) === date
@@ -45,8 +47,9 @@ export default function Calendar({ value, onSelect }: CalendarProps) {
   const monthId = useId()
   const month = monthOf(active)
 
+  const [openingFocus] = useState<FocusOptions>({ focusVisible })
   // 시트와 판은 layout effect에서 열린다. 열린 뒤에 초점을 옮긴다
-  useEffect(() => activeCell.current?.focus(), [])
+  useEffect(() => activeCell.current?.focus(openingFocus), [openingFocus])
 
   function moveTo(date: string) {
     flushSync(() => setActive(clampDate(date, range)))

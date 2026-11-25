@@ -19,7 +19,7 @@ interface DateFieldProps extends FieldLabels {
 /** 날짜 칸(화면설계서 00-common 5.8). 휴대폰 배치는 바닥 시트, 넓은 화면은 칸 아래 판에 달력을 연다. */
 export default function DateField({ value, onChange, readOnly = false, ref, ...labels }: DateFieldProps) {
   const valueId = useId()
-  const [opened, setOpened] = useState<{ button: HTMLButtonElement; wide: boolean }>()
+  const [opened, setOpened] = useState<{ button: HTMLButtonElement; focusVisible: boolean; wide: boolean }>()
   const close = () => setOpened(undefined)
 
   useEffect(() => {
@@ -30,9 +30,9 @@ export default function DateField({ value, onChange, readOnly = false, ref, ...l
   }, [opened])
 
   function open(button: HTMLButtonElement) {
-    // 누를 때 버튼에 초점을 주지 않는 브라우저(Safari)에서도 닫힐 때 이 칸으로 돌아오게 한다
+    setOpened({ button, focusVisible: button.matches(':focus-visible'), wide: wideScreen().matches })
+    // Safari는 누른 버튼에 초점을 주지 않는다. 닫힐 때 이 칸으로 돌아오게 한다
     button.focus()
-    setOpened({ button, wide: wideScreen().matches })
   }
 
   function select(date: string) {
@@ -40,7 +40,7 @@ export default function DateField({ value, onChange, readOnly = false, ref, ...l
     close()
   }
 
-  const calendar = <Calendar value={value} onSelect={select} />
+  const calendar = <Calendar value={value} focusVisible={opened?.focusVisible ?? false} onSelect={select} />
   return (
     <>
       <Field {...labels}>

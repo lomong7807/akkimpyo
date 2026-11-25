@@ -8,6 +8,8 @@
   border-radius: var(--radius-12);
   background-color: var(--color-surface);
   box-shadow: var(--shadow-dialog);
+  /* 그림자가 없는 고대비 모드에서는 투명한 테두리가 보이게 된다 */
+  outline: 1px solid transparent;
 }
 
 .panel[data-side='below'] {
