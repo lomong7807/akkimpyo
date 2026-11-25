@@ -28,6 +28,8 @@
   color: var(--color-text);
   font: var(--text-body);
   text-overflow: ellipsis;
+  /* 초점을 옮겨 스크롤할 때 위의 이름과 아래의 도움말, 오류 문구도 보이게 한다 */
+  scroll-margin-block: var(--space-32) calc(2 * var(--space-24));
 }
 
 .input::placeholder {

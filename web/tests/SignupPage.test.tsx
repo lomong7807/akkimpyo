@@ -21,6 +21,7 @@ const server = startMockServer()
 afterEach(() => {
   cleanup()
   resetViewport()
+  vi.restoreAllMocks()
   signUp.mockClear()
 })
 
@@ -407,6 +408,15 @@ describe('제출할 때의 검사', () => {
     await fillAndSubmit(user, values)
     expect(document.activeElement).toBe(input())
     expect(bodies).toEqual([])
+  })
+
+  it('첫 오류 칸에 이미 초점이 있어도 그 칸이 보이게 스크롤한다', async () => {
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const { user } = openSignup()
+    expect(document.activeElement).toBe(email())
+    await user.click(signupButton())
+    expect(scroll.mock.contexts).toEqual([email()])
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest' })
   })
 
   it('제출할 때 맞던 칸은 틀리게 고쳐도 칸을 벗어나기 전에는 오류를 띄우지 않는다', async () => {

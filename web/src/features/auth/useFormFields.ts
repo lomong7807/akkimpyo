@@ -49,8 +49,12 @@ export function useFormFields<Field extends string>({ fields, initialValues, val
 
   function focusFirst(messages: FieldErrors<Field>): boolean {
     const first = fields.find((field) => messages[field])
-    if (first) inputs.current[first]?.focus()
-    return first !== undefined
+    if (!first) return false
+    const input = inputs.current[first]
+    input?.focus()
+    // 이미 초점이 있는 칸이면 focus()는 스크롤하지 않는다
+    input?.scrollIntoView({ block: 'nearest' })
+    return true
   }
 
   function fieldProps(field: Field) {

@@ -15,8 +15,6 @@
   gap: var(--space-16);
   padding-block: var(--space-24);
   overflow-y: auto;
-  /* 초점이 간 칸의 이름과 도움말도 보이게 한다 */
-  scroll-padding-block: var(--space-32);
 }
 
 .bottom {
