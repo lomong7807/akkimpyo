@@ -39,6 +39,21 @@ const back = () => fireEvent.click(screen.getByRole('button', { name: '뒤로' }
 
 afterEach(cleanup)
 
+describe('하위 화면의 동작', () => {
+  it('상단 바 오른쪽 끝에 두고, 글자 버튼의 안쪽 여백만큼 당겨 글자를 오른쪽 선에 맞춘다', () => {
+    const action = <Link to="/accounts/new">추가</Link>
+    const screenRoutes = [{ path: '/accounts', element: <SubScreen title="계좌" parent="/more" action={action}>{null}</SubScreen> }]
+    window.history.replaceState(null, '', '/accounts')
+    const router = createBrowserRouter(screenRoutes)
+    render(<RouterProvider router={router} />)
+    const slot = screen.getByRole('link', { name: '추가' }).parentElement!
+    expect(screen.getByRole('banner').lastElementChild).toBe(slot)
+    expect(getComputedStyle(slot).getPropertyValue('margin-inline')).toBe('auto calc(-1 * var(--space-8))')
+    expect(getComputedStyle(slot).flex).toBe('0 0 auto')
+    router.dispose()
+  })
+})
+
 describe('하위 화면의 "뒤로"', () => {
   it('앞서 본 화면이 있으면 방문 기록에서 한 칸 돌아간다', async () => {
     const router = open('/accounts')

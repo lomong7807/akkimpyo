@@ -30,6 +30,12 @@
   margin-inline: calc(-1 * var(--space-12)) var(--space-4);
 }
 
+/* 글자 버튼의 안쪽 여백만큼 당겨 글자를 내용의 오른쪽 선에 맞춘다 */
+.action {
+  flex: none;
+  margin-inline: auto calc(-1 * var(--space-8));
+}
+
 .content {
   display: flex;
   flex: 1;

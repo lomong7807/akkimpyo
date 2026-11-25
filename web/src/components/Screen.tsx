@@ -22,6 +22,8 @@ interface TitleBarProps {
   title: string
   /** 앞서 본 화면이 없을 때(주소를 바로 연 경우) "뒤로"가 가는 주소 */
   parent: string
+  /** 오른쪽 끝에 두는 화면의 글자 버튼 */
+  action?: ReactNode
 }
 
 /** 하위 화면: 목록에서 들어간 상세, 설정, 관리 화면. 상단 바에 "뒤로"와 화면 이름을 둔다. */
@@ -35,7 +37,7 @@ export function SubScreen({ children, ...titleBarProps }: TitleBarProps & { chil
 }
 
 /** 하위 화면의 상단 바. 내용의 배치가 다른 화면은 이것만 쓴다. */
-export function TitleBar({ title, parent }: TitleBarProps) {
+export function TitleBar({ title, parent, action }: TitleBarProps) {
   const goBack = useGoBack(parent)
   return (
     <header className={`${layout.contentWidth} ${styles.topBar} ${styles.titleBar}`}>
@@ -43,6 +45,7 @@ export function TitleBar({ title, parent }: TitleBarProps) {
         <Button kind="icon" icon="CaretLeft" aria-label="뒤로" onClick={goBack} />
       </div>
       <h1 className={styles.title}>{title}</h1>
+      {action && <div className={styles.action}>{action}</div>}
     </header>
   )
 }

@@ -8,3 +8,7 @@
   color: var(--color-text-secondary);
   font: var(--text-body);
 }
+
+.action {
+  margin-top: var(--space-16);
+}
