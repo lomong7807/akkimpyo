@@ -82,6 +82,7 @@ class CrossLedgerAccessTest {
     static final LocalDate OPENING = LocalDate.of(2026, 11, 1);
     static final YearMonth NOVEMBER = YearMonth.of(2026, 11);
     static final String DEVICE = "a-phone";
+    static final String MALFORMED_DEVICE = "a phone";
 
     @Autowired AccountService accountService;
     @Autowired CategoryService categoryService;
@@ -427,7 +428,19 @@ class CrossLedgerAccessTest {
                 denied("순서: B의 삭제한 거래를 다시 삭제", notFound, bDeleted.id(), invalid,
                         (actor, tx) -> transactionService.delete(actor, tx, bDeleted.version(), DEVICE)),
                 denied("순서: B의 삭제하지 않은 거래를 복원", notFound, bExpense.id(), invalid,
-                        (actor, tx) -> transactionService.restore(actor, tx, bExpense.version(), DEVICE)));
+                        (actor, tx) -> transactionService.restore(actor, tx, bExpense.version(), DEVICE)),
+                denied("순서: B의 장부에 형식이 틀린 기기 값으로 지출", notMember, ledgerB, invalid,
+                        (actor, ledger) -> transactionService.create(actor, ledger,
+                                entry(UUID.randomUUID(), bBank, bFood, 1_000), MALFORMED_DEVICE)),
+                denied("순서: B의 지출을 형식이 틀린 기기 값으로 수정", notFound, bExpense.id(), invalid,
+                        (actor, tx) -> transactionService.update(actor, tx, bExpense.version(),
+                                entry(tx, bCash, bFood, 1), MALFORMED_DEVICE)),
+                denied("순서: B의 지출을 형식이 틀린 기기 값으로 취소", notFound, bExpense.id(), invalid,
+                        (actor, tx) -> transactionService.cancel(actor, tx, bExpense.version(), MALFORMED_DEVICE)),
+                denied("순서: B의 지출을 형식이 틀린 기기 값으로 삭제", notFound, bExpense.id(), invalid,
+                        (actor, tx) -> transactionService.delete(actor, tx, bExpense.version(), MALFORMED_DEVICE)),
+                denied("순서: B의 삭제한 거래를 형식이 틀린 기기 값으로 복원", notFound, bDeleted.id(), invalid,
+                        (actor, tx) -> transactionService.restore(actor, tx, bDeleted.version(), MALFORMED_DEVICE)));
     }
 
     // ---------------------------------------------------------------- 확인

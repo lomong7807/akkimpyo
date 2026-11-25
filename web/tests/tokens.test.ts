@@ -66,6 +66,7 @@ const sizes = {
 const widths = {
   '--width-content-narrow': 640,
   '--width-content-wide': 720,
+  '--width-auth': 400,
   '--width-sidebar': 240,
   '--width-list-min': 360,
   '--width-side-panel': 440,

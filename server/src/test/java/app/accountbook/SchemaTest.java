@@ -18,6 +18,7 @@ import app.accountbook.transaction.TransactionType;
 import app.accountbook.user.User;
 import app.accountbook.user.UserRepository;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -385,6 +386,43 @@ class SchemaTest {
                 .hasMessageContaining("ck_account_opening_balance_range");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "",
+            " ", "iphone safari", " iphone.safari", "iphone.safari ",      // 공백
+            "iphone,safari", "iphone/safari", "iphone;safari",             // 허용 구간의 바로 앞뒤: , / ; @ [ ^ `
+            "iphone@safari", "iphone[safari", "iphone^safari", "iphone`safari", "iphone{safari",
+            "iphone.safari\n", "\niphone.safari", "iphone\tsafari", "iphone\u007Fsafari", // 제어 문자
+            "iph\u00F3ne.safari", "아이폰.safari", "iphone.safari\u0661", "iphone.safari\uD83D\uDCF1"}) // ASCII 밖
+    void deviceIdOutsideFormatIsRejectedByDatabase(String deviceId) {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        assertThatThrownBy(() -> insertChangeLog(tx, deviceId))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_change_log_device_id_format");
+    }
+
+    @Test
+    void deviceIdOverSixtyFourCharactersIsRejectedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        assertThatThrownBy(() -> insertChangeLog(tx, "a".repeat(65)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_change_log_device_id_format");
+    }
+
+    @Test
+    void deviceIdWithAllowedCharactersOrNullIsAcceptedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+        List<String> deviceIds = Arrays.asList("a",
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._", ":-", null);
+
+        deviceIds.forEach(deviceId -> insertChangeLog(tx, deviceId));
+
+        assertThat(jdbc.queryForList("select device_id from change_log where transaction_id = ?", String.class, tx))
+                .containsExactlyInAnyOrderElementsOf(deviceIds);
+    }
+
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 장부와 사용자를 새로 만들고 거래 id를 돌려준다. */
     private UUID insertTransaction(LocalDate occurredOn) {
         UUID user = UUID.randomUUID();
@@ -417,6 +455,14 @@ class SchemaTest {
                 insert into transaction_line (id, transaction_id, account_id, amount, created_at)
                 values (?, ?, ?, ?, now())
                 """, UUID.randomUUID(), transactionId, account, amount);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
+    private void insertChangeLog(UUID transactionId, String deviceId) {
+        jdbc.update("""
+                insert into change_log (id, transaction_id, ledger_id, action, actor_id, device_id, created_at)
+                select ?, id, ledger_id, 'CREATE', created_by, ?, now() from transaction where id = ?
+                """, UUID.randomUUID(), deviceId, transactionId);
     }
 
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */

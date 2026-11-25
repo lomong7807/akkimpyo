@@ -112,6 +112,7 @@ public class TransactionService {
 
     private CreateResult judgeAndCreate(UUID actorId, UUID ledgerId, TransactionCommand cmd, String deviceId) {
         ledgerAccess.requireMember(actorId, ledgerId);
+        DeviceIds.requireValidFormat(deviceId);
         Content content = normalize(ledgerId, cmd, actorId);
         Optional<Transaction> existing = transactionRepository.findById(content.id());
         if (existing.isPresent()) {
@@ -138,6 +139,7 @@ public class TransactionService {
     public TransactionView update(UUID actorId, UUID txId, long expectedVersion, TransactionCommand cmd,
                                   String deviceId) {
         Transaction tx = loadAccessible(actorId, txId);
+        DeviceIds.requireValidFormat(deviceId);
         requireVersion(tx, expectedVersion);
         requireNotDeleted(tx, "삭제된 거래는 수정할 수 없습니다.");
         Content content = normalize(tx.getLedgerId(), cmd, tx.getPaidBy());
@@ -160,6 +162,7 @@ public class TransactionService {
     @Transactional
     public TransactionView cancel(UUID actorId, UUID txId, long expectedVersion, String deviceId) {
         Transaction tx = loadAccessible(actorId, txId);
+        DeviceIds.requireValidFormat(deviceId);
         requireVersion(tx, expectedVersion);
         requireNotDeleted(tx, "삭제된 거래는 취소할 수 없습니다.");
         if (tx.getStatus() == TransactionStatus.CANCELED) {
@@ -172,6 +175,7 @@ public class TransactionService {
     @Transactional
     public TransactionView delete(UUID actorId, UUID txId, long expectedVersion, String deviceId) {
         Transaction tx = loadAccessible(actorId, txId);
+        DeviceIds.requireValidFormat(deviceId);
         requireVersion(tx, expectedVersion);
         requireNotDeleted(tx, "이미 삭제된 거래입니다.");
         return write(tx, expectedVersion, ChangeAction.DELETE, actorId, deviceId, tx::markDeleted);
@@ -181,6 +185,7 @@ public class TransactionService {
     @Transactional
     public TransactionView restore(UUID actorId, UUID txId, long expectedVersion, String deviceId) {
         Transaction tx = loadAccessible(actorId, txId);
+        DeviceIds.requireValidFormat(deviceId);
         requireVersion(tx, expectedVersion);
         if (!tx.isDeleted()) {
             throw new InvalidRequestException("삭제된 거래만 복원할 수 있습니다.");
