@@ -5,6 +5,7 @@
 # 1. PostgreSQL을 셸이 감싸 띄운다. pg_ctl로 PostgreSQL만 재시작해도 컨테이너(와 그 cgroup)가 남는다.
 #    컨테이너째 재시작하면 cgroup이 새로 생겨, 이전 컨테이너가 쓴 페이지 캐시가 메모리 한도 밖에 남는다.
 # 2. shared_buffers와 메모리 한도를 환경변수로 바꾼다(E3). 기본값은 compose.perf.yaml과 같다.
+# command를 통째로 바꿔 쓰므로 설정 기본값이 compose.perf.yaml과 두 곳에 있다. 바꿀 때 같이 바꾼다.
 services:
   db:
     entrypoint: ["bash", "-c"]
