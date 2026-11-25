@@ -1,0 +1,164 @@
+/*
+ * 디자인 토큰. 값은 docs/design/tokens.md와 같다.
+ * 색, 글자, 간격, 모서리, 그림자 값은 이 파일에만 둔다.
+ * 크기는 rem(16px = 1rem)이다. 선 굵기와 그림자는 글자 크기를 따라 커지지 않도록 px로 둔다.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* 배경 */
+  --color-bg: #F6F7F8;
+  --color-surface: #FFFFFF;
+  --color-inverse: #15181B;
+  --color-scrim: rgba(15, 18, 20, 0.40);
+
+  /* 글자 */
+  --color-text: #15181B;
+  --color-text-secondary: #5B6670;
+  --color-on-accent: #FFFFFF;
+  --color-on-danger: #FFFFFF;
+  --color-on-inverse: #FFFFFF;
+  --color-inverse-action: #3CCB9E;
+
+  /* 테두리 */
+  --color-border: #E4E7EA;
+  --color-border-strong: #808B94;
+
+  /* 상태 */
+  --color-accent: #0F7B5F;
+  --color-danger: #C4372C;
+  --color-accent-weak: #E7F3EE;
+  --color-press: #EFF1F3;
+
+  /* 그림자 */
+  --shadow-quick-entry: 0 4px 12px rgba(15, 18, 20, 0.16); /* 빠른 입력 버튼. 휴대폰 배치에서는 쓰지 않는다(owner 결정 11) */
+  --shadow-sheet: 0 -2px 16px rgba(15, 18, 20, 0.12); /* 바닥 시트 */
+  --shadow-dialog: 0 8px 24px rgba(15, 18, 20, 0.12); /* 가운데 창, 펼친 판 */
+
+  /*
+   * 글자. 변수 하나가 굵기, 크기, 줄 높이, 글꼴을 함께 담는다. font: var(--text-body)처럼 쓴다.
+   * font는 font-variant-numeric을 되돌리므로 숫자에는 base.css의 tabular-nums 클래스를 함께 쓴다.
+   */
+  --font-family: "Pretendard Variable", -apple-system, "Apple SD Gothic Neo", system-ui, sans-serif;
+  --text-hero: 700 2rem/2.5rem var(--font-family); /* 32/40 */
+  --text-title: 700 1.25rem/1.75rem var(--font-family); /* 20/28 */
+  --text-body: 400 1rem/1.5rem var(--font-family); /* 16/24 */
+  --text-body-strong: 600 1rem/1.5rem var(--font-family); /* 16/24 */
+  --text-label: 600 0.875rem/1.25rem var(--font-family); /* 14/20 */
+  --text-secondary: 400 0.875rem/1.25rem var(--font-family); /* 14/20 */
+  --text-caption: 400 0.8125rem/1.125rem var(--font-family); /* 13/18 */
+
+  /* 간격. 이름의 숫자는 px 값이다 */
+  --space-4: 0.25rem;
+  --space-8: 0.5rem;
+  --space-12: 0.75rem;
+  --space-16: 1rem;
+  --space-24: 1.5rem;
+  --space-32: 2rem;
+  --space-40: 2.5rem;
+
+  /* 모서리 */
+  --radius-10: 0.625rem; /* 입력칸, 버튼, 날짜 칸의 고른 표시, 뼈대 막대 */
+  --radius-12: 0.75rem; /* 카드, 바닥 시트, 가운데 창, 펼친 판, 토스트 */
+  --radius-full: 9999px; /* 칩, 배지, 시트 손잡이, 스위치 */
+
+  /* 요소 크기 */
+  --size-topbar: 3.5rem; /* 56 상단 바 */
+  --size-tabbar: 3.5rem; /* 56 하단 탭 */
+  --size-quick-entry: 2.75rem; /* 44 하단 탭 칸 안의 거래 입력(owner 결정 11) */
+  --size-button: 3rem; /* 48 주 버튼, 위험 버튼 */
+  --size-button-secondary: 2.75rem; /* 44 보조 버튼 */
+  --size-field: 3rem; /* 48 입력칸 */
+  --size-touch: 2.75rem; /* 44 누르는 영역의 최솟값 */
+  --size-chip: 1.5rem; /* 24 표시 칩 */
+  --size-chip-choice: 2rem; /* 32 고르는 칩 */
+  --size-icon-20: 1.25rem; /* 20 줄 안, 버튼 안 */
+  --size-icon-24: 1.5rem; /* 24 하단 탭, 상단 바 */
+  --size-row: 3.5rem; /* 56 목록 한 줄의 최솟값 */
+
+  /* 화면 폭. 배치를 나누는 768px와 1024px는 변수를 쓸 수 없는 미디어 조건에 직접 쓴다 */
+  --width-content-narrow: 40rem; /* 640 휴대폰 배치 내용 폭 */
+  --width-content-wide: 45rem; /* 720 넓은 화면 내용 폭 */
+  --width-sidebar: 15rem; /* 240 */
+  --width-list-min: 22.5rem; /* 360 목록 칸의 최소 폭 */
+  --width-side-panel: 27.5rem; /* 440 오른쪽 칸 */
+
+  /* 2px 선 (tokens.md 확인 필요 T-1) */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --line-strong: 2px; /* 초점 칸과 오류 칸의 테두리, 전환 줄의 아래 선 */
+
+  /* 움직임 */
+  --motion-sheet-duration: 200ms;
+  --motion-sheet-easing: cubic-bezier(0.2, 0, 0, 1);
+  --motion-press-duration: 100ms;
+  --motion-press-scale: 0.98;
+  --motion-toast-duration: 150ms;
+}
+
+/* 어두운 화면: 시스템 설정을 따를 때. 아래 수동 지정 블록과 값이 같아야 한다 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --color-bg: #0F1214;
+    --color-surface: #181C1F;
+    --color-inverse: #ECEFF1;
+    --color-scrim: rgba(0, 0, 0, 0.60);
+
+    --color-text: #ECEFF1;
+    --color-text-secondary: #98A3AC;
+    --color-on-accent: #0F1214;
+    --color-on-danger: #0F1214;
+    --color-on-inverse: #0F1214;
+    --color-inverse-action: #0F7B5F;
+
+    --color-border: #2A3035;
+    --color-border-strong: #646E77;
+
+    --color-accent: #3CCB9E;
+    --color-danger: #F0796E;
+    --color-accent-weak: #16322A;
+    --color-press: #21262A;
+
+    --shadow-quick-entry: 0 4px 12px rgba(0, 0, 0, 0.48);
+    --shadow-sheet: 0 -2px 16px rgba(0, 0, 0, 0.48);
+    --shadow-dialog: 0 8px 24px rgba(0, 0, 0, 0.48);
+  }
+}
+
+/* 어두운 화면: 사용자가 "어둡게"를 고른 때 */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #0F1214;
+  --color-surface: #181C1F;
+  --color-inverse: #ECEFF1;
+  --color-scrim: rgba(0, 0, 0, 0.60);
+
+  --color-text: #ECEFF1;
+  --color-text-secondary: #98A3AC;
+  --color-on-accent: #0F1214;
+  --color-on-danger: #0F1214;
+  --color-on-inverse: #0F1214;
+  --color-inverse-action: #0F7B5F;
+
+  --color-border: #2A3035;
+  --color-border-strong: #646E77;
+
+  --color-accent: #3CCB9E;
+  --color-danger: #F0796E;
+  --color-accent-weak: #16322A;
+  --color-press: #21262A;
+
+  --shadow-quick-entry: 0 4px 12px rgba(0, 0, 0, 0.48);
+  --shadow-sheet: 0 -2px 16px rgba(0, 0, 0, 0.48);
+  --shadow-dialog: 0 8px 24px rgba(0, 0, 0, 0.48);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-press-scale: 1;
+  }
+}
