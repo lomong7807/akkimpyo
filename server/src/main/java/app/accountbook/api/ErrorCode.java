@@ -11,6 +11,7 @@ enum ErrorCode {
     MALFORMED_REQUEST(HttpStatus.BAD_REQUEST, "요청을 읽을 수 없다"),
     NOT_FOUND(HttpStatus.NOT_FOUND, "대상을 찾을 수 없다"),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "이 경로에서 받지 않는 메서드다"),
+    PAYLOAD_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "요청 본문이 너무 크다"),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 Content-Type이다"),
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청이 많아 지금은 처리할 수 없다"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버에서 오류가 났다");
@@ -40,6 +41,7 @@ enum ErrorCode {
         return switch (status) {
             case 404 -> NOT_FOUND;
             case 405 -> METHOD_NOT_ALLOWED;
+            case 413 -> PAYLOAD_TOO_LARGE;
             case 415 -> UNSUPPORTED_MEDIA_TYPE;
             case 408 -> INTERNAL_ERROR;
             case 501, 505 -> MALFORMED_REQUEST;
