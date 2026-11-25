@@ -1,4 +1,5 @@
 import { Outlet, ScrollRestoration, type RouteObject } from 'react-router'
+import LoginPage from '../features/auth/LoginPage'
 import NotFoundPage from '../features/not-found/NotFoundPage'
 import AppLayout from './AppLayout'
 import { navigation } from './navigation'
@@ -14,7 +15,7 @@ export const routes: RouteObject[] = [
       </>
     ),
     children: [
-      { element: <PlainLayout />, children: [] },
+      { element: <PlainLayout />, children: [{ path: '/login', element: <LoginPage /> }] },
       {
         element: <AppLayout navigation={navigation} />,
         children: [{ path: '*', element: <NotFoundPage /> }],

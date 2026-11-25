@@ -1,0 +1,527 @@
+import { onlineManager } from '@tanstack/react-query'
+import { cleanup, fireEvent, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createQueryClient } from '../src/app/queryClient'
+import { routes } from '../src/app/routes'
+import LoginPage from '../src/features/auth/LoginPage'
+import { startMockServer } from './support/mockServer'
+import { problem } from './support/problem'
+import { renderRoutes } from './support/renderRoutes'
+import { resetViewport, setViewportWidth } from './support/viewport'
+
+vi.stubGlobal('scrollTo', vi.fn())
+
+const server = startMockServer()
+
+afterEach(() => {
+  cleanup()
+  resetViewport()
+})
+
+const emailRequired = '이메일을 입력해 주세요'
+const emailFormat = '이메일 주소 형식을 확인해 주세요'
+const passwordRequired = '비밀번호를 입력해 주세요'
+const refused = '이메일 또는 비밀번호가 맞지 않아요'
+const failed = '문제가 생겨 로그인하지 못했어요. 잠시 후 다시 시도해 주세요.'
+
+const email = () => screen.getByLabelText<HTMLInputElement>('이메일')
+const password = () => screen.getByLabelText<HTMLInputElement>('비밀번호')
+const loginButton = () => screen.getByRole('button', { name: '로그인' })
+const retryButton = () => screen.getByRole('button', { name: '다시 시도' })
+
+function openLogin(queryClient = createQueryClient()) {
+  const router = renderRoutes(routes, '/login', queryClient)
+  return { user: userEvent.setup(), router }
+}
+
+/** 로그인 API의 응답을 정하고, 받은 본문을 모아 돌려준다. */
+function respondToLogin(respond: () => Response | Promise<Response>) {
+  const bodies: unknown[] = []
+  server.use(
+    http.post('/api/v1/auth/login', async ({ request }) => {
+      bodies.push(await request.json())
+      return respond()
+    }),
+  )
+  return bodies
+}
+
+const success = () => HttpResponse.json({ accessToken: 'token-1' })
+
+async function fill(user: ReturnType<typeof userEvent.setup>, emailValue: string, passwordValue: string) {
+  await user.type(email(), emailValue)
+  await user.type(password(), passwordValue)
+}
+
+async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
+  await fill(user, 'name@example.com', 'pass1234')
+  await user.click(loginButton())
+}
+
+describe('로그인(A-02)의 요소', () => {
+  it.each([390, 768, 1280])('폭 %dpx에서 공통 틀 없이 제목과 칸, 버튼을 그린다', (width) => {
+    openLogin()
+    setViewportWidth(width)
+    expect(screen.getByRole('heading', { level: 1, name: '로그인' })).toBeTruthy()
+    expect(loginButton().getAttribute('type')).toBe('submit')
+    expect(screen.queryByRole('navigation')).toBeNull()
+    expect(screen.queryByRole('banner')).toBeNull()
+  })
+
+  it('이메일 칸은 입력 형식 이메일, 자동 완성 username이고 자동 대문자와 맞춤법 검사를 끈다', () => {
+    openLogin()
+    expect(email().type).toBe('email')
+    expect(email().autocomplete).toBe('username')
+    expect(email().getAttribute('autocapitalize')).toBe('none')
+    expect(email().getAttribute('spellcheck')).toBe('false')
+    expect(email().placeholder).toBe('name@example.com')
+  })
+
+  it('비밀번호 칸은 가려져 있고 자동 완성이 current-password다', () => {
+    openLogin()
+    expect(password().type).toBe('password')
+    expect(password().autocomplete).toBe('current-password')
+  })
+
+  it('화면을 열면 이메일 칸에 초점을 둔다', () => {
+    openLogin()
+    expect(document.activeElement).toBe(email())
+  })
+
+  it('1단계에 없는 요소를 두지 않는다', () => {
+    openLogin()
+    expect(screen.queryByText('비밀번호를 잊었어요')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('넓은 화면에서는 폭 400px로 가운데에 두고, 휴대폰 배치에서는 폭을 줄이지 않는다', () => {
+    openLogin()
+    const page = screen.getByRole('main').firstElementChild!
+    setViewportWidth(1280)
+    const wide = getComputedStyle(page)
+    expect(wide.maxWidth).toBe('var(--width-auth)')
+    expect(wide.getPropertyValue('margin-inline')).toBe('auto')
+    expect(wide.justifyContent).toBe('center')
+    setViewportWidth(390)
+    expect(getComputedStyle(page).maxWidth).not.toBe('var(--width-auth)')
+  })
+})
+
+describe('입력값 검사', () => {
+  it.each([
+    ['', emailRequired],
+    ['   ', emailRequired],
+    ['name', emailFormat],
+    ['@example.com', emailFormat],
+    ['name@', emailFormat],
+    ['name@@example.com', emailFormat],
+    ['a@b@c', emailFormat],
+  ])('이메일 "%s"로 칸을 벗어나면 "%s"를 보인다', async (value, message) => {
+    const { user } = openLogin()
+    if (value) await user.type(email(), value)
+    await user.tab()
+    expect(screen.getByText(message)).toBeTruthy()
+    expect(email().getAttribute('aria-invalid')).toBe('true')
+    expect(password().hasAttribute('aria-invalid')).toBe(false)
+  })
+
+  it.each(['name@example.com', '  Name@Example.COM  ', 'a@b', '이름@한글.example'])(
+    '이메일 "%s"는 맞는 형식이다',
+    async (value) => {
+      const { user } = openLogin()
+      await user.type(email(), value)
+      await user.tab()
+      expect(email().hasAttribute('aria-invalid')).toBe(false)
+    },
+  )
+
+  it('비밀번호가 빈 채로 칸을 벗어나면 "비밀번호를 입력해 주세요"를 보인다', async () => {
+    const { user } = openLogin()
+    await user.click(password())
+    await user.tab()
+    expect(screen.getByText(passwordRequired)).toBeTruthy()
+  })
+
+  it.each(['1', ' ', 'a'.repeat(100)])('비밀번호의 길이와 구성은 검사하지 않는다: "%s"', async (value) => {
+    const bodies = respondToLogin(success)
+    const { user } = openLogin()
+    await fill(user, 'name@example.com', value)
+    await user.click(loginButton())
+    await vi.waitFor(() => expect(bodies).toEqual([{ email: 'name@example.com', password: value }]))
+  })
+
+  it('입력하는 동안에는 새 오류를 띄우지 않는다', async () => {
+    const { user } = openLogin()
+    await user.type(email(), 'name')
+    expect(screen.queryByText(emailFormat)).toBeNull()
+  })
+
+  it('오류가 보이는 칸은 고칠 때마다 다시 검사해 맞으면 바로 지운다', async () => {
+    const { user } = openLogin()
+    await user.tab()
+    expect(screen.getByText(emailRequired)).toBeTruthy()
+    await user.type(email(), 'n')
+    expect(screen.queryByText(emailRequired)).toBeNull()
+    expect(screen.getByText(emailFormat)).toBeTruthy()
+    await user.type(email(), 'ame@example.com')
+    expect(screen.queryByText(emailFormat)).toBeNull()
+  })
+
+  it('오류 없이 벗어난 칸을 틀리게 고쳐도 칸을 벗어나기 전에는 오류를 띄우지 않는다', async () => {
+    const { user } = openLogin()
+    await user.type(email(), 'a@b')
+    await user.tab()
+    await user.click(email())
+    await user.keyboard('{Backspace}')
+    expect(email().value).toBe('a@')
+    expect(screen.queryByText(emailFormat)).toBeNull()
+  })
+
+  it('오류를 고친 뒤 다시 틀리게 고쳐도 칸을 벗어나기 전에는 오류를 띄우지 않는다', async () => {
+    const { user } = openLogin()
+    await user.tab()
+    await user.type(email(), 'name@example.com')
+    await user.type(email(), '{Backspace>11/}')
+    expect(email().value).toBe('name@')
+    expect(screen.queryByText(emailFormat)).toBeNull()
+    await user.tab()
+    expect(screen.getByText(emailFormat)).toBeTruthy()
+  })
+})
+
+describe('제출할 때의 검사', () => {
+  it('빈 채로 누르면 두 오류를 보이고 첫 오류 칸인 이메일로 초점이 가며 보내지 않는다', async () => {
+    const bodies = respondToLogin(success)
+    const { user } = openLogin()
+    await user.click(loginButton())
+    expect(screen.getByText(emailRequired)).toBeTruthy()
+    expect(screen.getByText(passwordRequired)).toBeTruthy()
+    expect(document.activeElement).toBe(email())
+    expect(bodies).toEqual([])
+  })
+
+  it('이메일이 맞고 비밀번호가 비었으면 비밀번호로 초점이 간다', async () => {
+    const { user } = openLogin()
+    await user.type(email(), 'name@example.com')
+    await user.click(loginButton())
+    expect(screen.getByText(passwordRequired)).toBeTruthy()
+    expect(document.activeElement).toBe(password())
+  })
+
+  it('키보드로 눌러도 첫 오류 칸으로 초점이 간다', async () => {
+    const { user } = openLogin()
+    await user.tab()
+    await user.tab()
+    await user.tab()
+    expect(document.activeElement).toBe(loginButton())
+    await user.keyboard('{Enter}')
+    expect(document.activeElement).toBe(email())
+  })
+
+  it('오류가 있어도 버튼은 누를 수 있다', async () => {
+    const { user } = openLogin()
+    await user.click(loginButton())
+    expect(loginButton().hasAttribute('aria-disabled')).toBe(false)
+    expect(loginButton().hasAttribute('disabled')).toBe(false)
+  })
+
+  it.each([
+    ['로그인', loginButton],
+    ['가입', () => screen.getByRole('link', { name: '가입' })],
+    ['비밀번호 보기', () => screen.getByRole('button', { name: '비밀번호 보기' })],
+  ])('"%s"를 누르는 사이에 오류 문구가 나와 버튼이 밀리지 않는다', async (_, target) => {
+    const { user } = openLogin()
+    await user.pointer({ keys: '[MouseLeft>]', target: target() })
+    expect(screen.queryByText(emailRequired)).toBeNull()
+    expect(document.activeElement).toBe(email())
+  })
+
+  it('다른 칸을 누르면 벗어난 칸을 검사하고 초점이 옮겨 간다', async () => {
+    const { user } = openLogin()
+    await user.pointer({ keys: '[MouseLeft>]', target: password() })
+    expect(document.activeElement).toBe(password())
+    expect(screen.getByText(emailRequired)).toBeTruthy()
+  })
+})
+
+describe('보내기', () => {
+  it('이메일은 앞뒤 공백을 지우고 소문자로 바꿔 보내고, 화면의 값과 비밀번호는 그대로다', async () => {
+    const bodies = respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
+    const { user } = openLogin()
+    await fill(user, 'Name@Example.COM', ' Pass 1234 ')
+    await user.click(loginButton())
+    await screen.findByText(refused)
+    expect(bodies).toEqual([{ email: 'name@example.com', password: ' Pass 1234 ' }])
+    expect(email().value).toBe('Name@Example.COM')
+    expect(password().value).toBe(' Pass 1234 ')
+  })
+
+  it('비밀번호 칸에서 엔터를 누르면 로그인 버튼을 누른 것과 같다', async () => {
+    const bodies = respondToLogin(success)
+    const { user } = openLogin()
+    await fill(user, 'name@example.com', 'pass1234{Enter}')
+    await vi.waitFor(() => expect(bodies).toHaveLength(1))
+  })
+
+  it('브라우저가 양식을 직접 보내 페이지를 새로 열지 않는다', () => {
+    openLogin()
+    expect(fireEvent.submit(loginButton().closest('form')!)).toBe(false)
+  })
+
+  it('입력값을 주소에 싣지 않는다', async () => {
+    respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
+    const { user, router } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByText(refused)
+    expect(router.state.location.search).toBe('')
+    expect(email().hasAttribute('name')).toBe(false)
+    expect(password().hasAttribute('name')).toBe(false)
+  })
+})
+
+describe('처리 중', () => {
+  it('버튼 안에 돌아가는 원이 보이고 두 칸은 읽기 전용이며 응답이 오면 되돌린다', async () => {
+    const answer = Promise.withResolvers<Response>()
+    respondToLogin(() => answer.promise)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+
+    await vi.waitFor(() => expect(loginButton().getAttribute('aria-busy')).toBe('true'))
+    expect(loginButton().querySelector('.status-motion')).toBeTruthy()
+    expect(email().readOnly).toBe(true)
+    expect(password().readOnly).toBe(true)
+
+    answer.resolve(problem(401, 'INVALID_CREDENTIALS'))
+    await screen.findByText(refused)
+    expect(loginButton().hasAttribute('aria-busy')).toBe(false)
+    expect(email().readOnly).toBe(false)
+    expect(password().readOnly).toBe(false)
+  })
+
+  it('두 번 누르거나 엔터를 눌러도 한 번만 보낸다', async () => {
+    const bodies = respondToLogin(() => new Promise(() => {}))
+    const { user } = openLogin()
+    await fill(user, 'name@example.com', 'pass1234')
+    await user.dblClick(loginButton())
+    await user.type(password(), '{Enter}')
+    await user.click(loginButton())
+    expect(bodies).toHaveLength(1)
+  })
+
+  it('다시 보내는 동안 앞선 오류 문구를 지운다', async () => {
+    const answers = [Promise.resolve(problem(401, 'INVALID_CREDENTIALS')), new Promise<Response>(() => {})]
+    respondToLogin(() => answers.shift()!)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByText(refused)
+    await user.click(loginButton())
+    await vi.waitFor(() => expect(screen.queryByText(refused)).toBeNull())
+  })
+})
+
+describe('서버가 거부함', () => {
+  it.each([
+    ['401 INVALID_CREDENTIALS', () => problem(401, 'INVALID_CREDENTIALS')],
+    ['모르는 code의 401', () => problem(401, 'SOMETHING_NEW')],
+    ['본문을 읽을 수 없는 401', () => new HttpResponse('<html>', { status: 401 })],
+    [
+      '400 VALIDATION_FAILED',
+      () =>
+        problem(400, 'VALIDATION_FAILED', {
+          fieldErrors: [{ field: 'email', code: 'INVALID_FORMAT', message: '이메일 형식이 아니다' }],
+        }),
+    ],
+  ])('%s이면 버튼 바로 위에 구분 없는 문구를 보인다', async (_, response) => {
+    respondToLogin(response)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe(refused)
+    expect(loginButton().previousElementSibling!.contains(alert)).toBe(true)
+    expect(email().hasAttribute('aria-invalid')).toBe(false)
+    expect(password().hasAttribute('aria-invalid')).toBe(false)
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull()
+  })
+
+  it('입력값이 남고 서버가 쓴 문장은 보이지 않는다', async () => {
+    respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByText(refused)
+    expect(email().value).toBe('name@example.com')
+    expect(password().value).toBe('pass1234')
+    expect(document.body.textContent).not.toContain('개발자가 읽는 한 줄')
+  })
+
+  it('갱신하지 않고 로그인 요청을 한 번만 보낸다', async () => {
+    const bodies = respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
+    const refresh = vi.fn(() => problem(401, 'UNAUTHENTICATED'))
+    server.use(http.post('/api/v1/auth/refresh', refresh))
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByText(refused)
+    expect(bodies).toHaveLength(1)
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('비운 채로 다시 누르면 앞선 거부 문구를 지우고 칸의 오류만 보인다', async () => {
+    respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByText(refused)
+    await user.clear(password())
+    await user.click(loginButton())
+    expect(screen.getByText(passwordRequired)).toBeTruthy()
+    await vi.waitFor(() => expect(screen.queryByText(refused)).toBeNull())
+  })
+})
+
+describe('서버 오류와 지연', () => {
+  it.each([
+    ['500', () => problem(500, 'INTERNAL_ERROR')],
+    ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
+    ['연결 오류', () => HttpResponse.error()],
+    ['429', () => problem(429, 'TOO_MANY_REQUESTS')],
+    ['403', () => problem(403, 'ORIGIN_NOT_ALLOWED')],
+    ['400 MALFORMED_REQUEST', () => problem(400, 'MALFORMED_REQUEST')],
+    ['약속과 다른 200', () => HttpResponse.json({})],
+  ])('%s이면 버튼 바로 위에 문구와 "다시 시도"를 보이고 입력값이 남는다', async (_, response) => {
+    respondToLogin(response)
+    const { user, router } = openLogin()
+    await fillAndSubmit(user)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe(failed)
+    const notice = loginButton().previousElementSibling as HTMLElement
+    expect(notice.contains(alert)).toBe(true)
+    expect(within(notice).getByRole('button', { name: '다시 시도' })).toBeTruthy()
+    expect(email().value).toBe('name@example.com')
+    expect(password().value).toBe('pass1234')
+    expect(router.state.location.pathname).toBe('/login')
+  })
+
+  it('15초 동안 응답이 없으면 같은 문구를 보인다', async () => {
+    respondToLogin(() => new Promise(() => {}))
+    const { user } = openLogin()
+    await fill(user, 'name@example.com', 'pass1234')
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      fireEvent.click(loginButton())
+      await vi.advanceTimersByTimeAsync(14_900)
+      expect(screen.queryByRole('alert')).toBeNull()
+      await vi.advanceTimersByTimeAsync(200)
+      expect(screen.getByRole('alert').textContent).toBe(failed)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('저절로 다시 보내지 않는다', async () => {
+    const bodies = respondToLogin(() => problem(500, 'INTERNAL_ERROR'))
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByRole('alert')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(bodies).toHaveLength(1)
+  })
+
+  it('브라우저가 연결 없음이라고 해도 멈춰 기다리지 않고 실패를 알린다', async () => {
+    onlineManager.setOnline(false)
+    try {
+      respondToLogin(() => HttpResponse.error())
+      const { user } = openLogin()
+      await fillAndSubmit(user)
+      expect((await screen.findByRole('alert')).textContent).toBe(failed)
+    } finally {
+      onlineManager.setOnline(true)
+    }
+  })
+
+  it('"다시 시도"를 누르면 같은 값으로 다시 보낸다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), success]
+    const bodies = respondToLogin(() => answers.shift()!())
+    const { user, router } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByRole('alert')
+    await user.click(retryButton())
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe('/home'))
+    expect(bodies).toEqual([
+      { email: 'name@example.com', password: 'pass1234' },
+      { email: 'name@example.com', password: 'pass1234' },
+    ])
+  })
+
+  it('"다시 시도"가 사라져도 초점이 로그인 버튼에 남는다', async () => {
+    const answers = [Promise.resolve(problem(500, 'INTERNAL_ERROR')), new Promise<Response>(() => {})]
+    respondToLogin(() => answers.shift()!)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByRole('alert')
+    retryButton().focus()
+    await user.keyboard('{Enter}')
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull())
+    expect(document.activeElement).toBe(loginButton())
+  })
+})
+
+describe('성공', () => {
+  it('/home으로 가고 토스트가 없다', async () => {
+    respondToLogin(success)
+    const { user, router } = openLogin()
+    await fillAndSubmit(user)
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe('/home'))
+    expect(router.state.historyAction).toBe('REPLACE')
+    expect(router.state.location.state).toBeNull()
+    expect(screen.getByRole('heading', { level: 1, name: '찾을 수 없어요.' })).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('로그인 뒤 저장소와 쿠키, 주소, 캐시에 토큰과 비밀번호가 남지 않는다', async () => {
+    respondToLogin(success)
+    const queryClient = createQueryClient()
+    const { user, router } = openLogin(queryClient)
+    await fillAndSubmit(user)
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe('/home'))
+    expect(localStorage.length).toBe(0)
+    expect(sessionStorage.length).toBe(0)
+    expect(document.cookie).toBe('')
+    expect(JSON.stringify(router.state.location)).not.toMatch(/token-1|pass1234/)
+    await vi.waitFor(() => expect(queryClient.getMutationCache().getAll()).toEqual([]))
+    expect(queryClient.getQueryCache().getAll()).toEqual([])
+  })
+})
+
+it('성공한 뒤 다음 화면이 열릴 때까지 다시 누를 수 없다', async () => {
+  const bodies = respondToLogin(success)
+  const slowHome = { path: '/home', loader: () => new Promise(() => {}), element: null, hydrateFallbackElement: null }
+  renderRoutes([{ path: '/login', element: <LoginPage /> }, slowHome], '/login')
+  const user = userEvent.setup()
+  await fillAndSubmit(user)
+  await vi.waitFor(() => expect(bodies).toHaveLength(1))
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  await user.click(loginButton())
+  expect(loginButton().getAttribute('aria-busy')).toBe('true')
+  expect(bodies).toHaveLength(1)
+})
+
+describe('가입 링크', () => {
+  it('"계정이 없나요?" 뒤에 있고 /signup으로 간다', () => {
+    openLogin()
+    const link = screen.getByRole('link', { name: '가입' })
+    expect(link.parentElement!.textContent).toBe('계정이 없나요? 가입')
+    expect(link.getAttribute('href')).toBe('/signup')
+  })
+
+  it('입력한 이메일을 주소에 담지 않고 넘긴다', async () => {
+    const { user, router } = openLogin()
+    await fill(user, 'name@example.com', 'pass1234')
+    await user.click(screen.getByRole('link', { name: '가입' }))
+    expect(router.state.location.pathname).toBe('/signup')
+    expect(router.state.location.search).toBe('')
+    expect(router.state.location.hash).toBe('')
+    expect(router.state.location.state).toEqual({ email: 'name@example.com' })
+  })
+})
