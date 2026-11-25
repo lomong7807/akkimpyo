@@ -266,6 +266,47 @@ class SchemaTest {
                 .hasMessageContaining("ck_transaction_occurred_on_min");
     }
 
+    @Test
+    void sameAccountNameInSameLedgerIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+        UUID other = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+        insertAccount(ledger, "생활비", 0L);
+        // 다른 장부에서는 같은 이름이 들어간다.
+        insertAccount(other, "생활비", 0L);
+
+        assertThatThrownBy(() -> insertAccount(ledger, "생활비", 0L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("uq_account_name");
+    }
+
+    @Test
+    void accountNameOverFiftyCharactersIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+        insertAccount(ledger, "가".repeat(50), 0L);
+
+        assertThatThrownBy(() -> insertAccount(ledger, "가".repeat(51), 0L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_name_length");
+    }
+
+    @Test
+    void emptyAccountNameIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, "", 0L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_name_length");
+    }
+
+    @Test
+    void accountNameWithSurroundingSpaceIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, "생활비 ", 0L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_name_trimmed");
+    }
+
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 장부와 사용자를 새로 만들고 거래 id를 돌려준다. */
     private UUID insertTransaction(LocalDate occurredOn) {
         UUID user = UUID.randomUUID();
@@ -284,17 +325,28 @@ class SchemaTest {
         return tx;
     }
 
-    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 계좌는 거래의 장부에 새로 만든다. */
+    /**
+     * 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 계좌는 거래의 장부에 새로 만든다.
+     * 한 장부에 여러 번 부를 수 있게 계좌 이름을 호출마다 다르게 한다(uq_account_name).
+     */
     private void insertLine(UUID transactionId, long amount) {
         UUID account = UUID.randomUUID();
         jdbc.update("""
                 insert into account (id, ledger_id, name, type, opening_date, created_at)
-                select ?, ledger_id, '현금', 'CASH', DATE '2026-11-01', now() from transaction where id = ?
-                """, account, transactionId);
+                select ?, ledger_id, ?, 'CASH', DATE '2026-11-01', now() from transaction where id = ?
+                """, account, "현금-" + account, transactionId);
         jdbc.update("""
                 insert into transaction_line (id, transaction_id, account_id, amount, created_at)
                 values (?, ?, ?, ?, now())
                 """, UUID.randomUUID(), transactionId, account, amount);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
+    private void insertAccount(UUID ledgerId, String name, long openingBalance) {
+        jdbc.update("""
+                insert into account (id, ledger_id, name, type, opening_balance, opening_date, created_at)
+                values (?, ?, ?, 'BANK', ?, DATE '2026-11-01', now())
+                """, UUID.randomUUID(), ledgerId, name, openingBalance);
     }
 
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */

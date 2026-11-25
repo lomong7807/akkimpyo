@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
+import app.accountbook.common.DuplicateAccountNameException;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotLedgerMemberException;
@@ -21,6 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 @IntegrationTest
 class AccountServiceTest {
+
+    static final LocalDate OPENING = LocalDate.of(2026, 11, 1);
 
     @Autowired AccountService accountService;
     @Autowired AccountRepository accountRepository;
@@ -100,5 +103,76 @@ class AccountServiceTest {
 
         assertThat(accountRepository.findById(account.getId())).isEmpty();
         assertThat(accountService.list(owner.getId(), ledgerId)).isEmpty();
+    }
+
+    @Test
+    void create_rejectsNameAlreadyUsedInSameLedger() {
+        accountService.create(owner.getId(), ledgerId, command("생활비", 0));
+
+        // 앞뒤 공백을 지운 뒤 비교한다.
+        assertThatThrownBy(() -> accountService.create(owner.getId(), ledgerId, command("  생활비 ", 0)))
+                .isInstanceOf(DuplicateAccountNameException.class)
+                .hasMessage("같은 이름의 계좌가 있습니다.");
+        assertThat(accountService.list(owner.getId(), ledgerId)).hasSize(1);
+    }
+
+    @Test
+    void create_storesSameNameInAnotherLedger() {
+        User other = fixtures.user("other@example.com");
+        UUID otherLedgerId = fixtures.personalLedgerId(other);
+        accountService.create(owner.getId(), ledgerId, command("생활비", 0));
+
+        Account created = accountService.create(other.getId(), otherLedgerId, command("생활비", 0));
+
+        assertThat(accountService.list(other.getId(), otherLedgerId)).extracting(Account::getId)
+                .containsExactly(created.getId());
+    }
+
+    @Test
+    void create_comparesNamesLiterally() {
+        // 대소문자와 가운데 공백이 다르면 다른 이름이다.
+        accountService.create(owner.getId(), ledgerId, command("KB 통장", 0));
+
+        accountService.create(owner.getId(), ledgerId, command("kb 통장", 0));
+        accountService.create(owner.getId(), ledgerId, command("KB통장", 0));
+
+        assertThat(accountService.list(owner.getId(), ledgerId)).extracting(Account::getName)
+                .containsExactly("KB 통장", "kb 통장", "KB통장");
+    }
+
+    @Test
+    void create_storesNameOfFiftyCharactersAndRejectsFiftyOne() {
+        Account created = accountService.create(owner.getId(), ledgerId, command("가".repeat(50), 0));
+
+        assertThat(accountRepository.findById(created.getId()).orElseThrow().getName()).hasSize(50);
+        assertThatThrownBy(() -> accountService.create(owner.getId(), ledgerId, command("가".repeat(51), 0)))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void update_rejectsNameOfAnotherAccountInSameLedger() {
+        accountService.create(owner.getId(), ledgerId, command("생활비", 0));
+        Account savings = accountService.create(owner.getId(), ledgerId, command("비상금", 0));
+
+        assertThatThrownBy(() -> accountService.update(owner.getId(), savings.getId(), command(" 생활비 ", 0)))
+                .isInstanceOf(DuplicateAccountNameException.class)
+                .hasMessage("같은 이름의 계좌가 있습니다.");
+        assertThat(accountRepository.findById(savings.getId()).orElseThrow().getName()).isEqualTo("비상금");
+    }
+
+    @Test
+    void update_keepsOwnNameWhileChangingOtherFields() {
+        // 자기 자신과는 겹치지 않는 것으로 본다.
+        Account account = accountService.create(owner.getId(), ledgerId, command("생활비", 0));
+
+        accountService.update(owner.getId(), account.getId(), command("생활비", 50_000));
+
+        Account stored = accountRepository.findById(account.getId()).orElseThrow();
+        assertThat(stored.getName()).isEqualTo("생활비");
+        assertThat(stored.getOpeningBalance()).isEqualTo(50_000);
+    }
+
+    private static AccountCommand command(String name, long openingBalance) {
+        return new AccountCommand(name, AccountType.BANK, openingBalance, OPENING);
     }
 }
