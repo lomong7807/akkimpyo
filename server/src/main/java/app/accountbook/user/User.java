@@ -10,6 +10,8 @@ import java.util.UUID;
 @Table(name = "users")
 public class User extends BaseEntity {
 
+    public static final int DISPLAY_NAME_MAX_LENGTH = 20;
+
     @Column(name = "email", nullable = false, unique = true)
     private String email;
 

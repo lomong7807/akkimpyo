@@ -189,6 +189,37 @@ class SchemaTest {
                 .hasMessageContaining("fk_category_parent");
     }
 
+    @Test
+    void displayNameOverTwentyCharactersIsRejectedByDatabase() {
+        insertUser("twenty@example.com", "가".repeat(20));
+
+        assertThatThrownBy(() -> insertUser("twentyone@example.com", "가".repeat(21)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_users_display_name_length");
+    }
+
+    @Test
+    void emptyDisplayNameIsRejectedByDatabase() {
+        assertThatThrownBy(() -> insertUser("empty@example.com", ""))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_users_display_name_length");
+    }
+
+    @Test
+    void displayNameWithSurroundingSpaceIsRejectedByDatabase() {
+        assertThatThrownBy(() -> insertUser("space@example.com", "주인 "))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_users_display_name_trimmed");
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
+    private void insertUser(String email, String displayName) {
+        jdbc.update("""
+                insert into users (id, email, password_hash, display_name, created_at)
+                values (?, ?, 'hash', ?, now())
+                """, UUID.randomUUID(), email, displayName);
+    }
+
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
     private void insertCategory(UUID id, UUID ledgerId, String kind, String name, UUID parentId, boolean system) {
         jdbc.update("""
