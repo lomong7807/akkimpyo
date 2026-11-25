@@ -2,7 +2,7 @@
 -- 코드: MonthlyStatsQuery.monthly
 -- SQL은 손으로 쓴 것이 아니다. 테스트를 SQL 로그를 켜고 돌려 Hibernate가 보낸 문장을 그대로 가져왔고,
 -- ?만 psql 변수로 바꿨다(MonthlyStatsQueryTest).
--- 가져온 날 2026-11-24, 코드 main 48aa00e, Spring Boot 3.5.16, Hibernate 6.6.53.Final.
+-- 가져온 날 2026-11-26, 코드 main a55e96f, Spring Boot 4.2.0, Hibernate 7.4.15.Final, pgJDBC 42.7.14.
 --
 -- 변수: ledger_no(기본 1), month(기본 2026-10)
 --       explain(기본 'EXPLAIN (ANALYZE, BUFFERS)', -v explain= 로 비우면 쿼리만 실행)
@@ -46,7 +46,7 @@ SELECT (:'month' || '-01')::date AS first_day,
 \endif
 
 :head
-select tl1_0.category_id,c1_0.kind,sum(tl1_0.amount) from transaction_line tl1_0 join transaction t1_0 on t1_0.id=tl1_0.transaction_id join category c1_0 on c1_0.id=tl1_0.category_id where t1_0.ledger_id=:p1 and t1_0.occurred_on between :p2 and :p3 and t1_0.deleted_at is null and t1_0.status<>:p4 group by tl1_0.category_id,c1_0.kind having sum(tl1_0.amount)<>0;
+select tl1_0.category_id,c1_0.kind,cast(sum(tl1_0.amount) as numeric(38,0)) from transaction_line tl1_0 join transaction t1_0 on t1_0.id=tl1_0.transaction_id join category c1_0 on c1_0.id=tl1_0.category_id where t1_0.ledger_id=:p1 and t1_0.occurred_on between :p2 and :p3 and t1_0.deleted_at is null and t1_0.status<>:p4 group by tl1_0.category_id,c1_0.kind having sum(tl1_0.amount)<>0;
 
 \if :generic
   SET plan_cache_mode = force_generic_plan;

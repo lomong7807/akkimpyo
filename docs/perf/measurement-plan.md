@@ -60,7 +60,7 @@
 ## 6. 다시 재는 시점
 
 - Spring Boot 4.2 이전(이슈 #17) 앞뒤. → 쟀다: [2026-11-25 V6과 Spring Boot 4.2 뒤 다시 재기](results/2026-11-25-remeasure-v6-boot42.md)(SQL이 같은지와 pgJDBC 동작만 봤다. 쿼리 시간은 다시 재지 않았다)
-- `transaction_line`에 `ledger_id`를 넣는 결정이 난 뒤.
+- `transaction_line`에 `ledger_id`를 넣는 결정이 난 뒤. → 쟀다: [2026-11-26 #58(V10~V12) 뒤 다시 재기](results/2026-11-26-remeasure-line-ledger.md)(큰 장부 5만 건의 상한 200ms 시간 판정은 맥의 load 때문에 하지 못해 다음 측정으로 넘긴다)
 - 조각(1A, 1B, 1C)이 끝날 때마다.
 - 이슈 #6이 머지된 뒤: 장부 전체 잔액에서 `account` 전체 훑기가 없어지는지(dba, PR #107). → 쟀다: [2026-11-25 V6과 Spring Boot 4.2 뒤 다시 재기](results/2026-11-25-remeasure-v6-boot42.md)
 
