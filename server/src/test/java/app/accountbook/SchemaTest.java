@@ -21,6 +21,8 @@ import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -301,6 +303,127 @@ class SchemaTest {
     }
 
     @Test
+    void lineWithAccountOfAnotherLedgerIsRejectedByDatabase() {
+        LedgerRows mine = insertLedgerRows();
+        LedgerRows other = insertLedgerRows();
+
+        assertThatThrownBy(() -> insertLine(mine.transaction(), mine.ledger(), other.account(), mine.category()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("fk_transaction_line_account");
+    }
+
+    @Test
+    void lineWithCategoryOfAnotherLedgerIsRejectedByDatabase() {
+        LedgerRows mine = insertLedgerRows();
+        LedgerRows other = insertLedgerRows();
+
+        assertThatThrownBy(() -> insertLine(mine.transaction(), mine.ledger(), mine.account(), other.category()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("fk_transaction_line_category");
+    }
+
+    @Test
+    void lineWithLedgerOtherThanItsTransactionIsRejectedByDatabase() {
+        LedgerRows mine = insertLedgerRows();
+        LedgerRows other = insertLedgerRows();
+
+        // 계좌와 카테고리는 라인의 장부와 같으므로 거래 쪽 제약만 어긋난다.
+        assertThatThrownBy(() -> insertLine(mine.transaction(), other.ledger(), other.account(), other.category()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("fk_transaction_line_transaction");
+    }
+
+    @Test
+    void lineWithoutLedgerIsRejectedByDatabase() {
+        LedgerRows mine = insertLedgerRows();
+
+        assertThatThrownBy(() -> insertLine(mine.transaction(), null, mine.account(), mine.category()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("null value in column \"ledger_id\"");
+    }
+
+    @Test
+    void lineOfMissingTransactionAccountOrCategoryIsRejectedByDatabase() {
+        // V1의 단일 컬럼 FK를 지운 뒤에도 없는 행을 가리킬 수 없다.
+        LedgerRows mine = insertLedgerRows();
+        UUID missing = UUID.randomUUID();
+
+        assertRejectedBy("fk_transaction_line_transaction",
+                () -> insertLine(missing, mine.ledger(), mine.account(), mine.category()));
+        assertRejectedBy("fk_transaction_line_account",
+                () -> insertLine(mine.transaction(), mine.ledger(), missing, mine.category()));
+        assertRejectedBy("fk_transaction_line_category",
+                () -> insertLine(mine.transaction(), mine.ledger(), mine.account(), missing));
+    }
+
+    @Test
+    void lineWithoutCategoryIsAcceptedByDatabase() {
+        // 이체 라인은 카테고리가 없다(MATCH SIMPLE이라 카테고리 FK를 검사하지 않는다).
+        LedgerRows mine = insertLedgerRows();
+
+        insertLine(mine.transaction(), mine.ledger(), mine.account(), null);
+
+        assertThat(countLines(mine.transaction())).isEqualTo(1);
+    }
+
+    @Test
+    void deletingTransactionDeletesItsLinesInDatabase() {
+        LedgerRows mine = insertLedgerRows();
+        LedgerRows other = insertLedgerRows();
+        insertLine(mine.transaction(), mine.ledger(), mine.account(), mine.category());
+        insertLine(mine.transaction(), mine.ledger(), mine.account(), null);
+        insertLine(other.transaction(), other.ledger(), other.account(), other.category());
+
+        jdbc.update("delete from transaction where id = ?", mine.transaction());
+
+        assertThat(countLines(mine.transaction())).isZero();
+        assertThat(countLines(other.transaction())).isEqualTo(1);
+    }
+
+    @Test
+    void accountOrCategoryWithLineCannotBeDeletedInDatabase() {
+        LedgerRows mine = insertLedgerRows();
+        insertLine(mine.transaction(), mine.ledger(), mine.account(), mine.category());
+
+        assertRejectedBy("fk_transaction_line_account",
+                () -> jdbc.update("delete from account where id = ?", mine.account()));
+        assertRejectedBy("fk_transaction_line_category",
+                () -> jdbc.update("delete from category where id = ?", mine.category()));
+    }
+
+    @Test
+    void transactionAccountOrCategoryWithLineCannotMoveToAnotherLedgerInDatabase() {
+        // 거래 하나는 장부 하나에만 속한다(P-314). 옮기면 라인이 다른 장부를 가리키게 된다.
+        LedgerRows mine = insertLedgerRows();
+        LedgerRows other = insertLedgerRows();
+        insertLine(mine.transaction(), mine.ledger(), mine.account(), mine.category());
+
+        assertRejectedBy("fk_transaction_line_transaction", () -> jdbc.update(
+                "update transaction set ledger_id = ? where id = ?", other.ledger(), mine.transaction()));
+        assertRejectedBy("fk_transaction_line_account", () -> jdbc.update(
+                "update account set ledger_id = ?, name = '옮긴 계좌' where id = ?", other.ledger(), mine.account()));
+        assertRejectedBy("fk_transaction_line_category", () -> jdbc.update(
+                "update category set ledger_id = ?, name = '옮긴 분류' where id = ?", other.ledger(), mine.category()));
+    }
+
+    @Test
+    void lineOfAnotherLedgersAccountIsRejectedWhenSavedThroughRepository() {
+        // 서비스의 장부 검사에 버그가 생겨 다른 장부의 계좌가 엔터티까지 온 경우다.
+        LedgerRows mine = insertLedgerRows();
+        LedgerRows other = insertLedgerRows();
+        UUID user = jdbc.queryForObject("select created_by from transaction where id = ?", UUID.class,
+                mine.transaction());
+        Transaction tx = Transaction.of(UUID.randomUUID(), mine.ledger(), TransactionType.EXPENSE,
+                LocalDate.of(2026, 11, 18), null, null, null, user, user);
+        tx.addLine(other.account(), mine.category(), -12_000);
+
+        assertThatThrownBy(() -> transactionRepository.saveAndFlush(tx))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .cause().isInstanceOfSatisfying(ConstraintViolationException.class, violation ->
+                        assertThat(violation.getConstraintName()).isEqualTo("fk_transaction_line_account"));
+    }
+
+    @Test
     void occurredOnAtMinIsAcceptedByDatabase() {
         UUID tx = insertTransaction(LocalDate.of(2000, 1, 1));
 
@@ -471,9 +594,46 @@ class SchemaTest {
                 select ?, ledger_id, ?, 'CASH', DATE '2026-11-01', now() from transaction where id = ?
                 """, account, "현금-" + account, transactionId);
         jdbc.update("""
-                insert into transaction_line (id, transaction_id, account_id, amount, created_at)
-                values (?, ?, ?, ?, now())
-                """, UUID.randomUUID(), transactionId, account, amount);
+                insert into transaction_line (id, transaction_id, ledger_id, account_id, amount, created_at)
+                select ?, id, ledger_id, ?, ?, now() from transaction where id = ?
+                """, UUID.randomUUID(), account, amount, transactionId);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 장부, 거래, 계좌, 카테고리를 마음대로 섞을 수 있다. */
+    private void insertLine(UUID transactionId, UUID ledgerId, UUID accountId, UUID categoryId) {
+        jdbc.update("""
+                insert into transaction_line (id, transaction_id, ledger_id, account_id, category_id, amount,
+                                              created_at)
+                values (?, ?, ?, ?, ?, -12000, now())
+                """, UUID.randomUUID(), transactionId, ledgerId, accountId, categoryId);
+    }
+
+    private long countLines(UUID transactionId) {
+        return jdbc.queryForObject("select count(*) from transaction_line where transaction_id = ?", Long.class,
+                transactionId);
+    }
+
+    /** 실패한 문장 뒤에는 트랜잭션이 막히므로 SAVEPOINT로 되돌려, 한 테스트에서 여러 문장을 볼 수 있게 한다. */
+    private void assertRejectedBy(String constraint, ThrowingCallable statement) {
+        jdbc.execute("SAVEPOINT before_rejected");
+        assertThatThrownBy(statement)
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining(constraint);
+        jdbc.execute("ROLLBACK TO SAVEPOINT before_rejected");
+    }
+
+    /** 장부 하나와 그 안의 지출 거래(라인 없음), 계좌, 카테고리를 새로 만든다. */
+    private LedgerRows insertLedgerRows() {
+        UUID transaction = insertTransaction(LocalDate.of(2026, 11, 18));
+        UUID ledger = jdbc.queryForObject("select ledger_id from transaction where id = ?", UUID.class, transaction);
+        insertAccount(ledger, "현금", 0L);
+        UUID account = jdbc.queryForObject("select id from account where ledger_id = ?", UUID.class, ledger);
+        UUID category = UUID.randomUUID();
+        insertCategory(category, ledger, "EXPENSE", "식비", null, false);
+        return new LedgerRows(ledger, transaction, account, category);
+    }
+
+    private record LedgerRows(UUID ledger, UUID transaction, UUID account, UUID category) {
     }
 
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */

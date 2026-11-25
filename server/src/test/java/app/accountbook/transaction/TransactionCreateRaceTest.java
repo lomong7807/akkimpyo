@@ -100,6 +100,24 @@ class TransactionCreateRaceTest {
         assertOnlyFirstIsStored(race);
     }
 
+    /**
+     * 같은 장부의 같은 id는 기본키와 uq_transaction_id_ledger(V10)에 함께 걸리고, PostgreSQL은 OID가 작은 인덱스의
+     * 이름을 알린다. 기본키를 REINDEX CONCURRENTLY로 다시 만들면 OID가 커져 이름이 바뀐다. 끝나면 순서를 되돌린다.
+     */
+    @Test
+    void 기본키보다_장부_유니크가_먼저_걸려도_재전송이다() {
+        jdbc.execute("REINDEX INDEX CONCURRENTLY transaction_pkey");
+        try {
+            Race race = race(() -> create(owner, ledgerId, cash, 12_000),
+                    () -> create(owner, ledgerId, cash, 12_000));
+
+            assertThat(race.second().join()).isEqualTo(new CreateResult(race.first().transaction(), false));
+            assertOnlyFirstIsStored(race);
+        } finally {
+            jdbc.execute("REINDEX INDEX CONCURRENTLY uq_transaction_id_ledger");
+        }
+    }
+
     /** 앞 요청의 트랜잭션을 연 채로 뒤 요청을 보내고, 뒤 요청이 앞 요청을 기다리게 된 것을 본 뒤 앞 요청을 커밋한다. */
     private Race race(Supplier<CreateResult> first, Supplier<CreateResult> second) {
         return transactionTemplate.execute(status -> {
