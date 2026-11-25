@@ -87,7 +87,7 @@
   /* 2px 선 (tokens.md 확인 필요 T-1) */
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
-  --line-strong: 2px; /* 초점 칸과 오류 칸의 테두리, 전환 줄의 아래 선 */
+  --border-width-strong: 2px; /* 초점 칸과 오류 칸의 테두리, 전환 줄의 아래 선 */
 
   /* 움직임 */
   --motion-sheet-duration: 200ms;

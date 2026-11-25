@@ -198,7 +198,7 @@ describe('간격, 모서리, 크기, 선', () => {
     const token = tokensIn()
     expect(token('--focus-ring-width')).toBe('2px')
     expect(token('--focus-ring-offset')).toBe('2px')
-    expect(token('--line-strong')).toBe('2px')
+    expect(token('--border-width-strong')).toBe('2px')
   })
 })
 
