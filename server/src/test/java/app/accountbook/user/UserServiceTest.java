@@ -38,8 +38,10 @@ import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @IntegrationTest
@@ -52,10 +54,12 @@ class UserServiceTest {
     @Autowired CategoryRepository categoryRepository;
     @Autowired CategoryService categoryService;
     @Autowired JdbcTemplate jdbc;
-    /** UserService가 주입받는 인코더. 통합 테스트에서는 가벼운 Argon2id다(TestPasswordEncoderConfig). */
-    @Autowired PasswordEncoder passwordEncoder;
-    /** 운영 빈. 테스트 인코더를 빼면 UserService가 받는 것이 이것 하나다. */
-    @Autowired @Qualifier("passwordEncoder") PasswordEncoder productionPasswordEncoder;
+    @Autowired ApplicationContext context;
+    /** 운영 빈. 테스트용(TestPasswordHasherConfig)을 빼면 UserService가 받는 것이 이것 하나다. */
+    @Autowired @Qualifier("passwordHasher") PasswordHasher productionPasswordHasher;
+
+    /** 저장된 해시를 확인한다. 정규화하지 않으므로 어떤 값이 해시됐는지 그대로 드러난다. */
+    private final PasswordEncoder passwordEncoder = new Argon2PasswordEncoder(16, 32, 1, 256, 1);
 
     /** 규칙(P-101)에 맞는 비밀번호. 비밀번호가 주제가 아닌 테스트가 쓴다. */
     private static final String PASSWORD = "password1";
@@ -486,12 +490,18 @@ class UserServiceTest {
     }
 
     @Test
-    void productionPasswordEncoderBeanIsArgon2idAtTheFloor() {
-        // 운영 빈이 컨텍스트에 등록돼 있고(테스트 인코더가 가리지 않는다) ADR 001 결정 7의 하한 매개변수로 해시한다.
-        String encoded = productionPasswordEncoder.encode(PASSWORD);
+    void productionPasswordHasherBeanIsArgon2idAtTheFloor() {
+        // 운영 빈이 컨텍스트에 등록돼 있고(테스트용이 가리지 않는다) ADR 001 결정 7의 하한 매개변수로 해시한다.
+        String encoded = productionPasswordHasher.hash(PASSWORD);
 
         assertThat(encoded).startsWith("$argon2id$v=19$m=19456,t=2,p=1$");
-        assertThat(productionPasswordEncoder.matches(PASSWORD, encoded)).isTrue();
+        assertThat(productionPasswordHasher.matches(PASSWORD, encoded)).isTrue();
+    }
+
+    @Test
+    void noPasswordEncoderBeanBypassesTheHasher() {
+        // 정규화, 동시 해시 상한, 저장값 판정을 거치지 않는 인코더를 주입받을 길이 없다.
+        assertThat(context.getBeanNamesForType(PasswordEncoder.class)).isEmpty();
     }
 
     @Test
