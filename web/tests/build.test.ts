@@ -32,6 +32,12 @@ function links(rel: string): Record<string, string>[] {
     .filter((link) => link.rel === rel)
 }
 
+/** PNG 머리에 적힌 "가로x세로". PNG가 아니면 실패한다. */
+function pngSize(file: Buffer): string {
+  expect(file.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
+  return `${file.readUInt32BE(16)}x${file.readUInt32BE(20)}`
+}
+
 describe('배포 빌드', () => {
   it('미리 받는 글꼴과 @font-face가 쓰는 글꼴이 해시가 붙은 같은 파일이다', () => {
     const css = links('stylesheet')
@@ -43,5 +49,23 @@ describe('배포 빌드', () => {
     expect(preloaded).toMatch(/^\/assets\/PretendardVariable-[\w-]+\.woff2$/)
     expect(fontFace).toBe(preloaded)
     expect(builtFile(preloaded).subarray(0, 4).toString()).toBe('wOF2')
+  })
+})
+
+describe('홈 화면 설치 (F-120)', () => {
+  it('iPhone 홈 화면 아이콘은 180x180 PNG다', () => {
+    const [icon, ...others] = links('apple-touch-icon')
+    expect(others).toEqual([])
+    expect(icon?.sizes).toBe('180x180')
+    expect(pngSize(builtFile(icon.href))).toBe('180x180')
+  })
+
+  it('파비콘은 32x32와 16x16 PNG다', () => {
+    const icons = links('icon')
+    expect(icons.map((icon) => icon.sizes)).toEqual(['32x32', '16x16'])
+    for (const icon of icons) {
+      expect(icon.type).toBe('image/png')
+      expect(pngSize(builtFile(icon.href)), icon.href).toBe(icon.sizes)
+    }
   })
 })
