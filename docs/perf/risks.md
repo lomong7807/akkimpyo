@@ -1,6 +1,6 @@
 # 아낌표 성능 위험 목록
 
-> **대부분 코드를 읽고 정리한 것이다. 2.4 잔액만 2026-11-24부터 로컬에서 쟀다.** 읽은 코드는 main 9a31116이다. 이 문서를 올릴 때의 main(baaa2a4)과 서버 코드는 같다. 2.1~2.4는 2026-11-26에 main c3ef222(V15)와 맞췄다.
+> **대부분 코드를 읽고 정리한 것이다. 2.4 잔액만 2026-11-24부터 로컬에서 쟀다.** 읽은 코드는 main 9a31116이다. 이 문서를 올릴 때의 main(baaa2a4)과 서버 코드는 같다. 1장, 2.1~2.4, 2.9는 2026-11-26에 main c3ef222(V15)와 맞췄다.
 
 - 상태: 초안, 2.4 잔액만 실측(2026-11-24)
 - 작성일: 2026-11-24
@@ -10,12 +10,12 @@
 
 ## 1. 읽기 전에 알아 둘 코드 사실
 
-- 인덱스는 `V1__ledger_core.sql`에 있는 다음 네 개와 PK, UNIQUE뿐이다.
-  - `transaction (ledger_id, occurred_on)`
-  - `transaction_line (transaction_id)`
-  - `transaction_line (account_id)`
-  - `change_log (transaction_id, created_at)`
-- 컨트롤러가 아직 없다. 거래 목록과 검색 쿼리도 없다. 읽기로 있는 것은 휴지통 목록(`listDeleted`), 거래 하나 조회, 변경 이력, 잔액(`BalanceQuery`), 월 통계(`MonthlyStatsQuery`)이다.
+- PK와 UNIQUE(부분 유니크 `uq_category_system` 포함)를 빼면 인덱스는 다음 네 개뿐이다.
+  - `transaction (ledger_id, occurred_on)` (V1)
+  - `transaction_line (transaction_id)` (V1)
+  - `transaction_line (account_id)` (V1)
+  - `change_log (ledger_id, created_at)` (V15). V1의 `change_log (transaction_id, created_at)`은 V15가 지웠고, 거래의 이력은 유니크 `(transaction_id, version)`의 인덱스가 대신한다.
+- 컨트롤러는 오류 응답용 `ApiErrorController`(`/error`) 하나뿐이다. 거래 목록과 검색 쿼리도 없다. 거래와 통계를 읽는 것은 휴지통 목록(`listDeleted`), 거래 하나 조회, 변경 이력, 잔액(`BalanceQuery`), 월 통계(`MonthlyStatsQuery`)이고, 그 밖에 계좌 목록과 카테고리 목록이 있다.
 
 ## 2. 위험 표
 
@@ -31,7 +31,7 @@
 | 6 | 휴지통 목록 | 아래 2.6 | 확인 | 건수 제한, 부분 인덱스 제안 | dba, ledger |
 | 7 | 저장 1건의 SQL 수 | 아래 2.7 | 추정 (세어 보지 않음) | 세어서 상한으로 고정 | ledger |
 | 8 | 오프라인 입력 전송 | 아래 2.8 | 추정 | 묶음 저장 API 검토 | architect |
-| 9 | 스키마 변경 예정 | 아래 2.9 | 확인 (제안이 올라가 있음) | 결정 뒤에 실행 계획을 잰다 | dba, architect |
+| 9 | 라인의 장부 열(`ledger_id`) | 아래 2.9 | 확인 (V10~V12로 들어갔다) | 실행 계획을 쟀다(2026-11-26) | dba, architect |
 
 ### 2.1 인덱스 없는 조회 (확인)
 
@@ -97,7 +97,7 @@
 - 묶음 저장 API를 검토할 만하다.
 - 담당: architect.
 
-### 2.9 스키마 변경 예정
+### 2.9 라인의 장부 열 (들어감)
 
-- `transaction_line`에 `ledger_id`를 넣는 안이 소유자에게 올라가 있다.
-- 채택되면 통계 쿼리의 조인 모양이 바뀐다. 그 결정 뒤에 실행 계획을 잰다.
+- `transaction_line.ledger_id`(NOT NULL)와 복합 FK 셋이 V10~V12로 들어갔다(이슈 #58, PR #170). 잔액 쿼리 두 개가 라인과 거래를 장부 조건으로 읽는다. 월 통계 쿼리는 바뀌지 않았다.
+- 실행 계획은 2026-11-26에 쟀다([결과](results/2026-11-26-remeasure-line-ledger.md)). 장부 전체 잔액의 조인 모양이 바뀌었다.
