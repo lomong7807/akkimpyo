@@ -15,6 +15,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 @Retention(RetentionPolicy.RUNTIME)
 @HttpServerTest
 @MockitoSpyBean(types = UserService.class)
-@Import({AccessProbeController.class, SessionCounter.class, ThrowingFilter.class, StoppedClockConfig.class})
+@Import({AccessProbeController.class, SessionCounter.class, HttpsRequestFilter.class, ThrowingFilter.class,
+        StoppedClockConfig.class})
 @interface AccessTest {
 }

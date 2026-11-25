@@ -28,6 +28,11 @@ management:
       probes:
         # 공개하는 것은 /actuator/health 하나다. 쓰지 않는 하위 경로(liveness, readiness)를 만들지 않는다.
         enabled: false
+  endpoints:
+    web:
+      discovery:
+        # 로그인한 사람에게도 /actuator의 주소 목록을 주지 않는다.
+        enabled: false
 logging:
   pattern:
     # 요청 id(ADR 005). 요청 밖의 로그에서는 빈칸이다.

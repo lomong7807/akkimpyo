@@ -69,11 +69,11 @@ class AccessControlTest {
     @ParameterizedTest
     @ValueSource(strings = {
             // 있는 주소
-            AccessProbeController.ME, "/actuator",
+            AccessProbeController.ME,
             // health의 하위 경로와 비슷한 주소. 공개는 글자 그대로 하나다
             HEALTH + "/", HEALTH + "/liveness", HEALTH + "/readiness", HEALTH + "/db", HEALTH + "/x/y",
-            HEALTH + ".json", "/actuator/healthz", "/ACTUATOR/HEALTH", "/actuator/info", "/actuator/env",
-            "/actuator/metrics",
+            HEALTH + ".json", "/actuator/healthz", "/ACTUATOR/HEALTH", "/actuator", "/actuator/info",
+            "/actuator/env", "/actuator/metrics",
             // 없는 주소. 밖에서 직접 부른 /error도 같다
             "/", "/nope", "/api/v1/nope", "/favicon.ico", "/index.html", "/error", "/error/x",
             // 보안 라이브러리가 스스로 여는 주소
@@ -103,8 +103,8 @@ class AccessControlTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/", "/nope", "/api/v1/nope", "/error", "/error/x", "/actuator/info", "/actuator/env",
-            "/actuator/healthz", "/login", "/logout", "/.well-known/oauth-protected-resource"})
+    @ValueSource(strings = {"/", "/nope", "/api/v1/nope", "/error", "/error/x", "/actuator", "/actuator/",
+            "/actuator/info", "/actuator/env", "/actuator/healthz", "/login", "/logout", "/.well-known/oauth-protected-resource"})
     void 토큰이_있으면_없는_주소는_404다(String path) throws Exception {
         for (String method : List.of("GET", "POST")) {
             anyone.send(method, path, null, "Authorization", bearer).assertProblem(404, "Not Found", "NOT_FOUND");
@@ -177,6 +177,30 @@ class AccessControlTest {
         assertThat(replies).allSatisfy(reply ->
                 assertThat(reply.headers().get("Cache-Control"))
                         .containsExactly("no-cache, no-store, max-age=0, must-revalidate"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void 나머지_보안_헤더는_붙이지_않는다(boolean https) throws Exception {
+        // 프록시 한 곳에서 붙인다(ADR 005 결정 6). HSTS의 기본값은 https로 온 요청에만 나가므로 그것도 본다.
+        String[] anyoneHeaders = https ? new String[] {HttpsRequestFilter.HEADER, "1"} : new String[] {};
+        String[] signedIn = concat(new String[] {"Authorization", bearer}, anyoneHeaders);
+        Reply me = anyone.get(AccessProbeController.ME, signedIn);
+        assertThat(me.json().get("https").asBoolean()).isEqualTo(https);
+
+        List<Reply> replies = List.of(me,
+                anyone.get(HEALTH, anyoneHeaders),
+                anyone.get(AccessProbeController.ME, anyoneHeaders),
+                anyone.get("/nope", signedIn),
+                anyone.send("DELETE", AccessProbeController.ME, null, signedIn),
+                anyone.get("//nope", anyoneHeaders),
+                anyone.get(AccessProbeController.PATH + "/async", signedIn));
+
+        assertThat(replies).extracting(Reply::status).containsExactly(200, 200, 401, 404, 405, 400, 200);
+        assertThat(replies).allSatisfy(reply -> assertThat(reply.headers())
+                .containsKey("Cache-Control")
+                .doesNotContainKeys("Strict-Transport-Security", "X-Frame-Options", "X-Content-Type-Options",
+                        "X-XSS-Protection"));
     }
 
     @ParameterizedTest

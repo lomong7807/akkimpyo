@@ -57,11 +57,11 @@ class AccessProbeController {
         return () -> caller;
     }
 
-    record Caller(UUID userId, String principalName, boolean session) {
+    record Caller(UUID userId, String principalName, boolean session, boolean https) {
 
         static Caller of(UUID userId, HttpServletRequest request) {
             String name = request.getUserPrincipal() == null ? null : request.getUserPrincipal().getName();
-            return new Caller(userId, name, request.getSession(false) != null);
+            return new Caller(userId, name, request.getSession(false) != null, request.isSecure());
         }
     }
 }

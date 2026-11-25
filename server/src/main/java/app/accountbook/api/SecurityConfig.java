@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -43,6 +44,8 @@ class SecurityConfig {
                 .addFilterBefore(new AccessTokenFilter(verifier), AnonymousAuthenticationFilter.class)
                 .exceptionHandling(handling -> handling.authenticationEntryPoint(SecurityConfig::unauthenticated))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // 캐시하지 말라는 것만 붙인다. HSTS와 나머지 보안 헤더는 프록시 한 곳에서 붙인다(ADR 005 결정 6).
+                .headers(headers -> headers.defaultsDisabled().cacheControl(Customizer.withDefaults()))
                 // 세션이 없다. 쿠키로 인증하는 요청의 방어는 출처 검사다(ADR 001 결정 5).
                 .csrf(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
