@@ -147,14 +147,16 @@ describe('저장소를 쓸 수 없으면', () => {
     expect(tab.logoutValue()).toBe(logout)
   })
 
-  it.each([
-    ['막힘', ways[0][1], false],
-    ['없음', ways[1][1], false],
-    ['가득 참', ways[2][1], true],
-    ['쓸 수 있음', () => {}, true],
-  ])('%s: 읽을 수 있는지 안다', async (_, block, readable) => {
+  it.each(ways)('%s: 쓴 뒤에는 다른 탭과 나누지 못한 것을 안다', async (_, block) => {
     block()
-    expect((await openTab()).marksReadable()).toBe(readable)
+    const tab = await openTab()
+    tab.recordLogin()
+    expect(tab.marksShared()).toBe(false)
+  })
+
+  it('쓴 적이 없어도 읽지 못하면 나누지 못한다', async () => {
+    ways[0][1]()
+    expect((await openTab()).marksShared()).toBe(false)
   })
 
   it('저장하지 못한 값이 있어도, 다시 저장하면 다른 탭이 안다', async () => {
@@ -166,6 +168,7 @@ describe('저장소를 쓸 수 없으면', () => {
     full.mockRestore()
     const value = tab.recordLogout()
     expect(tab.logoutValue()).toBe(value)
+    expect(tab.marksShared()).toBe(true)
     expect((await openTab()).logoutValue()).toBe(value)
   })
 })

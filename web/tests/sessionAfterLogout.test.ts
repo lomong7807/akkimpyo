@@ -92,22 +92,6 @@ describe('로그아웃 대기가 있는 동안', () => {
     release.resolve()
   })
 
-  it('쓰던 탭의 요청이 401이어도 갱신하지 않고 로그아웃된 것으로 끝낸다', async () => {
-    const tab = await openSignedInTab()
-    const ended = vi.fn()
-    tab.onSessionEnded(ended)
-    const late = delayed()
-    backend.meResponse = late.respond
-    const request = errorOf(tab.request('/me'))
-    await late.arrived
-    await logOutElsewhere()
-    late.answer(problem(401, 'UNAUTHENTICATED'))
-    expect(await request).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
-    expect(backend.requests.refresh).toHaveLength(0)
-    expect(ended).toHaveBeenCalledExactlyOnceWith('logged-out')
-    await expectSignedOut(tab)
-  })
-
   it('로그인하면 다시 갱신할 수 있다', async () => {
     await logOutElsewhere()
     const tab = await openSignedInTab()
@@ -195,7 +179,23 @@ describe.each(logouts)('되찾는 동안 다른 탭에서 %s이 있었으면', (
   })
 })
 
-describe('쓰던 탭이 갱신하는 동안', () => {
+describe('쓰던 탭의 요청이나 갱신이 진행되는 동안', () => {
+  it.each(logouts)('다른 탭에서 %s이 있었으면 늦게 온 401에 갱신하지 않고 로그아웃된 것으로 끝낸다', async (_, logOut) => {
+    const tab = await openSignedInTab()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    const late = delayed()
+    backend.meResponse = late.respond
+    const request = errorOf(tab.request('/me'))
+    await late.arrived
+    await logOut()
+    late.answer(problem(401, 'UNAUTHENTICATED'))
+    expect(await request).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
+    expect(backend.requests.refresh).toHaveLength(0)
+    expect(ended).toHaveBeenCalledExactlyOnceWith('logged-out')
+    await expectSignedOut(tab)
+  })
+
   it.each(logouts)('다른 탭에서 %s이 있었으면 늦게 온 토큰을 버리고 로그아웃된 것으로 끝낸다', async (_, logOut) => {
     const tab = await openSignedInTab()
     const ended = vi.fn()

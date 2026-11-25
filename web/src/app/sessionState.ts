@@ -14,6 +14,8 @@ export interface Session {
   end?: SessionEnd
   /** 로그인을 보냈다. 그 뒤에 오는 확인 결과로는 화면을 옮기지 않는다. */
   loginSubmitted: boolean
+  /** 이 로그인 동안 화면이 보관됐다가 되살아난 횟수 */
+  resumed: number
 }
 
 export type SessionEvent =
@@ -28,18 +30,25 @@ export type SessionEvent =
   | 'signed-in'
   // 세션 계층이 알린 것
   | SessionEnd
+  // 브라우저가 알린 것
+  | 'resumed'
 
-export const initialSession: Session = { status: 'checking', id: 0, loginSubmitted: false }
+export const initialSession: Session = { status: 'checking', id: 0, loginSubmitted: false, resumed: 0 }
 
 export function nextSession(session: Session, event: SessionEvent): Session {
+  const anew = { ...initialSession, id: session.id + 1 }
   switch (event) {
     case 'signed-in':
-      return { status: 'signed-in', id: session.id + 1, loginSubmitted: false }
+      return { ...anew, status: 'signed-in' }
     case 'ended':
     case 'logged-out':
-      return { status: 'signed-out', id: session.id + 1, end: event, loginSubmitted: false }
+      return { ...anew, status: 'signed-out', end: event }
+    case 'replaced':
+      return { ...anew, status: 'checking' }
     case 'login-submitted':
       return { ...session, loginSubmitted: true }
+    case 'resumed':
+      return { ...session, resumed: session.resumed + 1 }
   }
   // 확인하는 사이에 로그인했으면 늦게 온 결과는 쓰지 않는다
   if (session.status === 'signed-in' || session.status === 'signed-out') return session

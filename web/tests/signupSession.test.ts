@@ -156,7 +156,9 @@ describe('가입', () => {
     const error = await errorOf(tab.signup(account))
     expect(everythingIn(error)).not.toMatch(/pass 1234|Name@Example|이서연/)
     for (const spy of consoleSpies) expect(spy).not.toHaveBeenCalled()
-    expect(localStorage.length + sessionStorage.length).toBe(0)
+    // 로그인했음을 다른 화면이 아는, 뜻이 없는 임의 값 하나만 남는다
+    expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f-]+$/) })
+    expect(sessionStorage.length).toBe(0)
   })
 })
 

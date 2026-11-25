@@ -47,11 +47,11 @@ export function recordLogin(): string {
   return write(LOGIN, crypto.randomUUID())
 }
 
-/** 다른 탭이 남긴 표시를 읽을 수 있는지 */
-export function marksReadable(): boolean {
+/** 다른 탭과 표시를 나누고 있는지 */
+export function marksShared(): boolean {
   try {
     window.localStorage.getItem(LOGOUT)
-    return true
+    return unsaved.size === 0
   } catch {
     return false
   }
