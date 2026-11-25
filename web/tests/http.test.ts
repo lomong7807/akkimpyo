@@ -84,7 +84,7 @@ describe('요청', () => {
     expect(fetch.mock.calls.map(([, init]) => init?.cache)).toEqual(['no-store'])
   })
 
-  it.each(['/auth/login', '/auth/refresh', '/auth/signup'] as const)(
+  it.each(['/auth/login', '/auth/refresh', '/auth/logout', '/auth/signup'] as const)(
     '%s에는 X-Akkimpyo-Client: web 헤더를 붙인다',
     async (path) => {
       const requests = captureRequest()
@@ -109,6 +109,22 @@ describe('성공 응답', () => {
   it('204는 본문이 없다', async () => {
     respondWith(() => new HttpResponse(null, { status: 204 }))
     expect(await send('/ledgers')).toBeUndefined()
+  })
+
+  it('성공으로 볼 상태를 정하면 그 상태만 성공이다', async () => {
+    respondWith(() => new HttpResponse(null, { status: 204 }))
+    expect(await send('/auth/logout', { method: 'POST', successStatus: 204 })).toBeUndefined()
+  })
+
+  it.each([
+    [200, null],
+    [200, '{}'],
+    [202, null],
+    [205, null],
+  ])('성공으로 볼 상태를 정했으면 다른 2xx(%d, 본문 %s)는 약속과 다른 응답이다', async (status, body) => {
+    respondWith(() => new HttpResponse(body, { status }))
+    const error = await errorOf(send('/auth/logout', { method: 'POST', successStatus: 204 }))
+    expect(error).toMatchObject({ kind: 'server', status })
   })
 
   it.each([
