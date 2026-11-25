@@ -10,6 +10,9 @@ import java.util.UUID;
 @Table(name = "users")
 public class User extends BaseEntity {
 
+    /** 메일 주소의 실무 상한. RFC 5321의 경로 길이 256에서 꺾쇠 둘을 뺀 값이고 users.email(VARCHAR(255))을 넘지 않는다. */
+    public static final int EMAIL_MAX_LENGTH = 254;
+
     public static final int DISPLAY_NAME_MAX_LENGTH = 20;
 
     @Column(name = "email", nullable = false, unique = true)

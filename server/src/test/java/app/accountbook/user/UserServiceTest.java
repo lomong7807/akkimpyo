@@ -111,6 +111,41 @@ class UserServiceTest {
         assertThat(ledgerRepository.count()).isEqualTo(ledgersBefore);
     }
 
+    @Test
+    void createUser_storesEmailOfMaxLength() {
+        String email = "a".repeat(254 - "@example.com".length()) + "@example.com";
+
+        User user = userService.createUser("  " + email.toUpperCase(Locale.ROOT) + "  ", "hash", "주인");
+        userRepository.flush();
+
+        assertThat(user.getEmail()).hasSize(254).isEqualTo(email);
+    }
+
+    @Test
+    void createUser_countsEmailLengthInUnicodeCharactersLikeTheColumn() {
+        // 😀는 UTF-16으로 2단위다. VARCHAR(255)는 글자 수로 세므로 글자 수 254자는 저장돼야 한다.
+        String email = "😀".repeat(254 - "@example.com".length()) + "@example.com";
+
+        User user = userService.createUser(email, "hash", "주인");
+        userRepository.flush();
+
+        assertThat(user.getEmail()).isEqualTo(email);
+        assertThat(email.codePointCount(0, email.length())).isEqualTo(254);
+    }
+
+    @Test
+    void createUser_rejectsEmailLongerThanMaxLengthWithoutEchoingIt() {
+        String email = "a".repeat(255 - "@example.com".length()) + "@example.com";
+        long usersBefore = userRepository.count();
+        long ledgersBefore = ledgerRepository.count();
+
+        assertThatThrownBy(() -> userService.createUser(email, "hash", "주인"))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("이메일은 254자 이하여야 합니다.");
+        assertThat(userRepository.count()).isEqualTo(usersBefore);
+        assertThat(ledgerRepository.count()).isEqualTo(ledgersBefore);
+    }
+
     // --- 표시 이름 (P-101): 앞뒤 공백을 지운 1~20자, 다른 사람과 겹쳐도 된다 ---
 
     @Test
