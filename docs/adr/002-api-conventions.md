@@ -2,7 +2,7 @@
 
 - 상태: 제안됨 (2026-11-24)
 - 보완: 2026-11-25, 5절에서 `TOO_MANY_REQUESTS`에 비밀번호 해시의 상한과 `Retry-After`의 값을 더하고 예외 목록을 main과 맞춘다. "지금 코드와 다른 점"의 `IdConflictException` 줄을 맞춘다(PR #167)
-- 보완: 2026-11-26, `MALFORMED_REQUEST`의 뜻과 표에 없는 상태의 처리, 본문 전체 오류의 `field`, 장부 경로의 구성원 확인 자리, JSON 값의 형을 바꿔 받지 않는 것을 더한다. 4절의 `ProblemDetail` 문장, 예외 목록, `InvalidRequestException` 줄을 지금에 맞춘다(PR #182)
+- 보완: 2026-11-26, `MALFORMED_REQUEST`의 뜻과 표에 없는 상태의 처리, 본문 전체 오류의 `field`, 장부 경로의 구성원 확인 자리, 쓰기 API가 `Accept`를 거절하는 때, JSON 값의 형을 바꿔 받지 않는 것을 더한다. 4절의 `ProblemDetail` 문장과 오류 응답을 만드는 곳, 예외 목록, `InvalidRequestException` 줄을 지금에 맞춘다(PR #182)
 - 결정한 사람: architect (검토: owner, 의견: frontend)
 
 ## 배경
@@ -28,7 +28,7 @@
 
 - 필드 이름은 camelCase, 열거 값은 대문자와 밑줄이다(`POSTED`).
 - 금액은 JSON 정수이고 단위는 원이다. 소수와 문자열은 받지 않는다. 상한은 #5가 정한 값이며 JavaScript의 안전한 정수 범위 안이다.
-- JSON을 읽을 때 문자열·소수를 정수로, 숫자를 열거 값으로 바꿔 받지 않는다. 서버 전체에 적용한다. 바꿔 받으면 금액 `1.9`가 1로, `"5"`가 5로 저장된다(architect 결정 2026-11-26, #102. 구현은 #12).
+- JSON을 읽을 때 문자열·소수를 정수로, 숫자를 문자열이나 열거 값으로 바꿔 받지 않는다. 서버 전체에 적용한다. 바꿔 받으면 금액 `1.9`가 1로, `"5"`가 5로 저장된다(architect 결정 2026-11-26, #102. 구현은 #12).
 - 날짜는 `YYYY-MM-DD`, 사용자가 고른 시각은 `HH:mm`만 주고받는다(초 이하는 없다). 둘 다 시간대가 없다.
 - 서버가 기록한 시각(만든 시각, 고친 시각)은 ISO 8601, UTC, `Z` 표기이고 밀리초 3자리 고정이다(예: `2026-11-24T03:15:00.123Z`). 화면이 Asia/Seoul로 바꿔 보여 준다.
 - id는 UUID 문자열, 소문자다.
@@ -51,7 +51,7 @@
 - Content-Type은 `application/problem+json`이다. 어느 클래스로 만드는지는 이 ADR이 정하지 않는다. 구현은 Spring의 `ProblemDetail`이 아니라 record를 쓴다(PR #177. Tomcat 밸브와 공통 처리기가 같은 타입을 쓰고 `instance`가 끼어들 자리가 없다. 새 의존성은 없다).
 - 필드는 `type`(항상 `about:blank`), `title`(HTTP 상태 문구), `status`, `detail`(개발자가 읽는 한 줄)이고, 확장 필드는 `code`, `requestId`, 해당할 때만 `fieldErrors`, `current`다. `instance`는 넣지 않는다(경로에 토큰이 들 수 있다).
 - `type`은 직접 `about:blank`로 넣는다(Spring Boot 4.2는 넣지 않으면 본문에서 뺀다, PR #100).
-- 오류 응답은 전부 서버의 공통 처리기가 만들고, 프레임워크의 기본 오류 응답(`spring.mvc.problemdetails` 포함)은 그대로 내보내지 않는다(`code`와 `requestId`가 없고 `detail`에 요청 값이 들어간다, PR #100).
+- 오류 응답은 전부 서버 코드가 한 모양으로 만들고(컨트롤러의 공통 처리기, `/error`, Tomcat 밸브), 프레임워크의 기본 오류 응답(`spring.mvc.problemdetails` 포함)은 그대로 내보내지 않는다(`code`와 `requestId`가 없고 `detail`에 요청 값이 들어간다, PR #100).
 - 필드 순서는 정하지 않으며, 본문 문자열을 통째로 비교하는 테스트는 쓰지 않는다.
 - 오류 종류는 `code`로 구분한다. 화면은 화면설계서의 문구를 `code`로 골라 쓰고, 모르는 `code`는 `status`로 처리한다. `code`는 추가만 하고 뜻을 바꾸거나 없애지 않는다.
 - `fieldErrors`는 입력란별 검증 오류의 배열이다. 항목은 `field`(요청 본문의 경로, 예: `lines[0].amount`), `code`, `message`다. 어느 입력란도 아닌 오류(본문 전체)의 `field`는 빈 글자다. `message`와 `detail`은 개발자가 읽는 글이고 화면 문구로 쓰지 않는다. 거래 요청의 줄 순서와 금액 부호 규칙은 OpenAPI 문서에 적는다(#14).
@@ -109,8 +109,8 @@
 
 | 상태 | code | 언제 |
 |---|---|---|
-| 400 | `VALIDATION_FAILED` | 입력란에 붙일 수 있는 오류 전부. 겹치는 이름과 이메일도 여기에 넣는다(`fieldErrors[].code`는 `DUPLICATE`). `fieldErrors`가 항상 1개 이상 있다 |
-| 400 | `MALFORMED_REQUEST` | 요청을 읽을 수 없거나 받을 수 없는 모양(JSON이 아닌 본문, 깨진 인코딩, 받을 수 없는 Accept, 너무 큰 헤더, Tomcat이 거절한 요청) |
+| 400 | `VALIDATION_FAILED` | 입력란에 붙일 수 있는 오류 전부와 본문 전체의 검증 오류(`field`가 빈 글자). 본문 전체의 오류를 화면에서 보일 자리는 화면설계서와 frontend가 정한다. 겹치는 이름과 이메일도 여기에 넣는다(`fieldErrors[].code`는 `DUPLICATE`). `fieldErrors`가 항상 1개 이상 있다 |
+| 400 | `MALFORMED_REQUEST` | 요청을 읽을 수 없거나 받을 수 없는 모양(JSON이 아닌 본문, JSON 뒤에 글자가 더 있는 본문, 깨진 인코딩, 받을 수 없는 Accept, 너무 큰 헤더, Tomcat이 거절한 요청) |
 | 401 | `UNAUTHENTICATED` | 토큰이 없거나 만료됐거나 틀렸다. 갱신 요청이 실패했을 때도 같으며, 화면은 갱신 요청의 401을 로그인 풀림으로 처리한다 |
 | 401 | `INVALID_CREDENTIALS` | 로그인 실패. 이메일과 비밀번호 중 무엇이 틀렸는지 구분하지 않는다(P-105) |
 | 403 | `FORBIDDEN` | 구성원이지만 권한이 모자란다(보기 전용의 쓰기, 소유자 전용 동작) |
@@ -128,7 +128,9 @@
 | 429 | `TOO_MANY_REQUESTS` | 동시에 도는 비밀번호 해시의 상한(1단계부터, ADR 001 결정 7)과 출시 단계의 요청 횟수 제한. `Retry-After` 헤더를 넣는다. 초 단위 정수이고 해시 상한은 1이다 |
 | 500 | `INTERNAL_ERROR` | 서버 오류. `detail`은 고정 문구다 |
 
-서버는 표에 없는 오류 상태를 밖으로 내보내지 않는다. 408·503은 500 `INTERNAL_ERROR`로, 그 밖의 4xx와 501·505는 400 `MALFORMED_REQUEST`로 바꾼다. 408을 4xx로 두지 않는 것은 `code`가 있는 4xx를 오프라인 대기열이 다시 보내지 않기 때문이다(ADR 006 결정 6. architect 결정 2026-11-26, #102).
+서버는 표에 없는 오류 상태를 밖으로 내보내지 않는다. 501·505와 그 밖의 4xx는 400 `MALFORMED_REQUEST`로, 408·503과 그 밖의 5xx는 500 `INTERNAL_ERROR`로 바꾼다. 408을 4xx로 두지 않는 것은 `code`가 있는 4xx를 오프라인 대기열이 다시 보내지 않기 때문이다(ADR 006 결정 6. architect 결정 2026-11-26, #102).
+
+만들거나 바꾸는 API는 응답 형식을 선언해 동작하기 전에 `Accept`를 거절한다. 저장된 뒤에 400이 나가면 오프라인 대기열이 "보낼 수 없음"으로 본다(architect 결정 2026-11-26).
 
 검사 순서는 인증(401) → 구성원 확인(404) → 권한(403) → 입력 검증(400) → 상태와 version(409)이다. 409의 `current`는 구성원 확인을 지난 요청에만 나간다.
 
