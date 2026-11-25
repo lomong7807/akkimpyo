@@ -6,7 +6,7 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
-/** 거래 1건의 읽기 모델. change_log의 전후 값도 이 레코드의 JSON이다. */
+/** 거래 1건의 읽기 모델. */
 public record TransactionView(
         UUID id,
         UUID ledgerId,
