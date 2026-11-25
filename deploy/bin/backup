@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# 운영 DB를 덤프하고 age 공개키로 암호화해 Object Storage에 올린다. 설계 기준은 docs/db/backup-restore.md다.
+# 타이머와 배포 스크립트가 인자 없이 부른다. 성공하면 0으로 끝나고 표준 출력 마지막 줄이 올린 객체 이름이다.
+# 나머지 출력은 모두 표준 오류로 나간다.
+set -euo pipefail
+umask 077
+export LC_ALL=C.UTF-8 TZ=Asia/Seoul
+
+exec 3>&1 1>&2
+# shellcheck source=deploy/bin/backup-lib.sh
+. "$(dirname -- "${BASH_SOURCE[0]}")/backup-lib.sh"
+
+step='시작'
+work=''
+
+# 한 건 알린다. 못 보내면 남겨 두고 다음 backup-check가 다시 보낸다.
+alert() {
+  log "알림: $1"
+  printf '[아낌표 백업] %s\n' "$1" | notify && return
+  log '알림을 보내지 못했다'
+  printf '[아낌표 백업] (늦게 보낸 알림) %s\n' "$1" >>"$BACKUP_STATE_DIR/unsent-alerts"
+}
+
+# 성공하든 실패하든 평문을 지우고, 실패면 알린다.
+finish() {
+  local rc=$?
+  trap - EXIT
+  trap '' HUP INT TERM
+  set +e
+  if [[ -n $work ]]; then
+    rm -rf -- "$work"
+    if [[ -e $work ]]; then
+      rc=1
+      step="평문 삭제($work)"
+    fi
+  fi
+  if ((rc != 0)); then
+    alert "백업이 실패했다. 단계: $step, 종료 코드: $rc, 시각: $(date '+%F %T')"
+  fi
+  exit "$rc"
+}
+
+upload_local() {
+  local dest=$BACKUP_LOCAL_DIR/$2
+  mkdir -p -- "$(dirname -- "$dest")"
+  cp -- "$1" "$dest.partial"
+  # 이미 있으면 실패한다. Object Storage에서 덮어쓰기 권한이 없는 것과 같다.
+  ln -- "$dest.partial" "$dest"
+  rm -- "$dest.partial"
+}
+
+# 객체 생성 권한(OBJECT_CREATE)만으로 올린다.
+# --force: CLI가 올리기 전에 하는 HEAD를 건너뛴다. HEAD에는 읽기 권한이 든다. 덮어쓰기는 IAM이 막는다.
+# --no-multipart: 여러 조각으로 올리기에는 덮어쓰기와 읽기 권한이 든다. 한 번에 50 GiB까지 올릴 수 있다.
+# sha256을 같이 보내면 Object Storage가 받은 내용과 맞춰 보고 다르면 거부한다.
+upload_oci() {
+  local sha256
+  sha256=$(openssl dgst -sha256 -binary "$1" | base64)
+  docker run --rm --init --network host --read-only --tmpfs /tmp --memory 512m \
+    --cap-drop ALL --security-opt no-new-privileges \
+    --mount "type=bind,src=$1,dst=/upload,readonly" \
+    "$OCI_CLI_IMAGE" --auth instance_principal os object put \
+    --namespace "$OCI_NAMESPACE" --bucket-name "$OCI_BUCKET" --name "$2" --file /upload \
+    --force --no-multipart --opc-checksum-algorithm SHA256 --opc-content-sha256 "$sha256"
+}
+
+# upload 접두어: 암호화한 파일과 sha256을 올린다.
+upload() {
+  local file
+  for file in "$bundle" "$bundle.sha256"; do
+    if [[ -n $BACKUP_LOCAL_DIR ]]; then
+      upload_local "$work/$file" "$1/$file"
+    else
+      # OCI CLI 컨테이너(uid 1000)가 읽을 수 있게 한다. 암호문이고, 위 폴더는 root만 연다.
+      chmod 644 "$work/$file"
+      upload_oci "$work/$file" "$1/$file"
+    fi
+  done
+}
+
+set_defaults
+trap finish EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 141' PIPE
+trap 'exit 143' TERM
+
+step='설정'
+(($# == 0)) || die '인자를 받지 않는다'
+load_config
+# 시간대 자료가 없으면 date가 조용히 UTC로 계산한다.
+[[ $(date +%z) == +0900 ]] || die '시간대 자료(tzdata)가 없다'
+for tool in docker tar openssl flock "$AGE_BIN"; do
+  command -v -- "$tool" >/dev/null || die "명령이 없다: $tool"
+done
+[[ -s $AGE_RECIPIENTS_FILE ]] || die "공개키 파일이 없다: $AGE_RECIPIENTS_FILE"
+[[ -s $INTEGRITY_SQL_FILE ]] || die "명세표 쿼리 파일이 없다: $INTEGRITY_SQL_FILE"
+[[ -n $BACKUP_LOCAL_DIR || (-n $OCI_NAMESPACE && -n $OCI_BUCKET) ]] || die 'OCI_NAMESPACE와 OCI_BUCKET을 정한다'
+
+step='작업 폴더'
+mkdir -p -- "$BACKUP_WORK_DIR" "$BACKUP_STATE_DIR"
+chmod 700 "$BACKUP_WORK_DIR" "$BACKUP_STATE_DIR"
+
+step='잠금'
+exec 9>"$BACKUP_WORK_DIR/lock"
+flock -w "$BACKUP_LOCK_WAIT_SECONDS" 9 || die "다른 백업이 ${BACKUP_LOCK_WAIT_SECONDS}초 안에 끝나지 않았다"
+# 강제 종료(SIGKILL)로 남은 평문을 지운다.
+rm -rf -- "$BACKUP_WORK_DIR"/run.*
+work=$(mktemp -d "$BACKUP_WORK_DIR/run.XXXXXX")
+plain=$work/plain
+mkdir "$plain"
+
+step='DB 컨테이너 찾기'
+container=$(docker ps --quiet \
+  --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" \
+  --filter "label=com.docker.compose.service=$COMPOSE_DB_SERVICE")
+[[ $container =~ ^[0-9a-f]+$ ]] || die "돌고 있는 DB 컨테이너가 하나가 아니다($COMPOSE_PROJECT/$COMPOSE_DB_SERVICE)"
+db_user=${BACKUP_DB_USER:-$(docker exec "$container" printenv POSTGRES_USER || true)}
+db_user=${db_user:-postgres}
+db_name=${BACKUP_DB_NAME:-$(docker exec "$container" printenv POSTGRES_DB || true)}
+db_name=${db_name:-$db_user}
+
+# 덤프와 명세표가 같은 시점을 보게 한다. 이 세션이 스냅샷을 내보내고, 덤프가 끝날 때까지 트랜잭션을 열어 둔다.
+step='DB 접속'
+now=$(date +%s)
+coproc PSQL { docker exec -i "$container" psql -X -q -A -t -v ON_ERROR_STOP=1 -U "$db_user" -d "$db_name"; }
+# shellcheck disable=SC2153  # coproc가 만드는 변수다.
+psql_pid=$PSQL_PID
+# psql이 끝나면 bash가 coproc의 파일 기술자를 닫으므로, 남은 출력을 읽을 수 있게 복사해 쓴다.
+exec {psql_out}<&"${PSQL[0]}" {psql_in}>&"${PSQL[1]}"
+cat >&"$psql_in" <<'SQL'
+SET idle_in_transaction_session_timeout = 0;
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SELECT pg_export_snapshot();
+SHOW server_version;
+SELECT pg_database_size(current_database());
+SQL
+{
+  IFS= read -r -t 60 snapshot &&
+    IFS= read -r -t 60 server_version &&
+    IFS= read -r -t 60 db_bytes
+} <&"$psql_out" || die 'DB에 접속하지 못했다'
+
+# 작업 폴더(/run)는 다른 서비스도 쓰는 메모리다. 가득 채우지 않도록 먼저 본다.
+# 덤프는 압축되므로 덤프와 암호문을 합쳐도 DB 크기를 넘지 않는다고 본다.
+step='여유 공간'
+free_bytes=$(df --output=avail --block-size=1 "$work" | tail -n 1)
+((free_bytes >= db_bytes)) || die "$BACKUP_WORK_DIR 의 여유(${free_bytes}바이트)가 DB 크기(${db_bytes}바이트)보다 작다"
+
+step='덤프'
+docker exec "$container" pg_dump --format=custom --snapshot="$snapshot" --lock-wait-timeout=60s \
+  -U "$db_user" -d "$db_name" >"$plain/db.dump.partial"
+[[ -s $plain/db.dump.partial ]] || die '덤프가 비었다'
+docker exec "$container" pg_dumpall --globals-only -U "$db_user" >"$plain/globals.sql"
+[[ -s $plain/globals.sql ]] || die '역할 덤프가 비었다'
+
+# --list는 목차만 읽어 뒤가 잘린 파일도 통과한다. 그래서 전체를 한 번 더 읽는다.
+step='덤프 확인'
+docker exec -i "$container" pg_restore --list <"$plain/db.dump.partial" >/dev/null
+docker exec -i "$container" pg_restore --file=/dev/null <"$plain/db.dump.partial"
+mv -- "$plain/db.dump.partial" "$plain/db.dump"
+dump_bytes=$(stat -c %s "$plain/db.dump")
+
+# 명세표가 실패해도(예: 스키마가 바뀌었는데 쿼리 파일이 옛것) 덤프는 올린다. 대신 마지막에 실패로 끝낸다.
+step='명세표'
+manifest=ok
+(
+  manifest_script "$INTEGRITY_SQL_FILE"
+  printf 'COMMIT;\n\\q\n'
+) >&"$psql_in" || manifest=failed
+cat <&"$psql_out" >"$plain/manifest.txt"
+wait "$psql_pid" || manifest=failed
+[[ -s $plain/manifest.txt ]] || manifest=failed
+
+step='암호화'
+cp -- "$INTEGRITY_SQL_FILE" "$plain/integrity-checks.sql"
+cat >"$plain/meta.txt" <<META
+format=1
+dumped_at=$(date -d "@$now" +%Y-%m-%dT%H:%M:%S%:z)
+database=$db_name
+server_version=$server_version
+dump_bytes=$dump_bytes
+manifest=$manifest
+META
+files=(meta.txt manifest.txt integrity-checks.sql globals.sql db.dump)
+(cd -- "$plain" && sha256sum -- "${files[@]}" >SHA256SUMS)
+bundle=akkimpyo-$(date -d "@$now" +%Y%m%dT%H%M%S)KST.tar.age
+tar -C "$plain" -cf - SHA256SUMS "${files[@]}" |
+  "$AGE_BIN" --encrypt --recipients-file "$AGE_RECIPIENTS_FILE" --output "$work/$bundle.partial"
+mv -- "$work/$bundle.partial" "$work/$bundle"
+rm -rf -- "$plain"
+(cd -- "$work" && sha256sum -- "$bundle" >"$bundle.sha256")
+
+step='올리기'
+upload daily
+
+# 일요일 백업을 weekly에도 올린다. 일요일 백업이 실패했으면 그 주의 다음 성공 백업이 대신한다.
+week=$(week_sunday "$now")
+if [[ $(state_get last-weekly sunday) != "$week" ]]; then
+  step='주간 사본 올리기'
+  upload weekly
+  printf 'sunday=%s\n' "$week" | state_put last-weekly
+fi
+
+step='명세표'
+[[ $manifest == ok ]] || die "명세표를 만들지 못했다. 덤프는 올렸다(daily/$bundle). $INTEGRITY_SQL_FILE 이 지금 스키마와 맞는지 본다"
+
+step='결과 기록'
+previous_bytes=$(state_get last-success dump_bytes)
+printf 'epoch=%s\nobject=%s\ndump_bytes=%s\n' "$now" "daily/$bundle" "$dump_bytes" | state_put last-success
+log "올렸다: daily/$bundle (덤프 ${dump_bytes}바이트)"
+if [[ -n $previous_bytes ]] && shrank "$previous_bytes" "$dump_bytes"; then
+  alert "덤프 크기가 직전보다 20% 넘게 줄었다. ${previous_bytes}바이트 → ${dump_bytes}바이트. 백업은 올라갔다(daily/$bundle)" || true
+fi
+printf '%s\n' "daily/$bundle" >&3

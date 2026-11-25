@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# 백업과 복원 스크립트를 로컬에서 끝까지 돌려 본다. Docker와 서버 빌드용 JDK가 필요하다.
+# 운영 서버와 Oracle Cloud에 접속하지 않는다. 이 실행이 만든 컨테이너, 볼륨, 네트워크, 이미지만 지운다.
+set -euo pipefail
+
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
+image=akkimpyo-backup-test
+id=akkimpyo-backup-test-$$-$RANDOM
+
+jar=${SERVER_JAR:-}
+if [[ -z $jar ]]; then
+  (cd -- "$repo/server" && ./gradlew --quiet bootJar)
+  jar=$(find "$repo/server/build/libs" -name '*.jar' ! -name '*-plain.jar')
+fi
+[[ -f $jar ]] || { printf '서버 jar가 하나가 아니다: %s\n' "$jar" >&2; exit 1; }
+
+docker build --quiet --tag "$image" "$repo/deploy/tests" >/dev/null
+
+# 시험이 다시 docker run --mount를 하므로, 호스트와 시험 컨테이너가 같은 경로를 쓴다.
+work=$(cd -- "$(mktemp -d)" && pwd -P)
+cleanup() {
+  docker ps --all --quiet --filter "name=^$id" | xargs docker rm --force --volumes >/dev/null 2>&1 || true
+  docker volume rm "$id-db" >/dev/null 2>&1 || true
+  docker network rm "$id" >/dev/null 2>&1 || true
+  docker image rm "$id-oci" >/dev/null 2>&1 || true
+  rm -rf -- "$work"
+}
+trap cleanup EXIT
+cp -- "$jar" "$work/app.jar"
+
+docker run --rm --name "$id-suite" \
+  --volume /var/run/docker.sock:/var/run/docker.sock \
+  --volume "$repo:$repo:ro" --volume "$work:$work" \
+  --tmpfs /run --tmpfs /small:size=128k --tmpfs /readonly:ro \
+  --env "TEST_ID=$id" --env "REPO=$repo" --env "WORK=$work" \
+  "$image" "$repo/deploy/tests/suite"

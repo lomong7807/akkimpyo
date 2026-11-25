@@ -1,0 +1,505 @@
+#!/usr/bin/env bash
+# deploy/tests/run이 시험 컨테이너 안에서 부른다. 하나라도 어긋나면 그 자리에서 1로 끝난다.
+set -euo pipefail
+export LC_ALL=C.UTF-8
+
+: "${TEST_ID:?}" "${REPO:?}" "${WORK:?}"
+JRE_IMAGE=eclipse-temurin:21.0.13_9-jre-noble@sha256:b4f9d2a0bc273417cf5219b7b832bbf0493ed500b7b57d5001d9f83374659060
+BIN=/opt/akkimpyo/bin
+RUN_DIR=/run/akkimpyo-backup
+STATE=/var/lib/akkimpyo-backup
+STORE=$WORK/store
+ALERTS=/tmp/alerts
+LOG=/tmp/log
+KEY=/tmp/identity.txt
+
+section() { printf '\n[%3d초] %s\n' "$SECONDS" "$1"; }
+
+# assert 설명 명령...
+assert() {
+  local what=$1
+  shift
+  if ! "$@"; then
+    printf '  실패: %s\n--- 로그\n' "$what"
+    cat "$LOG"
+    printf -- '--- 알림\n'
+    cat "$ALERTS"
+    exit 1
+  fi
+  printf '  ok: %s\n' "$what"
+}
+not() { ! "$@"; }
+equal() { [[ $1 == "$2" ]] || { printf '    기대 "%s", 실제 "%s"\n' "$1" "$2"; false; }; }
+alerted() { grep -q -- "$1" "$ALERTS"; }
+no_alert() { [[ ! -s $ALERTS ]]; }
+logged() { grep -q -- "$1" "$LOG"; }
+clean() { [[ -z $(find "$1" -mindepth 1 ! -name lock 2>/dev/null) ]]; }
+bundles() { find "$STORE/$1" -name '*.tar.age' 2>/dev/null | wc -l; }
+reset_alerts() { : >"$ALERTS"; }
+
+# 설정 파일을 새로 쓴다. 인자는 "이름=값"이다.
+config() {
+  printf '%s\n' "COMPOSE_PROJECT=$TEST_ID" "$@" >/etc/akkimpyo/backup.env
+}
+
+run_backup() {
+  reset_alerts
+  rc=0
+  out=$("$BIN/backup" 2>"$LOG" </dev/null) || rc=$?
+}
+
+# 실패해야 하는 백업. 알림이 가고, 평문과 새 객체가 남지 않는다.
+# expect_failure 알림에 나올 단계
+expect_failure() {
+  local before
+  before=$(find "$STORE" -type f | wc -l)
+  run_backup
+  assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+  assert '표준 출력에 객체 이름을 내지 않는다' equal '' "$out"
+  assert "알림이 간다($(tail -n 1 "$ALERTS"))" alerted "단계: $1"
+  assert '올라간 것이 없다' equal "$before" "$(find "$STORE" -type f | wc -l)"
+}
+
+run_check() {
+  reset_alerts
+  rc=0
+  "$BIN/backup-check" >"$LOG" 2>&1 || rc=$?
+}
+
+run_drill() {
+  rc=0
+  "$REPO/scripts/restore-drill" --identity "$KEY" "$@" >"$LOG" 2>&1 || rc=$?
+}
+
+db() { docker exec -i "$TEST_ID-db" "$@"; }
+sql() { db psql -X -q -A -t -v ON_ERROR_STOP=1 -U accountbook -d accountbook "$@"; }
+
+start_db() {
+  docker start "$TEST_ID-db" >/dev/null
+  until docker exec "$TEST_ID-db" pg_isready --quiet --host 127.0.0.1; do sleep 0.3; done
+}
+
+# ---------------------------------------------------------------------------
+section 'shellcheck'
+: >"$LOG"
+reset_alerts
+assert 'shellcheck' shellcheck --external-sources --source-path="$REPO" \
+  "$REPO"/deploy/bin/* "$REPO"/deploy/tests/run "$REPO"/deploy/tests/suite "$REPO"/scripts/restore-drill
+
+section '설치'
+install -d -m 755 /opt/akkimpyo/share
+install -m 755 "$REPO"/deploy/bin/backup "$REPO"/deploy/bin/backup-check "$BIN/"
+install -m 644 "$REPO"/deploy/bin/backup-lib.sh "$BIN/"
+install -m 644 "$REPO"/docs/db/integrity-checks.sql /opt/akkimpyo/share/
+install -d -m 700 /etc/akkimpyo
+install -m 644 "$REPO"/deploy/systemd/* /etc/systemd/system/
+age-keygen() { "$BIN/age-keygen" "$@"; }
+age-keygen -o "$KEY" 2>/dev/null
+age-keygen -y "$KEY" >/etc/akkimpyo/backup-recipients.txt
+export AGE_BIN=$BIN/age
+# 가짜 전송기. /tmp/notify-fails가 있으면 전송에 실패한다.
+cat >"$BIN/notify-telegram" <<'SH'
+#!/bin/sh
+[ ! -e /tmp/notify-fails ] || exit 1
+cat >>/tmp/alerts
+SH
+chmod 755 "$BIN/notify-telegram"
+mkdir -p "$STORE"
+config "BACKUP_LOCAL_DIR=$STORE"
+
+section 'systemd 단위 파일'
+assert '형식이 맞다' systemd-analyze verify /etc/systemd/system/akkimpyo-backup{,-check}.{service,timer}
+next=$(TZ=UTC systemd-analyze calendar --base-time='2026-11-25 00:00:00 UTC' '*-*-* 03:30:00 Asia/Seoul')
+assert '03:30 한국 시각(18:30 UTC)에 돈다' grep -q '2026-11-25 18:30:00 UTC' <<<"$next"
+
+section '판정 함수'
+# shellcheck source=deploy/bin/backup-lib.sh
+. "$BIN/backup-lib.sh"
+at() { date -d "$1" +%s; }
+assert '토요일 23:59:59 KST는 앞 일요일 주다' equal 2026-11-22 "$(week_sunday "$(at '2026-11-28 23:59:59 +0900')")"
+assert '일요일 00:00:00 KST에 새 주가 된다' equal 2026-11-29 "$(week_sunday "$(at '2026-11-29 00:00:00 +0900')")"
+assert '일요일 03:30 KST(UTC로는 토요일)는 그 일요일 주다' equal 2026-11-29 "$(week_sunday "$(at '2026-11-28 18:30:00 +0000')")"
+assert '달이 바뀌어도 앞 일요일이다' equal 2026-11-29 "$(week_sunday "$(at '2026-12-05 12:00:00 +0900')")"
+assert '해가 바뀌어도 앞 일요일이다' equal 2026-12-27 "$(week_sunday "$(at '2027-01-02 00:00:00 +0900')")"
+assert '정확히 26시간은 늦은 것이 아니다' not is_stale 100000 $((100000 - 26 * 3600))
+assert '26시간 1초는 늦은 것이다' is_stale 100000 $((100000 - 26 * 3600 - 1))
+assert '정확히 20% 감소는 알리지 않는다' not shrank 1000 800
+assert '20%를 넘는 감소는 알린다' shrank 1000 799
+assert '점검 번호를 모두 찾는다' equal "$(grep -c '^-- \[점검' "$REPO/docs/db/integrity-checks.sql")" \
+  "$(check_numbers "$REPO/docs/db/integrity-checks.sql" | wc -l)"
+assert '점검 1과 점검 11을 구분한다' equal 1 "$(sql_section "$REPO/docs/db/integrity-checks.sql" '점검 1' | grep -c '^-- \[')"
+
+# ---------------------------------------------------------------------------
+section '운영을 흉내 낸 DB(읽기 전용 파일 시스템, 권한 없음)에 서버가 Flyway 스키마를 만든다'
+docker network create "$TEST_ID" >/dev/null
+docker run --detach --name "$TEST_ID-db" --network "$TEST_ID" --network-alias db \
+  --label "com.docker.compose.project=$TEST_ID" --label com.docker.compose.service=db \
+  --user postgres --read-only --cap-drop ALL --security-opt no-new-privileges \
+  --tmpfs /tmp --tmpfs /var/run/postgresql --volume "$TEST_ID-db:/var/lib/postgresql/data" \
+  --env POSTGRES_DB=accountbook --env POSTGRES_USER=accountbook --env POSTGRES_PASSWORD=accountbook \
+  postgres:17 >/dev/null
+until docker exec "$TEST_ID-db" pg_isready --quiet --host 127.0.0.1; do sleep 0.3; done
+docker create --name "$TEST_ID-app" --network "$TEST_ID" \
+  --env DB_URL=jdbc:postgresql://db:5432/accountbook --env DB_USERNAME=accountbook --env DB_PASSWORD=accountbook \
+  "$JRE_IMAGE" java -jar /app.jar >/dev/null
+docker cp --quiet "$WORK/app.jar" "$TEST_ID-app:/app.jar"
+docker start "$TEST_ID-app" >/dev/null
+for _ in $(seq 120); do
+  docker logs "$TEST_ID-app" >"$LOG" 2>&1
+  grep -q 'Started .*Application' "$LOG" && break
+  sleep 0.5
+done
+assert '서버가 떴다' logged 'Started .*Application'
+docker rm --force "$TEST_ID-app" >/dev/null
+sql <"$REPO/deploy/tests/seed.sql"
+# 운영에는 소유자와 앱 실행용 역할이 나뉜다(#52). 역할도 복원되는지 본다.
+sql -c "CREATE ROLE app_rw NOLOGIN; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_rw"
+assert '시험 데이터가 들어갔다' equal 5000 "$(sql -c 'SELECT count(*) FROM transaction')"
+
+# ---------------------------------------------------------------------------
+section '백업 성공'
+run_backup
+assert '0으로 끝난다' equal 0 "$rc"
+assert '표준 출력은 객체 이름 한 줄이다' grep -qxE 'daily/akkimpyo-[0-9]{8}T[0-9]{6}KST\.tar\.age' <<<"$out"
+first=$out
+assert '그 이름으로 올라갔다' [ -s "$STORE/$first" ]
+sha256_ok() { (cd "$(dirname "$1")" && sha256sum --check --status "$(basename "$1").sha256"); }
+assert 'sha256이 맞다' sha256_ok "$STORE/$first"
+assert '첫 백업은 weekly에도 올라갔다' equal 1 "$(bundles weekly)"
+assert '올라간 것은 age 파일과 sha256뿐이다' equal '' "$(find "$STORE" -type f ! -name '*.tar.age' ! -name '*.tar.age.sha256')"
+assert 'age로 암호화됐다' grep -aq '^age-encryption.org/v1' "$STORE/$first"
+assert '평문이 남지 않는다' clean "$RUN_DIR"
+assert '작업 폴더는 root만 연다' equal 700 "$(stat -c %a "$RUN_DIR")"
+assert '알림이 없다' no_alert
+
+section '같은 주의 다음 백업은 weekly에 올리지 않는다. 지난주 것이 마지막이면 올린다'
+sleep 1
+run_backup
+assert '0으로 끝난다' equal 0 "$rc"
+assert 'daily가 늘었다' equal 2 "$(bundles daily)"
+assert 'weekly는 그대로다' equal 1 "$(bundles weekly)"
+echo 'sunday=2020-01-05' >"$STATE/last-weekly"
+sleep 1
+run_backup
+assert 'weekly가 늘었다' equal 2 "$(bundles weekly)"
+
+# ---------------------------------------------------------------------------
+section '복원 훈련: 복호화, 복원, 명세표, 점검, 서버 기동까지'
+run_drill --store "$STORE" --server-jar "$WORK/app.jar" --keep-copy "$WORK/copy"
+assert '통과하고 0으로 끝난다' equal 0 "$rc"
+sed -n '/^복원 훈련 결과/,$p' "$LOG" | sed 's/^/    /'
+assert '명세표를 맞춰 봤다' logged '^- 명세표: 통과'
+assert '점검 13개를 돌렸다' logged '^- 점검 쿼리: 통과 (13개 모두 0건)'
+assert 'Flyway validate를 봤다' logged '^- Flyway validate: 통과 (Successfully validated'
+assert '서버가 떴다' logged '^- 서버 기동: 통과'
+assert '컨테이너가 남지 않는다' equal '' "$(docker ps --all --quiet --filter 'name=akkimpyo-drill')"
+assert '평문이 남지 않는다' equal '' "$(find /tmp -maxdepth 1 -name 'akkimpyo-drill*')"
+
+section '복원 훈련: 서버 기동을 건너뛰면 불완전, 사본은 하나만 남는다'
+sleep 1
+run_backup
+run_drill --store "$STORE" --skip-server --keep-copy "$WORK/copy"
+assert '2로 끝난다' equal 2 "$rc"
+assert '사본은 가장 새것 하나다' equal "$(basename "$out")" "$(cd "$WORK/copy" && echo ./*.tar.age | sed 's|^\./||')"
+run_drill --file "$WORK/copy/$(basename "$out")" --skip-server
+assert '사본 파일로도 된다' equal 2 "$rc"
+
+section '복원 훈련: 잘못된 것을 잡아낸다'
+work_dir=$(mktemp -d)
+age-keygen -o /tmp/other.txt 2>/dev/null
+rc=0
+"$REPO/scripts/restore-drill" --identity /tmp/other.txt --store "$STORE" --skip-server >"$LOG" 2>&1 || rc=$?
+assert '다른 개인키' equal 1 "$rc"
+assert '  복호화 실패로 보고한다' logged '^- 복호화: 실패'
+cp "$STORE/$out" "$STORE/$out.sha256" "$work_dir/"
+printf 'x' >>"$work_dir/$(basename "$out")"
+run_drill --file "$work_dir/$(basename "$out")" --skip-server
+assert '바뀐 암호화 파일' logged '^- sha256: 실패'
+
+# 백업 안의 파일 하나를 바꿔 다시 묶는다. 안의 sha256 목록도 맞춘다.
+# repack 파일 명령...
+repack() {
+  local entry=$1
+  shift
+  rm -rf "$work_dir"
+  mkdir -p "$work_dir/plain"
+  "$BIN/age" --decrypt --identity "$KEY" "$STORE/$out" | tar -xf - -C "$work_dir/plain"
+  "$@" "$work_dir/plain/$entry"
+  (
+    cd "$work_dir/plain"
+    files=(meta.txt manifest.txt integrity-checks.sql globals.sql db.dump)
+    sha256sum "${files[@]}" >SHA256SUMS
+    tar -cf - SHA256SUMS "${files[@]}" | "$BIN/age" --encrypt -R /etc/akkimpyo/backup-recipients.txt -o "$work_dir/x.tar.age"
+  )
+  (cd "$work_dir" && sha256sum x.tar.age >x.tar.age.sha256)
+  run_drill --file "$work_dir/x.tar.age" --skip-server
+}
+repack manifest.txt sed -i 's/^transaction,5000$/transaction,4999/'
+assert '행 수가 다른 명세표' logged '^- 명세표: 실패'
+repack db.dump truncate --size=100K
+assert '잘린 덤프' logged '^- 복원: 실패'
+assert '1로 끝난다' equal 1 "$rc"
+
+sql -c "INSERT INTO transaction SELECT (jsonb_populate_record(t, jsonb_build_object('id', md5('bad')))).* FROM transaction t LIMIT 1"
+sleep 1
+run_backup
+run_drill --store "$STORE" --skip-server
+assert '라인 없는 거래(점검 2)' logged '^- 점검 쿼리: 실패 (점검 2: 1건,)'
+assert '1로 끝난다' equal 1 "$rc"
+sql -c "DELETE FROM transaction WHERE id = md5('bad')::uuid"
+
+# ---------------------------------------------------------------------------
+section '쓰는 중에 백업해도 덤프와 명세표가 같은 시점이다'
+docker exec --detach "$TEST_ID-db" psql -X -q -U accountbook -d accountbook -c "
+  DO \$\$ BEGIN
+    FOR i IN 1..100000 LOOP
+      INSERT INTO users VALUES (gen_random_uuid(), 'writer' || i || '@example.com', 'x', 'w', now());
+      COMMIT;
+      PERFORM pg_sleep(0.001);
+    END LOOP;
+  END \$\$"
+until (($(sql -c 'SELECT count(*) FROM users') > 100)); do sleep 0.1; done
+before=$(sql -c 'SELECT count(*) FROM users')
+run_backup
+after=$(sql -c 'SELECT count(*) FROM users')
+sql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query LIKE '%writer%' AND pid <> pg_backend_pid()" >/dev/null
+assert '0으로 끝난다' equal 0 "$rc"
+assert "백업하는 동안 행이 늘었다($before → $after)" [ "$after" -gt "$before" ]
+run_drill --store "$STORE" --skip-server
+assert '명세표가 맞는다' logged '^- 명세표: 통과'
+sql -c "DELETE FROM users WHERE email LIKE 'writer%'"
+
+# ---------------------------------------------------------------------------
+section '실패: DB가 내려가 있다'
+docker stop --time 5 "$TEST_ID-db" >/dev/null
+expect_failure 'DB 컨테이너 찾기'
+assert '평문이 남지 않는다' clean "$RUN_DIR"
+start_db
+
+section '실패: 작업 폴더의 여유가 DB보다 작다(128KB). 덤프를 시작하지 않는다'
+config "BACKUP_LOCAL_DIR=$STORE" BACKUP_WORK_DIR=/small/work
+expect_failure '여유 공간'
+
+section '실패: 여유가 있다고 봤는데 쓰는 중에 가득 찬다'
+mkdir -p /tmp/fake-df
+printf '#!/bin/sh\necho 99999999999\n' >/tmp/fake-df/df
+chmod 755 /tmp/fake-df/df
+PATH=/tmp/fake-df:$PATH expect_failure '덤프'
+assert '평문이 남지 않는다' clean /small/work
+
+section '실패: 작업 폴더가 읽기 전용이다'
+config "BACKUP_LOCAL_DIR=$STORE" BACKUP_WORK_DIR=/readonly/work
+expect_failure '작업 폴더'
+
+section '실패: 올릴 곳에 쓸 수 없다'
+config BACKUP_LOCAL_DIR=/readonly/store
+expect_failure '올리기'
+assert '평문이 남지 않는다' clean "$RUN_DIR"
+
+section '실패: 공개키가 없다(레포의 자리 파일 그대로)'
+config "BACKUP_LOCAL_DIR=$STORE" "AGE_RECIPIENTS_FILE=$REPO/deploy/backup-recipients.txt"
+expect_failure '암호화'
+assert '평문이 남지 않는다' clean "$RUN_DIR"
+
+section '실패: 설정이 틀렸다'
+config "BACKUP_LOCAL_DIR=$STORE" 'BACKUP_WROK_DIR=/tmp'
+expect_failure '설정'
+assert '어느 변수인지 알려 준다' logged 'BACKUP_WROK_DIR'
+config
+expect_failure '설정'
+
+section '실패: 명세표 쿼리가 스키마와 맞지 않는다. 덤프는 올리고 실패로 끝낸다'
+sed 's/FROM account;/FROM no_such_table;/' "$REPO/docs/db/integrity-checks.sql" >/tmp/old-checks.sql
+config "BACKUP_LOCAL_DIR=$STORE" INTEGRITY_SQL_FILE=/tmp/old-checks.sql
+count=$(bundles daily)
+run_backup
+assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+assert '알림이 간다' alerted '단계: 명세표'
+assert '덤프는 올라갔다' equal $((count + 1)) "$(bundles daily)"
+assert '평문이 남지 않는다' clean "$RUN_DIR"
+run_drill --store "$STORE" --skip-server
+assert '복원 훈련은 실패로 본다' logged '^- 명세표: 실패 (백업할 때'
+config "BACKUP_LOCAL_DIR=$STORE"
+
+section '실패: 다른 백업이 끝나지 않는다. 끝나면 이어서 돈다'
+config "BACKUP_LOCAL_DIR=$STORE" BACKUP_LOCK_WAIT_SECONDS=1
+(
+  flock 9
+  sleep 4
+) 9>"$RUN_DIR/lock" &
+sleep 0.5
+expect_failure '잠금'
+config "BACKUP_LOCAL_DIR=$STORE" BACKUP_LOCK_WAIT_SECONDS=30
+run_backup
+assert '기다렸다가 성공한다' equal 0 "$rc"
+wait
+config "BACKUP_LOCAL_DIR=$STORE"
+
+# DB 잠금으로 덤프를 멈춰 놓고 백업을 시작한다.
+start_blocked_backup() {
+  docker exec --detach "$TEST_ID-db" psql -X -q -U accountbook -d accountbook \
+    -c 'BEGIN' -c 'LOCK TABLE account IN ACCESS EXCLUSIVE MODE' -c 'SELECT pg_sleep(60)'
+  sleep 1
+  reset_alerts
+  setsid "$BIN/backup" >/tmp/out 2>"$LOG" </dev/null &
+  blocked=$!
+  for _ in $(seq 100); do
+    compgen -G "$RUN_DIR/run.*/plain/db.dump.partial" >/dev/null && break
+    sleep 0.1
+  done
+  sleep 0.5
+}
+unblock() {
+  sql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query LIKE 'SELECT pg_sleep%'" >/dev/null
+}
+
+section '실패: 도는 중에 멈춘다(systemd의 SIGTERM)'
+start_blocked_backup
+kill -TERM -- "-$blocked"
+rc=0
+wait "$blocked" || rc=$?
+assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+assert "알림이 간다($(tail -n 1 "$ALERTS"))" alerted '단계: 덤프'
+assert '평문이 남지 않는다' clean "$RUN_DIR"
+unblock
+
+section '실패: 도는 중에 강제 종료된다(SIGKILL). 남은 평문은 다음 백업이 지운다'
+start_blocked_backup
+kill -KILL -- "-$blocked"
+wait "$blocked" 2>/dev/null || true
+assert '평문 폴더가 남아 있다' compgen -G "$RUN_DIR/run.*"
+unblock
+run_backup
+assert '다음 백업이 성공한다' equal 0 "$rc"
+assert '남은 평문을 지웠다' clean "$RUN_DIR"
+
+section '경고: 덤프가 직전보다 20% 넘게 줄었다'
+sed -i 's/^dump_bytes=.*/dump_bytes=99999999/' "$STATE/last-success"
+sleep 1
+run_backup
+assert '백업은 성공이다' equal 0 "$rc"
+assert '객체 이름을 낸다' [ -s "$STORE/$out" ]
+assert '알림이 간다' alerted '20% 넘게 줄었다'
+sleep 1
+run_backup
+assert '다음 백업은 알리지 않는다' no_alert
+
+section '알림을 못 보내면 남겨 뒀다가 backup-check가 다시 보낸다'
+sed -i 's/^dump_bytes=.*/dump_bytes=99999999/' "$STATE/last-success"
+touch /tmp/notify-fails
+sleep 1
+run_backup
+assert '백업은 성공이다' equal 0 "$rc"
+run_check
+assert '아직 못 보내면 0이 아닌 코드다' [ "$rc" -ne 0 ]
+rm /tmp/notify-fails
+run_check
+assert '보냈다' alerted '늦게 보낸 알림.*20% 넘게 줄었다'
+assert '0으로 끝난다' equal 0 "$rc"
+run_check
+assert '한 번만 보낸다' no_alert
+
+# ---------------------------------------------------------------------------
+section '26시간 점검'
+ago() { printf 'epoch=%s\n' $(($(date +%s) - $1)); }
+ago $((25 * 3600)) >"$STATE/last-success"
+run_check
+assert '25시간 전이면 조용히 0으로 끝난다' equal 0 "$rc"
+assert '  알림이 없다' no_alert
+ago $((27 * 3600)) >"$STATE/last-success"
+run_check
+assert '27시간 전이면 알리고 1로 끝난다' equal 1 "$rc"
+assert "  알림이 간다($(tail -n 1 "$ALERTS"))" alerted '27시간째 없다'
+run_check
+assert '6시간 안에는 다시 알리지 않는다' no_alert
+assert '  그래도 1로 끝난다' equal 1 "$rc"
+ago $((6 * 3600)) >"$STATE/last-stale-alert"
+run_check
+assert '6시간이 지나면 다시 알린다' alerted '27시간째 없다'
+rm "$STATE/last-stale-alert"
+touch /tmp/notify-fails
+run_check
+rm /tmp/notify-fails
+assert '알림을 못 보내면 보낸 것으로 치지 않는다' not test -e "$STATE/last-stale-alert"
+rm "$STATE/last-success"
+run_check
+assert '기록이 없어도 알린다' alerted '기록이 없다'
+
+# ---------------------------------------------------------------------------
+section '텔레그램 전송기: 토큰이 명령줄과 출력에 나오지 않는다'
+mkdir -p /tmp/fake-bin
+cat >/tmp/fake-bin/curl <<'SH'
+#!/bin/bash
+printf '%s\n' "$@" >/tmp/curl-args
+while (($#)); do
+  [[ $1 == --config ]] && cat "$2" >/tmp/curl-config
+  shift
+done
+cat >/tmp/curl-stdin
+echo 'curl: 12345:test-token' >&2
+exit "${FAKE_CURL_RC:-0}"
+SH
+chmod 755 /tmp/fake-bin/curl
+telegram() {
+  rc=0
+  printf '%s' "$1" | PATH=/tmp/fake-bin:$PATH TELEGRAM_ENV_FILE=/tmp/telegram.env \
+    "$REPO/deploy/bin/notify-telegram" >"$LOG" 2>&1 || rc=$?
+}
+install -m 600 /dev/null /tmp/telegram.env
+printf 'TELEGRAM_BOT_TOKEN=12345:test-token\nTELEGRAM_CHAT_ID=-100200\n' >/tmp/telegram.env
+telegram '여러 줄
+"따옴표" & 기호'
+assert '0으로 끝난다' equal 0 "$rc"
+assert '주소에 토큰을 넣었다' grep -qx 'url = "https://api.telegram.org/bot12345:test-token/sendMessage"' /tmp/curl-config
+assert 'chat id를 넣었다' grep -qx 'data-urlencode = "chat_id=-100200"' /tmp/curl-config
+assert '글을 그대로 보냈다' equal '여러 줄
+"따옴표" & 기호' "$(cat /tmp/curl-stdin)"
+assert '명령줄에 토큰이 없다' not grep -q 'test-token\|100200' /tmp/curl-args
+assert '출력에 토큰이 없다' not logged 'test-token'
+FAKE_CURL_RC=22 telegram '글'
+assert '전송 실패면 0이 아닌 코드다' [ "$rc" -ne 0 ]
+assert '  실패 문구에 토큰이 없다' not logged 'test-token'
+printf 'TELEGRAM_BOT_TOKEN=bad token"\nTELEGRAM_CHAT_ID=1\n' >/tmp/telegram.env
+telegram '글'
+assert '형식이 틀린 토큰은 쓰지 않는다' [ "$rc" -ne 0 ]
+assert '  값을 출력하지 않는다' not logged 'bad token'
+rm /tmp/telegram.env
+telegram '글'
+assert '파일이 없으면 실패한다' [ "$rc" -ne 0 ]
+
+# ---------------------------------------------------------------------------
+section 'Object Storage 올리기: 진짜 OCI CLI를 대역 서버에 붙인다'
+oci_image=$(sed -n 's/^DEFAULT_OCI_CLI_IMAGE=//p' "$BIN/backup-lib.sh")
+docker create --name "$TEST_ID-oci-stub" --entrypoint python3 "$oci_image" /tmp/server.py >/dev/null
+docker cp --quiet "$REPO/deploy/tests/oci-stub/server.py" "$TEST_ID-oci-stub:/tmp/server.py"
+docker start "$TEST_ID-oci-stub" >/dev/null
+stub_ip=$(docker inspect --format '{{.NetworkSettings.Networks.bridge.IPAddress}}' "$TEST_ID-oci-stub")
+docker create --name "$TEST_ID-oci-cli" "$oci_image" >/dev/null
+docker cp --quiet "$REPO/deploy/tests/oci-stub/sitecustomize.py" "$TEST_ID-oci-cli:/usr/local/lib/python3.9/site-packages/sitecustomize.py"
+docker commit --change "ENV OCI_CLI_ENDPOINT=http://$stub_ip:8000" "$TEST_ID-oci-cli" "$TEST_ID-oci" >/dev/null
+requests() { docker logs "$TEST_ID-oci-stub" 2>&1; }
+rm -f "$STATE/last-weekly"
+mkdir -p "$WORK/run"
+config OCI_NAMESPACE=testns OCI_BUCKET=testbucket "OCI_CLI_IMAGE=$TEST_ID-oci" "BACKUP_WORK_DIR=$WORK/run"
+run_backup
+assert '0으로 끝난다' equal 0 "$rc"
+name=${out#daily/}
+assert 'PUT 네 번(daily, weekly에 파일과 sha256)만 보냈다' equal "PUT testbucket daily/$name 200
+PUT testbucket daily/$name.sha256 200
+PUT testbucket weekly/$name 200
+PUT testbucket weekly/$name.sha256 200" "$(requests)"
+assert '평문이 남지 않는다' clean "$WORK/run"
+export HOME=$WORK/home
+mkdir -p "$HOME/.oci"
+export OCI_CLI_AUTH=instance_principal OCI_NAMESPACE=testns OCI_BUCKET=testbucket OCI_CLI_IMAGE="$TEST_ID-oci"
+run_drill --skip-server
+assert '복원 훈련이 가장 새것을 내려받아 복원한다' equal 2 "$rc"
+assert '  명세표가 맞는다' logged '^- 명세표: 통과'
+run_drill --object "weekly/$name" --skip-server
+assert '이름을 정해 내려받을 수 있다' equal 2 "$rc"
+assert '내려받기는 읽기 요청만 보냈다' equal '' "$(requests | tail -n +5 | grep -v '^GET \|^HEAD ' || true)"
+config OCI_NAMESPACE=testns OCI_BUCKET=denied "OCI_CLI_IMAGE=$TEST_ID-oci" "BACKUP_WORK_DIR=$WORK/run"
+expect_failure '올리기'
+assert '평문이 남지 않는다' clean "$WORK/run"
+
+section '끝'

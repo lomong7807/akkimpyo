@@ -1,0 +1,10 @@
+[Unit]
+Description=아낌표 DB 백업 점검 (매시간)
+
+[Timer]
+OnCalendar=hourly
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
