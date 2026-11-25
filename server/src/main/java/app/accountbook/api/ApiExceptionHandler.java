@@ -164,7 +164,8 @@ class ApiExceptionHandler {
                 .body(Problem.of(code, RequestId.of(request), fields));
     }
 
-    private static boolean isClientGone(Throwable e) {
+    /** 클라이언트가 먼저 끊었는가. 다른 예외에 감싸여 올 수 있다. */
+    static boolean isClientGone(Throwable e) {
         return e != null && (e instanceof ClientAbortException || isClientGone(e.getCause()));
     }
 }

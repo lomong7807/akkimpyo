@@ -47,6 +47,8 @@ class ErrorLogTest {
     private static final String HOST = "Host: localhost\r\nConnection: close\r\n";
 
     private static final Logger OURS = (Logger) LoggerFactory.getLogger("app.accountbook");
+    private static final Logger TOMCAT_COOKIE =
+            (Logger) LoggerFactory.getLogger("org.apache.tomcat.util.http.parser.Cookie");
 
     @LocalServerPort int port;
     @Autowired ErrorProbeController probe;
@@ -127,6 +129,26 @@ class ErrorLogTest {
     }
 
     @Test
+    void 깨진_쿠키의_값이_로그에_없다() throws Exception {
+        String request = "GET /nope HTTP/1.1\r\n" + HOST + "Cookie: __Secure-r=" + PASSWORD + " zz\r\n\r\n";
+        // Tomcat은 처음 만난 깨진 쿠키만 INFO로, 다음부터는 DEBUG로 남긴다. 먼저 돈 테스트에 따라 헛돌지 않게 수준도 본다.
+        Level configured = TOMCAT_COOKIE.getLevel();
+        assertThat(configured).isEqualTo(Level.WARN);
+
+        server.rawReply(request).assertProblem(404, "Not Found", "NOT_FOUND");
+        assertNoValuesInLogs();
+
+        // 대조: 이 요청은 그 로거를 지난다. 수준을 내리면 값이 나온다.
+        TOMCAT_COOKIE.setLevel(Level.DEBUG);
+        try {
+            server.rawReply(request).assertProblem(404, "Not Found", "NOT_FOUND");
+            assertThat(logs.text()).contains(PASSWORD);
+        } finally {
+            TOMCAT_COOKIE.setLevel(configured);
+        }
+    }
+
+    @Test
     void DB_제약_위반의_값이_로그에_없고_제약_이름으로_원인을_찾을_수_있다() throws Exception {
         server.postJson(ErrorProbeController.PATH + "/db-violation",
                         "{\"name\":\"" + PASSWORD + "\",\"email\":\"" + EMAIL.toUpperCase() + "\"}")
@@ -183,6 +205,14 @@ class ErrorLogTest {
         probe.willThrow(new HttpMessageNotWritableException("쓰지 못함", new ClientAbortException()));
 
         server.get(THROW);
+
+        assertThat(atLeast(Level.INFO)).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {ThrowingFilter.CLIENT_ABORT, ThrowingFilter.WRAPPED_CLIENT_ABORT})
+    void 필터에서_클라이언트가_끊은_것도_ERROR로_남기지_않는다(String path) throws Exception {
+        server.raw("GET " + path + " HTTP/1.1\r\n" + HOST + "\r\n");
 
         assertThat(atLeast(Level.INFO)).isEmpty();
     }

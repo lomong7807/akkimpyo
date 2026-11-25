@@ -29,3 +29,5 @@ logging:
   level:
     # Tomcat은 읽지 못한 요청의 주소와 헤더(토큰이 들 수 있다)를 INFO로 그대로 남긴다.
     org.apache.coyote.http11.Http11Processor: warn
+    # 깨진 쿠키 헤더도 값째로 INFO로 남긴다.
+    org.apache.tomcat.util.http.parser.Cookie: warn
