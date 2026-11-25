@@ -386,6 +386,25 @@ class SchemaTest {
                 .hasMessageContaining("ck_account_opening_balance_range");
     }
 
+    @Test
+    void openingDateAtMinIsAcceptedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        insertAccountOpenedOn(ledger, LocalDate.of(2000, 1, 1));
+
+        assertThat(jdbc.queryForObject("select opening_date from account where ledger_id = ?", LocalDate.class,
+                ledger)).isEqualTo(LocalDate.of(2000, 1, 1));
+    }
+
+    @Test
+    void openingDateBeforeMinIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccountOpenedOn(ledger, LocalDate.of(1999, 12, 31)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_opening_date_min");
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {
             "",
@@ -471,6 +490,14 @@ class SchemaTest {
                 insert into account (id, ledger_id, name, type, opening_balance, opening_date, created_at)
                 values (?, ?, ?, 'BANK', ?, DATE '2026-11-01', now())
                 """, UUID.randomUUID(), ledgerId, name, openingBalance);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
+    private void insertAccountOpenedOn(UUID ledgerId, LocalDate openingDate) {
+        jdbc.update("""
+                insert into account (id, ledger_id, name, type, opening_date, created_at)
+                values (?, ?, '현금', 'CASH', ?, now())
+                """, UUID.randomUUID(), ledgerId, openingDate);
     }
 
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */

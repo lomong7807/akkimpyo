@@ -4,8 +4,15 @@ import app.accountbook.common.DuplicateAccountNameException;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
+import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
+import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerAccess;
+import app.accountbook.ledger.LedgerDates;
+import app.accountbook.ledger.LedgerRepository;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
@@ -25,22 +32,27 @@ public class AccountService {
     private final AccountRepository accountRepository;
     private final AccountUsage accountUsage;
     private final LedgerAccess ledgerAccess;
+    private final LedgerRepository ledgerRepository;
+    private final Clock clock;
 
     AccountService(AccountRepository accountRepository, AccountUsage accountUsage,
-                   LedgerAccess ledgerAccess) {
+                   LedgerAccess ledgerAccess, LedgerRepository ledgerRepository, Clock clock) {
         this.accountRepository = accountRepository;
         this.accountUsage = accountUsage;
         this.ledgerAccess = ledgerAccess;
+        this.ledgerRepository = ledgerRepository;
+        this.clock = clock;
     }
 
     /**
      * 이름은 앞뒤 공백을 지운 1~50자이고 같은 장부 안에서 겹칠 수 없다(P-220).
      * 시작 잔액은 음수도 되고 크기는 9,999,999,999원까지다(F-502).
+     * 기준일은 거래 날짜와 같은 범위다(P-206).
      */
     @Transactional
     public Account create(UUID actorId, UUID ledgerId, AccountCommand cmd) {
         ledgerAccess.requireMember(actorId, ledgerId);
-        String name = validateAndNormalizeName(cmd);
+        String name = validateAndNormalizeName(ledgerId, cmd);
         Account account = Account.of(ledgerId, name, cmd.type(), cmd.openingBalance(), cmd.openingDate());
         requireUniqueName(account, name);
         return saveUnlessDuplicate(account);
@@ -49,7 +61,7 @@ public class AccountService {
     @Transactional
     public Account update(UUID actorId, UUID accountId, AccountCommand cmd) {
         Account account = loadForMember(actorId, accountId);
-        String name = validateAndNormalizeName(cmd);
+        String name = validateAndNormalizeName(account.getLedgerId(), cmd);
         requireUniqueName(account, name);
         account.update(name, cmd.type(), cmd.openingBalance(), cmd.openingDate());
         return saveUnlessDuplicate(account);
@@ -102,7 +114,7 @@ public class AccountService {
     }
 
     /** 요청을 검증하고 공백을 지운 이름을 돌려준다. */
-    private static String validateAndNormalizeName(AccountCommand cmd) {
+    private String validateAndNormalizeName(UUID ledgerId, AccountCommand cmd) {
         if (cmd == null) {
             throw new InvalidRequestException("계좌 정보가 없습니다.");
         }
@@ -112,11 +124,20 @@ public class AccountService {
         if (cmd.openingDate() == null) {
             throw new InvalidRequestException("기준일이 없습니다.");
         }
+        requireOpeningDateInRange(ledgerId, cmd.openingDate());
         // Math.abs는 Long.MIN_VALUE에서 음수를 돌려주므로 양 끝과 직접 비교한다.
         if (cmd.openingBalance() < -MAX_OPENING_BALANCE || cmd.openingBalance() > MAX_OPENING_BALANCE) {
             throw new InvalidRequestException(
                     "시작 잔액은 -9,999,999,999원부터 9,999,999,999원까지 입력할 수 있습니다.");
         }
         return Names.normalize(cmd.name());
+    }
+
+    /** "오늘"은 서버 시계의 지금을 그 장부의 시간대로 본 날짜다(P-202). */
+    private void requireOpeningDateInRange(UUID ledgerId, LocalDate openingDate) {
+        ZoneId ledgerZone = ledgerRepository.findById(ledgerId)
+                .map(Ledger::zoneId)
+                .orElseThrow(NotFoundException::new);
+        LedgerDates.requireInRange("기준일은", openingDate, clock, ledgerZone);
     }
 }

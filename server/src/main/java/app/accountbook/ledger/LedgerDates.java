@@ -5,9 +5,12 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
-/** 장부에 입력하는 날짜의 범위(P-202). 오류 문구에는 입력값을 넣지 않는다. */
+/**
+ * 장부에 입력하는 날짜의 범위(P-202). 거래 날짜와 계좌 기준일(P-206)이 같이 쓴다. 오류 문구에는 입력값을 넣지 않는다.
+ */
 public final class LedgerDates {
 
+    /** DB의 ck_transaction_occurred_on_min, ck_account_opening_date_min과 같은 값이다. */
     private static final LocalDate MIN_DATE = LocalDate.of(2000, 1, 1);
 
     private LedgerDates() {
