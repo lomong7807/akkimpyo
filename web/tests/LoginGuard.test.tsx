@@ -135,6 +135,7 @@ describe('로그인 여부를 확인하지 못하면', () => {
     const dom = recordDom()
     const { router } = await open('/secret')
     await failure()
+    expect(screen.getByRole('link', { name: '로그인하러 가기' })).toBeTruthy()
     await settle()
     expect(router.state.location.pathname).toBe('/secret')
     expect(dom.sawText(secret)).toBe(false)
@@ -162,7 +163,7 @@ describe('/', () => {
 
 describe('로그인 없이 볼 수 있는 주소', () => {
   it('/login은 로그인 여부를 확인하는 동안에도 바로 열린다', async () => {
-    backend.refreshResponse = () => new Promise(() => {})
+    backend.refreshResponse = delayed().respond
     const { router } = await open('/login')
     expect(screen.getByRole('heading', { level: 1, name: '로그인' })).toBeTruthy()
     await settle()

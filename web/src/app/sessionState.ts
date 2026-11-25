@@ -10,7 +10,7 @@ export interface Session {
   id: number
   /** 쓰던 로그인이 풀렸다 */
   ended: boolean
-  /** 확인 결과가 나오기 전에 로그인을 보냈다 */
+  /** 로그인을 보냈다. 그 뒤에 오는 확인 결과로는 화면을 옮기지 않는다. */
   loginSubmitted: boolean
 }
 

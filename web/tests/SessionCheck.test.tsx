@@ -130,6 +130,7 @@ describe('확인 중', () => {
     await pass(1)
     expect(screen.getByText(failed)).toBeTruthy()
     expect(retryButton().hasAttribute('aria-busy')).toBe(false)
+    expect(toLogin()).toBeTruthy()
   })
 })
 
@@ -245,7 +246,7 @@ describe('확인하지 못함', () => {
 
   it('다시 시도한 것도 15초가 지나면 버튼을 되돌린다', async () => {
     const locks = createStuckLocks()
-    await openFailed('/secret', () => new Promise(() => {}))
+    await openFailed('/secret')
     installLocks(locks)
     stopClock()
     fireEvent.click(retryButton())

@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import type { SetupServer } from 'msw/node'
+import { afterEach } from 'vitest'
 import { accessTokenNamed } from './accessToken'
 import { problem } from './problem'
 
@@ -70,14 +71,22 @@ export function startBackend(server: SetupServer) {
 
 export type Backend = ReturnType<typeof startBackend>
 
+const unanswered: (() => void)[] = []
+
+// 답이 없으면 세션 계층이 5초 뒤 갱신을 한 번 더 보낸다. 다음 테스트의 서버에 닿지 않게 남은 것을 끝낸다
+afterEach(() => {
+  unanswered.splice(0).forEach((finish) => finish())
+})
+
 /** 답을 미루는 응답. `answer`를 부를 때까지 요청이 끝나지 않는다. */
 export function delayed() {
   const arrived = Promise.withResolvers<void>()
   const response = Promise.withResolvers<Response>()
+  unanswered.push(() => response.resolve(problem(500, 'INTERNAL_ERROR')))
   return {
-    respond: () => {
+    respond: async () => {
       arrived.resolve()
-      return response.promise
+      return (await response.promise).clone()
     },
     arrived: arrived.promise,
     answer: response.resolve,
