@@ -313,7 +313,6 @@ describe('키보드', () => {
     ['{PageDown}', '2026-10-31', '2026년 11월 30일 월요일'],
     ['{PageUp}', '2026-03-31', '2026년 2월 28일 토요일'],
     ['{PageDown}', '2024-01-31', '2024년 2월 29일 목요일'],
-    // 같은 자리의 칸으로 가도 초점이 새 날짜에 있다
     ['{PageDown}', '2026-02-10', '2026년 3월 10일 화요일'],
     // 범위 밖으로는 나가지 않는다
     ['{ArrowLeft}', '2000-01-01', '2000년 1월 1일 토요일'],
@@ -330,6 +329,14 @@ describe('키보드', () => {
     await user.keyboard(key)
     expect(focused()).toBe(expected)
     expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('같은 자리의 칸으로 가도 화면 낭독기가 새 날짜를 읽게 초점을 새로 받는다', async () => {
+    const { user } = open('2026-02-10')
+    const before = document.activeElement
+    await user.keyboard('{PageDown}')
+    expect(document.activeElement).toBe(day('2026년 3월 10일'))
+    expect(document.activeElement).not.toBe(before)
   })
 
   it('달을 넘으면 달 이름도 바뀐다', async () => {

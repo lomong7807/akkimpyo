@@ -108,9 +108,11 @@ describe('닫는 것', () => {
     const inside = screen.getByText('시트의 내용')
     fireEvent.pointerDown(inside)
     fireEvent.click(dialog()!)
+    await act(async () => {})
     expect(dialog()?.open).toBe(true)
     fireEvent.pointerDown(dialog()!)
     fireEvent.click(inside)
+    await act(async () => {})
     expect(dialog()?.open).toBe(true)
   })
 
@@ -188,6 +190,7 @@ describe('닫히는 움직임', () => {
         내용
       </BottomSheet>,
     )
+    const opened = dialog()
     rerender(
       <BottomSheet title="기준일" open={false} onClose={() => {}}>
         내용
@@ -199,8 +202,31 @@ describe('닫히는 움직임', () => {
       </BottomSheet>,
     )
     await finish()
+    expect(dialog()).toBe(opened)
     expect(dialog()?.open).toBe(true)
   })
+})
+
+it('다시 열었다 닫으면 앞의 움직임이 아니라 새 움직임이 끝날 때 사라진다', async () => {
+  const first = Promise.withResolvers<void>()
+  const second = Promise.withResolvers<void>()
+  const motion = vi.spyOn(Element.prototype, 'getAnimations')
+  for (const { promise } of [first, second]) {
+    motion.mockReturnValueOnce([{ finished: promise } as unknown as Animation])
+  }
+  const sheet = (open: boolean) => (
+    <BottomSheet title="기준일" open={open} onClose={() => {}}>
+      내용
+    </BottomSheet>
+  )
+  const { rerender } = render(sheet(true))
+  rerender(sheet(false))
+  rerender(sheet(true))
+  rerender(sheet(false))
+  await act(async () => first.resolve())
+  expect(dialog()).toBeTruthy()
+  await act(async () => second.resolve())
+  expect(document.querySelector('dialog')).toBeNull()
 })
 
 describe('아래로 끌기', () => {
@@ -288,10 +314,13 @@ describe('아래로 끌기', () => {
   it('끄는 동안 닿은 두 번째 손가락은 보지 않는다', async () => {
     await openTallSheet()
     drag(head(), 60)
-    const second = { pointerId: 2, isPrimary: false, clientY: 400 }
+    const second = { pointerId: 2, isPrimary: false, button: 0, clientY: 400 }
+    fireEvent.pointerDown(head(), second)
     fireEvent.pointerMove(head(), second)
     fireEvent.pointerUp(head(), second)
     expect(dragged()).toBe('60px')
+    fireEvent.pointerMove(head(), { pointerId: 1, isPrimary: true, clientY: 170 })
+    expect(dragged()).toBe('70px')
     expect(sheet().hasAttribute('data-dragging')).toBe(true)
   })
 
@@ -302,6 +331,7 @@ describe('아래로 끌기', () => {
     await openTallSheet()
     drag(head(), 300, init)
     expect(dragged()).toBe('')
+    expect(sheet().hasAttribute('data-dragging')).toBe(false)
   })
 
   it('닫기 버튼에서 시작한 끌기는 받지 않는다', async () => {

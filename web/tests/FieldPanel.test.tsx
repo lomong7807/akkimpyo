@@ -104,6 +104,11 @@ describe('자리', () => {
     expect(panel().dataset.side).toBe('below')
   })
 
+  it('아래에 자리가 있으면 위가 더 넓어도 아래에 펼친다', async () => {
+    await open(WINDOW_HEIGHT - 48 - 220, 200)
+    expect(panel().dataset.side).toBe('below')
+  })
+
   it('아래에 자리가 없으면 위로 펼친다', async () => {
     await open(WINDOW_HEIGHT - 148, 390)
     expect(panel().dataset.side).toBe('above')
