@@ -1,0 +1,114 @@
+.button {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-touch);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-10);
+  background-color: transparent;
+  font: var(--text-body-strong);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform var(--motion-press-duration);
+  /* 눌림은 아래의 크기 변화로 보인다 */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.button:active:not([aria-disabled='true']) {
+  transform: scale(var(--motion-press-scale));
+}
+
+.primary,
+.danger {
+  min-height: var(--size-button);
+  padding-inline: var(--space-24);
+}
+
+.primary {
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.danger {
+  background-color: var(--color-danger);
+  color: var(--color-on-danger);
+}
+
+.secondary {
+  min-height: var(--size-button-secondary);
+  padding-inline: var(--space-16);
+  border: 1px solid var(--color-border-strong);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+.text,
+.textDanger {
+  min-height: var(--size-touch);
+  padding-inline: var(--space-8);
+}
+
+.text {
+  color: var(--color-accent);
+}
+
+.textDanger {
+  color: var(--color-danger);
+}
+
+.icon {
+  width: var(--size-touch);
+  height: var(--size-touch);
+  color: var(--color-text);
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .icon:hover:not([aria-disabled='true']) {
+    background-color: var(--color-press);
+  }
+}
+
+.button[aria-disabled='true'] {
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+
+.primary[aria-disabled='true'],
+.danger[aria-disabled='true'],
+.secondary[aria-disabled='true'] {
+  background-color: var(--color-border);
+}
+
+.content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 자리와 화면 낭독기가 읽는 이름은 남기고 보이지만 않게 한다 */
+.button[aria-busy='true'] .content {
+  opacity: 0;
+}
+
+.spinner {
+  position: absolute;
+  inset: 0;
+  width: var(--size-icon-20);
+  height: var(--size-icon-20);
+  margin: auto;
+  border: var(--border-width-strong) solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: var(--radius-full);
+  animation: spin var(--motion-spinner-duration) linear infinite;
+}
+
+@keyframes spin {
+  to {
+    rotate: 1turn;
+  }
+}

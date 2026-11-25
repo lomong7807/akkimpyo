@@ -1,10 +1,13 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
-import App from '../src/App'
+import { describe, expect, it, vi } from 'vitest'
+import App from '../src/app/App'
+
+vi.stubGlobal('scrollTo', vi.fn())
 
 describe('App', () => {
-  it('화면 제목으로 앱 이름 "아낌표"를 보여 준다', () => {
+  it('브라우저 주소에 맞는 화면을 그린다', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { level: 1, name: '아낌표' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/')
+    expect(screen.getByRole('heading', { level: 1, name: '찾을 수 없어요.' })).toBeTruthy()
   })
 })

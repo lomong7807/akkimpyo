@@ -80,6 +80,7 @@
   /* 화면 폭. 배치를 나누는 768px와 1024px는 변수를 쓸 수 없는 미디어 조건에 직접 쓴다 */
   --width-content-narrow: 40rem; /* 640 휴대폰 배치 내용 폭 */
   --width-content-wide: 45rem; /* 720 넓은 화면 내용 폭 */
+  --width-auth: 25rem; /* 400 로그인 전 화면(A 그룹)의 넓은 화면 폭 */
   --width-sidebar: 15rem; /* 240 */
   --width-list-min: 22.5rem; /* 360 목록 칸의 최소 폭 */
   --width-side-panel: 27.5rem; /* 440 오른쪽 칸 */
@@ -95,6 +96,7 @@
   --motion-press-duration: 100ms;
   --motion-press-scale: 0.98;
   --motion-toast-duration: 150ms;
+  --motion-spinner-duration: 800ms; /* 버튼의 처리 중 원이 한 바퀴 도는 시간 */
 }
 
 /* 어두운 화면: 시스템 설정을 따를 때. 아래 수동 지정 블록과 값이 같아야 한다 */

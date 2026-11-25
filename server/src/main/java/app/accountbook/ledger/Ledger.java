@@ -4,6 +4,7 @@ import app.accountbook.common.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import java.time.ZoneId;
 import java.util.UUID;
 
 @Entity
@@ -16,7 +17,7 @@ public class Ledger extends BaseEntity {
     @Column(name = "name", nullable = false)
     private String name;
 
-    /** 거래 날짜·시각을 해석하는 장부 시간대(IANA 이름). */
+    /** 장부 시간대(IANA 이름). 서버가 "오늘"을 정할 때만 쓴다. 거래의 날짜·시각은 이 값으로 변환하지 않는다(P-202). */
     @Column(name = "timezone", nullable = false)
     private String timezone;
 
@@ -44,5 +45,10 @@ public class Ledger extends BaseEntity {
 
     public String getTimezone() {
         return timezone;
+    }
+
+    /** 서버가 "오늘"을 정할 때 쓰는 장부 시간대. */
+    public ZoneId zoneId() {
+        return ZoneId.of(timezone);
     }
 }

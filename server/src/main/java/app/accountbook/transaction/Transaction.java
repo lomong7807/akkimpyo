@@ -20,6 +20,9 @@ import java.util.UUID;
 /**
  * 거래 헤더. 돈의 움직임은 분개 라인(lines)으로 저장한다.
  * version은 JPA @Version을 쓰지 않는다. 서비스가 조건부 UPDATE로 직접 비교·증가한다.
+ *
+ * <p>날짜와 시각(P-202): 사용자가 입력한 날짜와 시각을 그대로 저장한다. 시간대 변환을 하지 않는다.
+ * 장부 시간대는 서버가 "오늘"을 정할 때만 쓰고, 저장된 날짜와 시각을 해석하거나 바꾸는 데는 쓰지 않는다.
  */
 @Entity
 @Table(name = "transaction")
@@ -34,11 +37,11 @@ public class Transaction extends BaseEntity {
     @Column(name = "type", nullable = false, updatable = false)
     private TransactionType type;
 
-    /** 장부 시간대의 현지 날짜. 집계 기준이다. */
+    /** 입력한 날짜 그대로다(시간대 변환 없음). 집계 기준이다. */
     @Column(name = "occurred_on", nullable = false)
     private LocalDate occurredOn;
 
-    /** 장부 시간대의 현지 시각. 없을 수 있다. */
+    /** 입력한 시각 그대로다(시간대 변환 없음). 입력하지 않았으면 null(시각 없음)이다. */
     @Column(name = "occurred_time")
     private LocalTime occurredTime;
 

@@ -3,6 +3,7 @@
 #
 #   OUT=<결과 폴더> perf/run-diagnosis.sh <단계> [단계...]
 #   단계: up seed base e1 e2 e3 e4 e5 e6 e7 base-again down
+#   V6 앞뒤 비교(새로 띄운 DB에서): DBS="perf_l1000_3m perf_mix_50k" ... up v6-seed v6 sleep-log down
 #
 # 측정용 프로젝트 akkimpyo-perf(포트 5434)와 이름이 perf_로 시작하는 DB만 건드린다.
 # 실행 계획 원문을 OUT 아래에 남기고, 숫자는 perf/summarize-diagnosis.mjs가 뽑는다.
@@ -48,6 +49,18 @@ pg_restart() {
 }
 wait_ready() { until dc exec -T db pg_isready -q -h localhost -U accountbook -d accountbook < /dev/null; do sleep 1; done; }
 
+# MAX_LOAD를 주면 1분 load average가 그 아래로 내려올 때까지(최대 MAX_WAIT초) 기다린다. 다른 worker가 같이 도는 맥에서 쓴다.
+wait_quiet() {
+  local waited=0
+  [ -n "${MAX_LOAD:-}" ] || return 0
+  while [ "$waited" -lt "${MAX_WAIT:-1800}" ]; do
+    if awk -v now="$(load1)" -v max="$MAX_LOAD" 'BEGIN { exit !(now < max) }'; then return 0; fi
+    sleep 10
+    waited=$((waited + 10))
+  done
+  mark "load가 MAX_LOAD=$MAX_LOAD 아래로 내려오지 않아 그대로 잰다"
+}
+
 # 단계가 시작될 때 그때의 조건을 남긴다.
 step() {
   # docker ps는 Docker Desktop의 Kubernetes 컨테이너를 숨긴다. docker info의 수에는 들어 있다.
@@ -71,13 +84,16 @@ run10() {
   } | perfsql -At -d "$db" -v ledger_no="$ledger" -v generic=$generic > "$out"
 }
 
+# perf_l1000_3m에는 큰 장부가 없다.
+ledgers_of() { case "$1" in perf_l1000_3m) echo "$NORMAL" ;; *) echo "$BIG $NORMAL" ;; esac; }
+
 # cells <결과 폴더> <db> <세션 SET 문> <쿼리 파일...>: 큰 장부와 보통 장부를 리터럴과 일반 계획으로
 cells() {
   local dir=$1 db=$2 prelude=$3 file ledger mode
   shift 3
   fresh
   for file in "$@"; do
-    for ledger in "$BIG" "$NORMAL"; do
+    for ledger in $(ledgers_of "$db"); do
       for mode in lit gen; do run10 "$dir" "$db" "$file" "$ledger" "$mode" "$prelude"; done
     done
   done
@@ -129,10 +145,14 @@ drop_db() {
   case "$1" in perf_*_e6 | perf_*_e7) sql postgres -c "DROP DATABASE $1" ;; *) echo "사본만 지운다: $1" >&2; exit 1 ;; esac
 }
 
-mkdb() {
-  local f
+migrations() { ls server/src/main/resources/db/migration/V*.sql | sort -V; }
+mkdb() { # mkdb <db> [마지막 버전]: 버전을 주면 그 버전까지만 적용한다
+  local f version
   sql postgres -c "CREATE DATABASE $1"
-  for f in $(ls server/src/main/resources/db/migration/V*.sql | sort -V); do perfsql -d "$1" < "$f"; done
+  for f in $(migrations); do
+    version=$(basename "$f" | sed 's/^V\([0-9]*\)__.*/\1/')
+    if [ -z "${2:-}" ] || [ "$version" -le "$2" ]; then perfsql -d "$1" < "$f"; fi
+  done
 }
 
 facts() { # facts <결과 파일> <db> <SQL...>: 크기나 통계 같은 사실을 남긴다
@@ -155,15 +175,28 @@ scatter_sql() {
 }
 VACUUMS="SELECT relname, last_vacuum, last_autovacuum, last_analyze, last_autoanalyze, n_dead_tup FROM pg_stat_user_tables WHERE relname IN ('transaction', 'transaction_line', 'account') ORDER BY 1"
 
+# 테이블마다 건수, 내용 해시, 저장 위치(ctid) 해시. 데이터와 저장 순서가 같은지 본다.
+HASHES=""
+for t in account category ledger ledger_member transaction transaction_line users; do
+  HASHES="${HASHES:+$HASHES UNION ALL }SELECT '$t' AS table_name, count(*), sum(hashtextextended(x::text, 0)::numeric) AS content, sum(hashtextextended(x.id::text || x.ctid::text, 0)::numeric) AS placement FROM $t x"
+done
+HASHES="SELECT * FROM ($HASHES) h ORDER BY 1"
+# account와 그 인덱스. relfilenode가 그대로면 테이블을 다시 쓰지 않은 것이다.
+ACCOUNT_STATE="SELECT c.relname, c.relkind, c.relfilenode, c.relpages, c.reltuples::bigint, c.relallvisible, pg_relation_size(c.oid) AS bytes, pg_get_indexdef(c.oid) AS definition
+                 FROM pg_class c
+                WHERE c.oid = 'account'::regclass OR c.oid IN (SELECT indexrelid FROM pg_index WHERE indrelid = 'account'::regclass)
+                ORDER BY c.relkind DESC, c.relname"
+
 do_up() { dc up -d; wait_ready; }
 
-do_seed() {
+do_seed() { # do_seed [마지막 마이그레이션 버전]
   local db
-  step seed
+  step "seed${1:+ V1~V$1}"
   for db in "${DBS[@]}"; do
-    mkdb "$db"
+    mkdb "$db" "${1:-}"
     mark "seed $db"
     case "$db" in
+      perf_l1000_3m) perfsql -d "$db" -v ledgers=1000 -v tx_per_ledger=3000 < perf/seed.sql ;;
       perf_mix_50k) perfsql -d "$db" -v ledgers=1000 -v tx_per_ledger=3000 -v big_ledger_tx=50000 < perf/seed.sql ;;
       perf_mix_200k) perfsql -d "$db" -v ledgers=1000 -v tx_per_ledger=3000 -v big_ledger_tx=200000 -v big_one_account=on < perf/seed.sql ;;
       *) perfsql -d "$db" -v ledgers=1000 -v tx_per_ledger="${TX_PER_LEDGER:-20}" -v big_ledger_tx="${BIG_TX:-500}" < perf/seed.sql ;;
@@ -394,6 +427,33 @@ SQL
   done
 }
 
+# V6(계좌 이름 유니크, 시작 잔액 범위) 앞뒤를 같은 DB에서 잰다(이슈 #146). v6-seed가 V1~V5까지만 적용해 만든 DB에서 시작한다.
+# V6을 적용하면 통계도 다시 모으므로, V6 없이 통계만 다시 모은 회차(3)를 사이에 둔다.
+do_v6() {
+  local db round
+  for db in "${DBS[@]}"; do
+    v6_state "$db" "V5까지"
+    for round in 1-v5 2-v5; do v6_round "$db" "$round"; done
+
+    sql "$db" -c "VACUUM (ANALYZE)" -c CHECKPOINT
+    v6_state "$db" "V5까지, VACUUM (ANALYZE) 다시"
+    v6_round "$db" 3-v5-reanalyzed
+
+    mark "v6 $db V6 적용"
+    perfsql -d "$db" < "$(migrations | grep '/V6__')"
+    sql "$db" -c "VACUUM (ANALYZE)" -c CHECKPOINT
+    v6_state "$db" "V6까지"
+    for round in 4-v6 5-v6; do v6_round "$db" "$round"; done
+  done
+}
+v6_state() { facts "v6.state.$1.txt" "$1" "SELECT '$2' AS state" "$HASHES" "$ACCOUNT_STATE" "$SIZES"; }
+v6_round() {
+  wait_quiet
+  step "v6 $1 $2"
+  cells "v6/$2" "$1" "" "$BALANCES" "$BALANCE"
+  facts "v6.vacuum.$1.txt" "$1" "$VACUUMS"
+}
+
 # 측정 구간의 절전 기록(맥에서만)
 do_sleep_log() {
   local start
@@ -411,7 +471,8 @@ for arg in "$@"; do
     seed) do_seed ;;
     base) do_base base ;;
     base-again) do_base base-again ;;
-    e1 | e2 | e3 | e4 | e5 | e6 | e7) "do_$arg" ;;
+    e1 | e2 | e3 | e4 | e5 | e6 | e7 | v6) "do_$arg" ;;
+    v6-seed) do_seed 5 ;;
     fresh) fresh ;;
     sleep-log) do_sleep_log ;;
     down) dc down -v ;;

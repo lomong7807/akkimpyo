@@ -12,10 +12,11 @@ public record MonthlySummary(long income, long expense, List<CategoryTotal> cate
                 List.copyOf(categories));
     }
 
+    /** LongStream.sum()은 넘치면 조용히 틀린 값이 되므로 쓰지 않는다. */
     private static long sum(List<CategoryTotal> categories, CategoryKind kind) {
         return categories.stream()
                 .filter(category -> category.kind() == kind)
                 .mapToLong(CategoryTotal::total)
-                .sum();
+                .reduce(0L, Math::addExact);
     }
 }

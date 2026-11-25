@@ -12,7 +12,6 @@ import app.accountbook.category.Category;
 import app.accountbook.category.CategoryCommand;
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
-import app.accountbook.common.IdConflictException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
@@ -38,7 +37,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class TransactionServiceTest {
 
     static final LocalDate DAY = LocalDate.of(2026, 11, 18);
-    static final String DEVICE = "iphone-1";
+    static final String DEVICE = "iphone.safari";
 
     @Autowired TransactionService transactionService;
     @Autowired TransactionRepository transactionRepository;

@@ -1,0 +1,6 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding-block: env(safe-area-inset-top) calc(var(--space-24) + env(safe-area-inset-bottom));
+}

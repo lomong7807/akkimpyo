@@ -18,8 +18,12 @@ import app.accountbook.transaction.TransactionType;
 import app.accountbook.user.User;
 import app.accountbook.user.UserRepository;
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -187,6 +191,321 @@ class SchemaTest {
         assertThatThrownBy(() -> jdbc.update("update category set kind = 'INCOME' where id = ?", parent))
                 .isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("fk_category_parent");
+    }
+
+    @Test
+    void displayNameOverTwentyCharactersIsRejectedByDatabase() {
+        insertUser("twenty@example.com", "가".repeat(20));
+
+        assertThatThrownBy(() -> insertUser("twentyone@example.com", "가".repeat(21)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_users_display_name_length");
+    }
+
+    @Test
+    void emptyDisplayNameIsRejectedByDatabase() {
+        assertThatThrownBy(() -> insertUser("empty@example.com", ""))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_users_display_name_length");
+    }
+
+    @Test
+    void displayNameWithSurroundingSpaceIsRejectedByDatabase() {
+        assertThatThrownBy(() -> insertUser("space@example.com", "주인 "))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_users_display_name_trimmed");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "A@example.com", "Z@example.com", "owner@Example.com",         // 대문자
+            " owner@example.com", "owner@example.com ",                    // 앞뒤 공백
+            "ow ner@example.com",                                          // 가운데 공백
+            "ow\tner@example.com", "owner@example.com\n", "ow\u007Fner@example.com", // 제어 문자
+            "ow\u200Bner@example.com",                                     // 보이지 않는 글자
+            "\u00E9@example.com", "가@example.com", "\u0130@example.com", "owner\uFF20example.com", // ASCII 밖
+            ""})
+    void emailOutsideNormalizedPrintableAsciiIsRejectedByDatabase(String email) {
+        assertThatThrownBy(() -> insertUser(email, "스키마"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_users_email_normalized");
+    }
+
+    @Test
+    void emailWithBoundaryCharactersIsAcceptedByDatabase() {
+        // 허용 범위의 양 끝(!와 ~)과 대문자 구간의 바로 앞뒤(@와 [)다.
+        List<String> emails = List.of("!@example.com", "~@example.com", "[@example.com");
+
+        emails.forEach(email -> insertUser(email, "스키마"));
+
+        assertThat(jdbc.queryForList("select email from users", String.class)).containsAll(emails);
+    }
+
+    @Test
+    void emailOverTwoHundredFiftyFourCharactersIsRejectedByDatabase() {
+        String domain = "@example.com";
+        insertUser("a".repeat(254 - domain.length()) + domain, "스키마");
+
+        assertThatThrownBy(() -> insertUser("a".repeat(255 - domain.length()) + domain, "스키마"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_users_email_length");
+    }
+
+    @Test
+    void sameEmailIsRejectedByNamedUniqueConstraint() {
+        // 이름은 V1의 UNIQUE (email)에 PostgreSQL이 붙인 것이다. UserService가 이 이름으로 동시 가입을 구분한다.
+        insertUser("same@example.com", "처음");
+
+        assertThatThrownBy(() -> insertUser("same@example.com", "두번째"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("users_email_key");
+    }
+
+    @Test
+    void lineAmountAtRangeEdgesIsAcceptedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        insertLine(tx, 9_999_999_999L);
+        insertLine(tx, -9_999_999_999L);
+
+        assertThat(jdbc.queryForList("select amount from transaction_line where transaction_id = ? order by amount",
+                Long.class, tx)).containsExactly(-9_999_999_999L, 9_999_999_999L);
+    }
+
+    @Test
+    void lineAmountOverMaxIsRejectedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        assertThatThrownBy(() -> insertLine(tx, 10_000_000_000L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_line_amount_range");
+    }
+
+    @Test
+    void lineAmountUnderMinIsRejectedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        assertThatThrownBy(() -> insertLine(tx, -10_000_000_000L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_line_amount_range");
+    }
+
+    @Test
+    void lineAmountZeroIsRejectedByRangeConstraint() {
+        // V1의 이름 없는 CHECK(amount <> 0)를 지워도 0은 새 제약이 막는다.
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        assertThatThrownBy(() -> insertLine(tx, 0L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_line_amount_range");
+    }
+
+    @Test
+    void occurredOnAtMinIsAcceptedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2000, 1, 1));
+
+        assertThat(jdbc.queryForObject("select occurred_on from transaction where id = ?", LocalDate.class, tx))
+                .isEqualTo(LocalDate.of(2000, 1, 1));
+    }
+
+    @Test
+    void occurredOnBeforeMinIsRejectedByDatabase() {
+        assertThatThrownBy(() -> insertTransaction(LocalDate.of(1999, 12, 31)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_occurred_on_min");
+    }
+
+    @Test
+    void sameAccountNameInSameLedgerIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+        UUID other = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+        insertAccount(ledger, "생활비", 0L);
+        // 다른 장부에서는 같은 이름이 들어간다.
+        insertAccount(other, "생활비", 0L);
+
+        assertThatThrownBy(() -> insertAccount(ledger, "생활비", 0L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("uq_account_name");
+    }
+
+    @Test
+    void accountNameOverFiftyCharactersIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+        insertAccount(ledger, "가".repeat(50), 0L);
+
+        assertThatThrownBy(() -> insertAccount(ledger, "가".repeat(51), 0L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_name_length");
+    }
+
+    @Test
+    void emptyAccountNameIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, "", 0L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_name_length");
+    }
+
+    @Test
+    void accountNameWithSurroundingSpaceIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, "생활비 ", 0L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_name_trimmed");
+    }
+
+    @Test
+    void openingBalanceAtRangeEdgesIsAcceptedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        insertAccount(ledger, "최대", 9_999_999_999L);
+        insertAccount(ledger, "최소", -9_999_999_999L);
+
+        assertThat(jdbc.queryForList(
+                "select opening_balance from account where ledger_id = ? order by opening_balance",
+                Long.class, ledger)).containsExactly(-9_999_999_999L, 9_999_999_999L);
+    }
+
+    @Test
+    void openingBalanceOverMaxIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, "생활비", 10_000_000_000L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_opening_balance_range");
+    }
+
+    @Test
+    void openingBalanceUnderMinIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, "생활비", -10_000_000_000L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_opening_balance_range");
+    }
+
+    @Test
+    void openingDateAtMinIsAcceptedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        insertAccountOpenedOn(ledger, LocalDate.of(2000, 1, 1));
+
+        assertThat(jdbc.queryForObject("select opening_date from account where ledger_id = ?", LocalDate.class,
+                ledger)).isEqualTo(LocalDate.of(2000, 1, 1));
+    }
+
+    @Test
+    void openingDateBeforeMinIsRejectedByDatabase() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccountOpenedOn(ledger, LocalDate.of(1999, 12, 31)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_opening_date_min");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "",
+            " ", "iphone safari", " iphone.safari", "iphone.safari ",      // 공백
+            "iphone,safari", "iphone/safari", "iphone;safari",             // 허용 구간의 바로 앞뒤: , / ; @ [ ^ `
+            "iphone@safari", "iphone[safari", "iphone^safari", "iphone`safari", "iphone{safari",
+            "iphone.safari\n", "\niphone.safari", "iphone\tsafari", "iphone\u007Fsafari", // 제어 문자
+            "iph\u00F3ne.safari", "아이폰.safari", "iphone.safari\u0661", "iphone.safari\uD83D\uDCF1"}) // ASCII 밖
+    void deviceIdOutsideFormatIsRejectedByDatabase(String deviceId) {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        assertThatThrownBy(() -> insertChangeLog(tx, deviceId))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_change_log_device_id_format");
+    }
+
+    @Test
+    void deviceIdOverSixtyFourCharactersIsRejectedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        assertThatThrownBy(() -> insertChangeLog(tx, "a".repeat(65)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_change_log_device_id_format");
+    }
+
+    @Test
+    void deviceIdWithAllowedCharactersOrNullIsAcceptedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+        List<String> deviceIds = Arrays.asList("a",
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._", ":-", null);
+
+        deviceIds.forEach(deviceId -> insertChangeLog(tx, deviceId));
+
+        assertThat(jdbc.queryForList("select device_id from change_log where transaction_id = ?", String.class, tx))
+                .containsExactlyInAnyOrderElementsOf(deviceIds);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 장부와 사용자를 새로 만들고 거래 id를 돌려준다. */
+    private UUID insertTransaction(LocalDate occurredOn) {
+        UUID user = UUID.randomUUID();
+        UUID ledger = UUID.randomUUID();
+        UUID tx = UUID.randomUUID();
+        jdbc.update("""
+                insert into users (id, email, password_hash, display_name, created_at)
+                values (?, ?, 'hash', '스키마', now())
+                """, user, user + "@example.com");
+        jdbc.update("insert into ledger (id, name, created_at) values (?, '장부', now())", ledger);
+        jdbc.update("""
+                insert into transaction (id, ledger_id, type, occurred_on, status, created_by, version,
+                                         created_at, updated_at)
+                values (?, ?, 'EXPENSE', ?, 'POSTED', ?, 1, now(), now())
+                """, tx, ledger, occurredOn, user);
+        return tx;
+    }
+
+    /**
+     * 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 계좌는 거래의 장부에 새로 만든다.
+     * 한 장부에 여러 번 부를 수 있게 계좌 이름을 호출마다 다르게 한다(uq_account_name).
+     */
+    private void insertLine(UUID transactionId, long amount) {
+        UUID account = UUID.randomUUID();
+        jdbc.update("""
+                insert into account (id, ledger_id, name, type, opening_date, created_at)
+                select ?, ledger_id, ?, 'CASH', DATE '2026-11-01', now() from transaction where id = ?
+                """, account, "현금-" + account, transactionId);
+        jdbc.update("""
+                insert into transaction_line (id, transaction_id, account_id, amount, created_at)
+                values (?, ?, ?, ?, now())
+                """, UUID.randomUUID(), transactionId, account, amount);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
+    private void insertChangeLog(UUID transactionId, String deviceId) {
+        jdbc.update("""
+                insert into change_log (id, transaction_id, ledger_id, action, actor_id, device_id, created_at)
+                select ?, id, ledger_id, 'CREATE', created_by, ?, now() from transaction where id = ?
+                """, UUID.randomUUID(), deviceId, transactionId);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
+    private void insertAccount(UUID ledgerId, String name, long openingBalance) {
+        jdbc.update("""
+                insert into account (id, ledger_id, name, type, opening_balance, opening_date, created_at)
+                values (?, ?, ?, 'BANK', ?, DATE '2026-11-01', now())
+                """, UUID.randomUUID(), ledgerId, name, openingBalance);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
+    private void insertAccountOpenedOn(UUID ledgerId, LocalDate openingDate) {
+        jdbc.update("""
+                insert into account (id, ledger_id, name, type, opening_date, created_at)
+                values (?, ?, '현금', 'CASH', ?, now())
+                """, UUID.randomUUID(), ledgerId, openingDate);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
+    private void insertUser(String email, String displayName) {
+        jdbc.update("""
+                insert into users (id, email, password_hash, display_name, created_at)
+                values (?, ?, 'hash', ?, now())
+                """, UUID.randomUUID(), email, displayName);
     }
 
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */

@@ -1,6 +1,7 @@
 # ADR 002: API 공통 규칙과 오류 응답 형식
 
 - 상태: 제안됨 (2026-11-24)
+- 보완: 2026-11-25, 5절에서 `TOO_MANY_REQUESTS`에 비밀번호 해시의 상한과 `Retry-After`의 값을 더하고 예외 목록을 main과 맞춘다. "지금 코드와 다른 점"의 `IdConflictException` 줄을 맞춘다(PR #167)
 - 결정한 사람: architect (검토: owner, 의견: frontend)
 
 ## 배경
@@ -112,6 +113,7 @@
 | 401 | `INVALID_CREDENTIALS` | 로그인 실패. 이메일과 비밀번호 중 무엇이 틀렸는지 구분하지 않는다(P-105) |
 | 403 | `FORBIDDEN` | 구성원이지만 권한이 모자란다(보기 전용의 쓰기, 소유자 전용 동작) |
 | 403 | `NO_LONGER_MEMBER` | 2단계에 추가. 내가 구성원이었던 장부(나갔거나 내보내짐, 삭제됨)(P-903, P-310, F-906). 본인이 이미 아는 사실이라 드러나는 것이 없다. 판정은 지난 구성원 기록으로만 하고, 응답에 장부의 값(이름 등)을 넣지 않는다. 기록이 남아 있는 동안만 준다. 그 기록은 장부 영구 삭제와 탈퇴 때 지우며, 기록이 없으면 404 `NOT_FOUND`다 |
+| 403 | `ORIGIN_NOT_ALLOWED` | 인증 경로에 다른 출처에서 왔거나 전용 헤더가 없는 요청. ADR 001 결정 5 |
 | 404 | `NOT_FOUND` | 없는 자원. 한 번도 구성원이 아니었던 장부와 그 데이터도 같은 응답이며 없는 것과 구분되지 않는다(P-903) |
 | 405 | `METHOD_NOT_ALLOWED` | 그 경로에서 받지 않는 메서드 |
 | 409 | `STALE_VERSION` | 낡은 version으로 고치려 했다. `current`가 있다 |
@@ -121,7 +123,7 @@
 | 413 | `PAYLOAD_TOO_LARGE` | 본문이 너무 크다 |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | 지원하지 않는 Content-Type |
 | 429 | `LOGIN_LOCKED` | 로그인 잠금(P-105). `Retry-After` 헤더를 넣는다 |
-| 429 | `TOO_MANY_REQUESTS` | 출시 단계의 요청 횟수 제한. `Retry-After` 헤더를 넣는다 |
+| 429 | `TOO_MANY_REQUESTS` | 동시에 도는 비밀번호 해시의 상한(1단계부터, ADR 001 결정 7)과 출시 단계의 요청 횟수 제한. `Retry-After` 헤더를 넣는다. 초 단위 정수이고 해시 상한은 1이다 |
 | 500 | `INTERNAL_ERROR` | 서버 오류. `detail`은 고정 문구다 |
 
 검사 순서는 인증(401) → 구성원 확인(404) → 권한(403) → 입력 검증(400) → 상태와 version(409)이다. 409의 `current`는 구성원 확인을 지난 요청에만 나간다.
@@ -134,10 +136,10 @@
 
 이슈 #24의 목록(400, 401, 403, 404, 409)에 405, 413, 415, 429, 500을 더했다. 로그인 잠금을 429로 둔 것은 architect 판단이며 security가 429에 동의했다(PR #97 검토, 2026-11-24). 잠금 응답이 계정의 존재를 드러내지 않게 하는 방법은 ADR 001에서 security와 정한다.
 
-지금 `common` 패키지에 있는 예외 8개는 다음 code가 된다(클래스 이름 확인, main `baaa2a4`).
+지금 `common` 패키지에 있는 예외 9개와 `transaction` 패키지의 `IdConflictException`은 다음 code가 된다(클래스 이름 확인, main `38a65a3`).
 
-- `DuplicateEmailException` → 400 `VALIDATION_FAILED`(`fieldErrors[].code`=`DUPLICATE`)
-- `IdConflictException` → 409 `ID_CONFLICT`
+- `DuplicateAccountNameException`, `DuplicateCategoryNameException`, `DuplicateEmailException` → 400 `VALIDATION_FAILED`(`fieldErrors[].code`=`DUPLICATE`)
+- `IdConflictException`(`transaction`) → 409 `ID_CONFLICT`
 - `InUseException` → 409 `IN_USE`
 - `InvalidRequestException` → 400 `VALIDATION_FAILED`(상태 오류는 409 `INVALID_STATE`)
 - `NotFoundException` → 404 `NOT_FOUND`
@@ -179,7 +181,7 @@
 구현 이슈에서 맞춘다. 이 PR은 코드를 바꾸지 않는다(확인, main `baaa2a4`).
 
 - `LedgerAccess.requireOwner`는 구성원이 아니어도 `NotLedgerOwnerException`을 던진다. 404가 먼저여야 한다.
-- `IdConflictException`은 내용이 다를 때와 다른 장부의 id일 때를 함께 다룬다(#21).
+- `IdConflictException`이 내용이 다를 때와 다른 장부의 id일 때를 함께 다루던 것은 끝났다(#21, PR #151). 이제 앞의 경우만 저장된 거래(`current`)를 담는다(확인, main `38a65a3`).
 - `InvalidRequestException`은 입력란 정보가 없고 상태 오류에도 쓰인다. `VALIDATION_FAILED`와 `INVALID_STATE`로 나눠야 한다.
 - 거래 서비스의 조회, 수정, 취소, 삭제, 복원은 거래 id만 받는다. 거래 API는 경로의 `ledgerId`와 거래의 장부가 같은지 확인해야 한다. 다르면 404다.
 - 거래에 마지막으로 고친 사람을 담는 값이 없다. V1의 `transaction`과 `TransactionView`에는 고친 시각만 있고, 바꾼 사람은 `change_log.actor_id`에만 남는다.
