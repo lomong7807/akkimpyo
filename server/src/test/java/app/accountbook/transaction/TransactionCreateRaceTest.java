@@ -2,6 +2,7 @@ package app.accountbook.transaction;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.awaitility.Awaitility.await;
 
 import app.accountbook.account.AccountType;
@@ -118,8 +119,45 @@ class TransactionCreateRaceTest {
         }
     }
 
-    /** 앞 요청의 트랜잭션을 연 채로 뒤 요청을 보내고, 뒤 요청이 앞 요청을 기다리게 된 것을 본 뒤 앞 요청을 커밋한다. */
+    /**
+     * 뒤 요청이 같은 id도 완전 삭제 기록도 없다고 본 뒤 INSERT하기 전에, 그 id가 만들어지고 완전히 지워진 경우다.
+     * 부딪힐 행이 지워져 기본키 위반이 나지 않는다.
+     */
+    @Test
+    void 기다리는_사이_만들어지고_완전히_지워진_id면_새로_만들지_않는다() {
+        Race race = race(() -> create(owner, ledgerId, cash, 12_000), () -> create(owner, ledgerId, cash, 12_000),
+                this::purge);
+
+        assertThat(conflictOf(race).current()).isEmpty();
+        assertOnlyPurgeRecordIsStored();
+    }
+
+    @Test
+    void 완전_삭제가_커밋되기_전의_재전송은_있던_거래로_답하고_커밋된_뒤에는_거부된다() {
+        CreateResult stored = create(owner, ledgerId, cash, 12_000);
+
+        CreateResult during = transactionTemplate.execute(status -> {
+            purge();
+            return CompletableFuture.supplyAsync(() -> create(owner, ledgerId, cash, 12_000))
+                    .orTimeout(TIMEOUT.toSeconds(), TimeUnit.SECONDS).join();
+        });
+        IdConflictException after = catchThrowableOfType(IdConflictException.class,
+                () -> create(owner, ledgerId, cash, 12_000));
+
+        assertThat(during).isEqualTo(new CreateResult(stored.transaction(), false));
+        assertThat(after.current()).isEmpty();
+        assertOnlyPurgeRecordIsStored();
+    }
+
     private Race race(Supplier<CreateResult> first, Supplier<CreateResult> second) {
+        return race(first, second, () -> { });
+    }
+
+    /**
+     * 앞 요청의 트랜잭션을 연 채로 뒤 요청을 보내고, 뒤 요청이 앞 요청을 기다리게 된 것을 본 뒤 앞 요청을 커밋한다.
+     * beforeCommit은 뒤 요청이 기다리는 동안 앞 요청의 트랜잭션에서 한다.
+     */
+    private Race race(Supplier<CreateResult> first, Supplier<CreateResult> second, Runnable beforeCommit) {
         return transactionTemplate.execute(status -> {
             CreateResult result = first.get();
             entityManager.flush();
@@ -130,8 +168,16 @@ class TransactionCreateRaceTest {
                     select exists (select 1 from pg_locks
                                     where not granted and pg_backend_pid() = any (pg_blocking_pids(pid)))
                     """, Boolean.class));
+            beforeCommit.run();
             return new Race(result, waiting);
         });
+    }
+
+    /** 완전 삭제(#9)가 한 트랜잭션에서 할 일: 그 거래의 이력과 거래를 지우고 기록 한 행만 남긴다. */
+    private void purge() {
+        jdbc.update("delete from change_log where transaction_id = ?", id);
+        jdbc.update("delete from transaction where id = ?", id);
+        fixtures.purgeRecord(id, ledgerId, ChangeAction.PURGE, owner.getId());
     }
 
     private CreateResult create(User actor, UUID ledger, UUID account, long amount) {
@@ -150,6 +196,12 @@ class TransactionCreateRaceTest {
         assertThat(transactionService.get(owner.getId(), id)).isEqualTo(race.first().transaction());
         assertThat(transactionService.history(owner.getId(), id)).extracting(ChangeLogView::action)
                 .containsExactly(ChangeAction.CREATE);
+    }
+
+    private void assertOnlyPurgeRecordIsStored() {
+        assertThat(jdbc.queryForObject("select count(*) from transaction where id = ?", Integer.class, id)).isZero();
+        assertThat(jdbc.queryForList("select action from change_log where transaction_id = ?", String.class, id))
+                .containsExactly("PURGE");
     }
 
     record Race(CreateResult first, CompletableFuture<CreateResult> second) {

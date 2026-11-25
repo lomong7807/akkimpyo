@@ -144,6 +144,24 @@ class TransactionCreateOrderTest {
                 .isInstanceOf(IdConflictException.class);
     }
 
+    /** 완전히 지운 id의 확인은 같은 id 조회 자리다: 구성원과 형식 검증 뒤, 참조 검증 앞. */
+    @Test
+    void 완전히_지운_id는_구성원과_형식을_본_뒤_참조_검증보다_먼저_거부한다() {
+        UUID purged = UUID.randomUUID();
+        fixtures.purgeRecord(purged, ledgerId, ChangeAction.PURGE, owner.getId());
+
+        assertThatThrownBy(() -> transactionService.create(stranger.getId(), ledgerId, expense(purged, 12_000, null),
+                DEVICE))
+                .isInstanceOf(NotLedgerMemberException.class);
+        assertThatThrownBy(() -> transactionService.create(owner.getId(), ledgerId, expense(purged, 0, null), DEVICE))
+                .isInstanceOf(InvalidRequestException.class);
+        // 계좌가 내 장부의 것이 아니지만, 그 전에 쓸 수 없는 id로 판정된다.
+        assertThatThrownBy(() -> transactionService.create(owner.getId(), ledgerId,
+                new Entry(purged, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 12_000, false,
+                        "김밥천국", null, null), DEVICE))
+                .isInstanceOf(IdConflictException.class);
+    }
+
     @Test
     void 새_id는_참조_검증을_지나야_저장된다() {
         UUID id = UUID.randomUUID();

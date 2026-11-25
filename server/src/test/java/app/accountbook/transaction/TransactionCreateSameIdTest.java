@@ -27,10 +27,11 @@ import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * 같은 id의 만들기 요청에 대한 판정 표(ADR 006 결정 3).
- * "완전히 지운 거래의 id"는 완전 삭제 기록이 아직 없어 여기서 다루지 않는다(#9, #60).
+ * 완전 삭제 기능은 아직 없어(#9) 완전 삭제 기록은 DB에 직접 넣는다.
  */
 @IntegrationTest
 class TransactionCreateSameIdTest {
@@ -47,6 +48,7 @@ class TransactionCreateSameIdTest {
     @Autowired CategoryService categoryService;
     @Autowired Fixtures fixtures;
     @Autowired EntityManager entityManager;
+    @Autowired JdbcTemplate jdbc;
 
     User owner;
     User member;
@@ -216,7 +218,7 @@ class TransactionCreateSameIdTest {
 
     // ---------------------------------------------------------------- 5줄: 그 밖
 
-    /** 세 경우 가운데 완전히 지운 id를 뺀 둘. 어느 경우든 예외의 종류, 메시지, 담긴 값이 같다. */
+    /** 세 경우 가운데 다른 장부의 id와 다른 사람이 만든 id. 어느 경우든 예외의 종류, 메시지, 담긴 값이 같다. */
     @Test
     void 쓸_수_없는_id는_이유와_상관없이_같은_충돌이고_아무것도_담지_않는다() {
         User stranger = fixtures.user("stranger@example.com");
@@ -244,15 +246,30 @@ class TransactionCreateSameIdTest {
                 "같은 장부에서 다른 사람이 만들어 휴지통에 있는 id", othersDeleted);
 
         unusable.forEach((label, tx) -> {
-            // 같은 내용(다른 사람의 거래와 똑같은 요청)이든 다른 내용이든 답이 같다.
-            List.of(7_300L, 9_900L).forEach(amount -> {
-                IdConflictException conflict = conflictOf(member, ledgerId, new Entry(tx.id(), TransactionType.EXPENSE,
-                        DAY, null, cash, null, amount, false, null, null, owner.getId()));
-                assertThat(conflict).as(label).isExactlyInstanceOf(IdConflictException.class)
-                        .hasMessage("이 id는 쓸 수 없습니다.").hasNoCause();
-                assertThat(conflict.current()).as(label).isEmpty();
-            });
+            assertUnusable(label, tx.id());
             assertThat(transactionService.history(tx.createdBy(), tx.id())).as(label).hasSize((int) tx.version());
+        });
+        assertThat(transactionRepository.count()).isEqualTo(count);
+    }
+
+    /** 세 경우 가운데 완전히 지운 id(ADR 007 결정 7). 누가 어느 장부에서 어떻게 지웠든 위의 두 경우와 답이 같다. */
+    @Test
+    void 완전히_지운_거래의_id로는_다시_만들_수_없고_답이_다른_쓸_수_없는_id와_같다() {
+        User stranger = fixtures.user("stranger@example.com");
+        UUID strangerLedger = fixtures.personalLedgerId(stranger);
+        Map<String, UUID> purged = Map.of(
+                "내 장부에서 내가 지운 id", purged(ledgerId, ChangeAction.PURGE, member.getId()),
+                "내 장부에서 다른 사람이 지운 id", purged(ledgerId, ChangeAction.PURGE, owner.getId()),
+                "내 장부에서 탈퇴한 사람이 지운 id", purged(ledgerId, ChangeAction.PURGE, null),
+                "내 장부에서 자동으로 지워진 id", purged(ledgerId, ChangeAction.AUTO_PURGE, null),
+                "다른 장부에서 사람이 지운 id", purged(strangerLedger, ChangeAction.PURGE, stranger.getId()),
+                "다른 장부에서 자동으로 지워진 id", purged(strangerLedger, ChangeAction.AUTO_PURGE, null));
+        long count = transactionRepository.count();
+
+        purged.forEach((label, txId) -> {
+            assertUnusable(label, txId);
+            assertThat(jdbc.queryForList("select version from change_log where transaction_id = ?", Long.class, txId))
+                    .as(label).containsExactly(3L);
         });
         assertThat(transactionRepository.count()).isEqualTo(count);
     }
@@ -270,6 +287,23 @@ class TransactionCreateSameIdTest {
                 () -> transactionService.createOrReplay(actor.getId(), ledger, command, DEVICE));
         assertThat(conflict).isNotNull();
         return conflict;
+    }
+
+    /** 같은 내용(다른 사람의 거래와 똑같은 요청)이든 다른 내용이든 답이 같다. */
+    private void assertUnusable(String label, UUID txId) {
+        List.of(7_300L, 9_900L).forEach(amount -> {
+            IdConflictException conflict = conflictOf(member, ledgerId, new Entry(txId, TransactionType.EXPENSE, DAY,
+                    null, cash, null, amount, false, null, null, owner.getId()));
+            assertThat(conflict).as(label).isExactlyInstanceOf(IdConflictException.class)
+                    .hasMessage("이 id는 쓸 수 없습니다.").hasNoCause();
+            assertThat(conflict.current()).as(label).isEmpty();
+        });
+    }
+
+    private UUID purged(UUID ledger, ChangeAction action, UUID actor) {
+        UUID txId = UUID.randomUUID();
+        fixtures.purgeRecord(txId, ledger, action, actor);
+        return txId;
     }
 
     private TransactionView stored() {

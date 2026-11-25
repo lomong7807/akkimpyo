@@ -565,6 +565,88 @@ class SchemaTest {
                 .containsExactlyInAnyOrderElementsOf(deviceIds);
     }
 
+    @Test
+    void sameVersionOfSameTransactionInChangeLogIsRejectedByDatabase() {
+        LedgerRows mine = insertLedgerRows();
+        UUID actor = UUID.randomUUID();
+        insertChangeLog(mine.transaction(), mine.ledger(), 1L, actor);
+        // 다른 번호와, 다른 거래의 같은 번호는 들어간다.
+        insertChangeLog(mine.transaction(), mine.ledger(), 2L, actor);
+        insertChangeLog(UUID.randomUUID(), mine.ledger(), 1L, actor);
+
+        assertRejectedBy("uq_change_log_transaction_version",
+                () -> insertChangeLog(mine.transaction(), mine.ledger(), 1L, actor));
+        // 장부가 달라도 같은 거래의 같은 번호다.
+        LedgerRows other = insertLedgerRows();
+        assertRejectedBy("uq_change_log_transaction_version",
+                () -> insertChangeLog(mine.transaction(), other.ledger(), 1L, actor));
+    }
+
+    @Test
+    void changeLogWithoutVersionIsRejectedByDatabase() {
+        LedgerRows mine = insertLedgerRows();
+
+        assertRejectedBy("null value in column \"version\"",
+                () -> insertChangeLog(mine.transaction(), mine.ledger(), null, UUID.randomUUID()));
+    }
+
+    @Test
+    void changeLogOfMissingLedgerIsRejectedByDatabase() {
+        LedgerRows mine = insertLedgerRows();
+
+        assertRejectedBy("fk_change_log_ledger",
+                () -> insertChangeLog(mine.transaction(), UUID.randomUUID(), 1L, UUID.randomUUID()));
+    }
+
+    @Test
+    void ledgerWithChangeLogCannotBeDeletedInDatabase() {
+        // 장부 삭제는 CASCADE에 기대지 않는다. 이력이 남아 있으면 장부를 지울 수 없다.
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+        insertChangeLog(UUID.randomUUID(), ledger, 1L, UUID.randomUUID());
+
+        assertRejectedBy("fk_change_log_ledger", () -> jdbc.update("delete from ledger where id = ?", ledger));
+
+        jdbc.update("delete from change_log where ledger_id = ?", ledger);
+        assertThat(jdbc.update("delete from ledger where id = ?", ledger)).isEqualTo(1);
+    }
+
+    @Test
+    void changeLogOutlivesItsTransactionInDatabase() {
+        // transaction_id는 FK가 아니다. 거래를 지워도 이력이 남고, 없는 거래의 이력도 들어간다.
+        LedgerRows mine = insertLedgerRows();
+        insertChangeLog(mine.transaction(), mine.ledger(), 1L, UUID.randomUUID());
+
+        jdbc.update("delete from transaction where id = ?", mine.transaction());
+        insertChangeLog(mine.transaction(), mine.ledger(), 2L, UUID.randomUUID());
+
+        assertThat(jdbc.queryForList("select version from change_log where transaction_id = ? order by version",
+                Long.class, mine.transaction())).containsExactly(1L, 2L);
+    }
+
+    @Test
+    void changeLogWithoutActorIsAcceptedByDatabase() {
+        // 서버가 한 일과 탈퇴한 사람의 자리(ADR 007 결정 5, 6).
+        LedgerRows mine = insertLedgerRows();
+
+        insertChangeLog(mine.transaction(), mine.ledger(), 1L, null);
+
+        assertThat(jdbc.queryForObject("select count(*) from change_log where transaction_id = ? and actor_id is null",
+                Integer.class, mine.transaction())).isEqualTo(1);
+    }
+
+    @Test
+    void changeLogFormatVersionIsOneUnlessGivenAndNeverBelowOneInDatabase() {
+        LedgerRows mine = insertLedgerRows();
+        insertChangeLog(mine.transaction(), mine.ledger(), 1L, UUID.randomUUID());
+
+        assertThat(jdbc.queryForObject("select format_version from change_log where transaction_id = ?",
+                Integer.class, mine.transaction())).isEqualTo(1);
+        assertRejectedBy("ck_change_log_format_version_min", () -> jdbc.update(
+                "update change_log set format_version = 0 where transaction_id = ?", mine.transaction()));
+        assertRejectedBy("null value in column \"format_version\"", () -> jdbc.update(
+                "update change_log set format_version = null where transaction_id = ?", mine.transaction()));
+    }
+
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 장부와 사용자를 새로 만들고 거래 id를 돌려준다. */
     private UUID insertTransaction(LocalDate occurredOn) {
         UUID user = UUID.randomUUID();
@@ -636,12 +718,25 @@ class SchemaTest {
     private record LedgerRows(UUID ledger, UUID transaction, UUID account, UUID category) {
     }
 
-    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
+    /**
+     * 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 한 거래에 여러 번 부를 수 있게 번호(version)를 하나씩 올린다
+     * (uq_change_log_transaction_version).
+     */
     private void insertChangeLog(UUID transactionId, String deviceId) {
         jdbc.update("""
-                insert into change_log (id, transaction_id, ledger_id, action, actor_id, device_id, created_at)
-                select ?, id, ledger_id, 'CREATE', created_by, ?, now() from transaction where id = ?
+                insert into change_log (id, transaction_id, ledger_id, version, action, actor_id, device_id, created_at)
+                select ?, id, ledger_id, 1 + (select count(*) from change_log where transaction_id = t.id), 'CREATE',
+                       created_by, ?, now()
+                  from transaction t where id = ?
                 """, UUID.randomUUID(), deviceId, transactionId);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 거래와 장부가 있는지도 보지 않는다. 형식 버전은 적지 않는다. */
+    private void insertChangeLog(UUID transactionId, UUID ledgerId, Long version, UUID actorId) {
+        jdbc.update("""
+                insert into change_log (id, transaction_id, ledger_id, version, action, actor_id, created_at)
+                values (?, ?, ?, ?, 'CREATE', ?, now())
+                """, UUID.randomUUID(), transactionId, ledgerId, version, actorId);
     }
 
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */

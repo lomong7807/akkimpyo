@@ -9,6 +9,7 @@ import app.accountbook.category.CategoryRepository;
 import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRole;
+import app.accountbook.transaction.ChangeAction;
 import app.accountbook.transaction.Transaction;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionRepository;
@@ -20,6 +21,7 @@ import app.accountbook.user.UserService;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.boot.test.context.TestComponent;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /** 서비스 테스트에서 반복되는 준비 작업. {@link IntegrationTest}가 등록한다. */
 @TestComponent
@@ -33,16 +35,18 @@ public class Fixtures {
     private final LedgerMemberRepository memberRepository;
     private final TransactionRepository transactionRepository;
     private final CategoryRepository categoryRepository;
+    private final JdbcTemplate jdbc;
 
     Fixtures(UserService userService, AccountService accountService, TransactionService transactionService,
              LedgerMemberRepository memberRepository, TransactionRepository transactionRepository,
-             CategoryRepository categoryRepository) {
+             CategoryRepository categoryRepository, JdbcTemplate jdbc) {
         this.userService = userService;
         this.accountService = accountService;
         this.transactionService = transactionService;
         this.memberRepository = memberRepository;
         this.transactionRepository = transactionRepository;
         this.categoryRepository = categoryRepository;
+        this.jdbc = jdbc;
     }
 
     /**
@@ -122,6 +126,17 @@ public class Fixtures {
 
     public TransactionView delete(User actor, TransactionView tx) {
         return transactionService.delete(actor.getId(), tx.id(), tx.version(), DEVICE);
+    }
+
+    /**
+     * 거래를 완전히 지운 기록 한 행을 DB에 바로 넣는다. 완전 삭제 기능(#9)이 아직 없어 그 결과만 만든다.
+     * 만들고(1) 휴지통에 넣고(2) 완전히 지운(3) 거래라 번호가 3이고, 전후 값과 기기 값이 없다(ADR 007 결정 2, 7).
+     */
+    public void purgeRecord(UUID transactionId, UUID ledgerId, ChangeAction action, UUID actorId) {
+        jdbc.update("""
+                insert into change_log (id, transaction_id, ledger_id, version, action, actor_id, created_at)
+                values (?, ?, ?, 3, ?, ?, now())
+                """, UUID.randomUUID(), transactionId, ledgerId, action.name(), actorId);
     }
 
     private TransactionView entry(User actor, UUID ledgerId, TransactionType type, boolean refund, UUID accountId,
