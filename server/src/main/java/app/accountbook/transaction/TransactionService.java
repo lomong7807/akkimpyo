@@ -74,15 +74,19 @@ public class TransactionService {
     /**
      * 거래를 만든다. id는 클라이언트 값이다. 같은 id가 이미 있으면(삭제된 것 포함) 같은 장부·같은 내용일 때
      * 저장된 거래를 그대로 돌려주고(이력 추가 없음), 아니면 {@link IdConflictException}.
+     *
+     * <p>검사 순서(ADR 006 결정 4): 구성원 → 형식 검증 → 같은 id 조회 → 참조 검증 → 저장.
+     * 이미 저장된 거래의 재전송이 그사이 없어진 계좌나 카테고리 때문에 거부되지 않게 한다.
      */
     @Transactional
     public TransactionView create(UUID actorId, UUID ledgerId, TransactionCommand cmd, String deviceId) {
         ledgerAccess.requireMember(actorId, ledgerId);
-        Content content = resolve(ledgerId, cmd, actorId);
+        Content content = normalize(ledgerId, cmd, actorId);
         Optional<Transaction> existing = transactionRepository.findById(content.id());
         if (existing.isPresent()) {
             return replay(existing.get(), ledgerId, content);
         }
+        requireReferences(ledgerId, cmd);
         Transaction tx = Transaction.of(content.id(), ledgerId, content.type(), content.occurredOn(),
                 content.occurredTime(), content.payee(), content.memo(), actorId, content.paidBy());
         content.lines().forEach(line -> tx.addLine(line.accountId(), line.categoryId(), line.amount()));
@@ -99,7 +103,8 @@ public class TransactionService {
         Transaction tx = loadAccessible(actorId, txId);
         requireVersion(tx, expectedVersion);
         requireNotDeleted(tx, "삭제된 거래는 수정할 수 없습니다.");
-        Content content = resolve(tx.getLedgerId(), cmd, tx.getPaidBy());
+        Content content = normalize(tx.getLedgerId(), cmd, tx.getPaidBy());
+        requireReferences(tx.getLedgerId(), cmd);
         if (!tx.getId().equals(content.id())) {
             throw new InvalidRequestException("요청의 거래 id가 수정 대상과 다릅니다.");
         }
@@ -239,16 +244,20 @@ public class TransactionService {
         }
     }
 
-    private Content resolve(UUID ledgerId, TransactionCommand cmd, UUID defaultPaidBy) {
+    /**
+     * 형식 검증(필수 항목, 형식, 범위)과 비교 전의 값 맞추기. 계좌와 카테고리가 장부에 있는지는 보지 않는다.
+     * 돌려주는 값은 저장할 내용이고 재전송 비교에도 쓴다.
+     */
+    private Content normalize(UUID ledgerId, TransactionCommand cmd, UUID defaultPaidBy) {
         return switch (cmd) {
             case null -> throw new InvalidRequestException("거래 정보가 없습니다.");
-            case Entry entry -> resolveEntry(ledgerId, entry, defaultPaidBy);
-            case Transfer transfer -> resolveTransfer(ledgerId, transfer);
+            case Entry entry -> normalizeEntry(ledgerId, entry, defaultPaidBy);
+            case Transfer transfer -> normalizeTransfer(ledgerId, transfer);
         };
     }
 
     /** 라인 부호: 지출 -amount, 환불(지출) +amount, 수입 +amount. 카테고리가 없으면 미분류. */
-    private Content resolveEntry(UUID ledgerId, Entry entry, UUID defaultPaidBy) {
+    private Content normalizeEntry(UUID ledgerId, Entry entry, UUID defaultPaidBy) {
         requireHeader(entry.id(), entry.occurredOn());
         requireDateInRange(ledgerId, entry.occurredOn());
         if (entry.type() != TransactionType.EXPENSE && entry.type() != TransactionType.INCOME) {
@@ -260,12 +269,11 @@ public class TransactionService {
         }
         requireMaxLength(entry.payee(), PAYEE_MAX_LENGTH, "가맹점/내용");
         requireMaxLength(entry.memo(), MEMO_MAX_LENGTH, "메모");
-        requireAccountInLedger(ledgerId, entry.accountId());
-        CategoryKind kind = entry.type() == TransactionType.EXPENSE ? CategoryKind.EXPENSE : CategoryKind.INCOME;
+        requireAccountGiven(entry.accountId());
         UUID categoryId = entry.categoryId() == null
-                ? categoryService.uncategorized(ledgerId, kind).getId()
-                : requireCategoryInLedger(ledgerId, kind, entry.categoryId());
-        UUID paidBy = entry.paidBy() == null ? defaultPaidBy : requirePayer(ledgerId, entry.paidBy());
+                ? categoryService.uncategorized(ledgerId, categoryKind(entry)).getId()
+                : entry.categoryId();
+        UUID paidBy = entry.paidBy() == null ? defaultPaidBy : entry.paidBy();
         boolean increasesBalance = entry.type() == TransactionType.INCOME || entry.refund();
         long amount = increasesBalance ? entry.amount() : -entry.amount();
         return new Content(entry.id(), entry.type(), entry.occurredOn(),
@@ -274,13 +282,13 @@ public class TransactionService {
     }
 
     /** 이체: from 라인 -amount, to 라인 +amount. 카테고리·paidBy·payee가 없다. */
-    private Content resolveTransfer(UUID ledgerId, Transfer transfer) {
+    private Content normalizeTransfer(UUID ledgerId, Transfer transfer) {
         requireHeader(transfer.id(), transfer.occurredOn());
         requireDateInRange(ledgerId, transfer.occurredOn());
         TransactionLimits.requireAmountInRange(transfer.amount());
         requireMaxLength(transfer.memo(), MEMO_MAX_LENGTH, "메모");
-        requireAccountInLedger(ledgerId, transfer.fromAccountId());
-        requireAccountInLedger(ledgerId, transfer.toAccountId());
+        requireAccountGiven(transfer.fromAccountId());
+        requireAccountGiven(transfer.toAccountId());
         if (transfer.fromAccountId().equals(transfer.toAccountId())) {
             throw new InvalidRequestException("같은 계좌로는 이체할 수 없습니다.");
         }
@@ -288,6 +296,38 @@ public class TransactionService {
                 Transaction.storableTime(transfer.occurredTime()), null, transfer.memo(), null,
                 List.of(new Line(transfer.fromAccountId(), null, -transfer.amount()),
                         new Line(transfer.toAccountId(), null, transfer.amount())));
+    }
+
+    /**
+     * 참조 검증: 계좌와 카테고리가 이 장부에 있는지, 카테고리의 수입·지출 구분이 맞는지, 결제한 사람이 구성원인지.
+     * {@link #normalize}를 통과한 요청에만 쓴다.
+     */
+    private void requireReferences(UUID ledgerId, TransactionCommand cmd) {
+        switch (cmd) {
+            case Entry entry -> {
+                requireAccountInLedger(ledgerId, entry.accountId());
+                if (entry.categoryId() != null) {
+                    requireCategoryInLedger(ledgerId, categoryKind(entry), entry.categoryId());
+                }
+                if (entry.paidBy() != null) {
+                    requirePayer(ledgerId, entry.paidBy());
+                }
+            }
+            case Transfer transfer -> {
+                requireAccountInLedger(ledgerId, transfer.fromAccountId());
+                requireAccountInLedger(ledgerId, transfer.toAccountId());
+            }
+        }
+    }
+
+    private static CategoryKind categoryKind(Entry entry) {
+        return entry.type() == TransactionType.EXPENSE ? CategoryKind.EXPENSE : CategoryKind.INCOME;
+    }
+
+    private static void requireAccountGiven(UUID accountId) {
+        if (accountId == null) {
+            throw new InvalidRequestException("계좌가 없습니다.");
+        }
     }
 
     private static void requireHeader(UUID id, LocalDate occurredOn) {
@@ -315,7 +355,7 @@ public class TransactionService {
     }
 
     private void requireAccountInLedger(UUID ledgerId, UUID accountId) {
-        boolean inLedger = accountId != null && accountRepository.findById(accountId)
+        boolean inLedger = accountRepository.findById(accountId)
                 .map(Account::getLedgerId)
                 .filter(ledgerId::equals)
                 .isPresent();
@@ -324,24 +364,22 @@ public class TransactionService {
         }
     }
 
-    private UUID requireCategoryInLedger(UUID ledgerId, CategoryKind kind, UUID categoryId) {
+    private void requireCategoryInLedger(UUID ledgerId, CategoryKind kind, UUID categoryId) {
         Category category = categoryRepository.findById(categoryId)
                 .filter(candidate -> candidate.getLedgerId().equals(ledgerId))
                 .orElseThrow(() -> new InvalidRequestException("장부에 없는 카테고리입니다."));
         if (category.getKind() != kind) {
             throw new InvalidRequestException("거래 종류와 카테고리의 수입·지출 구분이 다릅니다.");
         }
-        return category.getId();
     }
 
-    private UUID requirePayer(UUID ledgerId, UUID paidBy) {
+    private void requirePayer(UUID ledgerId, UUID paidBy) {
         if (!ledgerAccess.isMember(paidBy, ledgerId)) {
             throw new InvalidRequestException("결제한 사람은 장부 구성원이어야 합니다.");
         }
-        return paidBy;
     }
 
-    /** 요청을 검증·해석한 저장 내용. 재전송 비교에도 쓴다. */
+    /** 형식 검증을 지난 요청의 저장 내용. 재전송 비교에도 쓴다. */
     private record Content(UUID id, TransactionType type, LocalDate occurredOn, LocalTime occurredTime,
                            String payee, String memo, UUID paidBy, List<Line> lines) {
 
