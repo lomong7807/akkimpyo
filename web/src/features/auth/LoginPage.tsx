@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router'
 import { Button, ButtonLink } from '../../components/Button'
 import ErrorMessage from '../../components/ErrorMessage'
 import { PasswordField, TextField } from '../../components/TextField'
-import { loginFields, normalizeEmail, validateLogin, type LoginField } from './loginForm'
+import { loginFields, validateLogin, type LoginField } from './loginForm'
 import { isWrongCredentials, useLogin } from './useLogin'
 import styles from './LoginPage.module.css'
 
@@ -41,10 +41,7 @@ export default function LoginPage() {
       input.current?.focus()
       return
     }
-    login.mutate(
-      { email: normalizeEmail(values.email), password: values.password },
-      { onSuccess: () => navigate('/home', { replace: true }) },
-    )
+    login.mutate(values, { onSuccess: () => navigate('/home', { replace: true }) })
   }
 
   function handleSubmit(event: SubmitEvent) {

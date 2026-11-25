@@ -117,6 +117,7 @@ describe('입력값 검사', () => {
   it.each([
     ['', emailRequired],
     ['   ', emailRequired],
+    ['\t \f', emailRequired],
     ['name', emailFormat],
     ['@example.com', emailFormat],
     ['name@', emailFormat],
@@ -130,6 +131,12 @@ describe('입력값 검사', () => {
     ['na\u0007me@example.com', emailFormat],
     // 소문자로 바꾸면 ASCII k가 되는 켈빈 기호
     ['\u212Aim@example.com', emailFormat],
+    // trim()은 지우지만 서버는 거부하는 글자
+    ['\u00a0name@example.com', emailFormat],
+    ['name@example.com\u00a0', emailFormat],
+    ['\ufeffname@example.com', emailFormat],
+    ['\u00a0', emailFormat],
+    ['\vname@example.com', emailFormat],
   ])('이메일 "%s"로 칸을 벗어나면 "%s"를 보인다', async (value, message) => {
     const { user } = openLogin()
     if (value) await user.paste(value)
@@ -142,7 +149,7 @@ describe('입력값 검사', () => {
   it.each([
     'name@example.com',
     '  Name@Example.COM  ',
-    '\u00a0name@example.com\u00a0',
+    '\t\f name@example.com \f\t',
     'a@b',
     "!#$%&'*+/=?^_`{|}~.-@xn--bj0bj06e.kr",
   ])('이메일 "%s"는 맞는 형식이다', async (value) => {
@@ -263,13 +270,13 @@ describe('제출할 때의 검사', () => {
 })
 
 describe('보내기', () => {
-  it('이메일은 앞뒤 공백을 지우고 소문자로 바꿔 보내고, 화면의 값과 비밀번호는 그대로다', async () => {
+  it('공백과 대문자가 섞인 이메일과 비밀번호를 쓴 그대로 보내고, 화면의 값도 그대로다', async () => {
     const bodies = respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
     const { user } = openLogin()
     await fill(user, ' Name@Example.COM ', ' Pass 1234 ')
     await user.click(loginButton())
     await screen.findByText(refused)
-    expect(bodies).toEqual([{ email: 'name@example.com', password: ' Pass 1234 ' }])
+    expect(bodies).toEqual([{ email: ' Name@Example.COM ', password: ' Pass 1234 ' }])
     expect(email().value).toBe(' Name@Example.COM ')
     expect(password().value).toBe(' Pass 1234 ')
   })
