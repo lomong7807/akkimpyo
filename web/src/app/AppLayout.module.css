@@ -1,0 +1,32 @@
+.frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.screen {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 키보드로 옮긴 초점이 상단 바와 하단 탭 뒤에 가려지지 않게 한다 */
+:root:has(.frame) {
+  scroll-padding-block: calc(var(--size-topbar) + env(safe-area-inset-top) + var(--space-4))
+    calc(var(--size-tabbar) + env(safe-area-inset-bottom) + var(--space-4));
+}
+
+@media (width >= 1024px) {
+  .frame {
+    flex-direction: row;
+  }
+
+  .screen {
+    padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom);
+  }
+
+  :root:has(.frame) {
+    scroll-padding-block: 0;
+  }
+}

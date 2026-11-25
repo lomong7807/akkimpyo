@@ -1,0 +1,53 @@
+.tabBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: grid;
+  flex: none;
+  min-height: calc(var(--size-tabbar) + env(safe-area-inset-bottom));
+  padding-block: 0 env(safe-area-inset-bottom);
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  margin: 0;
+  padding-block: var(--space-4);
+  list-style: none;
+}
+
+.tabs > li {
+  display: grid;
+}
+
+/* 글자를 키워 이름이 두 줄이 된 칸이 있어도 아이콘은 한 줄에 놓이도록 위에서부터 쌓는다 */
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--size-touch);
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  text-align: center;
+  text-decoration: none;
+  transition: transform var(--motion-press-duration);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab:active {
+  transform: scale(var(--motion-press-scale));
+}
+
+.tab[aria-current] {
+  color: var(--color-accent);
+}
+
+@media (width >= 1024px) {
+  .tabBar {
+    display: none;
+  }
+}
