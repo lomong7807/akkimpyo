@@ -3,8 +3,8 @@ package app.accountbook.user;
 import app.accountbook.common.InvalidRequestException;
 
 /**
- * 비밀번호 규칙(P-101): 8자 이상 72자 이하(유니코드 글자 수)이고 영문(A-Z, a-z)과 숫자(0-9)를 모두 포함한다.
- * 비밀번호는 입력 그대로다. 앞뒤 공백을 지우지 않는다. 오류 문구에 입력값을 넣지 않는다.
+ * 비밀번호 규칙(P-101): NFKC로 맞춘 값이 8자 이상 72자 이하(유니코드 글자 수)이고 영문(A-Z, a-z)과 숫자(0-9)를 모두 포함한다.
+ * 맞춘 값으로 보므로 전각 영문·숫자도 조건을 채운다. 앞뒤 공백을 지우지 않는다. 오류 문구에 입력값을 넣지 않는다.
  */
 final class PasswordPolicy {
 
@@ -14,14 +14,18 @@ final class PasswordPolicy {
     private PasswordPolicy() {
     }
 
-    /** 규칙에 맞지 않으면 {@link InvalidRequestException}. */
-    static void validate(String password) {
-        if (password == null || !hasValidLength(password)
-                || password.chars().noneMatch(PasswordPolicy::isAsciiLetter)
-                || password.chars().noneMatch(PasswordPolicy::isAsciiDigit)) {
-            throw new InvalidRequestException(
-                    "비밀번호는 " + MIN_LENGTH + "~" + MAX_LENGTH + "자이고 영문과 숫자를 모두 포함해야 합니다.");
-        }
+    /** 정규화한({@link PasswordNormalizer}) 비밀번호를 돌려준다. 규칙에 맞지 않으면 {@link InvalidRequestException}. */
+    static String normalizeAndValidate(String raw) {
+        return PasswordNormalizer.normalize(raw)
+                .filter(PasswordPolicy::isAllowed)
+                .orElseThrow(() -> new InvalidRequestException(
+                        "비밀번호는 " + MIN_LENGTH + "~" + MAX_LENGTH + "자이고 영문과 숫자를 모두 포함해야 합니다."));
+    }
+
+    private static boolean isAllowed(String password) {
+        return hasValidLength(password)
+                && password.chars().anyMatch(PasswordPolicy::isAsciiLetter)
+                && password.chars().anyMatch(PasswordPolicy::isAsciiDigit);
     }
 
     private static boolean hasValidLength(String password) {
