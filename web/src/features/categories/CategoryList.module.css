@@ -15,11 +15,9 @@
   padding-block: var(--space-8);
 }
 
+/* 긴 이름은 자르지 않고 낱말 중간에서라도 줄을 바꿔 다 보인다 */
 .name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* 선은 내용의 좌우 여백만큼 넓혀 화면 끝까지 닿게 한다 */
@@ -48,7 +46,6 @@
 
 .text {
   flex: 1 1 auto;
-  min-width: 0;
 }
 
 .helper {

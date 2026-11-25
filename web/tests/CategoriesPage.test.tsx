@@ -214,16 +214,18 @@ describe('카테고리 목록', () => {
     expect(rowOf('외식').className).toBe(rowOf('식비').className)
   })
 
-  it('긴 이름은 한 줄에 두고 넘치면 줄임표로 자른다', async () => {
+  it('긴 이름은 줄임표로 자르지 않고 낱말 중간에서라도 줄을 바꿔 다 보인다. 줄은 커진다', async () => {
     const long = '가나다라마바사아자차카타파하거너더러머버'
-    respondWith([category('EXPENSE', long, [`${long.slice(1)}서`]), uncategorized('EXPENSE')])
+    const longChild = `${long.slice(1)}서`
+    respondWith([category('EXPENSE', long, [longChild]), uncategorized('EXPENSE')])
     await openList()
-    for (const name of [long, `${long.slice(1)}서`]) {
+    for (const name of [long, longChild]) {
       const style = styleOf(content().getByText(name))
-      expect(style.whiteSpace).toBe('nowrap')
-      expect(style.overflow).toBe('hidden')
-      expect(style.textOverflow).toBe('ellipsis')
-      expect(style.minWidth).toBe('0px')
+      expect(style.overflowWrap).toBe('anywhere')
+      expect(style.whiteSpace).not.toBe('nowrap')
+      expect(style.textOverflow).not.toBe('ellipsis')
+      expect(styleOf(rowOf(name)).getPropertyValue('padding-block')).toBe('var(--space-8)')
+      expect(styleOf(rowOf(name)).height).not.toBe('var(--size-row)')
     }
   })
 })
