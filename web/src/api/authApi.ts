@@ -2,8 +2,8 @@ import { ApiError } from './apiError'
 import { send } from './http'
 
 /*
- * 로그인과 갱신의 경로와 필드 이름. ADR과 서버 이슈에 적히지 않은 이름은 이 파일에만 있다.
- * 서버(#12, #26)와 다르면 여기만 고친다.
+ * 로그인, 가입, 갱신의 경로와 필드 이름. ADR과 서버 이슈에 적히지 않은 이름은 이 파일에만 있다.
+ * 서버(#12, #26, #29)와 다르면 여기만 고친다.
  */
 
 export interface Credentials {
@@ -14,6 +14,20 @@ export interface Credentials {
 /** 새 access token을 돌려준다. refresh token은 서버가 HttpOnly 쿠키로 준다. */
 export async function requestLogin({ email, password }: Credentials, signal: AbortSignal): Promise<string> {
   return accessTokenIn(await send('/auth/login', { method: 'POST', body: { email, password }, signal }))
+}
+
+export interface Registration {
+  email: string
+  password: string
+  displayName: string
+}
+
+/** 가입하면 바로 로그인한 상태가 된다. 응답과 쿠키는 로그인과 같다. */
+export async function requestSignup(
+  { email, password, displayName }: Registration,
+  signal: AbortSignal,
+): Promise<string> {
+  return accessTokenIn(await send('/auth/signup', { method: 'POST', body: { email, password, displayName }, signal }))
 }
 
 /** 갱신은 다시 보낸 요청이 서버의 허용 시간 안에 닿도록 짧게 기다린다(session.ts의 requestRefreshTwice). */

@@ -15,8 +15,13 @@ type FieldProps = InputProps & {
   error?: string
 }
 
+type TextFieldProps = FieldProps & {
+  /** 글자 수 제한이 있는 칸의 지금 글자 수와 최대. 세는 법은 칸마다 다르므로 화면이 센다. 최대에 가까워지면 보인다. */
+  count?: { current: number; max: number }
+}
+
 /** 브라우저가 쓴 값을 바꾸지 않도록 종류는 늘 text다. 화면 키보드는 inputMode로 고른다. */
-export function TextField(props: FieldProps) {
+export function TextField(props: TextFieldProps) {
   return <Field {...props} type="text" />
 }
 
@@ -47,13 +52,17 @@ function Field({
   label,
   help,
   error,
+  count,
   action,
   ...inputProps
-}: FieldProps & { type: string; action?: ReactNode }) {
+}: TextFieldProps & { type: string; action?: ReactNode }) {
   const id = useId()
   const helpId = `${id}-help`
+  const countId = `${id}-count`
   const errorId = `${id}-error`
-  const describedBy = [help && helpId, error && errorId].filter(Boolean).join(' ')
+  // 제한의 80%를 넘으면 보인다(화면설계서 00-common 4.4)
+  const shownCount = count && count.current > count.max * 0.8 ? `${count.current}/${count.max}` : undefined
+  const describedBy = [help && helpId, shownCount && countId, error && errorId].filter(Boolean).join(' ')
   return (
     <div className={styles.field}>
       <label htmlFor={id} className={styles.label}>
@@ -69,10 +78,15 @@ function Field({
         />
         {action && <div className={styles.action}>{action}</div>}
       </div>
-      {help && (
-        <p id={helpId} className={styles.help}>
-          {help}
-        </p>
+      {(help || shownCount) && (
+        <div className={styles.hint}>
+          {help && <p id={helpId}>{help}</p>}
+          {shownCount && (
+            <p id={countId} className={`${styles.count} tabular-nums`}>
+              {shownCount}
+            </p>
+          )}
+        </div>
       )}
       {error && <ErrorMessage id={errorId}>{error}</ErrorMessage>}
     </div>

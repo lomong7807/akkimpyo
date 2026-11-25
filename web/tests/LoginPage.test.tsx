@@ -2,9 +2,12 @@ import { onlineManager } from '@tanstack/react-query'
 import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
+import type { ReactNode } from 'react'
+import { useNavigate, type RouteObject } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { login } from '../src/api/session'
+import PlainLayout from '../src/app/PlainLayout'
 import { createQueryClient } from '../src/app/queryClient'
-import { routes } from '../src/app/routes'
 import LoginPage from '../src/features/auth/LoginPage'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
@@ -18,6 +21,7 @@ const server = startMockServer()
 afterEach(() => {
   cleanup()
   resetViewport()
+  signIn.mockClear()
 })
 
 const emailRequired = '이메일을 입력해 주세요'
@@ -31,8 +35,32 @@ const password = () => screen.getByLabelText<HTMLInputElement>('비밀번호')
 const loginButton = () => screen.getByRole('button', { name: '로그인' })
 const retryButton = () => screen.getByRole('button', { name: '다시 시도' })
 
-function openLogin(queryClient = createQueryClient()) {
-  const router = renderRoutes(routes, '/login', queryClient)
+const signIn = vi.fn(login)
+
+/** 로그인한 뒤 어디로 갈지는 앱이 정한다(LoginReturn.test.tsx). 여기서는 홈으로 보낸다. */
+function Login({ sessionEnded = false, initialEmail = '' }) {
+  const navigate = useNavigate()
+  return (
+    <LoginPage
+      signIn={signIn}
+      onSignedIn={() => navigate('/home', { replace: true })}
+      sessionEnded={sessionEnded}
+      initialEmail={initialEmail}
+    />
+  )
+}
+
+function routesWith(login: ReactNode): RouteObject[] {
+  return [
+    { element: <PlainLayout />, children: [{ path: '/login', element: login }] },
+    { path: '/home', element: <h1>홈</h1> },
+    { path: '/signup', element: <h1>가입</h1> },
+  ]
+}
+
+function openLogin({ queryClient = createQueryClient(), sessionEnded = false, initialEmail = '' } = {}) {
+  const login = <Login sessionEnded={sessionEnded} initialEmail={initialEmail} />
+  const router = renderRoutes(routesWith(login), '/login', queryClient)
   return { user: userEvent.setup(), router }
 }
 
@@ -91,6 +119,15 @@ describe('로그인(A-02)의 요소', () => {
   it('화면을 열면 이메일 칸에 초점을 둔다', () => {
     openLogin()
     expect(document.activeElement).toBe(email())
+  })
+
+  it('가입 화면에서 넘어온 이메일이 있으면 채우고 비밀번호 칸에 초점을 둔다', async () => {
+    const bodies = respondToLogin(success)
+    const { user } = openLogin({ initialEmail: ' Name@example.com' })
+    expect(email().value).toBe(' Name@example.com')
+    expect(document.activeElement).toBe(password())
+    await user.keyboard('pass1234{Enter}')
+    await vi.waitFor(() => expect(bodies).toEqual([{ email: ' Name@example.com', password: 'pass1234' }]))
   })
 
   it('1단계에 없는 요소를 두지 않는다', () => {
@@ -337,7 +374,7 @@ describe('처리 중', () => {
     const answer = Promise.withResolvers<Response>()
     const bodies = respondToLogin(() => answer.promise)
     const queryClient = createQueryClient()
-    const { user, router } = openLogin(queryClient)
+    const { user, router } = openLogin({ queryClient })
     await fillAndSubmit(user)
     await vi.waitFor(() => expect(bodies).toHaveLength(1))
     await user.click(screen.getByRole('link', { name: '가입' }))
@@ -509,15 +546,27 @@ describe('성공', () => {
     await vi.waitFor(() => expect(router.state.location.pathname).toBe('/home'))
     expect(router.state.historyAction).toBe('REPLACE')
     expect(router.state.location.state).toBeNull()
-    expect(screen.getByRole('heading', { level: 1, name: '찾을 수 없어요.' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: '홈' })).toBeTruthy()
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('이 화면을 떠난 뒤에 성공해도 앱에 로그인을 맡긴 채라 앱이 성공을 안다', async () => {
+    const answer = Promise.withResolvers<Response>()
+    const bodies = respondToLogin(() => answer.promise)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await vi.waitFor(() => expect(bodies).toHaveLength(1))
+    await user.click(screen.getByRole('link', { name: '가입' }))
+    answer.resolve(success())
+    expect(signIn).toHaveBeenCalledExactlyOnceWith({ email: 'name@example.com', password: 'pass1234' })
+    await expect(signIn.mock.results[0].value).resolves.toBeUndefined()
   })
 
   it('로그인 뒤 저장소와 쿠키, 주소, 캐시에 토큰과 비밀번호가 남지 않는다', async () => {
     respondToLogin(success)
     const queryClient = createQueryClient()
-    const { user, router } = openLogin(queryClient)
+    const { user, router } = openLogin({ queryClient })
     await fillAndSubmit(user)
     await vi.waitFor(() => expect(router.state.location.pathname).toBe('/home'))
     expect(localStorage.length).toBe(0)
@@ -532,7 +581,7 @@ describe('성공', () => {
 it('성공한 뒤 다음 화면이 열릴 때까지 다시 누를 수 없다', async () => {
   const bodies = respondToLogin(success)
   const slowHome = { path: '/home', loader: () => new Promise(() => {}), element: null, hydrateFallbackElement: null }
-  renderRoutes([{ path: '/login', element: <LoginPage /> }, slowHome], '/login')
+  renderRoutes([{ path: '/login', element: <Login /> }, slowHome], '/login')
   const user = userEvent.setup()
   await fillAndSubmit(user)
   await vi.waitFor(() => expect(bodies).toHaveLength(1))
@@ -542,11 +591,44 @@ it('성공한 뒤 다음 화면이 열릴 때까지 다시 누를 수 없다', a
   expect(bodies).toHaveLength(1)
 })
 
+describe('로그인 풀림 알림', () => {
+  const ended = '로그인이 풀렸어요. 다시 로그인해 주세요.'
+
+  it('로그인이 풀려 넘어왔으면 제목 위에 알림 띠를 보인다', () => {
+    openLogin({ sessionEnded: true })
+    const notice = screen.getByRole('status')
+    expect(notice.textContent).toBe(ended)
+    const heading = screen.getByRole('heading', { level: 1, name: '로그인' })
+    expect(notice.compareDocumentPosition(heading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(screen.queryByText(/쓰던 내용/)).toBeNull()
+  })
+
+  it('알림 띠와 제목 사이는 24px이고, 초점은 그대로 이메일 칸에 둔다', () => {
+    openLogin({ sessionEnded: true })
+    const heading = screen.getByRole('heading', { level: 1, name: '로그인' })
+    expect(getComputedStyle(heading.previousElementSibling!).marginBottom).toBe('var(--space-24)')
+    expect(document.activeElement).toBe(email())
+  })
+
+  it('로그인에 실패해도 화면을 떠날 때까지 남는다', async () => {
+    respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
+    const { user } = openLogin({ sessionEnded: true })
+    await fillAndSubmit(user)
+    await screen.findByText(refused)
+    expect(screen.getByText(ended)).toBeTruthy()
+  })
+
+  it('로그인이 풀린 것이 아니면 없다', () => {
+    openLogin()
+    expect(screen.queryByText(ended)).toBeNull()
+  })
+})
+
 describe('가입 링크', () => {
   it('"계정이 없나요?" 뒤에 있고 /signup으로 간다', () => {
     openLogin()
     const link = screen.getByRole('link', { name: '가입' })
-    expect(link.parentElement!.textContent).toBe('계정이 없나요? 가입')
+    expect(link.closest('p')!.textContent).toBe('계정이 없나요? 가입')
     expect(link.getAttribute('href')).toBe('/signup')
   })
 

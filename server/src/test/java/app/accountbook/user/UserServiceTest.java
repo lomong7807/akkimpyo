@@ -281,16 +281,17 @@ class UserServiceTest {
     @ValueSource(strings = {
             "owner@예시.com",               // 도메인
             "owner\uFF20example.com",       // @ 자리에 전각 @
-            "\u00A0owner@example.com",      // 앞에 붙은, strip()이 지우지 않는 글자
-            "owner@example.com\u200B",      // 뒤에 붙은, strip()이 지우지 않는 글자
+            "\u00A0owner@example.com",      // 앞에 붙은, 지우지 않는 공백
+            "owner@example.com\u3000",      // 뒤에 붙은, 지우지 않는 공백
+            "owner@example.com\u200B",      // 뒤에 붙은, 보이지 않는 글자
             "owner@example.com\r\nBcc:x"})  // 줄바꿈 뒤에 이어진 값
     void createUser_rejectsEmailWithCharacterOutsidePrintableAsciiAtAnyPosition(String email) {
         assertEmailRejected(email);
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"0009", "000A", "000D", "001F", "0020", "2003", "2028", "3000"})
-    void createUser_stripsSurroundingUnicodeSpaceBeforeJudgingEmail(String codePoint) {
+    @ValueSource(strings = {"0020", "0009", "000A", "000C", "000D"})
+    void createUser_trimsSurroundingAsciiSpaceBeforeJudgingEmail(String codePoint) {
         String space = character(codePoint);
 
         User user = userService.createUser(space + "Owner@example.com" + space, PASSWORD, "주인");

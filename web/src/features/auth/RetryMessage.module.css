@@ -1,0 +1,11 @@
+/* "다시 시도"의 초점 테두리가 문구와 겹치지 않게 띄운다 */
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* 글자가 오류 문구의 글자와 같은 선에서 시작한다 */
+.retry {
+  margin-inline-start: var(--space-16);
+}

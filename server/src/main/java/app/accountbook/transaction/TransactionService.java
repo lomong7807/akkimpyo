@@ -36,8 +36,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 /**
  * 거래 쓰기(생성·수정·취소·삭제·복원)와 조회. 모든 쓰기는 change_log에 1행을 남긴다.
@@ -62,15 +60,13 @@ public class TransactionService {
     private final CategoryService categoryService;
     private final LedgerAccess ledgerAccess;
     private final LedgerRepository ledgerRepository;
-    private final ObjectMapper objectMapper;
     private final Clock clock;
     private final TransactionTemplate transactionTemplate;
 
     TransactionService(TransactionRepository transactionRepository, ChangeLogRepository changeLogRepository,
                        AccountRepository accountRepository, CategoryRepository categoryRepository,
                        CategoryService categoryService, LedgerAccess ledgerAccess,
-                       LedgerRepository ledgerRepository, ObjectMapper objectMapper, Clock clock,
-                       TransactionTemplate transactionTemplate) {
+                       LedgerRepository ledgerRepository, Clock clock, TransactionTemplate transactionTemplate) {
         this.transactionRepository = transactionRepository;
         this.changeLogRepository = changeLogRepository;
         this.accountRepository = accountRepository;
@@ -78,7 +74,6 @@ public class TransactionService {
         this.categoryService = categoryService;
         this.ledgerAccess = ledgerAccess;
         this.ledgerRepository = ledgerRepository;
-        this.objectMapper = objectMapper;
         this.clock = clock;
         this.transactionTemplate = transactionTemplate;
     }
@@ -91,7 +86,7 @@ public class TransactionService {
     /**
      * 거래를 만든다. id는 클라이언트 값이다. 같은 id의 거래가 이미 있으면(휴지통에 있는 것 포함) 새로 만들지 않고
      * 재전송으로 답하거나 {@link IdConflictException}으로 거부한다(판정은 {@link #replay}).
-     * 재전송은 아무것도 바꾸지 않고 이력도 남기지 않는다.
+     * 재전송은 아무것도 바꾸지 않고 이력도 남기지 않는다. 완전히 지운 거래의 id도 거부한다.
      *
      * <p>검사 순서(ADR 006 결정 4): 구성원 → 형식 검증 → 같은 id 조회 → 참조 검증 → 저장.
      * 이미 저장된 거래의 재전송이 그사이 없어진 계좌나 카테고리 때문에 거부되지 않게 한다.
@@ -121,15 +116,25 @@ public class TransactionService {
         if (existing.isPresent()) {
             return new CreateResult(replay(existing.get(), actorId, ledgerId, content), false);
         }
+        requireNotPurged(content.id());
         requireReferences(ledgerId, cmd);
         Transaction tx = Transaction.of(content.id(), ledgerId, content.type(), content.occurredOn(),
                 content.occurredTime(), content.payee(), content.memo(), actorId, content.paidBy());
         content.lines().forEach(line -> tx.addLine(line.accountId(), line.categoryId(), line.amount()));
         // 바로 flush해서 기본키 위반을 다른 오류와 섞이기 전에 받는다.
         transactionRepository.saveAndFlush(tx);
-        TransactionView after = TransactionView.of(tx);
-        appendLog(tx, ChangeAction.CREATE, actorId, deviceId, null, after);
-        return new CreateResult(after, true);
+        // 앞의 확인 뒤에 같은 id가 만들어지고 완전히 지워졌으면 부딪힐 행이 없어 INSERT가 된다. INSERT는 그 삭제의 커밋을
+        // 기다리므로 여기서는 기록이 보인다.
+        requireNotPurged(content.id());
+        appendLog(tx, ChangeAction.CREATE, actorId, deviceId, null);
+        return new CreateResult(TransactionView.of(tx), true);
+    }
+
+    /** 완전히 지운 거래의 id는 어느 장부의 것이었든 다시 쓸 수 없다(ADR 007 결정 7). */
+    private void requireNotPurged(UUID txId) {
+        if (changeLogRepository.existsByTransactionIdAndActionIn(txId, ChangeAction.PURGES)) {
+            throw IdConflictException.unusableId();
+        }
     }
 
     private static boolean isIdTaken(DataIntegrityViolationException e) {
@@ -212,11 +217,11 @@ public class TransactionService {
                 .toList();
     }
 
-    /** 거래의 변경 이력, 오래된 순. */
+    /** 거래의 변경 이력, 오래된 순(version 순). */
     @Transactional(readOnly = true)
     public List<ChangeLogView> history(UUID actorId, UUID txId) {
         Transaction tx = loadAccessible(actorId, txId);
-        return changeLogRepository.findByTransactionIdOrderByCreatedAtAsc(tx.getId()).stream()
+        return changeLogRepository.findByTransactionIdOrderByVersionAsc(tx.getId()).stream()
                 .map(ChangeLogView::of)
                 .toList();
     }
@@ -243,39 +248,35 @@ public class TransactionService {
      */
     private TransactionView write(Transaction tx, long expectedVersion, ChangeAction action, UUID actorId,
                                   String deviceId, Consumer<Instant> change) {
-        TransactionView before = TransactionView.of(tx);
+        ChangeLogValue before = ChangeLogValue.of(tx);
         Instant now = Times.now();
         if (transactionRepository.advanceVersion(tx.getId(), expectedVersion, now) == 0) {
             throw new StaleVersionException();
         }
         tx.applyVersion(expectedVersion + 1, now);
         change.accept(now);
-        TransactionView after = TransactionView.of(tx);
-        appendLog(tx, action, actorId, deviceId, before, after);
-        return after;
+        appendLog(tx, action, actorId, deviceId, before);
+        return TransactionView.of(tx);
     }
 
+    /** 거래가 이 변경 뒤의 내용과 version이 된 다음에 부른다. 이력의 후 값과 번호가 그 값이다. */
     private void appendLog(Transaction tx, ChangeAction action, UUID actorId, String deviceId,
-                           TransactionView before, TransactionView after) {
-        changeLogRepository.save(ChangeLog.of(tx.getId(), tx.getLedgerId(), action, actorId, deviceId,
-                toJson(before), toJson(after), nextLogTime(tx.getId())));
+                           ChangeLogValue before) {
+        changeLogRepository.save(ChangeLog.of(tx.getId(), tx.getLedgerId(), tx.getVersion(), action, actorId,
+                deviceId, before, ChangeLogValue.of(tx), nextLogTime(tx.getId())));
     }
 
     /**
-     * 이력 시각은 거래마다 엄격히 증가하게 한다. 같은 마이크로초에 두 번 쓰이거나 시계가 뒤로 가도
-     * created_at 순서가 쓰기 순서와 같아야 "오래된 순" 조회가 맞다.
+     * 이력 시각은 거래마다 엄격히 증가하게 한다. 순서는 version이 정하지만, 같은 마이크로초에 두 번 쓰이거나 시계가
+     * 뒤로 가도 보이는 시각이 그 순서를 거스르지 않게 한다.
      */
     private Instant nextLogTime(UUID txId) {
         Instant now = Times.now();
-        return changeLogRepository.findFirstByTransactionIdOrderByCreatedAtDesc(txId)
+        return changeLogRepository.findFirstByTransactionIdOrderByVersionDesc(txId)
                 .map(ChangeLog::getCreatedAt)
                 .filter(last -> !now.isAfter(last))
                 .map(last -> last.plus(1, ChronoUnit.MICROS))
                 .orElse(now);
-    }
-
-    private JsonNode toJson(TransactionView view) {
-        return view == null ? null : objectMapper.valueToTree(view);
     }
 
     /** 없는 거래와 구성원이 아닌 장부의 거래를 구분하지 않는다. */

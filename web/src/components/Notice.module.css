@@ -1,0 +1,12 @@
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin: 0;
+  padding-block: var(--space-12);
+  padding-inline: var(--space-16);
+  border-radius: var(--radius-12);
+  background-color: var(--color-border);
+  color: var(--color-text);
+  font: var(--text-secondary);
+}

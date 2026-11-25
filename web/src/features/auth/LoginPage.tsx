@@ -1,47 +1,44 @@
-import { useRef, useState, type MouseEvent, type SubmitEvent } from 'react'
-import { useNavigate } from 'react-router'
-import { Button, ButtonLink } from '../../components/Button'
+import { useRef, type SubmitEvent } from 'react'
+import { Button } from '../../components/Button'
 import ErrorMessage from '../../components/ErrorMessage'
+import Notice from '../../components/Notice'
 import { PasswordField, TextField } from '../../components/TextField'
-import { loginFields, validateLogin, type LoginField } from './loginForm'
-import { isWrongCredentials, useLogin } from './useLogin'
+import AuthLink from './AuthLink'
+import { keepFocusInField } from './keepFocusInField'
+import { loginFields, validateLogin } from './loginForm'
+import RetryMessage from './RetryMessage'
+import { useFormFields } from './useFormFields'
+import { isWrongCredentials, useLogin, type SignIn } from './useLogin'
 import styles from './LoginPage.module.css'
 
+interface LoginPageProps {
+  signIn: SignIn
+  /** 로그인했고 이 화면을 아직 떠나지 않았다 */
+  onSignedIn: () => void
+  /** 쓰던 로그인이 풀려 이 화면에 왔다 */
+  sessionEnded: boolean
+  /** 가입 화면에서 넘어온 이메일. 없으면 빈 글자다. */
+  initialEmail: string
+}
+
 /** A-02 로그인 */
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const login = useLogin()
-  const [values, setValues] = useState({ email: '', password: '' })
-  /** 칸을 벗어나거나 제출해 오류 문구를 보이고 있는 칸 */
-  const [shown, setShown] = useState({ email: false, password: false })
-  const emailInput = useRef<HTMLInputElement>(null)
-  const passwordInput = useRef<HTMLInputElement>(null)
+export default function LoginPage({ signIn, onSignedIn, sessionEnded, initialEmail }: LoginPageProps) {
+  const login = useLogin(signIn)
+  const { values, fieldProps, checkAll } = useFormFields({
+    fields: loginFields,
+    initialValues: { email: initialEmail, password: '' },
+    validate: validateLogin,
+  })
   const loginButton = useRef<HTMLButtonElement>(null)
 
-  const errors = validateLogin(values)
   const busy = login.isPending || login.isSuccess
 
-  function change(field: LoginField, value: string) {
-    const changed = { ...values, [field]: value }
-    setValues(changed)
-    // 맞게 고치면 바로 지운다. 다시 틀려도 칸을 벗어나기 전에는 띄우지 않는다.
-    if (!validateLogin(changed)[field]) setShown((current) => ({ ...current, [field]: false }))
-  }
-
-  function check(field: LoginField) {
-    setShown((current) => ({ ...current, [field]: errors[field] !== undefined }))
-  }
-
   function submit() {
-    const firstInvalid = loginFields.find((field) => errors[field])
-    if (firstInvalid) {
-      loginFields.forEach(check)
+    if (!checkAll()) {
       login.reset()
-      const input = firstInvalid === 'email' ? emailInput : passwordInput
-      input.current?.focus()
       return
     }
-    login.mutate(values, { onSuccess: () => navigate('/home', { replace: true }) })
+    login.mutate(values, { onSuccess: onSignedIn })
   }
 
   function handleSubmit(event: SubmitEvent) {
@@ -55,23 +52,18 @@ export default function LoginPage() {
     submit()
   }
 
-  function fieldProps(field: LoginField) {
-    return {
-      value: values[field],
-      error: shown[field] ? errors[field] : undefined,
-      readOnly: busy,
-      onChange: (event: { target: HTMLInputElement }) => change(field, event.target.value),
-      onBlur: () => check(field),
-    }
-  }
-
   return (
     <div className={styles.page} onMouseDown={keepFocusInField}>
+      {sessionEnded && (
+        <div className={styles.notice}>
+          <Notice>로그인이 풀렸어요. 다시 로그인해 주세요.</Notice>
+        </div>
+      )}
       <h1>로그인</h1>
       <form className={styles.form} noValidate onSubmit={handleSubmit}>
         <TextField
           {...fieldProps('email')}
-          ref={emailInput}
+          readOnly={busy}
           label="이메일"
           inputMode="email"
           autoComplete="username"
@@ -79,25 +71,23 @@ export default function LoginPage() {
           autoCorrect="off"
           spellCheck={false}
           placeholder="name@example.com"
-          autoFocus
+          autoFocus={initialEmail === ''}
         />
         <PasswordField
           {...fieldProps('password')}
-          ref={passwordInput}
+          readOnly={busy}
           label="비밀번호"
           autoComplete="current-password"
+          autoFocus={initialEmail !== ''}
         />
         {login.isError && <LoginFailure error={login.error} onRetry={retry} />}
         <Button ref={loginButton} kind="primary" type="submit" busy={busy}>
           로그인
         </Button>
       </form>
-      <p className={styles.signup}>
-        계정이 없나요?{' '}
-        <ButtonLink kind="text" to="/signup" state={{ email: values.email }}>
-          가입
-        </ButtonLink>
-      </p>
+      <AuthLink question="계정이 없나요?" to="/signup" email={values.email}>
+        가입
+      </AuthLink>
     </div>
   )
 }
@@ -107,21 +97,6 @@ function LoginFailure({ error, onRetry }: { error: Error; onRetry: () => void })
     return <ErrorMessage role="alert">이메일 또는 비밀번호가 맞지 않아요</ErrorMessage>
   }
   return (
-    <div>
-      <ErrorMessage role="alert">문제가 생겨 로그인하지 못했어요. 잠시 후 다시 시도해 주세요.</ErrorMessage>
-      <div className={styles.retry}>
-        <Button kind="text" onClick={onRetry}>
-          다시 시도
-        </Button>
-      </div>
-    </div>
+    <RetryMessage onRetry={onRetry}>문제가 생겨 로그인하지 못했어요. 잠시 후 다시 시도해 주세요.</RetryMessage>
   )
-}
-
-/**
- * 버튼을 누르는 순간 칸을 벗어난 검사로 오류 문구가 나오면 버튼이 밀려 눌리지 않는다.
- * 버튼과 링크를 누르는 동안에는 초점을 칸에 남긴다.
- */
-function keepFocusInField(event: MouseEvent) {
-  if (event.target instanceof Element && event.target.closest('button, a')) event.preventDefault()
 }
