@@ -2,6 +2,7 @@ import caretLeft from '../assets/icons/phosphor/caret-left.svg?raw'
 import check from '../assets/icons/phosphor/check.svg?raw'
 import eyeSlash from '../assets/icons/phosphor/eye-slash.svg?raw'
 import eye from '../assets/icons/phosphor/eye.svg?raw'
+import info from '../assets/icons/phosphor/info.svg?raw'
 import plus from '../assets/icons/phosphor/plus.svg?raw'
 import warningCircle from '../assets/icons/phosphor/warning-circle.svg?raw'
 import x from '../assets/icons/phosphor/x.svg?raw'
@@ -13,6 +14,7 @@ const svgs = {
   Check: check,
   Eye: eye,
   EyeSlash: eyeSlash,
+  Info: info,
   Plus: plus,
   WarningCircle: warningCircle,
   X: x,

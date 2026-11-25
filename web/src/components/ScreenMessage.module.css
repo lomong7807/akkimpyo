@@ -14,3 +14,10 @@
   color: var(--color-text-secondary);
   font: var(--text-secondary);
 }
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-8);
+}

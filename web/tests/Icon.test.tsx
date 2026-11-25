@@ -8,6 +8,7 @@ const files: Record<IconName, string> = {
   Check: 'check',
   Eye: 'eye',
   EyeSlash: 'eye-slash',
+  Info: 'info',
   Plus: 'plus',
   WarningCircle: 'warning-circle',
   X: 'x',

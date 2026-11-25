@@ -133,6 +133,20 @@ describe('로그인', () => {
     expect(request.headers.has('Authorization')).toBe(false)
   })
 
+  it('로그인, 그 뒤의 요청, 갱신의 응답을 브라우저 캐시에 남기지도, 거기서 받지도 않는다', async () => {
+    const { backend, tab } = await openTabWithExpiredToken()
+    const fetch = vi.spyOn(globalThis, 'fetch')
+    await tab.request('/ledgers')
+    await tab.login(credentials)
+    expect(fetch.mock.calls.map(([path, init]) => [path, init?.cache])).toEqual([
+      ['/api/v1/ledgers', 'no-store'],
+      ['/api/v1/auth/refresh', 'no-store'],
+      ['/api/v1/ledgers', 'no-store'],
+      ['/api/v1/auth/login', 'no-store'],
+    ])
+    expect(backend.requests.refresh).toHaveLength(1)
+  })
+
   it('로그인하면 다음 요청부터 access token을 보낸다', async () => {
     const backend = startBackend()
     const tab = await openTab()
