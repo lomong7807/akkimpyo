@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.spi.ThrowableProxyUtil;
 import ch.qos.logback.core.read.ListAppender;
+import java.util.List;
 import java.util.stream.Collectors;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +21,11 @@ public final class CapturedLogs implements AutoCloseable {
 
     public static CapturedLogs start() {
         return new CapturedLogs();
+    }
+
+    /** 모은 로그를 나온 순서대로. */
+    public List<ILoggingEvent> events() {
+        return List.copyOf(appender.list);
     }
 
     /** 모은 로그 전부: 로거 이름, 문구, 예외와 그 원인 사슬. */
