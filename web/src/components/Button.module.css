@@ -61,8 +61,16 @@
 }
 
 .icon {
-  min-height: var(--size-touch);
+  width: var(--size-touch);
+  height: var(--size-touch);
   color: var(--color-text);
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .icon:hover:not([aria-disabled='true']) {
+    background-color: var(--color-press);
+  }
 }
 
 .button[aria-disabled='true'] {

@@ -40,7 +40,6 @@ describe('모양', () => {
     ['secondary', 'var(--color-surface)', 'var(--color-text)', 'var(--size-button-secondary)'],
     ['text', 'transparent', 'var(--color-accent)', 'var(--size-touch)'],
     ['text-danger', 'transparent', 'var(--color-danger)', 'var(--size-touch)'],
-    ['icon', 'transparent', 'var(--color-text)', 'var(--size-touch)'],
   ])('%s의 바탕, 글자색, 높이는 설계서 5.1의 토큰이다', (kind, background, color, height) => {
     const style = getComputedStyle(renderButton(kind))
     expect(style.backgroundColor.replace('rgba(0, 0, 0, 0)', 'transparent')).toBe(background)
@@ -63,6 +62,14 @@ describe('모양', () => {
   it('보조 버튼만 1px color-border-strong 테두리가 있다', () => {
     expect(ruleBody('.secondary')).toContain('border: 1px solid var(--color-border-strong)')
     expect(ruleBody('.button')).toContain('border: 0')
+  })
+
+  it('아이콘 버튼은 바탕이 없고, 둘레 배치가 늘려도 44x44px 그대로다', () => {
+    const style = getComputedStyle(renderButton('icon'))
+    expect(style.backgroundColor.replace('rgba(0, 0, 0, 0)', 'transparent')).toBe('transparent')
+    expect(style.color).toBe('var(--color-text)')
+    expect(style.width).toBe('var(--size-touch)')
+    expect(style.height).toBe('var(--size-touch)')
   })
 
   it('아이콘 버튼은 24px 아이콘을 그리고 이름은 aria-label로 읽힌다', () => {
@@ -89,6 +96,15 @@ describe('누르기', () => {
     expect(ruleBody(".button:active:not([aria-disabled='true'])")).toContain(
       'transform: scale(var(--motion-press-scale))',
     )
+  })
+
+  it('아이콘 버튼은 마우스를 올릴 때만 color-press 바탕이고, 비활성과 처리 중에는 없다', () => {
+    const css = readWebFile('src/components/Button.module.css')
+    const hover = /@media \(hover: hover\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? ''
+    expect(hover.replace(/\s+/g, ' ').trim()).toBe(
+      ".icon:hover:not([aria-disabled='true']) { background-color: var(--color-press); }",
+    )
+    expect(css.match(/:hover/g)).toHaveLength(1)
   })
 
   it('키보드 초점 테두리를 지우지 않는다(base.css의 :focus-visible)', () => {
