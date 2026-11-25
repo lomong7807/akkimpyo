@@ -117,4 +117,14 @@ describe('홈 화면 설치 (F-120)', () => {
       expect(pngSize(builtFile(icon.href)), icon.href).toBe(icon.sizes)
     }
   })
+
+  it('테스트용 가짜 응답(msw)이 들어가지 않는다', async () => {
+    const files = await builtFiles()
+    const scripts = [...files].filter(([name]) => name.endsWith('.js'))
+    expect(scripts).not.toHaveLength(0)
+    for (const [name, code] of scripts) {
+      expect(name).not.toContain('mockServiceWorker')
+      expect(code).not.toMatch(/mockServiceWorker|\[MSW\]/)
+    }
+  })
 })
