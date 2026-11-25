@@ -1,5 +1,6 @@
 package app.accountbook.category;
 
+import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
@@ -7,11 +8,16 @@ import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.ledger.LedgerAccess;
 import java.util.List;
 import java.util.UUID;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CategoryService {
+
+    /** V2 마이그레이션의 유니크 제약 이름. */
+    private static final String NAME_UNIQUE_CONSTRAINT = "uq_category_name";
 
     private final CategoryRepository categoryRepository;
     private final CategoryUsage categoryUsage;
@@ -24,7 +30,10 @@ public class CategoryService {
         this.ledgerAccess = ledgerAccess;
     }
 
-    /** 카테고리는 2단계까지다. 부모는 같은 장부·같은 kind의 최상위 분류여야 한다. */
+    /**
+     * 카테고리는 2단계까지다. 부모는 같은 장부·같은 kind의 최상위 분류여야 한다.
+     * 이름은 앞뒤 공백을 지운 1~20자이고 같은 상위 아래에서 겹칠 수 없다(P-221).
+     */
     @Transactional
     public Category create(UUID actorId, UUID ledgerId, CategoryCommand cmd) {
         ledgerAccess.requireMember(actorId, ledgerId);
@@ -34,19 +43,23 @@ public class CategoryService {
         if (cmd.kind() == null) {
             throw new InvalidRequestException("수입·지출 구분이 없습니다.");
         }
-        String name = Names.normalize(cmd.name());
+        String name = Names.normalize(cmd.name(), Category.NAME_MAX_LENGTH);
         if (cmd.parentId() != null) {
             requireValidParent(ledgerId, cmd.kind(), cmd.parentId());
         }
-        return categoryRepository.save(Category.of(ledgerId, cmd.kind(), name, cmd.parentId()));
+        Category category = Category.of(ledgerId, cmd.kind(), name, cmd.parentId());
+        requireUniqueName(category, name);
+        return saveUnlessDuplicate(category);
     }
 
     @Transactional
     public Category rename(UUID actorId, UUID categoryId, String name) {
         Category category = loadForMember(actorId, categoryId);
         requireNotSystem(category);
-        category.rename(Names.normalize(name));
-        return category;
+        String newName = Names.normalize(name, Category.NAME_MAX_LENGTH);
+        requireUniqueName(category, newName);
+        category.rename(newName);
+        return saveUnlessDuplicate(category);
     }
 
     /** 기본 카테고리, 하위 분류가 있는 카테고리, 라인이 참조하는 카테고리(소프트 삭제된 거래 포함)는 지울 수 없다. */
@@ -86,6 +99,30 @@ public class CategoryService {
         }
         if (parent.getKind() != kind) {
             throw new InvalidRequestException("상위 분류와 수입·지출 구분이 같아야 합니다.");
+        }
+    }
+
+    /** 자기 자신과는 겹치지 않는 것으로 본다. 이름은 글자 그대로 비교한다(대소문자, 가운데 공백 구분). */
+    private void requireUniqueName(Category category, String name) {
+        if (categoryRepository.existsSibling(category.getLedgerId(), category.getKind(), category.getParentId(),
+                name, category.getId())) {
+            throw new DuplicateCategoryNameException();
+        }
+    }
+
+    /**
+     * 바로 flush해서 DB 제약 위반을 이 메서드 안에서 받는다.
+     * 동시 요청이 둘 다 앱 검사를 통과하면 나중 것이 유니크 제약에 걸리는데, 그것도 같은 이름 오류로 알린다.
+     */
+    private Category saveUnlessDuplicate(Category category) {
+        try {
+            return categoryRepository.saveAndFlush(category);
+        } catch (DataIntegrityViolationException e) {
+            if (e.getCause() instanceof ConstraintViolationException violation
+                    && NAME_UNIQUE_CONSTRAINT.equals(violation.getConstraintName())) {
+                throw new DuplicateCategoryNameException();
+            }
+            throw e;
         }
     }
 

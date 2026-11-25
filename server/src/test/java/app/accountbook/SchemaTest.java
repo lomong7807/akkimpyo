@@ -6,6 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import app.accountbook.account.Account;
 import app.accountbook.account.AccountRepository;
 import app.accountbook.account.AccountType;
+import app.accountbook.category.Category;
+import app.accountbook.category.CategoryKind;
+import app.accountbook.category.CategoryRepository;
 import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.support.IntegrationTest;
@@ -28,6 +31,7 @@ class SchemaTest {
     @Autowired UserRepository userRepository;
     @Autowired LedgerRepository ledgerRepository;
     @Autowired AccountRepository accountRepository;
+    @Autowired CategoryRepository categoryRepository;
     @Autowired TransactionRepository transactionRepository;
 
     @Test
@@ -51,5 +55,36 @@ class SchemaTest {
 
         assertThatThrownBy(() -> transactionRepository.saveAndFlush(tx))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void categoryNameOverTwentyCharactersIsRejectedByDatabase() {
+        Ledger ledger = ledgerRepository.save(Ledger.personal());
+        Category tooLong = Category.of(ledger.getId(), CategoryKind.EXPENSE, "가".repeat(21), null);
+
+        assertThatThrownBy(() -> categoryRepository.saveAndFlush(tooLong))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_category_name_length");
+    }
+
+    @Test
+    void sameTopLevelCategoryNameIsRejectedByDatabase() {
+        Ledger ledger = ledgerRepository.save(Ledger.personal());
+        categoryRepository.saveAndFlush(Category.of(ledger.getId(), CategoryKind.EXPENSE, "식비", null));
+        Category duplicate = Category.of(ledger.getId(), CategoryKind.EXPENSE, "식비", null);
+
+        assertThatThrownBy(() -> categoryRepository.saveAndFlush(duplicate))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("uq_category_name");
+    }
+
+    @Test
+    void categoryNameWithSurroundingSpaceIsRejectedByDatabase() {
+        Ledger ledger = ledgerRepository.save(Ledger.personal());
+        Category trailingSpace = Category.of(ledger.getId(), CategoryKind.EXPENSE, "식비 ", null);
+
+        assertThatThrownBy(() -> categoryRepository.saveAndFlush(trailingSpace))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_category_name_trimmed");
     }
 }
