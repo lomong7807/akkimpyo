@@ -138,6 +138,13 @@ describe.each(kinds)('처리 중: %s', (kind) => {
     expect(spinner.getAttribute('aria-hidden')).toBe('true')
   })
 
+  it('원은 한 바퀴 800ms로 일정하게 계속 돌고, 움직임 줄이기에서도 돈다', () => {
+    const spinner = renderButton(kind, { busy: true }).children[1]
+    expect(ruleBody('.spinner')).toMatch(/animation: \w+ var\(--motion-spinner-duration\) linear infinite;/)
+    // base.css의 움직임 줄이기 규칙에서 빠지는 표시(tests/base-styles.test.ts)
+    expect(spinner.classList.contains('status-motion')).toBe(true)
+  })
+
   it('처리가 끝나면 원래대로 돌아온다', () => {
     const { rerender } = render(buttons[kind]({ busy: true }))
     rerender(buttons[kind]({ busy: false }))

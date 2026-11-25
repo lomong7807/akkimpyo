@@ -62,17 +62,28 @@ describe('기본 스타일', () => {
     expect(getComputedStyle(amount).fontVariantNumeric).toBe('tabular-nums')
   })
 
-  it('움직임 줄이기를 켜면 모든 요소의 애니메이션과 전환이 바로 끝난다', () => {
-    const media = baseRules().find(
-      (rule): rule is CSSMediaRule =>
-        rule instanceof CSSMediaRule && rule.media.mediaText === '(prefers-reduced-motion: reduce)',
-    )
-    const all = styleOf('*, ::before, ::after', [...(media?.cssRules ?? [])])
+  const reducedMotionRules = () =>
+    baseRules()
+      .filter((rule) => rule instanceof CSSMediaRule)
+      .filter((rule) => rule.media.mediaText === '(prefers-reduced-motion: reduce)')
+      .flatMap((rule) => [...rule.cssRules])
+
+  it('움직임 줄이기를 켜면 애니메이션과 전환이 바로 끝난다', () => {
+    const all = styleOf('*:not(.status-motion), ::before, ::after', reducedMotionRules())
     for (const name of ['animation-duration', 'animation-delay', 'transition-duration', 'transition-delay']) {
       expect(all.getPropertyValue(name), name).toBe('0s')
       expect(all.getPropertyPriority(name), name).toBe('important')
     }
     expect(all.getPropertyValue('scroll-behavior')).toBe('auto')
+  })
+
+  it('움직임 줄이기를 켜도 상태를 알리는 움직임(status-motion)은 남는다', () => {
+    document.body.innerHTML = '<span class="status-motion"></span><span></span>'
+    const [status, other] = document.body.children
+    const selectors = reducedMotionRules().flatMap((rule) => (rule instanceof CSSStyleRule ? [rule.selectorText] : []))
+    expect(selectors.length).toBeGreaterThan(0)
+    expect(selectors.some((selector) => other.matches(selector))).toBe(true)
+    expect(selectors.some((selector) => status.matches(selector))).toBe(false)
   })
 })
 

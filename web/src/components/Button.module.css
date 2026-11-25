@@ -96,8 +96,7 @@
   border: var(--border-width-strong) solid currentColor;
   border-inline-end-color: transparent;
   border-radius: var(--radius-full);
-  /* 한 바퀴 도는 시간은 문서에 없어 가장 긴 움직임 값을 쓴다 */
-  animation: spin var(--motion-sheet-duration) linear infinite;
+  animation: spin var(--motion-spinner-duration) linear infinite;
 }
 
 @keyframes spin {

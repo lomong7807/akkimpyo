@@ -44,8 +44,9 @@ textarea {
   font-variant-numeric: tabular-nums !important;
 }
 
+/* 처리 중 원처럼 상태를 알리는 움직임(status-motion)은 남긴다 */
 @media (prefers-reduced-motion: reduce) {
-  *,
+  *:not(.status-motion),
   ::before,
   ::after {
     animation-duration: 0s !important;

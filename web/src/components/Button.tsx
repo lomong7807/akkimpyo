@@ -70,7 +70,7 @@ export function Button({
       onClick={inactive ? ignoreClick : onClick}
     >
       <span className={styles.content}>{icon ? <Icon name={icon} size={24} /> : children}</span>
-      {busy && <span className={styles.spinner} aria-hidden="true" />}
+      {busy && <span className={`status-motion ${styles.spinner}`} aria-hidden="true" />}
     </button>
   )
 }
