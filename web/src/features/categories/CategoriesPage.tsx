@@ -3,9 +3,10 @@ import LoadFailure from '../../components/LoadFailure'
 import { SubScreen } from '../../components/Screen'
 import SegmentedChoice from '../../components/SegmentedChoice'
 import type { CategoryKind } from './categories'
+import CategoriesSkeleton from './CategoriesSkeleton'
 import CategoryList from './CategoryList'
-import styles from './CategoriesPage.module.css'
 import { useCategories } from './useCategories'
+import styles from './Categories.module.css'
 
 const kindOptions: { value: CategoryKind; label: string }[] = [
   { value: 'EXPENSE', label: '지출' },
@@ -29,6 +30,6 @@ function Categories({ kind }: { kind: CategoryKind }) {
   const { data, isFetchedAfterMount, isFetching, refetch } = useCategories()
   if (data) return <CategoryList categories={data.filter((category) => category.kind === kind)} />
   // 다시 받는 동안에는 isError가 풀리므로 이 화면에서 받아 본 적이 있는지로 본다
-  if (isFetchedAfterMount) return <LoadFailure onRetry={() => void refetch()} busy={isFetching} />
-  return null
+  if (isFetchedAfterMount) return <LoadFailure headingLevel={2} onRetry={() => void refetch()} busy={isFetching} />
+  return <CategoriesSkeleton />
 }

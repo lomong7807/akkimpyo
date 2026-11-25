@@ -1,3 +1,12 @@
+.kind {
+  margin-block: var(--space-24) var(--space-8);
+}
+
+/* 빈 상태의 글 위 40px에는 고르기 아래의 8px이 든다 */
+.empty {
+  margin-top: calc(-1 * var(--space-8));
+}
+
 .list {
   margin: 0;
   padding: 0;

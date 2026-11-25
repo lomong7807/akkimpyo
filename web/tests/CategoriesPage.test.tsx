@@ -4,13 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, startBackend, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
 import { startMockServer } from './support/mockServer'
-import { openApp } from './support/openApp'
+import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
-const CSS = 'src/features/categories/CategoryList.module.css'
+const CSS = 'src/features/categories/Categories.module.css'
+const empty = '아직 만든 카테고리가 없어요.'
+const loading = '불러오고 있어요.'
+const failed = '불러오지 못했어요.'
 
 const server = startMockServer()
 let backend: Backend
@@ -64,6 +67,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   cleanup()
   resetViewport()
   vi.unstubAllGlobals()
@@ -90,7 +94,7 @@ const title = () => screen.findByRole('heading', { level: 1, name: '카테고리
 const content = () => within(screen.getByRole('main'))
 const option = (name: string) => screen.getByRole('radio', { name })
 const chosen = () => screen.getAllByRole('radio', { checked: true }).map((radio) => radio.textContent)
-const failure = () => screen.findByText('불러오지 못했어요.')
+const failure = () => screen.findByRole('heading', { level: 2, name: failed })
 const retry = () => screen.getByRole('button', { name: '다시 시도' })
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 30)))
 
@@ -293,6 +297,47 @@ describe('미분류', () => {
   })
 })
 
+describe('고른 구분에 미분류만 있으면', () => {
+  const onlyUncategorized = [uncategorized('EXPENSE'), category('INCOME', '급여'), uncategorized('INCOME')]
+
+  it('미분류 줄 위에 안내를 보이고 미분류 줄은 그대로다. 안내에 버튼이 없다', async () => {
+    respondWith(onlyUncategorized)
+    await openList()
+    expect(await tree()).toEqual([uncategorizedRow])
+    const order = content().getByText(empty).compareDocumentPosition(await list())
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(content().queryAllByRole('button')).toEqual([])
+    expect(content().queryAllByRole('link')).toEqual([])
+  })
+
+  it('다른 구분을 고르면 안내가 사라지고, 돌아오면 다시 보인다', async () => {
+    respondWith(onlyUncategorized)
+    const { user } = await openList()
+    await user.click(option('수입'))
+    expect(content().queryByText(empty)).toBeNull()
+    expect(await tree()).toEqual(['급여', uncategorizedRow])
+    await user.click(option('지출'))
+    expect(content().getByText(empty)).toBeTruthy()
+  })
+
+  it('안내는 고르기 상자에서 40px 아래에 있다(상자 아래 8px을 넣은 값). 아래는 24px과 선이다', async () => {
+    respondWith(onlyUncategorized)
+    await openList()
+    const state = content().getByText(empty).parentElement!
+    expect(styleOf(state).paddingTop).toBe('var(--space-40)')
+    expect(styleOf(state.parentElement!).marginTop).toBe('calc(-1 * var(--space-8))')
+    expect(styleOf(itemsIn(await list())[0]).marginTop).toBe('var(--space-24)')
+    expect(styleOf(itemsIn(await list())[0]).paddingTop).toBe('var(--space-24)')
+  })
+})
+
+it('만든 카테고리가 있는 구분에는 "아직 만든 카테고리가 없어요."가 없다', async () => {
+  const { user } = await openList()
+  expect(content().queryByText(empty)).toBeNull()
+  await user.click(option('수입'))
+  expect(content().queryByText(empty)).toBeNull()
+})
+
 describe('지출과 수입', () => {
   it('"구분"에 지출, 수입 두 칸이 있고 화면을 열면 지출이 골라져 있다', async () => {
     await openList()
@@ -344,6 +389,21 @@ describe('지출과 수입', () => {
 })
 
 describe('불러오는 중', () => {
+  const pass = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+  const skeleton = () => screen.getByRole('main').querySelector('[aria-hidden="true"]')
+
+  /** 다른 화면에서 시계를 멈추고 카테고리로 간다. 요청은 답을 기다린다. */
+  async function openLoading() {
+    const answer = delayed()
+    api.response = answer.respond
+    installMatchMedia(390)
+    const { router } = await openApp('/other', addScreens([{ path: '/other', element: <main>다른 화면</main> }]))
+    await screen.findByText('다른 화면')
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    await act(() => router.navigate('/categories'))
+    return answer
+  }
+
   it('응답을 기다리지 않고 고르기를 보이고, 그사이 고른 구분의 목록을 보인다', async () => {
     const late = delayed()
     api.response = late.respond
@@ -353,6 +413,61 @@ describe('불러오는 중', () => {
     await user.click(option('수입'))
     late.answer(HttpResponse.json({ items }))
     expect((await tree())[0]).toBe('급여')
+  })
+
+  it('300ms까지는 고르기만 있고 그 뒤 뼈대를 보이며 "불러오고 있어요."를 알린다', async () => {
+    await openLoading()
+    await pass(299)
+    expect(chosen()).toEqual(['지출'])
+    expect(screen.getByRole('main').textContent).toBe('지출수입')
+    expect(skeleton()).toBeNull()
+    await pass(1)
+    expect(content().getByRole('status').textContent).toBe(loading)
+    expect(skeleton()).toBeTruthy()
+    expect(chosen()).toEqual(['지출'])
+    expect(screen.getByRole('heading', { level: 1, name: '카테고리' })).toBeTruthy()
+  })
+
+  it('뼈대는 이름 막대만 있는 카테고리 줄 8개이고 화면 읽기에는 없다', async () => {
+    await openLoading()
+    await pass(300)
+    const rows = [...skeleton()!.children]
+    expect(rows.map((row) => row.children.length)).toEqual(Array(8).fill(1))
+    for (const row of rows) {
+      expect(styleOf(row.firstElementChild!).width).toBe('40%')
+      expect(styleOf(row.firstElementChild!).font).toBe('var(--text-body)')
+    }
+    expect(content().queryAllByRole('listitem')).toEqual([])
+  })
+
+  it('뼈대 줄은 실제 줄과 같은 CSS를 쓴다', async () => {
+    const answer = await openLoading()
+    await pass(300)
+    const classes = [...skeleton()!.children].map((row) => row.className)
+    answer.answer(HttpResponse.json({ items }))
+    vi.useRealTimers()
+    await list()
+    expect(new Set(classes)).toEqual(new Set([rowOf('식비').className]))
+  })
+
+  it('받으면 뼈대와 알림을 지우고 목록을 보인다', async () => {
+    const answer = await openLoading()
+    await pass(300)
+    answer.answer(HttpResponse.json({ items }))
+    vi.useRealTimers()
+    await list()
+    expect(content().queryByRole('status')).toBeNull()
+    expect(skeleton()).toBeNull()
+  })
+
+  it('300ms 안에 받으면 뼈대를 보이지 않는다', async () => {
+    const answer = await openLoading()
+    const dom = recordDom()
+    answer.answer(HttpResponse.json({ items }))
+    vi.useRealTimers()
+    await list()
+    expect(dom.sawText(loading)).toBe(false)
+    expect(dom.sawElement('main [aria-hidden="true"]')).toBe(false)
   })
 })
 
@@ -367,12 +482,13 @@ describe('오류', () => {
     const { user } = await open()
     await failure()
     expect(content().getByText('잠시 후 다시 시도해 주세요.')).toBeTruthy()
+    expect(screen.getAllByRole('heading', { level: 1 }).map((heading) => heading.textContent)).toEqual(['카테고리'])
     expect(chosen()).toEqual(['지출'])
     expect(content().queryAllByRole('list')).toEqual([])
     respondWith(items)
     await user.click(retry())
     expect((await tree())[0]).toEqual(['식비', ['외식', '장보기']])
-    expect(screen.queryByText('불러오지 못했어요.')).toBeNull()
+    expect(screen.queryByText(failed)).toBeNull()
   })
 
   it('저절로 다시 받지 않는다', async () => {
@@ -410,7 +526,7 @@ describe('오류', () => {
     await late.arrived
     late.answer(HttpResponse.json({ items }))
     await list()
-    expect(dom.sawText('불러오지 못했어요.')).toBe(false)
+    expect(dom.sawText(failed)).toBe(false)
   })
 
   it('받은 목록이 있으면 다시 받기가 실패해도 그대로 보인다', async () => {
@@ -426,6 +542,6 @@ describe('오류', () => {
     late.answer(problem(500, 'INTERNAL_ERROR'))
     await settle()
     expect(content().getByText('식비')).toBeTruthy()
-    expect(screen.queryByText('불러오지 못했어요.')).toBeNull()
+    expect(screen.queryByText(failed)).toBeNull()
   })
 })
