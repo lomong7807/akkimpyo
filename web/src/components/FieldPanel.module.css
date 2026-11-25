@@ -1,0 +1,24 @@
+.panel {
+  position: absolute;
+  left: min(var(--field-left), 100% - var(--width-field-panel));
+  width: var(--width-field-panel);
+  padding-block: var(--space-4) var(--space-8);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-12);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-dialog);
+  /* 그림자가 없는 고대비 모드에서는 투명한 테두리가 보이게 된다 */
+  outline: 1px solid transparent;
+}
+
+/* 칸과도 화면 끝과도 4px 떨어진다 */
+.panel[data-side='below'] {
+  top: calc(var(--field-bottom) + var(--space-4));
+  max-height: calc(100% - var(--field-bottom) - 2 * var(--space-4));
+}
+
+.panel[data-side='above'] {
+  bottom: calc(100% - var(--field-top) + var(--space-4));
+  max-height: calc(var(--field-top) - 2 * var(--space-4));
+}

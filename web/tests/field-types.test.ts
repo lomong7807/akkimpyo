@@ -2,7 +2,11 @@
 import { describe, expect, it } from 'vitest'
 import { typeErrorsOf } from './support/typeErrors'
 
-const typeErrors = (jsx: string) => typeErrorsOf(`import { PasswordField, TextField } from './components/TextField'`, jsx)
+const imports = `
+import DateField from './components/DateField'
+import { PasswordField, TextField } from './components/TextField'
+`
+const typeErrors = (jsx: string) => typeErrorsOf(imports, jsx)
 
 describe('입력칸의 타입', () => {
   it('정해진 쓰임은 통과한다', () => {
@@ -11,6 +15,7 @@ describe('입력칸의 타입', () => {
         <TextField label="이메일" inputMode="email" autoComplete="username" help="도움말" error="오류" onBlur={() => {}} readOnly />
         <TextField label="이름" count={{ current: 17, max: 20 }} />
         <PasswordField label="비밀번호" autoComplete="current-password" ref={() => {}} />
+        <DateField label="기준일" value="2026-11-26" onChange={(date: string) => date} help="도움말" error="오류" readOnly ref={() => {}} />
       `),
     ).toEqual([])
   })
@@ -29,6 +34,11 @@ describe('입력칸의 타입', () => {
     ['비밀번호 칸의 종류 바꾸기', '<PasswordField label="비밀번호" type="text" />', 'type'],
     ['비밀번호 칸의 글자 수', '<PasswordField label="비밀번호" count={{ current: 8, max: 72 }} />', 'count'],
     ['비밀번호 칸의 모양 덮어쓰기', '<PasswordField label="비밀번호" className="a" />', 'className'],
+    ['이름 없는 날짜 칸', '<DateField value="" onChange={() => {}} />', 'label'],
+    ['Date를 값으로 받는 날짜 칸', '<DateField label="기준일" value={new Date()} onChange={() => {}} />', 'string'],
+    ['날짜 칸의 모양 덮어쓰기', '<DateField label="기준일" value="" onChange={() => {}} className="a" />', 'className'],
+    ['모양이 정해지지 않은 날짜 칸의 비활성', '<DateField label="기준일" value="" onChange={() => {}} disabled />', 'disabled'],
+    ['날짜 칸의 글자 수', '<DateField label="기준일" value="" onChange={() => {}} count={{ current: 1, max: 2 }} />', 'count'],
   ])('%s는 타입 오류다', (_, jsx, word) => {
     const errors = typeErrors(jsx)
     expect(errors).toHaveLength(1)
