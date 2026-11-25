@@ -1,16 +1,20 @@
 package app.accountbook.user;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.support.IntegrationTest;
+import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,17 +27,19 @@ import org.springframework.test.context.bean.override.convention.TestBean;
 class SignupHashOrderTest {
 
     @Autowired UserService userService;
+    @Autowired UserRepository userRepository;
+    @Autowired LedgerRepository ledgerRepository;
     @TestBean PasswordHasher passwordHasher;
 
     private static final PasswordEncoder passwordEncoder = spy(new Argon2PasswordEncoder(16, 32, 1, 256, 1));
 
     static PasswordHasher passwordHasher() {
-        return new PasswordHasher(passwordEncoder);
+        return new PasswordHasher(passwordEncoder, new PasswordHashProperties(4, 16, Duration.ofSeconds(2)));
     }
 
     @BeforeEach
     void forgetEarlierHashes() {
-        clearInvocations(passwordEncoder);
+        reset(passwordEncoder);
     }
 
     @Test
@@ -84,6 +90,18 @@ class SignupHashOrderTest {
         // 규칙 오류다. 이미 가입된 이메일인지는 싼 검사를 모두 지난 요청만 알 수 있다.
         assertThatThrownBy(() -> userService.createUser("taken@example.com", "abc1234", "두번째"))
                 .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void createUser_savesNothingWhenHashFails() {
+        long usersBefore = userRepository.count();
+        long ledgersBefore = ledgerRepository.count();
+        doThrow(new PasswordHashBusyException()).when(passwordEncoder).encode("password1");
+
+        assertThatThrownBy(() -> userService.createUser("busy@example.com", "password1", "주인"))
+                .isInstanceOf(PasswordHashBusyException.class);
+        assertThat(userRepository.count()).isEqualTo(usersBefore);
+        assertThat(ledgerRepository.count()).isEqualTo(ledgersBefore);
     }
 
     @Test

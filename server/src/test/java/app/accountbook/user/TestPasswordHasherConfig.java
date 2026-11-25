@@ -1,5 +1,6 @@
 package app.accountbook.user;
 
+import java.time.Duration;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
@@ -16,6 +17,7 @@ public class TestPasswordHasherConfig {
     @Bean
     @Primary
     PasswordHasher lightPasswordHasher() {
-        return new PasswordHasher(new Argon2PasswordEncoder(16, 32, 1, 256, 1));
+        return new PasswordHasher(new Argon2PasswordEncoder(16, 32, 1, 256, 1),
+                new PasswordHashProperties(4, 16, Duration.ofSeconds(2)));
     }
 }
