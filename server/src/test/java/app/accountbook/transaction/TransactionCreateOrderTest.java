@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import app.accountbook.account.Account;
 import app.accountbook.account.AccountType;
-import app.accountbook.common.IdConflictException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.ledger.LedgerMemberRepository;
