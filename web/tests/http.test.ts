@@ -234,11 +234,21 @@ describe('지연', () => {
     expect((await result).kind).toBe('timeout')
   })
 
-  it('본문이 15초 안에 끝나지 않아도 지연 오류다', async () => {
-    respondWith(() => new HttpResponse(new ReadableStream(), { headers: { 'Content-Type': 'application/json' } }))
-    const result = errorOf(send('/ledgers'))
-    await vi.advanceTimersByTimeAsync(15_000)
-    expect((await result).kind).toBe('timeout')
+  it('머리글만 오고 본문이 15초 안에 끝나지 않아도 지연 오류다', async () => {
+    // msw는 본문이 끝나야 응답을 넘기므로, 머리글만 먼저 오는 응답은 fetch를 바꿔 만든다
+    vi.stubGlobal('fetch', async (_: string, { signal }: { signal: AbortSignal }) => {
+      const body = new ReadableStream({
+        start: (controller) => signal.addEventListener('abort', () => controller.error(signal.reason)),
+      })
+      return new Response(body)
+    })
+    try {
+      const result = errorOf(send('/ledgers'))
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect((await result).kind).toBe('timeout')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('응답을 받으면 시계를 멈춘다', async () => {

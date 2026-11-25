@@ -106,11 +106,7 @@ export default function LoginPage() {
 
 function LoginFailure({ error, onRetry }: { error: Error; onRetry: () => void }) {
   if (isWrongCredentials(error)) {
-    return (
-      <div>
-        <ErrorMessage role="alert">이메일 또는 비밀번호가 맞지 않아요</ErrorMessage>
-      </div>
-    )
+    return <ErrorMessage role="alert">이메일 또는 비밀번호가 맞지 않아요</ErrorMessage>
   }
   return (
     <div>

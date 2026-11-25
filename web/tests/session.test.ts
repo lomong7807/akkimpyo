@@ -480,6 +480,15 @@ describe('탭 사이의 잠금', () => {
     expect(await second.restoreSession()).toBe(true)
   })
 
+  it('브라우저가 잠금을 막으면 잠금 없이 보낸다', async () => {
+    installLocks({ request: () => Promise.reject(new DOMException('막힘', 'SecurityError')) })
+    const backend = startBackend()
+    const tab = await openTab()
+    await tab.login(credentials)
+    expect(await tab.restoreSession()).toBe(true)
+    expect(backend.requests.login).toHaveLength(1)
+  })
+
   it('앞 탭이 멈춰 잠금을 15초 동안 얻지 못하면 잠금 없이 갱신한다', async () => {
     installLocks(createStuckLocks())
     const backend = startBackend()

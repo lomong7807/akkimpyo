@@ -27,6 +27,7 @@
   background-color: var(--color-surface);
   color: var(--color-text);
   font: var(--text-body);
+  text-overflow: ellipsis;
 }
 
 .input::placeholder {

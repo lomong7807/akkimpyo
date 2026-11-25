@@ -105,6 +105,11 @@ describe.each(fields)('%s', (_, Field) => {
     expect(ruleBody('.input')).toContain('padding: 0 calc(var(--space-12) + 1px - var(--border-width))')
   })
 
+  it('칸보다 긴 글자는 말줄임표로 줄인다', () => {
+    render(<Field label="이메일" />)
+    expect(getComputedStyle(screen.getByLabelText('이메일')).textOverflow).toBe('ellipsis')
+  })
+
   it('값, 입력 속성, ref를 칸에 넘긴다', async () => {
     let input: HTMLInputElement | null = null
     render(
