@@ -17,6 +17,11 @@ const reactPackages = {
   message: 'api는 React와 무관하다. 화면과 잇는 훅은 features에 둔다.',
 }
 
+const apiInternals = {
+  regex: '^\\.\\.?/(.*/)?api(/(?!(request|session|apiError)(\\.ts)?$)|$)',
+  message: '화면은 api의 request, session, apiError만 쓴다. 나머지는 api 안의 구현이다.',
+}
+
 const mswPackage = {
   regex: '^msw(/|$)',
   message: '가짜 응답은 테스트에서만 쓴다.',
@@ -51,7 +56,7 @@ export default tseslint.config(
     },
   },
   restrictedImports(['src/**/*.{ts,tsx}']),
-  restrictedImports(['src/features/**/*.{ts,tsx}'], [importsFrom('app')]),
+  restrictedImports(['src/features/**/*.{ts,tsx}'], [importsFrom('app'), apiInternals]),
   restrictedImports(
     ['src/components/**/*.{ts,tsx}'],
     [importsFrom('app'), importsFrom('features'), importsFrom('api')],
