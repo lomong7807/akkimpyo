@@ -1,8 +1,9 @@
 import { useRef, type SubmitEvent } from 'react'
-import { Button, ButtonLink } from '../../components/Button'
+import { Button } from '../../components/Button'
 import ErrorMessage from '../../components/ErrorMessage'
 import Notice from '../../components/Notice'
 import { PasswordField, TextField } from '../../components/TextField'
+import AuthLink from './AuthLink'
 import { keepFocusInField } from './keepFocusInField'
 import { loginFields, validateLogin } from './loginForm'
 import RetryMessage from './RetryMessage'
@@ -84,12 +85,9 @@ export default function LoginPage({ signIn, onSignedIn, sessionEnded, initialEma
           로그인
         </Button>
       </form>
-      <p className={styles.signup}>
-        계정이 없나요?{' '}
-        <ButtonLink kind="text" to="/signup" state={{ email: values.email }}>
-          가입
-        </ButtonLink>
-      </p>
+      <AuthLink question="계정이 없나요?" to="/signup" email={values.email}>
+        가입
+      </AuthLink>
     </div>
   )
 }

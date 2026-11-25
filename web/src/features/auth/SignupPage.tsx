@@ -1,8 +1,9 @@
 import { useRef, type SubmitEvent } from 'react'
-import { Button, ButtonLink } from '../../components/Button'
+import { Button } from '../../components/Button'
 import layout from '../../components/layout.module.css'
 import { TitleBar } from '../../components/Screen'
 import { PasswordField, TextField } from '../../components/TextField'
+import AuthLink from './AuthLink'
 import { keepFocusInField } from './keepFocusInField'
 import RetryMessage from './RetryMessage'
 import {
@@ -121,12 +122,9 @@ export default function SignupPage({ signUp, onSignedUp, initialEmail }: SignupP
             <Button ref={signupButton} kind="primary" type="submit" busy={busy}>
               가입
             </Button>
-            <p className={styles.login}>
-              이미 계정이 있나요?{' '}
-              <ButtonLink kind="text" to="/login" state={{ email: values.email }}>
-                로그인
-              </ButtonLink>
-            </p>
+            <AuthLink question="이미 계정이 있나요?" to="/login" email={values.email}>
+              로그인
+            </AuthLink>
           </div>
         </form>
       </main>

@@ -26,12 +26,6 @@
   background-color: var(--color-surface);
 }
 
-.login {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font: var(--text-secondary);
-}
-
 /* 화면 전체를 스크롤할 때 키보드로 옮긴 초점이 상단 바 뒤에 가려지지 않게 한다 */
 :root:has(.page) {
   scroll-padding-top: calc(var(--size-topbar) + env(safe-area-inset-top) + var(--space-4));

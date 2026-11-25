@@ -628,7 +628,7 @@ describe('가입 링크', () => {
   it('"계정이 없나요?" 뒤에 있고 /signup으로 간다', () => {
     openLogin()
     const link = screen.getByRole('link', { name: '가입' })
-    expect(link.parentElement!.textContent).toBe('계정이 없나요? 가입')
+    expect(link.closest('p')!.textContent).toBe('계정이 없나요? 가입')
     expect(link.getAttribute('href')).toBe('/signup')
   })
 
