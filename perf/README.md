@@ -8,7 +8,7 @@
 | [`seed.sql`](seed.sql) | 시험 데이터를 만든다 |
 | [`queries/`](queries/) | 지금 코드가 보내는 SQL 그대로. `EXPLAIN (ANALYZE, BUFFERS)`로 감싸 돌린다 |
 | [`queries/candidates/`](queries/candidates/) | 후보 쿼리. 앱이 보내는 SQL이 아니다. 7번의 진단 측정만 쓴다 |
-| [`run-diagnosis.sh`](run-diagnosis.sh) | 진단 측정(7번)을 단계별로 돌린다 |
+| [`run-diagnosis.sh`](run-diagnosis.sh) | 진단 측정(7번)과 V6 앞뒤 비교(8번)를 단계별로 돌린다 |
 | [`summarize-diagnosis.mjs`](summarize-diagnosis.mjs) | 진단 측정이 남긴 실행 계획 원문에서 숫자를 뽑는다 |
 | [`insert-cost.sql`](insert-cost.sql) | 거래 1,000건을 넣는 시간(진단 측정 E7) |
 | [`compose.diag.yaml`](compose.diag.yaml) | 진단 측정용 덮어쓰기. 셸이 PostgreSQL을 감싸 컨테이너를 유지한 채 `pg_ctl`로만 재시작한다. `PG_SHARED_BUFFERS`, `PG_MEM_LIMIT` 환경변수로 E3의 설정을 준다 |
@@ -220,12 +220,31 @@ OUT=~/akkimpyo-perf-out perf/run-diagnosis.sh down
 - VM 전체의 페이지 캐시(`/proc/sys/vm/drop_caches`)는 비우지 않는다. 같은 VM의 다른 컨테이너에 영향을 준다. `docker ps`는 Docker Desktop의 Kubernetes 컨테이너를 숨기므로 `docker info`의 실행 중 개수도 같이 본다.
 - 큰 장부와 보통 장부의 번호는 `BIG`(1001), `NORMAL`(1)로 바꿀 수 있다. `DBS`로 다른 DB 이름을 주면 작은 시험 데이터(`TX_PER_LEDGER`, `BIG_TX`)로 흐름만 확인할 수 있다.
 
-앱과 같은 pgJDBC가 언제 준비된 문장을 쓰는지는 이렇게 본다(JDK 21, 서버 의존성을 한 번 받은 뒤).
+앱과 같은 pgJDBC가 언제 준비된 문장을 쓰는지는 이렇게 본다(JDK 21, 서버 의존성을 한 번 받은 뒤). jar 이름의 버전은 `server`의 `./gradlew dependencies`에 나오는 것으로 맞춘다.
 
 ```sh
-java -cp "$(find ~/.gradle/caches/modules-2 -name 'postgresql-42.7.11.jar' | head -1)" \
+java -cp "$(find ~/.gradle/caches/modules-2 -name 'postgresql-42.7.14.jar' | head -1)" \
   perf/PrepareThresholdCheck.java jdbc:postgresql://localhost:5434/perf_mix_50k 1001
 ```
+
+## 8. V6 앞뒤 비교 (`uq_account_name`)
+
+이슈 #6(PR #139)의 V6이 `account`에 `(ledger_id, name)` 유니크를 더했다. 장부 전체 잔액이 `account`를 훑는 것이 바뀌는지 같은 DB에서 V6 앞뒤로 잰다. 결과는 [2026-11-25 V6과 Spring Boot 4.2 뒤 다시 재기](../docs/perf/results/2026-11-25-remeasure-v6-boot42.md)에 있다. 띄우는 방법과 캐시 상태를 맞추는 방법(`fresh`)은 7번과 같다.
+
+```sh
+OUT=~/akkimpyo-perf-out DBS="perf_l1000_3m perf_mix_50k" perf/run-diagnosis.sh up v6-seed v6 sleep-log
+node perf/summarize-diagnosis.mjs ~/akkimpyo-perf-out
+OUT=~/akkimpyo-perf-out perf/run-diagnosis.sh down
+```
+
+| 단계 | 하는 일 |
+|---|---|
+| `v6-seed` | `DBS`의 DB를 만들 때 V1~V5까지만 적용하고 시드를 넣는다(점검 쿼리까지) |
+| `v6` | DB마다 차례로: V5 상태에서 두 회차, `VACUUM (ANALYZE)`만 다시 한 한 회차, V6을 적용하고 `VACUUM (ANALYZE)` 뒤 두 회차. 앞뒤의 건수·내용 해시·저장 위치(ctid) 해시와 `account`, `account`의 인덱스 상태를 `v6.state.<DB>.txt`에 남긴다 |
+
+- 가운데 회차(통계만 다시 모은 것)는 V6의 효과와 `VACUUM (ANALYZE)`가 통계 표본을 다시 뽑아 생기는 차이를 가르려고 둔다.
+- `perf_l1000_3m`에는 큰 장부(1001)가 없어 보통 장부만 잰다.
+- 맥에서 다른 worker가 같이 돌면 `MAX_LOAD`(1분 load average의 상한)를 줘서 회차마다 그 아래로 내려올 때까지(최대 `MAX_WAIT`초, 기본 1800) 기다린다. 회차마다의 load는 `OUT/timeline.tsv`에 남는다.
 
 ## 쿼리 파일을 다시 가져오는 법
 
@@ -238,18 +257,18 @@ SQL은 손으로 쓰지 않았다. 기존 테스트를 SQL 로그를 켜고 돌�
 grep -h org.hibernate.SQL server/build/test-results/test/*.xml | sed 's/.*org.hibernate.SQL[^:]*: //' | sort -u
 ```
 
-지금 파일은 main 48aa00e(Spring Boot 3.5.16, Hibernate 6.6.53.Final, PostgreSQL JDBC 42.7.11)에서 가져왔다.
+지금 파일은 main 48aa00e(Spring Boot 3.5.16, Hibernate 6.6.53.Final, PostgreSQL JDBC 42.7.11)에서 가져왔다. 2026-11-25에 main 18a1c49(Spring Boot 4.2.0, Hibernate 7.4.15.Final, PostgreSQL JDBC 42.7.14)에서 같은 명령으로 다시 가져와 보았고, 다섯 문장이 글자 단위로 같고 로그의 바인드 타입도 같았다(이슈 #146).
 
 ## 고쳐야 하는 때
 
 - **이슈 #58**(`transaction_line`에 `ledger_id` 추가)이 머지되면 `seed.sql`의 `transaction_line` INSERT에 `ledger_id`를 넣어야 한다. 안 고치면 NOT NULL 위반으로 멈춘다.
-- Spring Boot 4.2 이전(이슈 #17)이 머지되면 Hibernate 버전이 바뀐다. 쿼리 파일을 다시 가져와 같은지 본다.
+- Spring Boot나 Hibernate 버전이 바뀌면 쿼리 파일을 다시 가져와 같은지 본다. pgJDBC 버전이 바뀌면 위의 `PrepareThresholdCheck.java` 명령에서 jar 버전을 맞춰 다시 돌려 본다(4.2.0에서는 `perf/queries/`가 그대로였다).
 - 쿼리 코드(`BalanceQuery`, `MonthlyStatsQuery`, 리포지토리)가 바뀌면 그 파일을 다시 가져온다.
 - 이슈 #58이 머지되면 `run-diagnosis.sh`의 `e7`에서 `ledger_id`를 손으로 넣는 부분(`add_ledger_id`)을 뺀다. 후보가 채택되거나 버려지면 `queries/candidates/`를 지운다.
 
 ## 확인한 날짜와 환경
 
-1~6번의 명령은 2026-11-24에, 7번(진단 측정)은 2026-11-25에 아래 환경에서 실행해 확인했다.
+1~6번의 명령은 2026-11-24에, 7번(진단 측정)은 2026-11-25에 아래 환경에서 실행해 확인했다. 2026-11-25에 main 18a1c49(V1~V6, Spring Boot 4.2.0)에서 1~8번을 다시 돌렸고, `seed.sql`은 고치지 않고 그대로 들어갔다(큰 DB는 8번의 V5까지와 V1~V6, 진단 측정 전체는 작은 DB `perf_small`로 확인).
 
 - 맥(Apple M5 Pro, 메모리 48GB), macOS 27.0.1, zsh
 - Docker Desktop(Docker 29.9.2, Compose 5.6.1). Docker VM에 CPU 10개, 메모리 약 7.7GB
