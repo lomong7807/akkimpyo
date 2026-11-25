@@ -232,10 +232,14 @@ repack() {
     tar -cf - SHA256SUMS "${files[@]}" | "$BIN/age" --encrypt -R /etc/akkimpyo/backup-recipients.txt -o "$work_dir/x.tar.age"
   )
   (cd "$work_dir" && sha256sum x.tar.age >x.tar.age.sha256)
-  run_drill --file "$work_dir/x.tar.age" --skip-server
+  run_drill --file "$work_dir/x.tar.age" --skip-server --keep-copy "$WORK/copy"
 }
 repack manifest.txt sed -i 's/^transaction,5000$/transaction,4999/'
 assert '행 수가 다른 명세표' logged '^- 명세표: 실패'
+assert '  좋은 옛 사본을 지우지 않는다' [ -s "$WORK/copy/$(basename "$out")" ]
+assert '  나쁜 파일을 사본으로 두지 않는다' not test -e "$WORK/copy/x.tar.age"
+repack globals.sql ln --symbolic --force /etc/hostname
+assert '심볼릭 링크가 든 백업' logged '보통 파일이 아닌 것'
 repack db.dump truncate --size=100K
 assert '잘린 덤프' logged '^- 복원: 실패'
 assert '1로 끝난다' equal 1 "$rc"

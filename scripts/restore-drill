@@ -19,7 +19,7 @@ usage() {
   --store 폴더        버킷 대신 로컬 폴더에서 daily/의 가장 새것을 쓴다(시험용)
 
 옵션:
-  --keep-copy 폴더    확인이 끝난 암호화 파일을 이 폴더에 두고, 거기 있던 옛 사본은 지운다
+  --keep-copy 폴더    복원과 명세표까지 통과한 암호화 파일을 이 폴더에 두고, 거기 있던 옛 사본은 지운다
   --server-jar 파일   이 jar로 서버를 띄운다. 정하지 않으면 server/에서 빌드한다
   --skip-server       서버 기동과 Flyway validate를 건너뛴다. 훈련은 "불완전"으로 끝난다
 
@@ -92,6 +92,7 @@ cleanup() {
   exit "$rc"
 }
 trap cleanup EXIT
+trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -171,15 +172,6 @@ if [[ $(sha256_of "$work/$bundle") != "$expected" ]]; then
 fi
 pass 'sha256'
 
-if [[ -n $keep_copy ]]; then
-  mkdir -p -- "$keep_copy"
-  cp -- "$work/$bundle" "$work/$bundle.sha256" "$keep_copy/"
-  for old in "$keep_copy"/akkimpyo-*KST.tar.age "$keep_copy"/akkimpyo-*KST.tar.age.sha256; do
-    [[ -e $old && $old != "$keep_copy/$bundle" && $old != "$keep_copy/$bundle.sha256" ]] || continue
-    rm -- "$old"
-  done
-fi
-
 # --- 복호화 ---
 
 log '복호화'
@@ -192,6 +184,7 @@ files='SHA256SUMS meta.txt manifest.txt integrity-checks.sql globals.sql db.dump
 [[ $(tar -tf "$work/bundle.tar" | tr '\n' ' ') == "$files " ]] || die '백업 안의 파일 목록이 다르다'
 tar -xf "$work/bundle.tar" -C "$work/plain"
 rm -- "$work/bundle.tar"
+[[ -z $(find "$work/plain" ! -type d ! -type f) ]] || die '백업 안에 보통 파일이 아닌 것이 있다'
 while read -r sum entry; do
   [[ $(sha256_of "$work/plain/$entry") == "$sum" ]] || die "백업 안의 파일이 깨졌다: $entry"
 done <"$work/plain/SHA256SUMS"
@@ -200,9 +193,6 @@ meta() { sed -n "s/^$1=//p" "$work/plain/meta.txt"; }
 dumped_at=$(meta dumped_at)
 database=$(meta database)
 pass '복호화'
-if [[ -n $keep_copy ]]; then
-  log "암호화 사본: $keep_copy/$bundle (덤프 시각 ${dumped_at}부터 35일 안에 지운다)"
-fi
 
 # --- 복원 ---
 
@@ -238,6 +228,15 @@ if [[ $(meta manifest) != ok ]]; then
 elif manifest_script "$work/plain/integrity-checks.sql" | psql_restored >"$work/manifest.txt" &&
   diff "$work/plain/manifest.txt" "$work/manifest.txt" >&2; then
   pass '명세표'
+  if [[ -n $keep_copy ]]; then
+    mkdir -p -- "$keep_copy"
+    cp -- "$work/$bundle" "$work/$bundle.sha256" "$keep_copy/"
+    for old in "$keep_copy"/akkimpyo-*KST.tar.age "$keep_copy"/akkimpyo-*KST.tar.age.sha256; do
+      [[ -e $old && $old != "$keep_copy/$bundle" && $old != "$keep_copy/$bundle.sha256" ]] || continue
+      rm -- "$old"
+    done
+    log "암호화 사본: $keep_copy/$bundle (덤프 시각 ${dumped_at}부터 35일 안에 지운다)"
+  fi
 else
   fail '명세표' '백업 때와 다르다'
 fi
