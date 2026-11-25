@@ -1,0 +1,21 @@
+.panel {
+  position: absolute;
+  left: min(var(--field-left), 100% - var(--width-field-panel));
+  width: var(--width-field-panel);
+  padding-block: var(--space-4) var(--space-8);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-12);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-dialog);
+}
+
+.panel[data-side='below'] {
+  top: calc(var(--field-bottom) + var(--space-4));
+  max-height: calc(100% - var(--field-bottom) - var(--space-4));
+}
+
+.panel[data-side='above'] {
+  bottom: calc(100% - var(--field-top) + var(--space-4));
+  max-height: calc(var(--field-top) - var(--space-4));
+}

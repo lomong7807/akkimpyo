@@ -71,6 +71,7 @@ const widths = {
   '--width-sidebar': 240,
   '--width-list-min': 360,
   '--width-side-panel': 440,
+  '--width-field-panel': 320,
 } as const
 
 interface Situation {
