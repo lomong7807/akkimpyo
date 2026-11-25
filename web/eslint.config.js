@@ -17,6 +17,14 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "JSXAttribute[name.name='dangerouslySetInnerHTML'], Property[key.name='dangerouslySetInnerHTML'], Property[key.value='dangerouslySetInnerHTML']",
+          message: 'dangerouslySetInnerHTML은 쓰지 않는다(XSS). 글자와 요소는 JSX로 그린다.',
+        },
+      ],
     },
   },
 )
