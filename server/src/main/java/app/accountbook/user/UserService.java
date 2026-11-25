@@ -12,7 +12,6 @@ import app.accountbook.ledger.LedgerRole;
 import java.util.Locale;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,16 +25,16 @@ public class UserService {
     private final LedgerRepository ledgerRepository;
     private final LedgerMemberRepository memberRepository;
     private final CategoryService categoryService;
-    private final PasswordEncoder passwordEncoder;
+    private final PasswordHasher passwordHasher;
 
     UserService(UserRepository userRepository, LedgerRepository ledgerRepository,
                 LedgerMemberRepository memberRepository, CategoryService categoryService,
-                PasswordEncoder passwordEncoder) {
+                PasswordHasher passwordHasher) {
         this.userRepository = userRepository;
         this.ledgerRepository = ledgerRepository;
         this.memberRepository = memberRepository;
         this.categoryService = categoryService;
-        this.passwordEncoder = passwordEncoder;
+        this.passwordHasher = passwordHasher;
     }
 
     /**
@@ -52,11 +51,12 @@ public class UserService {
     public User createUser(String rawEmail, String rawPassword, String rawDisplayName) {
         String email = normalizeEmail(rawEmail);
         String displayName = Names.normalize(rawDisplayName, User.DISPLAY_NAME_MAX_LENGTH);
-        String password = PasswordPolicy.normalizeAndValidate(rawPassword);
+        // 해시할 때도 같은 규칙을 본다. 여기서는 DB 조회와 해시보다 먼저 떨어뜨리려고 부른다.
+        PasswordPolicy.normalizeAndValidate(rawPassword);
         if (userRepository.existsByEmail(email)) {
             throw new DuplicateEmailException();
         }
-        User user = saveUnlessDuplicate(User.of(email, passwordEncoder.encode(password), displayName));
+        User user = saveUnlessDuplicate(User.of(email, passwordHasher.hash(rawPassword), displayName));
         Ledger ledger = ledgerRepository.save(Ledger.personal());
         memberRepository.save(LedgerMember.of(ledger.getId(), user.getId(), LedgerRole.OWNER));
         categoryService.createDefaults(user.getId(), ledger.getId());

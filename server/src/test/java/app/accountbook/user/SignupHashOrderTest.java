@@ -2,24 +2,39 @@ package app.accountbook.user;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.support.IntegrationTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.context.bean.override.convention.TestBean;
 
 /** 해시보다 싼 검사와 중복 확인을 먼저 한다(ADR 001 결정 7). 거기서 떨어진 가입은 해시를 돌리지 않는다. */
 @IntegrationTest
 class SignupHashOrderTest {
 
     @Autowired UserService userService;
-    @MockitoSpyBean PasswordEncoder passwordEncoder;
+    @TestBean PasswordHasher passwordHasher;
+
+    private static final PasswordEncoder passwordEncoder = spy(new Argon2PasswordEncoder(16, 32, 1, 256, 1));
+
+    static PasswordHasher passwordHasher() {
+        return new PasswordHasher(passwordEncoder);
+    }
+
+    @BeforeEach
+    void forgetEarlierHashes() {
+        clearInvocations(passwordEncoder);
+    }
 
     @Test
     void createUser_hashesOnceOnSuccess() {
@@ -60,6 +75,15 @@ class SignupHashOrderTest {
                 .isInstanceOf(DuplicateEmailException.class);
 
         verify(passwordEncoder, times(1)).encode(any());
+    }
+
+    @Test
+    void createUser_checksPasswordRuleBeforeDuplicateEmail() {
+        userService.createUser("taken@example.com", "password1", "처음");
+
+        // 규칙 오류다. 이미 가입된 이메일인지는 싼 검사를 모두 지난 요청만 알 수 있다.
+        assertThatThrownBy(() -> userService.createUser("taken@example.com", "abc1234", "두번째"))
+                .isInstanceOf(InvalidRequestException.class);
     }
 
     @Test
