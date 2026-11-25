@@ -46,7 +46,7 @@ class SignupHashOutsideTransactionTest {
     @Autowired HikariDataSource dataSource;
 
     static PasswordHasher passwordHasher() {
-        return new PasswordHasher(ENCODER, new PasswordHashProperties(2, Duration.ofMinutes(5)));
+        return new PasswordHasher(ENCODER, new PasswordHashProperties(2, 16, Duration.ofMinutes(5)));
     }
 
     private final List<RunningTask<User>> started = new ArrayList<>();

@@ -37,7 +37,7 @@ import org.springframework.security.crypto.scrypt.SCryptPasswordEncoder;
 /** 비밀번호를 해시하고 비교하는 입구(ADR 001 결정 7). 스프링 컨텍스트 없이 돈다. */
 class PasswordHasherTest {
 
-    private static final PasswordHashProperties PROPERTIES = new PasswordHashProperties(4, Duration.ofSeconds(2));
+    private static final PasswordHashProperties PROPERTIES = new PasswordHashProperties(4, 16, Duration.ofSeconds(2));
     private static final String PASSWORD = "password1";
     private static final String SALT = "YWNjb3VudC1ib29rLXRzdA";
     private static final String HASH = "vHygWA0jNvBLxOELjrkU6R1OAPyuN/Ro9FrihcYD2KI";

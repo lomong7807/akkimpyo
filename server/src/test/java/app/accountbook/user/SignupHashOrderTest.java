@@ -35,7 +35,7 @@ class SignupHashOrderTest {
     private static final PasswordEncoder passwordEncoder = spy(new Argon2PasswordEncoder(16, 32, 1, 256, 1));
 
     static PasswordHasher passwordHasher() {
-        return new PasswordHasher(passwordEncoder, new PasswordHashProperties(4, Duration.ofSeconds(2)));
+        return new PasswordHasher(passwordEncoder, new PasswordHashProperties(4, 16, Duration.ofSeconds(2)));
     }
 
     @BeforeEach

@@ -18,6 +18,6 @@ public class TestPasswordHasherConfig {
     @Primary
     PasswordHasher lightPasswordHasher() {
         return new PasswordHasher(new Argon2PasswordEncoder(16, 32, 1, 256, 1),
-                new PasswordHashProperties(4, Duration.ofSeconds(2)));
+                new PasswordHashProperties(4, 16, Duration.ofSeconds(2)));
     }
 }
