@@ -212,11 +212,11 @@ public class TransactionService {
                 .toList();
     }
 
-    /** 거래의 변경 이력, 오래된 순. */
+    /** 거래의 변경 이력, 오래된 순(version 순). */
     @Transactional(readOnly = true)
     public List<ChangeLogView> history(UUID actorId, UUID txId) {
         Transaction tx = loadAccessible(actorId, txId);
-        return changeLogRepository.findByTransactionIdOrderByCreatedAtAsc(tx.getId()).stream()
+        return changeLogRepository.findByTransactionIdOrderByVersionAsc(tx.getId()).stream()
                 .map(ChangeLogView::of)
                 .toList();
     }
@@ -263,12 +263,12 @@ public class TransactionService {
     }
 
     /**
-     * 이력 시각은 거래마다 엄격히 증가하게 한다. 같은 마이크로초에 두 번 쓰이거나 시계가 뒤로 가도
-     * created_at 순서가 쓰기 순서와 같아야 "오래된 순" 조회가 맞다.
+     * 이력 시각은 거래마다 엄격히 증가하게 한다. 순서는 version이 정하지만, 같은 마이크로초에 두 번 쓰이거나 시계가
+     * 뒤로 가도 보이는 시각이 그 순서를 거스르지 않게 한다.
      */
     private Instant nextLogTime(UUID txId) {
         Instant now = Times.now();
-        return changeLogRepository.findFirstByTransactionIdOrderByCreatedAtDesc(txId)
+        return changeLogRepository.findFirstByTransactionIdOrderByVersionDesc(txId)
                 .map(ChangeLog::getCreatedAt)
                 .filter(last -> !now.isAfter(last))
                 .map(last -> last.plus(1, ChronoUnit.MICROS))

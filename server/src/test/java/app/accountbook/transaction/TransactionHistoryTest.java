@@ -105,7 +105,91 @@ class TransactionHistoryTest {
         assertThat(history()).extracting(ChangeLogView::actorId).containsExactly(null, owner);
     }
 
+    // ---------------------------------------------------------------- 조회 순서
+
+    /** 넣은 순서를 번호와 반대로 해서, 시각이 같을 때 DB가 우연히 맞는 순서로 돌려주는 경우를 없앤다. */
+    @Test
+    void 시각이_같은_이력은_몇_번을_읽어도_번호_순서다() {
+        create(id);
+        flushAndClear();
+        insertLog(4, ChangeAction.RESTORE, "created_at");
+        insertLog(3, ChangeAction.DELETE, "created_at");
+        insertLog(2, ChangeAction.UPDATE, "created_at");
+        assertThat(jdbc.queryForObject("select count(distinct created_at) from change_log where transaction_id = ?",
+                Integer.class, id)).isEqualTo(1);
+
+        for (int read = 1; read <= 3; read++) {
+            assertThat(actions()).as("%d번째 조회", read).containsExactly(ChangeAction.CREATE, ChangeAction.UPDATE,
+                    ChangeAction.DELETE, ChangeAction.RESTORE);
+            entityManager.clear();
+        }
+    }
+
+    /** 서버 시계가 뒤로 가서 나중 변경의 시각이 앞선 경우다. 번호가 크게 뛰어 있어도 같다. */
+    @Test
+    void 시각이_거꾸로여도_구멍이_있어도_번호_순서다() {
+        create(id);
+        flushAndClear();
+        insertLog(2, ChangeAction.UPDATE, "created_at - interval '1 hour'");
+        insertLog(RESTORE_JUMP + 3, ChangeAction.DELETE, "created_at - interval '2 hours'");
+        insertLog(RESTORE_JUMP + 9, ChangeAction.RESTORE, "created_at - interval '3 hours'");
+
+        assertThat(actions()).containsExactly(ChangeAction.CREATE, ChangeAction.UPDATE, ChangeAction.DELETE,
+                ChangeAction.RESTORE);
+    }
+
+    /** 새 이력의 시각은 마지막 이력보다 뒤다. 마지막 이력은 시각이 아니라 번호가 가장 큰 행이다. */
+    @Test
+    void 새_이력의_시각은_번호가_가장_큰_이력의_시각_바로_뒤다() {
+        create(id);
+        transactionService.cancel(owner, id, 1, DEVICE);
+        flushAndClear();
+        // 앞으로 간 시계로 쓴 이력 둘. 시각은 번호 1이 더 늦지만 마지막 이력은 번호 2다.
+        jdbc.update("update change_log set created_at = now() + interval '2 hours' where transaction_id = ? "
+                + "and version = 1", id);
+        jdbc.update("update change_log set created_at = now() + interval '1 hour' where transaction_id = ? "
+                + "and version = 2", id);
+
+        transactionService.delete(owner, id, 2, DEVICE);
+        flushAndClear();
+
+        assertThat(jdbc.queryForObject("""
+                select (select created_at from change_log where transaction_id = ? and version = 3)
+                     - (select created_at from change_log where transaction_id = ? and version = 2)
+                     = interval '1 microsecond'
+                """, Boolean.class, id, id)).isTrue();
+    }
+
+    @Test
+    void 이력_조회는_다른_거래의_이력을_섞지_않는다() {
+        UUID otherId = UUID.randomUUID();
+        create(id);
+        create(otherId);
+        transactionService.cancel(owner, otherId, 1, DEVICE);
+        transactionService.update(owner, id, 1, expense(id, 15_000), DEVICE);
+        transactionService.delete(owner, otherId, 2, DEVICE);
+        flushAndClear();
+
+        assertThat(history()).hasSize(2).allSatisfy(entry -> {
+            assertThat(entry.transactionId()).isEqualTo(id);
+            assertThat(entry.after().at("/id").asString()).isEqualTo(id.toString());
+        });
+        assertThat(actions()).containsExactly(ChangeAction.CREATE, ChangeAction.UPDATE);
+        assertThat(transactionService.history(owner, otherId)).extracting(ChangeLogView::action)
+                .containsExactly(ChangeAction.CREATE, ChangeAction.CANCEL, ChangeAction.DELETE);
+    }
+
     // ---------------------------------------------------------------- 도우미
+
+    /** 번호 1의 이력을 본떠 앱을 거치지 않고 넣는다. createdAt은 번호 1의 created_at으로 만드는 식이다. */
+    private void insertLog(long version, ChangeAction action, String createdAt) {
+        jdbc.update("""
+                insert into change_log (id, transaction_id, ledger_id, version, action, actor_id, after_value,
+                                        created_at)
+                select ?, transaction_id, ledger_id, ?, ?, actor_id, after_value, %s
+                  from change_log where transaction_id = ? and version = 1
+                """.formatted(createdAt), UUID.randomUUID(), version, action.name(), id);
+    }
 
     private TransactionView create(UUID txId) {
         return transactionService.create(owner, ledgerId, expense(txId, 12_000), DEVICE);

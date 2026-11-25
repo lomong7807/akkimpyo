@@ -3,11 +3,17 @@ package app.accountbook.transaction;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.Repository;
 
-public interface ChangeLogRepository extends JpaRepository<ChangeLog, UUID> {
+/**
+ * 이력은 추가만 한다(P-216). 고치거나 지우는 메서드가 딸려 오지 않게 JpaRepository를 잇지 않고 쓰는 것만 적는다.
+ */
+public interface ChangeLogRepository extends Repository<ChangeLog, UUID> {
 
-    List<ChangeLog> findByTransactionIdOrderByCreatedAtAsc(UUID transactionId);
+    ChangeLog save(ChangeLog log);
 
-    Optional<ChangeLog> findFirstByTransactionIdOrderByCreatedAtDesc(UUID transactionId);
+    /** 이력의 순서는 시각이 아니라 거래 version이다(ADR 007 결정 7). */
+    List<ChangeLog> findByTransactionIdOrderByVersionAsc(UUID transactionId);
+
+    Optional<ChangeLog> findFirstByTransactionIdOrderByVersionDesc(UUID transactionId);
 }
