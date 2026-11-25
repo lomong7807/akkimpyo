@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
+import { useLocation } from 'react-router'
 import { afterModals } from '../components/openModal'
 import { ToastContext } from '../components/ToastContext'
+import { useScreenHandle } from './useScreenHandle'
 import styles from './ToastProvider.module.css'
 
 /** 보이는 시간 */
@@ -15,6 +17,15 @@ const CLOSE_RATIO = 1 / 4
  */
 export default function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<{ id: number; message: string }>()
+
+  // 전체 화면 입력에서는 토스트의 자리(5.7)가 저장 버튼과 겹치므로, 열 때 보이던 것을 바로 걷는다.
+  // 그 화면에서 알린 것(저장을 마침)은 두어 나간 화면에서 보이게 한다
+  const formPath = useFullScreenPath()
+  const [openedForm, setOpenedForm] = useState(formPath)
+  if (formPath !== openedForm) {
+    setOpenedForm(formPath)
+    if (formPath !== undefined) setToast(undefined)
+  }
 
   // 모달은 화면 전체를 덮고 그 밖은 읽히지 않으므로, 닫힌 뒤에 알린다
   const showToast = useCallback((message: string) => {
@@ -31,6 +42,13 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
       </div>
     </ToastContext>
   )
+}
+
+/** 전체 화면 입력(라우트의 handle에 fullScreen)의 주소. 아니면 없다. */
+function useFullScreenPath(): string | undefined {
+  const { fullScreen } = useScreenHandle()
+  const { pathname } = useLocation()
+  return fullScreen ? pathname : undefined
 }
 
 function Toast({ message, onClosed }: { message: string; onClosed: () => void }) {

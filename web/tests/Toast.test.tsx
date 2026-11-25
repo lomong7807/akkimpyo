@@ -1,9 +1,12 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { StrictMode, useState } from 'react'
+import { StrictMode, useState, type ReactNode } from 'react'
+import { createMemoryRouter, Outlet, type RouteObject } from 'react-router'
+import { RouterProvider } from 'react-router/dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ToastProvider from '../src/app/ToastProvider'
 import { useToast } from '../src/components/ToastContext'
 import { readCssRule } from './support/cssRule'
+import { recordDom } from './support/recordDom'
 import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
@@ -36,8 +39,17 @@ function Caller() {
   )
 }
 
+function routerWith(routes: RouteObject[]) {
+  return createMemoryRouter(routes, { initialEntries: ['/'] })
+}
+
+/** 앱처럼 라우터 안에 그린다. */
+function renderScreen(element: ReactNode) {
+  return render(<RouterProvider router={routerWith([{ path: '/', element }])} />)
+}
+
 function renderToasts() {
-  return render(
+  return renderScreen(
     <ToastProvider>
       <Caller />
     </ToastProvider>,
@@ -126,11 +138,10 @@ describe('토스트의 모양', () => {
     expect(style.boxShadow).toBe('')
   })
 
-  it('긴 글은 두 줄까지 늘어나고 그 뒤는 줄임표다. 띄어쓰기가 없어도 칸 안에서 줄을 바꾼다', () => {
+  it('글이 길면 그만큼 늘어나고 자르지 않는다. 띄어쓰기가 없어도 칸 안에서 줄을 바꾼다', () => {
     const rule = readCssRule(CSS, '.message')
-    expect(rule).toContain('-webkit-line-clamp: 2')
-    expect(rule).toContain('overflow: hidden')
     expect(rule).toContain('overflow-wrap: anywhere')
+    expect(readWebFile(CSS)).not.toMatch(/line-clamp|ellipsis|overflow: hidden|max-height|nowrap/)
   })
 
   it('글자로만 그린다', () => {
@@ -142,7 +153,7 @@ describe('토스트의 모양', () => {
         </button>
       )
     }
-    render(
+    renderScreen(
       <ToastProvider>
         <Html />
       </ToastProvider>,
@@ -172,11 +183,14 @@ describe('지속 시간', () => {
   })
 
   it('두 번 그리는 개발 모드에서도 4초다', async () => {
+    const provider = (
+      <ToastProvider>
+        <Caller />
+      </ToastProvider>
+    )
     render(
       <StrictMode>
-        <ToastProvider>
-          <Caller />
-        </ToastProvider>
+        <RouterProvider router={routerWith([{ path: '/', element: provider }])} />
       </StrictMode>,
     )
     press('알리기')
@@ -390,6 +404,87 @@ describe('모달이 열려 있으면', () => {
   })
 })
 
+describe('전체 화면 입력을 열면', () => {
+  /** 토스트는 저장 버튼과 같은 자리에 놓이므로 걷는다. 공급자는 화면이 바뀌어도 그대로다. */
+  function open() {
+    const layout = (
+      <ToastProvider>
+        <Caller />
+        <Outlet />
+      </ToastProvider>
+    )
+    const children = [
+      { path: '/', element: <p>목록</p> },
+      { path: '/detail', element: <p>상세</p> },
+      { path: '/new', element: <p>입력</p>, handle: { fullScreen: true } },
+      { path: '/edit', element: <p>수정</p>, handle: { fullScreen: true } },
+    ]
+    const router = routerWith([{ element: layout, children }])
+    render(<RouterProvider router={router} />)
+    return router
+  }
+
+  it('보이던 토스트를 사라지는 움직임 없이 바로 걷는다', async () => {
+    vi.spyOn(Element.prototype, 'getAnimations').mockReturnValue([
+      { finished: new Promise(() => {}) } as unknown as Animation,
+    ])
+    const router = open()
+    press('알리기')
+    expect(message()).not.toBe('')
+    const dom = recordDom()
+    await act(() => router.navigate('/new'))
+    expect(screen.getByText('입력')).toBeTruthy()
+    expect(message()).toBe('')
+    expect(dom.sawElement('[data-closing]')).toBe(false)
+  })
+
+  it('입력 화면이 그려질 때 이미 걷혀 있다', async () => {
+    const router = open()
+    press('알리기')
+    let shownTogether = false
+    const observer = new MutationObserver(() => {
+      if (screen.queryByText('입력') && message() !== '') shownTogether = true
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    await act(() => router.navigate('/new'))
+    observer.disconnect()
+    expect(shownTogether).toBe(false)
+  })
+
+  it('다른 화면으로 가면 그대로 보인다', async () => {
+    const router = open()
+    press('알리기')
+    await act(() => router.navigate('/detail'))
+    expect(message()).not.toBe('')
+  })
+
+  it('입력 화면에서 알린 것(저장을 마침)은 걷지 않고 나간 화면에도 보인다', async () => {
+    const router = open()
+    await act(() => router.navigate('/new'))
+    press('알리기')
+    expect(message()).not.toBe('')
+    await act(() => router.navigate('/'))
+    expect(message()).not.toBe('')
+  })
+
+  it('나갔다가 다시 열어도 걷는다', async () => {
+    const router = open()
+    await act(() => router.navigate('/new'))
+    press('알리기')
+    await act(() => router.navigate('/'))
+    await act(() => router.navigate('/new'))
+    expect(message()).toBe('')
+  })
+
+  it('입력 화면에서 다른 입력 화면을 열어도 걷는다', async () => {
+    const router = open()
+    await act(() => router.navigate('/new'))
+    press('알리기')
+    await act(() => router.navigate('/edit'))
+    expect(message()).toBe('')
+  })
+})
+
 it('공급자를 다시 만들면 앞의 알림이 남지 않는다', () => {
   function Keyed() {
     const [session, setSession] = useState(0)
@@ -404,7 +499,7 @@ it('공급자를 다시 만들면 앞의 알림이 남지 않는다', () => {
       </>
     )
   }
-  render(<Keyed />)
+  renderScreen(<Keyed />)
   press('알리기')
   press('로그아웃')
   expect(message()).toBe('')

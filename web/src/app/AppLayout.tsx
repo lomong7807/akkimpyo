@@ -1,9 +1,10 @@
-import { Outlet, useMatches } from 'react-router'
+import { Outlet } from 'react-router'
 import { LedgerNameContext } from '../components/LedgerNameContext'
-import type { Navigation, ScreenHandle } from './navigation'
+import type { Navigation } from './navigation'
 import Sidebar from './Sidebar'
 import TabBar from './TabBar'
 import { useCurrentTab } from './useCurrentTab'
+import { useScreenHandle } from './useScreenHandle'
 import styles from './AppLayout.module.css'
 
 interface AppLayoutProps {
@@ -30,9 +31,4 @@ export default function AppLayout({ navigation, ledgerName, onLogout }: AppLayou
       {!fullScreen && <TabBar tabs={navigation.tabs} current={currentTab} />}
     </div>
   )
-}
-
-/** 안쪽 라우트에 적은 것이 바깥쪽에 적은 것보다 앞선다. */
-function useScreenHandle(): ScreenHandle {
-  return Object.assign({}, ...useMatches().map((match) => match.handle as ScreenHandle | undefined))
 }

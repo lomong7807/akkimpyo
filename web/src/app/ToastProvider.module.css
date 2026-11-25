@@ -41,14 +41,10 @@
   opacity: 0;
 }
 
-/* 두 줄까지 늘어난다 */
+/* 글이 길면 그만큼 늘어난다 */
 .message {
-  display: -webkit-box;
   min-width: 0;
   margin: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   overflow-wrap: anywhere;
 }
 
