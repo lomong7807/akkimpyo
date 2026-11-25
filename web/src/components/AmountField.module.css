@@ -1,12 +1,14 @@
+/* 글자를 키워 가장 긴 금액이 들어갈 폭이 남지 않으면 칸을 부호 버튼의 다음 줄로 내린다 */
 .row {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-8);
   align-items: center;
 }
 
 .box {
   position: relative;
-  flex: 1;
+  flex: 1 1 10em;
   min-width: 0;
 }
 

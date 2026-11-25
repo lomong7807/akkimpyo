@@ -534,6 +534,10 @@ describe('모양', () => {
 
   it('칸만 스크롤하고 저장 자리는 맨 아래다. 낮은 화면에서도 칸 하나는 보인다', () => {
     openAt('/new')
+    const main = screen.getByRole('main')
+    expect(styleOf(main.parentElement!).getPropertyValue('grid-template-rows')).toBe('auto minmax(0, 1fr)')
+    expect(styleOf(main).getPropertyValue('grid-template-rows')).toBe('minmax(0, 1fr)')
+    expect(styleOf(main).overflowY).toBe('auto')
     const form = styleOf(name().closest('form')!)
     expect(form.display).toBe('grid')
     expect(form.getPropertyValue('grid-template-rows')).toBe('minmax(calc(2 * var(--size-field)), 1fr) auto')

@@ -55,6 +55,11 @@ describe.each(fields)('%s', (_, Field) => {
     expect(getComputedStyle(icon).width).toBe('var(--size-icon-20)')
   })
 
+  it('오류 문구의 낱말이 줄보다 길어도 칸을 넘지 않는다', () => {
+    render(<Field label="이메일" error="9,999,999,999원까지" />)
+    expect(getComputedStyle(screen.getByText('9,999,999,999원까지')).minWidth).toBe('0px')
+  })
+
   it('칸 둘을 그려도 이름과 설명이 섞이지 않는다', () => {
     render(
       <>

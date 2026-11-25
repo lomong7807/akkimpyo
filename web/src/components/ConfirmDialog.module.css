@@ -18,8 +18,10 @@
   margin-top: var(--space-24);
 }
 
+/* 칸의 최소 폭은 버튼의 글자와 안쪽 여백이다 */
 .actions > div {
   display: grid;
   flex: 1 1 calc(50% - var(--space-8) / 2);
+  grid-template-columns: minmax(max-content, 1fr);
   min-height: var(--size-button);
 }

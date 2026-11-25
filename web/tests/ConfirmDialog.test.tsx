@@ -115,6 +115,8 @@ describe.each(layouts)('확인 창: %s', (_, width) => {
       expect(styleOf(slot).flex).toBe('1 1 calc(50% - var(--space-8) / 2)')
       expect(styleOf(slot).minHeight).toBe('var(--size-button)')
       expect(styleOf(slot).display).toBe('grid')
+      // 글자보다 좁아지지 않아야 한 줄에 들어가지 않을 때 쌓인다
+      expect(styleOf(slot).getPropertyValue('grid-template-columns')).toBe('minmax(max-content, 1fr)')
     }
   })
 

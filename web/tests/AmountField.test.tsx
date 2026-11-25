@@ -614,6 +614,13 @@ describe('읽기 전용', () => {
 })
 
 describe('모양', () => {
+  it('글자를 키워 가장 긴 금액이 들어갈 폭이 남지 않으면 칸이 부호 버튼의 다음 줄로 내려간다', () => {
+    renderField({ signed: true })
+    expect(getComputedStyle(signButton().parentElement!).flexWrap).toBe('wrap')
+    expect(getComputedStyle(input().parentElement!).flex).toBe('1 1 10em')
+    expect(getComputedStyle(input().parentElement!).minWidth).toBe('0px')
+  })
+
   it('오른쪽 끝의 "원" 자리를 비우고 글자를 오른쪽에 맞춘다', () => {
     expect(readCssRule(CSS, '.input')).toContain('padding-inline-end: calc(var(--space-12) + 0.875em + var(--space-8))')
     expect(readCssRule(CSS, '.unit')).toContain('inset-inline-end: calc(var(--space-12) + 1px)')
