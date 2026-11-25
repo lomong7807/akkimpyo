@@ -4,6 +4,7 @@ import app.accountbook.common.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import java.time.ZoneId;
 import java.util.UUID;
 
 @Entity
@@ -44,5 +45,10 @@ public class Ledger extends BaseEntity {
 
     public String getTimezone() {
         return timezone;
+    }
+
+    /** 서버가 "오늘"을 정할 때 쓰는 장부 시간대. */
+    public ZoneId zoneId() {
+        return ZoneId.of(timezone);
     }
 }
