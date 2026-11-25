@@ -13,6 +13,7 @@ const files: Record<IconName, string> = {
   Info: 'info',
   Plus: 'plus',
   SignOut: 'sign-out',
+  Tag: 'tag',
   Wallet: 'wallet',
   WarningCircle: 'warning-circle',
   X: 'x',
