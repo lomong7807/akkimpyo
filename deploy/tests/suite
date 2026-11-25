@@ -84,7 +84,8 @@ section 'shellcheck'
 : >"$LOG"
 reset_alerts
 assert 'shellcheck' shellcheck --external-sources --source-path="$REPO" \
-  "$REPO"/deploy/bin/* "$REPO"/deploy/tests/run "$REPO"/deploy/tests/suite "$REPO"/scripts/restore-drill
+  "$REPO"/deploy/bin/* "$REPO"/deploy/tests/run "$REPO"/deploy/tests/suite "$REPO"/scripts/restore-drill \
+  "$REPO"/scripts/server-container.sh
 
 section '설치'
 install -d -m 755 /opt/akkimpyo/share
@@ -139,14 +140,11 @@ docker run --detach --name "$TEST_ID-db" --network "$TEST_ID" --network-alias db
   --env POSTGRES_DB=accountbook --env POSTGRES_USER=accountbook --env POSTGRES_PASSWORD=accountbook \
   postgres:17 >/dev/null
 until docker exec "$TEST_ID-db" pg_isready --quiet --host 127.0.0.1; do sleep 0.3; done
-# 서버가 뜨는 데 필요한 서명 키(#187). 이번 한 번만 쓸 것으로 만들고, 값이 명령줄에 보이지 않게 이름만 넘긴다.
-ACCESS_TOKEN_SIGNING_KEY=$(openssl rand -base64 32)
-export ACCESS_TOKEN_SIGNING_KEY
-docker create --name "$TEST_ID-app" --network "$TEST_ID" \
+# shellcheck source=scripts/server-container.sh
+. "$REPO/scripts/server-container.sh"
+create_server --name "$TEST_ID-app" --network "$TEST_ID" \
   --env DB_URL=jdbc:postgresql://db:5432/accountbook --env DB_USERNAME=accountbook --env DB_PASSWORD=accountbook \
-  --env ACCESS_TOKEN_SIGNING_KEY \
-  "$JRE_IMAGE" java -jar /app.jar >/dev/null
-unset ACCESS_TOKEN_SIGNING_KEY
+  "$JRE_IMAGE" java -jar /app.jar
 docker cp --quiet "$WORK/app.jar" "$TEST_ID-app:/app.jar"
 docker start "$TEST_ID-app" >/dev/null
 for _ in $(seq 120); do

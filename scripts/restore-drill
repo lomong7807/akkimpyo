@@ -8,6 +8,8 @@ umask 077
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 # shellcheck source=deploy/bin/backup-lib.sh
 . "$repo/deploy/bin/backup-lib.sh"
+# shellcheck source=scripts/server-container.sh
+. "$repo/scripts/server-container.sh"
 
 usage() {
   cat <<'USAGE'
@@ -289,16 +291,10 @@ if [[ -z $server_jar ]]; then
   [[ -f $server_jar ]] || die "server/build/libs에 jar가 하나가 아니다: $server_jar"
 fi
 log '서버 기동'
-# 서버가 뜨는 데 필요한 서명 키(#187)를 이번 한 번만 쓸 것으로 만든다. 운영 키는 쓰지 않는다.
-# 값이 명령줄에 보이지 않게 이름만 넘긴다.
-ACCESS_TOKEN_SIGNING_KEY=$(openssl rand -base64 32) || die 'openssl로 일회용 키를 만들지 못했다'
-export ACCESS_TOKEN_SIGNING_KEY
-docker create --name "$name-app" --network "$name" --user 10001:10001 --memory 1g \
+create_server --name "$name-app" --network "$name" --user 10001:10001 --memory 1g \
   --cap-drop ALL --security-opt no-new-privileges \
   --env "DB_URL=jdbc:postgresql://db:5432/$database" --env DB_USERNAME=drill_admin --env DB_PASSWORD=unused \
-  --env ACCESS_TOKEN_SIGNING_KEY \
-  "$JRE_IMAGE" java -jar /app.jar >/dev/null
-unset ACCESS_TOKEN_SIGNING_KEY
+  "$JRE_IMAGE" java -jar /app.jar || die '서버 컨테이너를 만들지 못했다'
 cp -- "$server_jar" "$work/app.jar"
 chmod 644 "$work/app.jar"
 docker cp --quiet "$work/app.jar" "$name-app:/app.jar"

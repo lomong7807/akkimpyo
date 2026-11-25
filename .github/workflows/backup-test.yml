@@ -9,8 +9,10 @@ on:
       - '.github/workflows/backup-test.yml'
       - 'deploy/**'
       - 'scripts/restore-drill'
+      - 'scripts/server-container.sh'
       - 'docs/db/integrity-checks.sql'
       - 'server/src/main/resources/db/migration/**'
+      - 'server/src/main/resources/application*.yml'
       - '!**/*.md'
   push:
     branches: [main]
@@ -18,8 +20,10 @@ on:
       - '.github/workflows/backup-test.yml'
       - 'deploy/**'
       - 'scripts/restore-drill'
+      - 'scripts/server-container.sh'
       - 'docs/db/integrity-checks.sql'
       - 'server/src/main/resources/db/migration/**'
+      - 'server/src/main/resources/application*.yml'
       - '!**/*.md'
 
 permissions:
