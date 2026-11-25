@@ -2,6 +2,7 @@
   "name": "아낌표",
   "short_name": "아낌표",
   "lang": "ko",
+  "id": "/home",
   "start_url": "/home",
   "scope": "/",
   "display": "standalone",

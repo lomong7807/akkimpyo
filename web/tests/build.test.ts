@@ -70,6 +70,8 @@ describe('홈 화면 설치 (F-120)', () => {
       name: '아낌표',
       short_name: '아낌표',
       lang: 'ko',
+      // 시작 주소가 바뀌어도 이미 설치한 앱과 같은 앱으로 이어지게 하는 값이라 바꾸지 않는다.
+      id: '/home',
       start_url: '/home',
       scope: '/',
       display: 'standalone',
