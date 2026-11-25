@@ -43,7 +43,7 @@ class SignupAtomicityTest {
                     FOR EACH ROW WHEN (NEW.name = '교육') EXECUTE FUNCTION fail_signup_category()
                     """);
 
-            assertThatThrownBy(() -> userService.createUser("atomic@example.com", "hash", "주인"))
+            assertThatThrownBy(() -> userService.createUser("atomic@example.com", "password1", "주인"))
                     .hasStackTraceContaining("default category insert fails midway");
         } finally {
             jdbc.execute("DROP FUNCTION fail_signup_category() CASCADE");

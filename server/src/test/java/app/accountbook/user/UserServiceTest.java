@@ -24,12 +24,16 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 @IntegrationTest
 class UserServiceTest {
@@ -41,10 +45,17 @@ class UserServiceTest {
     @Autowired CategoryRepository categoryRepository;
     @Autowired CategoryService categoryService;
     @Autowired JdbcTemplate jdbc;
+    /** UserService가 주입받는 인코더. 통합 테스트에서는 가벼운 Argon2id다(TestPasswordEncoderConfig). */
+    @Autowired PasswordEncoder passwordEncoder;
+    /** 운영 빈. 테스트 인코더를 빼면 UserService가 받는 것이 이것 하나다. */
+    @Autowired @Qualifier("passwordEncoder") PasswordEncoder productionPasswordEncoder;
+
+    /** 규칙(P-101)에 맞는 비밀번호. 비밀번호가 주제가 아닌 테스트가 쓴다. */
+    private static final String PASSWORD = "password1";
 
     @Test
     void createUser_createsPersonalLedgerWithOwnerAndDefaultCategories() {
-        User user = userService.createUser("owner@example.com", "hash", "주인");
+        User user = userService.createUser("owner@example.com", PASSWORD, "주인");
 
         List<LedgerMember> memberships = memberRepository.findByUserId(user.getId());
         assertThat(memberships).hasSize(1);
@@ -66,7 +77,7 @@ class UserServiceTest {
 
     @Test
     void createUser_createsDefaultCategoriesWithSpecNamesInSpecOrder() {
-        User user = userService.createUser("defaults@example.com", "hash", "주인");
+        User user = userService.createUser("defaults@example.com", PASSWORD, "주인");
         UUID ledgerId = memberRepository.findByUserId(user.getId()).get(0).getLedgerId();
 
         // 화면이 쓰는 목록(CategoryService.list)의 순서다. 미분류는 구분마다 맨 뒤에 온다(F-509).
@@ -84,7 +95,7 @@ class UserServiceTest {
 
     @Test
     void createUser_givesDefaultCategoriesStrictlyIncreasingCreatedAtSoListOrderCannotTie() {
-        User user = userService.createUser("order@example.com", "hash", "주인");
+        User user = userService.createUser("order@example.com", PASSWORD, "주인");
         UUID ledgerId = memberRepository.findByUserId(user.getId()).get(0).getLedgerId();
         categoryRepository.flush();
 
@@ -98,7 +109,7 @@ class UserServiceTest {
 
     @Test
     void createUser_defaultCategoryNamesFollowCategoryNameRule() {
-        User user = userService.createUser("rule@example.com", "hash", "주인");
+        User user = userService.createUser("rule@example.com", PASSWORD, "주인");
         UUID ledgerId = memberRepository.findByUserId(user.getId()).get(0).getLedgerId();
 
         // 기본 카테고리는 CategoryService.create의 검증을 거치지 않고 들어간다. 같은 규칙(P-221)에 맞는지 본다.
@@ -108,7 +119,7 @@ class UserServiceTest {
 
     @Test
     void createUser_defaultCategoriesBlockSameNameInSameKindOnly() {
-        User user = userService.createUser("unique@example.com", "hash", "주인");
+        User user = userService.createUser("unique@example.com", PASSWORD, "주인");
         UUID ledgerId = memberRepository.findByUserId(user.getId()).get(0).getLedgerId();
 
         // 지출의 "기타"와 수입의 "기타"는 구분이 달라 함께 있다. 같은 구분에 다시 만들면 거부된다.
@@ -124,8 +135,8 @@ class UserServiceTest {
 
     @Test
     void createUser_givesEachUserTheirOwnDefaultCategories() {
-        User first = userService.createUser("first-ledger@example.com", "hash", "처음");
-        User second = userService.createUser("second-ledger@example.com", "hash", "두번째");
+        User first = userService.createUser("first-ledger@example.com", PASSWORD, "처음");
+        User second = userService.createUser("second-ledger@example.com", PASSWORD, "두번째");
         UUID firstLedger = memberRepository.findByUserId(first.getId()).get(0).getLedgerId();
         UUID secondLedger = memberRepository.findByUserId(second.getId()).get(0).getLedgerId();
 
@@ -136,9 +147,9 @@ class UserServiceTest {
 
     @Test
     void createUser_rejectsDuplicateEmail() {
-        userService.createUser("dup@example.com", "hash", "처음");
+        userService.createUser("dup@example.com", PASSWORD, "처음");
 
-        assertThatThrownBy(() -> userService.createUser("dup@example.com", "hash2", "두번째"))
+        assertThatThrownBy(() -> userService.createUser("dup@example.com", "password2", "두번째"))
                 .isInstanceOf(DuplicateEmailException.class);
         assertThat(userRepository.findAll()).extracting(User::getEmail).containsOnlyOnce("dup@example.com");
     }
@@ -147,7 +158,7 @@ class UserServiceTest {
 
     @Test
     void createUser_storesEmailTrimmedAndLowercased() {
-        User user = userService.createUser("  Owner@Example.COM ", "hash", "주인");
+        User user = userService.createUser("  Owner@Example.COM ", PASSWORD, "주인");
         userRepository.flush();
 
         assertThat(user.getEmail()).isEqualTo("owner@example.com");
@@ -156,9 +167,9 @@ class UserServiceTest {
 
     @Test
     void createUser_rejectsEmailDifferingOnlyByCaseAndSurroundingSpace() {
-        userService.createUser("A@x.com", "hash", "처음");
+        userService.createUser("A@x.com", PASSWORD, "처음");
 
-        assertThatThrownBy(() -> userService.createUser(" a@X.com ", "hash2", "두번째"))
+        assertThatThrownBy(() -> userService.createUser(" a@X.com ", "password2", "두번째"))
                 .isInstanceOf(DuplicateEmailException.class);
         assertThat(userRepository.findAll()).extracting(User::getEmail).containsOnlyOnce("a@x.com");
     }
@@ -169,7 +180,7 @@ class UserServiceTest {
         // 터키어 로캘에서는 "I".toLowerCase()가 점 없는 ı(U+0131)가 된다.
         Locale.setDefault(Locale.forLanguageTag("tr-TR"));
         try {
-            User user = userService.createUser("INFO@MAIL.COM", "hash", "주인");
+            User user = userService.createUser("INFO@MAIL.COM", PASSWORD, "주인");
 
             assertThat(user.getEmail()).isEqualTo("info@mail.com");
         } finally {
@@ -185,7 +196,7 @@ class UserServiceTest {
         long usersBefore = userRepository.count();
         long ledgersBefore = ledgerRepository.count();
 
-        assertThatThrownBy(() -> userService.createUser(email, "hash", "주인"))
+        assertThatThrownBy(() -> userService.createUser(email, PASSWORD, "주인"))
                 .isInstanceOf(InvalidRequestException.class);
         assertThat(userRepository.count()).isEqualTo(usersBefore);
         assertThat(ledgerRepository.count()).isEqualTo(ledgersBefore);
@@ -195,7 +206,7 @@ class UserServiceTest {
     void createUser_storesEmailOfMaxLength() {
         String email = "a".repeat(254 - "@example.com".length()) + "@example.com";
 
-        User user = userService.createUser("  " + email.toUpperCase(Locale.ROOT) + "  ", "hash", "주인");
+        User user = userService.createUser("  " + email.toUpperCase(Locale.ROOT) + "  ", PASSWORD, "주인");
         userRepository.flush();
 
         assertThat(user.getEmail()).hasSize(254).isEqualTo(email);
@@ -206,7 +217,7 @@ class UserServiceTest {
         // 😀는 UTF-16으로 2단위다. VARCHAR(255)는 글자 수로 세므로 글자 수 254자는 저장돼야 한다.
         String email = "😀".repeat(254 - "@example.com".length()) + "@example.com";
 
-        User user = userService.createUser(email, "hash", "주인");
+        User user = userService.createUser(email, PASSWORD, "주인");
         userRepository.flush();
 
         assertThat(user.getEmail()).isEqualTo(email);
@@ -219,7 +230,7 @@ class UserServiceTest {
         long usersBefore = userRepository.count();
         long ledgersBefore = ledgerRepository.count();
 
-        assertThatThrownBy(() -> userService.createUser(email, "hash", "주인"))
+        assertThatThrownBy(() -> userService.createUser(email, PASSWORD, "주인"))
                 .isInstanceOf(InvalidRequestException.class)
                 .hasMessage("이메일은 254자 이하여야 합니다.");
         assertThat(userRepository.count()).isEqualTo(usersBefore);
@@ -230,7 +241,7 @@ class UserServiceTest {
 
     @Test
     void createUser_storesDisplayNameTrimmed() {
-        User user = userService.createUser("trim@example.com", "hash", "  아낌 표  ");
+        User user = userService.createUser("trim@example.com", PASSWORD, "  아낌 표  ");
         userRepository.flush();
 
         assertThat(user.getDisplayName()).isEqualTo("아낌 표");
@@ -238,7 +249,7 @@ class UserServiceTest {
 
     @Test
     void createUser_storesTwentyCharacterDisplayName() {
-        User user = userService.createUser("twenty@example.com", "hash", "가".repeat(20));
+        User user = userService.createUser("twenty@example.com", PASSWORD, "가".repeat(20));
         userRepository.flush();
 
         assertThat(user.getDisplayName()).isEqualTo("가".repeat(20));
@@ -249,11 +260,11 @@ class UserServiceTest {
         // 😀는 UTF-16으로 2단위다. 글자 수로는 20자이므로 앱과 DB 제약 모두 받아야 한다.
         String twentyEmoji = "😀".repeat(20);
 
-        User user = userService.createUser("emoji@example.com", "hash", twentyEmoji);
+        User user = userService.createUser("emoji@example.com", PASSWORD, twentyEmoji);
         userRepository.flush();
 
         assertThat(user.getDisplayName()).isEqualTo(twentyEmoji);
-        assertThatThrownBy(() -> userService.createUser("emoji21@example.com", "hash", "😀".repeat(21)))
+        assertThatThrownBy(() -> userService.createUser("emoji21@example.com", PASSWORD, "😀".repeat(21)))
                 .isInstanceOf(InvalidRequestException.class);
     }
 
@@ -264,7 +275,7 @@ class UserServiceTest {
         long usersBefore = userRepository.count();
         long ledgersBefore = ledgerRepository.count();
 
-        assertThatThrownBy(() -> userService.createUser("name@example.com", "hash", displayName))
+        assertThatThrownBy(() -> userService.createUser("name@example.com", PASSWORD, displayName))
                 .isInstanceOf(InvalidRequestException.class);
         assertThat(userRepository.count()).isEqualTo(usersBefore);
         assertThat(ledgerRepository.count()).isEqualTo(ledgersBefore);
@@ -272,11 +283,102 @@ class UserServiceTest {
 
     @Test
     void createUser_allowsSameDisplayNameForDifferentUsers() {
-        User first = userService.createUser("first@example.com", "hash", "같은이름");
-        User second = userService.createUser("second@example.com", "hash", "같은이름");
+        User first = userService.createUser("first@example.com", PASSWORD, "같은이름");
+        User second = userService.createUser("second@example.com", PASSWORD, "같은이름");
         userRepository.flush();
 
         assertThat(first.getDisplayName()).isEqualTo(second.getDisplayName());
         assertThat(first.getId()).isNotEqualTo(second.getId());
+    }
+
+    // --- 비밀번호 (P-101): 8~72자(유니코드 글자 수), 영문과 숫자를 모두 포함. Argon2id 해시로만 저장한다 ---
+
+    static Stream<String> acceptedPasswords() {
+        return Stream.of(
+                "abcd1234",                       // 8자
+                "a1" + "x".repeat(70),            // 72자
+                "가나다라마바사a1",                  // 한글이 섞여도 영문과 숫자가 하나씩 있으면 된다
+                "!@#$%^&*()a1",                   // 기호
+                "A1234567",                       // 대문자도 영문이다
+                "a1" + "😀".repeat(70),           // 글자 수로 72자(UTF-16으로는 142단위)
+                " abc1234",                       // 앞 공백도 글자다
+                "abc1234 ");                      // 뒤 공백도 글자다
+    }
+
+    static Stream<String> rejectedPasswords() {
+        return Stream.of(
+                "",
+                "abc1234",                        // 7자
+                "a1" + "x".repeat(71),            // 73자
+                "a1" + "😀".repeat(71),           // 글자 수로 73자
+                "a1😀😀😀",                       // 글자 수로 5자(UTF-16으로는 8단위)
+                "abcdefgh",                       // 영문만
+                "12345678",                       // 숫자만
+                "가나다라마바사1",                   // 한글과 숫자(영문 없음)
+                "가나다라마바사a",                   // 한글과 영문(숫자 없음)
+                "ａｂｃｄ１２３４",                  // 전각 영문과 숫자는 영문·숫자로 보지 않는다
+                "        ");                      // 공백만
+    }
+
+    @ParameterizedTest
+    @MethodSource("acceptedPasswords")
+    void createUser_acceptsPasswordWithinRule(String password) {
+        User user = userService.createUser("accepted@example.com", password, "주인");
+
+        assertThat(passwordEncoder.matches(password, user.getPasswordHash())).isTrue();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @MethodSource("rejectedPasswords")
+    void createUser_rejectsPasswordOutsideRuleWithoutEchoingIt(String password) {
+        long usersBefore = userRepository.count();
+        long ledgersBefore = ledgerRepository.count();
+
+        assertThatThrownBy(() -> userService.createUser("rejected@example.com", password, "주인"))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("비밀번호는 8~72자이고 영문과 숫자를 모두 포함해야 합니다.");
+        assertThat(userRepository.count()).isEqualTo(usersBefore);
+        assertThat(ledgerRepository.count()).isEqualTo(ledgersBefore);
+    }
+
+    @Test
+    void createUser_storesOnlyArgon2idHashOfPassword() {
+        User user = userService.createUser("stored@example.com", "plain-Secret-42", "주인");
+        userRepository.flush();
+
+        String stored = jdbc.queryForObject("select password_hash from users where id = ?", String.class,
+                user.getId());
+
+        assertThat(stored).startsWith("$argon2id$").doesNotContain("plain-Secret-42");
+        assertThat(passwordEncoder.matches("plain-Secret-42", stored)).isTrue();
+        assertThat(passwordEncoder.matches("plain-Secret-43", stored)).isFalse();
+    }
+
+    @Test
+    void createUser_hashesSamePasswordDifferentlyForEachUser() {
+        User first = userService.createUser("salt1@example.com", PASSWORD, "처음");
+        User second = userService.createUser("salt2@example.com", PASSWORD, "두번째");
+
+        assertThat(first.getPasswordHash()).isNotEqualTo(second.getPasswordHash());
+        assertThat(passwordEncoder.matches(PASSWORD, first.getPasswordHash())).isTrue();
+        assertThat(passwordEncoder.matches(PASSWORD, second.getPasswordHash())).isTrue();
+    }
+
+    @Test
+    void productionPasswordEncoderBeanIsArgon2idAtTheFloor() {
+        // 운영 빈이 컨텍스트에 등록돼 있고(테스트 인코더가 가리지 않는다) ADR 001 결정 7의 하한 매개변수로 해시한다.
+        String encoded = productionPasswordEncoder.encode(PASSWORD);
+
+        assertThat(encoded).startsWith("$argon2id$v=19$m=19456,t=2,p=1$");
+        assertThat(productionPasswordEncoder.matches(PASSWORD, encoded)).isTrue();
+    }
+
+    @Test
+    void createUser_doesNotTrimPassword() {
+        User user = userService.createUser("untrimmed@example.com", " abc1234 ", "주인");
+
+        assertThat(passwordEncoder.matches(" abc1234 ", user.getPasswordHash())).isTrue();
+        assertThat(passwordEncoder.matches("abc1234", user.getPasswordHash())).isFalse();
     }
 }

@@ -51,7 +51,7 @@ public class Fixtures {
      * 카테고리와 겹치지 않게 하기 위해서다. 기본 카테고리 자체는 UserServiceTest가 본다.
      */
     public User user(String email) {
-        User user = userService.createUser(email, "{noop}password", email.substring(0, email.indexOf('@')));
+        User user = userService.createUser(email, "password1", email.substring(0, email.indexOf('@')));
         categoryRepository.deleteAll(categoryRepository.findByLedgerIdOrderByCreatedAtAsc(personalLedgerId(user))
                 .stream()
                 .filter(category -> !category.isSystem())
