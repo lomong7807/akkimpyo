@@ -5,7 +5,7 @@ import NotFoundPage from '../features/not-found/NotFoundPage'
 import LedgerLayout from './LedgerLayout'
 import LoginRoute from './LoginRoute'
 import MoreRoute from './MoreRoute'
-import { moreItem } from './navigation'
+import { accountsItem, moreItem } from './navigation'
 import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
 import SessionProvider from './SessionProvider'
@@ -51,7 +51,7 @@ export const routes: RouteObject[] = [
                 ),
                 children: [
                   { path: '/more', element: <MoreRoute />, handle: { navigationItem: moreItem } },
-                  { path: '/accounts', element: <AccountsPage /> },
+                  { path: '/accounts', element: <AccountsPage />, handle: { navigationItem: accountsItem } },
                   { path: '*', element: <NotFoundPage /> },
                 ],
               },
