@@ -12,13 +12,13 @@ export interface Credentials {
 }
 
 /** 새 access token을 돌려준다. refresh token은 서버가 HttpOnly 쿠키로 준다. */
-export async function requestLogin({ email, password }: Credentials): Promise<string> {
-  return accessTokenIn(await send('/auth/login', { method: 'POST', body: { email, password } }))
+export async function requestLogin({ email, password }: Credentials, signal: AbortSignal): Promise<string> {
+  return accessTokenIn(await send('/auth/login', { method: 'POST', body: { email, password }, signal }))
 }
 
 /** refresh 쿠키로 새 access token을 받는다. */
-export async function requestRefresh(): Promise<string> {
-  return accessTokenIn(await send('/auth/refresh', { method: 'POST' }))
+export async function requestRefresh(signal: AbortSignal): Promise<string> {
+  return accessTokenIn(await send('/auth/refresh', { method: 'POST', signal }))
 }
 
 /** Authorization 헤더에 넣을 수 있는 글자만 받는다(RFC 6750 2.1절 b64token). */

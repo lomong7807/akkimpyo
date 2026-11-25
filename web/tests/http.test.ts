@@ -4,6 +4,7 @@ import { ApiError } from '../src/api/apiError'
 import { send } from '../src/api/http'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
+import { watchAppTimers } from './support/timers'
 
 const server = startMockServer()
 
@@ -227,6 +228,27 @@ describe('응답을 받지 못함', () => {
   })
 })
 
+describe('중단', () => {
+  it('중단하면 응답을 기다리지 않고 지연 오류로 끝낸다', async () => {
+    const arrived = Promise.withResolvers<void>()
+    respondWith(() => {
+      arrived.resolve()
+      return new Promise<Response>(() => {})
+    })
+    const aborter = new AbortController()
+    const error = errorOf(send('/ledgers', { signal: aborter.signal }))
+    await arrived.promise
+    aborter.abort()
+    expect((await error).kind).toBe('timeout')
+  })
+
+  it('이미 중단됐으면 보내지 않는다', async () => {
+    const requests = captureRequest()
+    expect((await errorOf(send('/ledgers', { signal: AbortSignal.abort() }))).kind).toBe('timeout')
+    expect(requests).toHaveLength(0)
+  })
+})
+
 describe('지연', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
@@ -265,9 +287,12 @@ describe('지연', () => {
   })
 
   it('응답을 받으면 시계를 멈춘다', async () => {
+    vi.useRealTimers()
+    const running = watchAppTimers()
     respondWith(() => HttpResponse.json({}))
     await send('/ledgers')
-    expect(vi.getTimerCount()).toBe(0)
+    expect(running()).toBe(0)
+    vi.restoreAllMocks()
   })
 })
 

@@ -4,7 +4,8 @@ import type { ApiError } from '../src/api/apiError'
 import { accessTokenNamed, tokenNameIn } from './support/accessToken'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
-import { createFakeLocks, createStuckLocks, installLocks, removeLocks } from './support/webLocks'
+import { watchAppTimers } from './support/timers'
+import { createFakeLocks, createStuckLocks, installLocks, removeLocks, SESSION_LOCK } from './support/webLocks'
 
 const server = startMockServer()
 
@@ -42,7 +43,8 @@ function startBackend() {
   async function oneAtATime(respond: () => Response | Promise<Response>) {
     authInFlight += 1
     maxAuthInFlight = Math.max(maxAuthInFlight, authInFlight)
-    await new Promise((resolve) => setTimeout(resolve, 5))
+    // 겹친 요청이 있으면 드러나도록 잠시 쥔다. 시계를 멈춘 시험에서도 흐르게 setImmediate를 쓴다
+    for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setImmediate(resolve))
     try {
       return await respond()
     } finally {
@@ -115,7 +117,10 @@ async function openTabWithExpiredToken() {
   return { backend, tab }
 }
 
-afterEach(removeLocks)
+afterEach(() => {
+  removeLocks()
+  vi.restoreAllMocks()
+})
 
 describe('로그인', () => {
   it('이메일과 비밀번호를 본문으로 보내고 전용 헤더를 붙인다', async () => {
@@ -395,7 +400,7 @@ describe('갱신한 토큰의 사용자가 다를 때', () => {
     const ended = vi.fn()
     tab.onSessionEnded(ended)
     const otherTab = Promise.withResolvers<void>()
-    void locks.request('akkimpyo-session', { signal: new AbortController().signal }, () => otherTab.promise)
+    void locks.request(SESSION_LOCK, {}, () => otherTab.promise)
     backend.makeToken = otherUser
     const login = tab.login(otherLogin)
     const error = errorOf(tab.request('/ledgers'))
@@ -688,7 +693,7 @@ describe('탭 사이의 잠금', () => {
     const late = tab.request('/ledgers')
     await answerLate.arrived
     await tab.request('/ledgers')
-    void locks.request('akkimpyo-session', { signal: new AbortController().signal }, () => new Promise(() => {}))
+    void locks.request(SESSION_LOCK, {}, () => new Promise(() => {}))
     answerLate.with(problem(401, 'UNAUTHENTICATED'))
     expect(await late).toMatchObject({ method: 'GET' })
   })
@@ -708,6 +713,20 @@ describe('탭 사이의 잠금', () => {
     }
   })
 
+  it.each([
+    ['얻은 뒤', () => createFakeLocks()],
+    ['막혔을 때', () => ({ request: () => Promise.reject(new DOMException('막힘', 'SecurityError')) })],
+  ])('잠금을 %s에는 기다리던 시계를 남기지 않는다', async (_, locks) => {
+    installLocks(locks())
+    startBackend()
+    const tab = await openTab()
+    const running = watchAppTimers()
+    const restored = tab.restoreSession()
+    await vi.waitFor(() => expect(running()).toBeGreaterThan(0))
+    expect(await restored).toBe(true)
+    expect(running()).toBe(0)
+  })
+
   it('갱신이 실패해도 잠금을 놓는다', async () => {
     const backend = startBackend()
     backend.refreshResponse = () => problem(500, 'INTERNAL_ERROR')
@@ -717,30 +736,205 @@ describe('탭 사이의 잠금', () => {
     expect(await second.restoreSession()).toBe(true)
   })
 
-  it('브라우저가 잠금을 막으면 잠금 없이 보낸다', async () => {
+  it('브라우저가 잠금을 막으면 갱신도 잠금 없이 보낸다', async () => {
+    installLocks({ request: () => Promise.reject(new DOMException('막힘', 'SecurityError')) })
+    const backend = startBackend()
+    const tab = await openTab()
+    expect(await tab.restoreSession()).toBe(true)
+    expect(backend.requests.refresh).toHaveLength(1)
+  })
+
+  it('브라우저가 잠금을 막으면 로그인도 잠금 없이 보낸다', async () => {
     installLocks({ request: () => Promise.reject(new DOMException('막힘', 'SecurityError')) })
     const backend = startBackend()
     const tab = await openTab()
     await tab.login(credentials)
-    expect(await tab.restoreSession()).toBe(true)
     expect(backend.requests.login).toHaveLength(1)
   })
+})
 
-  it('앞 탭이 멈춰 잠금을 15초 동안 얻지 못하면 잠금 없이 갱신한다', async () => {
+describe('앞 탭이 멈춰 잠금을 15초 동안 얻지 못하면', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('갱신은 보내지 않고 지연 오류로 끝낸다', async () => {
     installLocks(createStuckLocks())
     const backend = startBackend()
     const tab = await openTab()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    let settled = false
+    const error = errorOf(tab.restoreSession()).finally(() => {
+      settled = true
+    })
+    await vi.advanceTimersByTimeAsync(14_999)
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(await error).toMatchObject({ name: 'ApiError', kind: 'timeout' })
+    expect(backend.requests.refresh).toHaveLength(0)
+    expect(ended).not.toHaveBeenCalled()
+  })
+
+  it('갱신을 기다리던 요청도 지연 오류다. 로그인 풀림이 아니고 이 탭의 토큰이 남아 다음에 다시 갱신한다', async () => {
+    vi.useRealTimers()
+    const { backend, tab } = await openTabWithExpiredToken()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      const restored = tab.restoreSession()
-      await vi.advanceTimersByTimeAsync(14_999)
-      expect(backend.requests.refresh).toHaveLength(0)
-      await vi.advanceTimersByTimeAsync(1)
-      await vi.advanceTimersByTimeAsync(5)
-      expect(await restored).toBe(true)
-    } finally {
-      vi.useRealTimers()
-    }
+    const stuck = createStuckLocks()
+    installLocks(stuck)
+    const errors = Promise.all([errorOf(tab.request('/ledgers')), errorOf(tab.request('/ledgers'))])
+    await stuck.requested
+    await vi.advanceTimersByTimeAsync(15_000)
+    for (const error of await errors) expect(error).toMatchObject({ kind: 'timeout' })
+    expect(backend.requests.refresh).toHaveLength(0)
+    expect(ended).not.toHaveBeenCalled()
+
+    vi.useRealTimers()
+    installLocks(createFakeLocks())
+    backend.requests.ledgers.length = 0
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-2'])
+  })
+
+  it('로그인은 잠금을 빼앗아 보내고, 그 뒤의 갱신은 정상으로 잠금을 얻는다', async () => {
+    const stuck = createStuckLocks()
+    installLocks(stuck)
+    const frozenTabLost = errorOf(stuck.frozenTab)
+    const backend = startBackend()
+    const tab = await openTab()
+    const login = tab.login(credentials)
+    await vi.advanceTimersByTimeAsync(14_999)
+    expect(backend.requests.login).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(await frozenTabLost).toMatchObject({ name: 'AbortError' })
+    vi.useRealTimers()
+    await login
+    expect(backend.requests.login).toHaveLength(1)
+
+    backend.expireToken()
+    await tab.request('/ledgers')
+    expect(backend.requests.refresh).toHaveLength(1)
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-2'])
+  })
+
+  it('빼앗아 보낸 로그인이 거부되면 다시 보내지 않고 그 오류를 던진다', async () => {
+    installLocks(createStuckLocks())
+    const bodies: unknown[] = []
+    server.use(
+      http.post('/api/v1/auth/login', async ({ request }) => {
+        bodies.push(await request.json())
+        return problem(401, 'INVALID_CREDENTIALS')
+      }),
+    )
+    const tab = await openTab()
+    const error = errorOf(tab.login(credentials))
+    await vi.advanceTimersByTimeAsync(15_000)
+    vi.useRealTimers()
+    expect(await error).toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS' })
+    expect(bodies).toHaveLength(1)
+  })
+})
+
+describe('다른 탭이 잠금을 빼앗으면', () => {
+  /** 요청을 중단해도 응답이 오는 경우까지 보려고, 중단 신호를 무시하는 fetch로 바꾼다. */
+  function answerRegardlessOfAbort(path: string) {
+    const arrived = Promise.withResolvers<AbortSignal>()
+    const answer = Promise.withResolvers<Response>()
+    const realFetch = fetch
+    vi.stubGlobal('fetch', (input: string, init: RequestInit) => {
+      if (input !== `/api/v1${path}`) return realFetch(input, init)
+      arrived.resolve(init.signal!)
+      return answer.promise
+    })
+    return { arrived: arrived.promise, with: answer.resolve }
+  }
+
+  async function steal(locks: Pick<ReturnType<typeof createFakeLocks>, 'request'>) {
+    await locks.request(SESSION_LOCK, { steal: true }, async () => {})
+  }
+
+  const unauthenticated = () => new Response('{"code":"UNAUTHENTICATED"}', { status: 401 })
+  const lateToken = () => Response.json({ accessToken: accessTokenNamed('late-token') })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it.each([
+    ['성공', lateToken],
+    ['401', unauthenticated],
+  ])('갱신은 지연 오류로 끝나고 늦게 온 %s은 버린다. 로그인 풀림이 아니다', async (_, late) => {
+    const locks = createFakeLocks()
+    installLocks(locks)
+    const { backend, tab } = await openTabWithExpiredToken()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    const answer = answerRegardlessOfAbort('/auth/refresh')
+    const error = errorOf(tab.request('/ledgers'))
+    const signal = await answer.arrived
+    await steal(locks)
+    expect(await error).toMatchObject({ name: 'ApiError', kind: 'timeout' })
+    expect(everythingIn(await error)).not.toContain('AbortError')
+    expect(signal.aborted).toBe(true)
+
+    answer.with(late())
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(ended).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+    backend.requests.ledgers.length = 0
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-2'])
+  })
+
+  it('로그인도 지연 오류로 끝나고 늦게 온 성공은 버린다', async () => {
+    const locks = createFakeLocks()
+    installLocks(locks)
+    const backend = startBackend()
+    const tab = await openTab()
+    const answer = answerRegardlessOfAbort('/auth/login')
+    const error = errorOf(tab.login(credentials))
+    const signal = await answer.arrived
+    await steal(locks)
+    expect(await error).toMatchObject({ name: 'ApiError', kind: 'timeout' })
+    expect(signal.aborted).toBe(true)
+
+    answer.with(lateToken())
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    await errorOf(tab.request('/ledgers'))
+    expect(backend.requests.ledgers).toEqual([null])
+  })
+
+  it('빼앗아 얻은 잠금을 다시 빼앗겨도 지연 오류로 끝난다', async () => {
+    const locks = createStuckLocks()
+    installLocks(locks)
+    startBackend()
+    const tab = await openTab()
+    const answer = answerRegardlessOfAbort('/auth/login')
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const error = errorOf(tab.login(credentials))
+    await vi.advanceTimersByTimeAsync(15_000)
+    vi.useRealTimers()
+    await answer.arrived
+    await steal(locks)
+    expect(await error).toMatchObject({ name: 'ApiError', kind: 'timeout' })
+  })
+
+  it('되찾기도 지연 오류다. 로그인이 필요하다는 뜻이 아니다', async () => {
+    const locks = createFakeLocks()
+    installLocks(locks)
+    startBackend()
+    const tab = await openTab()
+    const answer = answerRegardlessOfAbort('/auth/refresh')
+    const error = errorOf(tab.restoreSession())
+    await answer.arrived
+    await steal(locks)
+    expect(await error).toMatchObject({ kind: 'timeout' })
+    answer.with(unauthenticated())
   })
 })
 
