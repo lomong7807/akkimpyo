@@ -19,7 +19,7 @@ export default function Sidebar({ items, current, ledgerName }: SidebarProps) {
             {items.main.map((item) => (
               <li key={item.to}>
                 <NavigationLink item={item} current={item === current} className={styles.row}>
-                  <Icon name={item.icon} size={20} />
+                  <Icon name={item.icon} size={24} />
                   {item.label}
                 </NavigationLink>
               </li>

@@ -237,9 +237,11 @@ describe('사이드바', () => {
     expect(styleOf(name).font).toBe('var(--text-body-strong)')
   })
 
-  it('주 메뉴는 아이콘과 이름, 더보기 항목은 이름만 두고 줄 높이는 44px, 글자는 text-body다', () => {
+  it('주 메뉴는 24px 아이콘과 이름(사이 12px), 더보기 항목은 이름만 두고 줄 높이는 44px, 글자는 text-body다', () => {
     open('/home', wide)
     expect(menuLink('홈').querySelectorAll('svg')).toHaveLength(1)
+    expect(styleOf(menuLink('홈').querySelector('svg')!).width).toBe('var(--size-icon-24)')
+    expect(styleOf(menuLink('홈')).gap).toBe('var(--space-12)')
     expect(menuLink('계좌').querySelectorAll('svg')).toHaveLength(0)
     for (const name of ['홈', '계좌']) {
       expect(styleOf(menuLink(name)).minHeight).toBe('var(--size-touch)')
