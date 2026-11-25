@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import app.accountbook.account.Account;
+import app.accountbook.account.AccountRepository;
+import app.accountbook.account.AccountType;
 import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.support.CapturedLogs;
@@ -21,6 +24,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
@@ -46,10 +50,10 @@ class DbErrorLogTest {
     private static final String NAME = "표식이름";
     private static final String PAYEE = "표식가맹점";
     private static final String MEMO = "표식메모";
-    private static final UUID ACCOUNT_ID = UUID.fromString("aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb");
 
     @Autowired UserRepository userRepository;
     @Autowired LedgerRepository ledgerRepository;
+    @Autowired AccountRepository accountRepository;
     @Autowired TransactionRepository transactionRepository;
     @Autowired HikariDataSource dataSource;
 
@@ -92,10 +96,15 @@ class DbErrorLogTest {
     void foreignKeyViolationLeavesNoValues() {
         User user = userRepository.save(User.of("writer@example.com", "hash", "작성자"));
         Ledger ledger = ledgerRepository.save(Ledger.personal());
+        Ledger other = ledgerRepository.save(Ledger.personal());
+        Account otherAccount = accountRepository.saveAndFlush(
+                Account.of(other.getId(), "표식계좌", AccountType.CASH, 0, LocalDate.of(2026, 11, 1)));
         Transaction tx = transaction(user, ledger, LocalDate.of(2026, 11, 18));
-        tx.addLine(ACCOUNT_ID, null, -1_000);
+        tx.addLine(otherAccount.getId(), null, -1_000);
 
-        assertNoValuesLeft("violates foreign key constraint", () -> transactionRepository.saveAndFlush(tx));
+        // 다른 장부의 계좌를 가리키는 라인. 오류의 상세에는 그 계좌와 장부의 id가 들어 있다.
+        assertNoValuesLeft("fk_transaction_line_account", () -> transactionRepository.saveAndFlush(tx),
+                otherAccount.getId().toString(), other.getId().toString(), ledger.getId().toString());
     }
 
     @Test
@@ -132,19 +141,20 @@ class DbErrorLogTest {
     }
 
     /** 위반은 나고(제약이 드러난다), 예외의 원인 사슬과 모든 로그에 표식 값이 없다. */
-    private void assertNoValuesLeft(String violation, ThrowingCallable action) {
+    private void assertNoValuesLeft(String violation, ThrowingCallable action, String... moreMarkers) {
         Throwable thrown = catchThrowable(action);
 
         assertThat(thrown).isInstanceOf(DataIntegrityViolationException.class);
         assertThat(stackTrace(thrown)).contains(violation);
-        assertNoMarkerIn(stackTrace(thrown));
+        assertNoMarkerIn(stackTrace(thrown), moreMarkers);
         // 로그에 위반이 남아 있어야 로그를 실제로 모은 것이다.
         assertThat(logs.text()).contains(violation);
-        assertNoMarkerIn(logs.text());
+        assertNoMarkerIn(logs.text(), moreMarkers);
     }
 
-    private static void assertNoMarkerIn(String text) {
-        assertThat(text).doesNotContain(EMAIL, HASH, NAME, PAYEE, MEMO, ACCOUNT_ID.toString());
+    private static void assertNoMarkerIn(String text, String... moreMarkers) {
+        assertThat(text).doesNotContain(EMAIL, HASH, NAME, PAYEE, MEMO);
+        List.of(moreMarkers).forEach(marker -> assertThat(text).doesNotContain(marker));
     }
 
     private static Transaction transaction(User user, Ledger ledger, LocalDate occurredOn) {
