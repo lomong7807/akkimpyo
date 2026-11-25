@@ -1,0 +1,43 @@
+/* 고른 칸의 바탕은 상자가 모서리를 따라 자른다 */
+.box {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  min-height: var(--size-field);
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-10);
+  background-color: var(--color-surface);
+}
+
+.option {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  cursor: pointer;
+  transition: transform var(--motion-press-duration);
+  /* 눌림은 아래의 크기 변화로 보인다 */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.option + .option {
+  border-inline-start: 1px solid var(--color-border);
+}
+
+.option[aria-checked='true'] {
+  background-color: var(--color-accent-weak);
+  color: var(--color-accent);
+  font: var(--text-body-strong);
+}
+
+.option:active {
+  transform: scale(var(--motion-press-scale));
+}
+
+/* 상자가 넘치는 부분을 잘라 바깥에 그리면 보이지 않는다 */
+.option:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
