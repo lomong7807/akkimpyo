@@ -71,6 +71,14 @@ class RequestBodyLimitLogTest {
         assertThat(logs.text()).contains("로그 수집 확인").doesNotContain(MARKER, "65537", "65536");
     }
 
+    @Test
+    void 받은_본문의_값도_로그에_없다() throws Exception {
+        Reply reply = new ServerClient(port).send("POST", BodyProbeController.BYTES, MARKER);
+
+        assertThat(reply.status()).isEqualTo(200);
+        assertThat(logs.text()).contains("로그 수집 확인").doesNotContain(MARKER);
+    }
+
     /** Tomcat은 남은 본문을 2MB까지만 읽어 버리고 연결을 끊는다. */
     @ParameterizedTest
     @ValueSource(strings = {"Content-Length: 67108864\r\n", "Transfer-Encoding: chunked\r\n"})
