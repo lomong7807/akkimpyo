@@ -54,7 +54,7 @@ export class ApiError extends Error {
   }
 
   /** 성공 상태인데 본문이 약속과 다르다 */
-  static unreadable(status: number): ApiError {
+  static unreadable(status?: number): ApiError {
     return new ApiError('server', status)
   }
 

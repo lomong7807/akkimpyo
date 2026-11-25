@@ -2,7 +2,7 @@ import { ApiError, parseProblem } from './apiError'
 
 const BASE_PATH = '/api/v1'
 /** 이 시간 안에 응답을 다 받지 못하면 지연으로 본다(화면설계서 00-common 4.3) */
-const TIMEOUT_MS = 15_000
+export const TIMEOUT_MS = 15_000
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
