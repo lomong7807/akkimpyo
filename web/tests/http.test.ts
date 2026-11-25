@@ -192,6 +192,19 @@ describe('오류 응답', () => {
   })
 })
 
+describe('다른 주소로 보내는 응답', () => {
+  it.each([301, 302, 307, 308])('%d을 따라가지 않아 본문과 토큰이 다른 곳으로 가지 않는다', async (status) => {
+    const followed = vi.fn(() => HttpResponse.json({}))
+    server.use(
+      http.post('/api/v1/auth/login', () => new HttpResponse(null, { status, headers: { Location: '/elsewhere' } })),
+      http.all('/elsewhere', followed),
+    )
+    const error = await errorOf(send('/auth/login', { method: 'POST', body: { password: 'pass1234' }, accessToken: 'token-1' }))
+    expect(error.kind).toBe('connection')
+    expect(followed).not.toHaveBeenCalled()
+  })
+})
+
 describe('응답을 받지 못함', () => {
   it('서버에 닿지 못하면 연결 오류다', async () => {
     respondWith(() => HttpResponse.error())

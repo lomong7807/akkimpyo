@@ -39,7 +39,14 @@ async function exchange(path: `/${string}`, { method = 'GET', body, accessToken 
   const timeout = new AbortController()
   const timer = setTimeout(() => timeout.abort(), TIMEOUT_MS)
   try {
-    const response = await fetch(BASE_PATH + path, { method, headers, body: json, signal: timeout.signal })
+    const response = await fetch(BASE_PATH + path, {
+      method,
+      headers,
+      body: json,
+      signal: timeout.signal,
+      // API는 다른 주소로 보내지 않는다. 따라가면 본문과 토큰이 다른 곳으로 갈 수 있다
+      redirect: 'error',
+    })
     return { response, text: await response.text() }
   } catch {
     throw timeout.signal.aborted ? ApiError.timeout() : ApiError.connection()

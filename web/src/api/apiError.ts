@@ -1,6 +1,6 @@
 /**
  * 요청이 실패한 까닭. 화면이 문구를 고르는 기준이다.
- * - connection: 서버에 닿지 못했거나 응답을 받다가 끊겼다
+ * - connection: 서버에 닿지 못했거나 응답을 받다가 끊겼다. 다른 주소로 보내는 응답(3xx)도 여기에 든다
  * - timeout: 정한 시간 안에 응답을 다 받지 못했다
  * - server: 서버 오류(5xx)이거나 응답을 읽을 수 없다
  * - rejected: 서버가 요청을 거부했다(4xx). code와 status로 나눈다
@@ -24,7 +24,8 @@ export interface Problem {
 
 /**
  * 요청이 실패하면 던지는 오류.
- * 원래의 예외(cause)와 요청, 응답의 본문은 담지 않는다. 토큰이나 입력값이 오류와 console에 남지 않게 한다.
+ * 원래의 예외(cause)와 요청 본문, problem+json이 아닌 응답 본문은 담지 않는다. 토큰과 비밀번호가 오류와 console에
+ * 남지 않게 한다. current에는 장부 데이터가 들어가므로 오류 수집을 붙이면 이 필드는 보내지 않는다.
  */
 export class ApiError extends Error {
   override readonly name = 'ApiError'
