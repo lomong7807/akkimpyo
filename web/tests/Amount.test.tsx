@@ -72,10 +72,36 @@ describe('금액의 글자(00-common 3.2)', () => {
     expect(show(<Amount kind="balance" value={value} />).text).toBe(text)
   })
 
-  it('숫자의 폭이 같고 가운데에서 줄이 바뀌지 않는다', () => {
-    const { element, style } = show(<Amount kind="balance" value={1000} />)
+  it('숫자의 폭이 같다', () => {
+    const { element } = show(<Amount kind="balance" value={1000} />)
     expect(element.classList.contains('tabular-nums')).toBe(true)
-    expect(style.whiteSpace).toBe('nowrap')
+  })
+
+  it.each([
+    [999, ['999원']],
+    [-999, ['-999원']],
+    [1000, ['1,', '000원']],
+    [-1000, ['-1,', '000원']],
+    [9999999999, ['9,', '999,', '999,', '999원']],
+    [-9999999999, ['-9,', '999,', '999,', '999원']],
+  ])('%d은 쉼표 뒤에서만 줄을 바꿀 수 있다', (value, parts) => {
+    const { element } = show(<Amount kind="balance" value={value} />)
+    const breaks = [...element.childNodes].map((node) => (node.nodeName === 'WBR' ? '|' : node.textContent))
+    expect(breaks.join('').split('|')).toEqual(parts)
+  })
+
+  it('부호와 첫 숫자 사이에도 줄을 바꿀 자리가 없다', () => {
+    const { element } = show(<Amount kind="income" value={3000} />)
+    const breaks = [...element.childNodes].map((node) => (node.nodeName === 'WBR' ? '|' : node.textContent))
+    expect(breaks.join('')).toBe('+3,|000원')
+  })
+
+  // 둘레(body)의 overflow-wrap: break-word를 따르면 숫자 묶음 안에서도 끊긴다
+  it('쉼표 뒤가 아닌 곳에서는 폭이 모자라도 끊기지 않는다', () => {
+    const { style } = show(<Amount kind="balance" value={1000} />)
+    expect(style.whiteSpace).not.toBe('nowrap')
+    expect(style.getPropertyValue('word-break')).toBe('keep-all')
+    expect(style.getPropertyValue('overflow-wrap')).toBe('normal')
   })
 
   it('글자 크기와 굵기는 놓인 자리를 따른다', () => {

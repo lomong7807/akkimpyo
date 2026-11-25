@@ -272,8 +272,16 @@ describe('계좌 목록의 모양', () => {
       const [name, amount] = row.children
       expect(styleOf(name).flex).toBe('1 1 50%')
       expect(styleOf(name).minWidth).toBe('0px')
-      expect(styleOf(amount).flex).toBe('0 0 auto')
       expect(styleOf(amount).getPropertyValue('margin-inline-start')).toBe('auto')
+    }
+  })
+
+  it('금액은 줄 폭을 넘지 않고, 줄 폭보다 길면 오른쪽에 맞춰 줄을 바꾼다', async () => {
+    await open()
+    for (const row of [totalRow(), headOf('은행'), within(group('은행')).getAllByRole('listitem')[0]]) {
+      const amount = styleOf(row.children[1])
+      expect(amount.flex).toBe('0 1 auto')
+      expect(amount.textAlign).toBe('end')
     }
   })
 

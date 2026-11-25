@@ -1,5 +1,7 @@
+/* 쉼표 뒤(wbr)가 아닌 곳에서는 폭이 모자라도 끊지 않는다 */
 .amount {
-  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
 }
 
 .expense,

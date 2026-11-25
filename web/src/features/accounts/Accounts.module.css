@@ -12,7 +12,10 @@
   }
 }
 
-/* 금액은 이름의 첫 줄에 맞추고, 이름 자리가 줄의 절반보다 좁아지면 다음 줄 오른쪽으로 내린다 */
+/*
+ * 금액은 이름의 첫 줄에 맞추고, 이름 자리가 줄의 절반보다 좁아지면 다음 줄 오른쪽으로 내린다.
+ * 내려간 뒤에도 줄 폭보다 길 때만 금액 안에서 줄이 바뀐다.
+ */
 .row {
   display: flex;
   flex-wrap: wrap;
@@ -31,9 +34,10 @@
 }
 
 .amount {
-  flex: none;
+  flex: 0 1 auto;
   margin-inline-start: auto;
   font: var(--text-body-strong);
+  text-align: end;
 }
 
 .total {
