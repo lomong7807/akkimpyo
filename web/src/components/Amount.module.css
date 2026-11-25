@@ -1,0 +1,21 @@
+.amount {
+  white-space: nowrap;
+}
+
+.expense,
+.balance {
+  color: var(--color-text);
+}
+
+.income {
+  color: var(--color-accent);
+}
+
+.transfer,
+.canceled {
+  color: var(--color-text-secondary);
+}
+
+.canceled {
+  text-decoration: line-through;
+}
