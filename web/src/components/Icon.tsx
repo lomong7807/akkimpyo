@@ -1,3 +1,4 @@
+import calendarBlank from '../assets/icons/phosphor/calendar-blank.svg?raw'
 import caretLeft from '../assets/icons/phosphor/caret-left.svg?raw'
 import caretRight from '../assets/icons/phosphor/caret-right.svg?raw'
 import check from '../assets/icons/phosphor/check.svg?raw'
@@ -15,6 +16,7 @@ import styles from './Icon.module.css'
 
 // Phosphor Icons Regular (phosphor-icons/core v2.0.8, MIT). 라이선스: ../assets/icons/phosphor/LICENSE
 const svgs = {
+  CalendarBlank: calendarBlank,
   CaretLeft: caretLeft,
   CaretRight: caretRight,
   Check: check,

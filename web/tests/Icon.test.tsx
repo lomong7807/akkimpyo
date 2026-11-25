@@ -4,6 +4,7 @@ import Icon, { type IconName } from '../src/components/Icon'
 import { readWebFile } from './support/webFile'
 
 const files: Record<IconName, string> = {
+  CalendarBlank: 'calendar-blank',
   CaretLeft: 'caret-left',
   CaretRight: 'caret-right',
   Check: 'check',
