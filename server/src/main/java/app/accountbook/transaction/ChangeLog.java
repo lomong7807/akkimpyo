@@ -56,9 +56,11 @@ public class ChangeLog extends BaseEntity {
         this.afterValue = afterValue;
     }
 
+    /** 이력 행을 만드는 유일한 길이다. 기기 값은 여기서 목록의 값이나 unknown으로 바뀐다({@link DeviceIds#storable}). */
     public static ChangeLog of(UUID transactionId, UUID ledgerId, ChangeAction action, UUID actorId,
                                String deviceId, JsonNode beforeValue, JsonNode afterValue, Instant createdAt) {
-        return new ChangeLog(transactionId, ledgerId, action, actorId, deviceId, beforeValue, afterValue, createdAt);
+        return new ChangeLog(transactionId, ledgerId, action, actorId, DeviceIds.storable(deviceId), beforeValue,
+                afterValue, createdAt);
     }
 
     public UUID getTransactionId() {
