@@ -23,10 +23,11 @@ describe('ESLint', () => {
   })
 })
 
-describe('의존 방향: app → features → components', () => {
+describe('의존 방향: app → features → components, api', () => {
   const feature = 'src/features/sample/sample.ts'
   const component = 'src/components/sample.ts'
   const nestedComponent = 'src/components/sample/sample.ts'
+  const api = 'src/api/sample.ts'
 
   const value = (from: string) => `import { a } from '${from}'\nexport const b = a`
   const type = (from: string) => `import type { A } from '${from}'\nexport type B = A`
@@ -43,6 +44,22 @@ describe('의존 방향: app → features → components', () => {
     ['components에서 features', component, value('../features/not-found/NotFoundPage')],
     ['components에서 features의 타입', component, type('../features/not-found/NotFoundPage')],
     ['components 안쪽 폴더에서 features', nestedComponent, reExport('../../features/not-found/NotFoundPage')],
+    ['components에서 api', component, value('../api/request')],
+    ['components에서 api의 타입', component, type('../api/apiError')],
+    ['components 안쪽 폴더에서 api', nestedComponent, reExport('../../api/request')],
+    ['api에서 app', api, value('../app/routes')],
+    ['api에서 features', api, value('../features/auth/useLogin')],
+    ['api에서 components', api, value('../components/Button')],
+    ['api에서 React', api, value('react')],
+    ['api에서 React의 타입', api, type('react')],
+    ['api에서 React DOM', api, value('react-dom/client')],
+    ['api에서 라우터', api, value('react-router/dom')],
+    ['api에서 TanStack Query', api, value('@tanstack/react-query')],
+    ['앱 코드에서 msw', feature, value('msw')],
+    ['api에서 msw', api, value('msw/node')],
+    ['components에서 msw', component, value('msw')],
+    ['app에서 msw', 'src/app/sample.ts', value('msw/node')],
+    ['main에서 msw', 'src/main.ts', value('msw/browser')],
   ])('막는다: %s', async (_, path, code) => {
     expect(await ruleIdsFor(code, path)).toEqual(['no-restricted-imports'])
   })
@@ -56,6 +73,12 @@ describe('의존 방향: app → features → components', () => {
     ['app에서 components', 'src/app/sample.ts', value('../components/Button')],
     ['app에서 app', 'src/app/sample.ts', value('./navigation')],
     ['main에서 app', 'src/main.ts', value('./app/App')],
+    ['features에서 api', feature, value('../../api/request')],
+    ['app에서 api', 'src/app/sample.ts', value('../api/session')],
+    ['main에서 api', 'src/main.ts', value('./api/session')],
+    ['api에서 api', api, value('./http')],
+    ['테스트에서 api', 'tests/sample.test.ts', value('../src/api/session')],
+    ['테스트에서 msw', 'tests/sample.test.ts', value('msw/node')],
     ['테스트에서 app', 'tests/sample.test.ts', value('../src/app/routes')],
   ])('막지 않는다: %s', async (_, path, code) => {
     expect(await ruleIdsFor(code, path)).toEqual([])
