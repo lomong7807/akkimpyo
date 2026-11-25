@@ -121,6 +121,24 @@ class UserAuthenticateTest {
         verify(encoder, times(3)).matches(any(), any());
     }
 
+    @Test
+    void 맞춘_비밀번호의_길이는_유니코드_글자_수로_센다() {
+        // UTF-16으로는 142단위다. 가입이 받은 비밀번호로 로그인할 수 있어야 한다.
+        String password = "a1" + "\uD83D\uDE00".repeat(70);
+        User user = signedUp(hasher.hash(password));
+
+        assertThat(service.authenticate(EMAIL, password)).contains(user.getId());
+        assertThat(service.authenticate(EMAIL, password + "\uD83D\uDE00")).isEmpty();
+        verify(encoder, times(1)).matches(any(), any());
+    }
+
+    @Test
+    void 지금_규칙에_맞지_않아도_저장된_비밀번호와_비교한다() {
+        User user = signedUp(encoder.encode("old"));
+
+        assertThat(service.authenticate(EMAIL, "old")).contains(user.getId());
+    }
+
     // --- 실패: 모두 빈 값이고 해시 비교를 한 번 한다 ---
 
     static Stream<Arguments> failures() {
