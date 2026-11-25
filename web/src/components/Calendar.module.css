@@ -58,6 +58,13 @@
   transition: transform var(--motion-press-duration);
 }
 
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .day:hover:not([aria-selected='true'], [aria-disabled='true']) .mark {
+    background-color: var(--color-press);
+  }
+}
+
 .day:active:not([aria-disabled='true']) .mark {
   transform: scale(var(--motion-press-scale));
 }

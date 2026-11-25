@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Calendar from '../src/components/Calendar'
 import { readCssRule } from './support/cssRule'
+import { readWebFile } from './support/webFile'
 
 const rule = (selector: string) => readCssRule('src/components/Calendar.module.css', selector)
 
@@ -441,6 +442,19 @@ describe('모양', () => {
   it('범위 밖 날짜는 보조 글자색이다', () => {
     open('2027-11-10')
     expect(getComputedStyle(day('2027년 11월 27일')).color).toBe('var(--color-text-secondary)')
+  })
+
+  it('마우스를 올리면 44x44px 표시에 바탕을 깐다. 고른 날과 범위 밖 날짜는 그대로다', () => {
+    const css = readWebFile('src/components/Calendar.module.css')
+    const hover = /@media \(hover: hover\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? ''
+    expect(hover.replace(/\s+/g, ' ').trim()).toBe(
+      ".day:hover:not([aria-selected='true'], [aria-disabled='true']) .mark { background-color: var(--color-press); }",
+    )
+    expect(css.match(/:hover/g)).toHaveLength(1)
+  })
+
+  it('누르면 표시가 작아진다. 범위 밖 날짜는 그대로다', () => {
+    expect(rule(".day:active:not([aria-disabled='true']) .mark")).toContain('transform: scale(var(--motion-press-scale))')
   })
 
   it('초점은 칸 안쪽에 그린다. 고른 날은 강조색 위에서 보이게 안으로 더 띄운다', () => {
