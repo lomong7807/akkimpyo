@@ -3,6 +3,7 @@ import Overlay from './Overlay'
 import styles from './FieldPanel.module.css'
 
 interface FieldPanelProps {
+  open: boolean
   /** 판을 연 칸의 이름 */
   label: string
   /** 판을 붙일 칸 */
@@ -12,10 +13,11 @@ interface FieldPanelProps {
 }
 
 /** 넓은 화면에서 칸 아래에 펼치는 판(화면설계서 00-common 5.4). 초점은 안의 내용이 useEffect에서 옮긴다. */
-export default function FieldPanel({ label, anchor, onClose, children }: FieldPanelProps) {
+export default function FieldPanel({ open, label, anchor, onClose, children }: FieldPanelProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
+    if (!open) return
     const panel = ref.current!
 
     // 칸의 자리와 남은 높이는 화면마다 달라 CSS에 적어 둘 수 없다
@@ -32,10 +34,10 @@ export default function FieldPanel({ label, anchor, onClose, children }: FieldPa
     place()
     window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
-  }, [anchor])
+  }, [open, anchor])
 
   return (
-    <Overlay aria-label={label} onClose={onClose}>
+    <Overlay open={open} aria-label={label} onClose={onClose}>
       <div ref={ref} className={styles.panel}>
         {children}
       </div>

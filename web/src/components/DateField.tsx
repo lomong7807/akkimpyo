@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type Ref } from 'react'
+import { useEffect, useId, useState, type KeyboardEvent, type Ref } from 'react'
 import BottomSheet from './BottomSheet'
 import Calendar from './Calendar'
 import { formatDate, today } from './calendarDate'
@@ -19,17 +19,20 @@ interface DateFieldProps extends FieldLabels {
 /** 날짜 칸(화면설계서 00-common 5.8). 휴대폰 배치는 바닥 시트, 넓은 화면은 칸 아래 판에 달력을 연다. */
 export default function DateField({ value, onChange, readOnly = false, ref, ...labels }: DateFieldProps) {
   const valueId = useId()
+  const [open, setOpen] = useState(false)
+  // 마지막으로 연 때의 칸과 배치. 닫히는 동안에도 쓴다
   const [opened, setOpened] = useState<{ button: HTMLButtonElement; focusVisible: boolean; wide: boolean }>()
-  const close = () => setOpened(undefined)
+  const close = () => setOpen(false)
 
   useEffect(() => {
-    if (!opened) return
+    if (!open) return
     const wide = wideScreen()
     wide.addEventListener('change', close)
     return () => wide.removeEventListener('change', close)
-  }, [opened])
+  }, [open])
 
-  function open(button: HTMLButtonElement) {
+  function openFrom(button: HTMLButtonElement) {
+    setOpen(true)
     setOpened({ button, focusVisible: button.matches(':focus-visible'), wide: wideScreen().matches })
     // Safari는 누른 버튼에 초점을 주지 않는다. 닫힐 때 이 칸으로 돌아오게 한다
     button.focus()
@@ -52,9 +55,10 @@ export default function DateField({ value, onChange, readOnly = false, ref, ...l
             className={`${control.className} ${styles.button}`}
             aria-labelledby={`${labelId} ${valueId}`}
             aria-haspopup="dialog"
-            aria-expanded={opened !== undefined}
+            aria-expanded={open}
             aria-disabled={readOnly || undefined}
-            onClick={readOnly ? undefined : (event) => open(event.currentTarget)}
+            onClick={readOnly ? undefined : (event) => openFrom(event.currentTarget)}
+            onKeyDown={ignoreHeldKey}
           >
             <span id={valueId} className="tabular-nums">
               {value && formatDate(value, today())}
@@ -63,11 +67,11 @@ export default function DateField({ value, onChange, readOnly = false, ref, ...l
           </button>
         )}
       </Field>
-      <BottomSheet title={labels.label} open={opened?.wide === false} onClose={close}>
+      <BottomSheet title={labels.label} open={open && opened?.wide === false} onClose={close}>
         {calendar}
       </BottomSheet>
       {opened?.wide && (
-        <FieldPanel label={labels.label} anchor={opened.button} onClose={close}>
+        <FieldPanel open={open} label={labels.label} anchor={opened.button} onClose={close}>
           {calendar}
         </FieldPanel>
       )}
@@ -77,4 +81,9 @@ export default function DateField({ value, onChange, readOnly = false, ref, ...l
 
 function wideScreen(): MediaQueryList {
   return window.matchMedia('(width >= 1024px)')
+}
+
+/** 날짜를 고른 키를 누르고 있으면 초점이 돌아온 칸에 되풀이해서 들어온다. 다시 열리지 않게 한다. */
+function ignoreHeldKey(event: KeyboardEvent) {
+  if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault()
 }

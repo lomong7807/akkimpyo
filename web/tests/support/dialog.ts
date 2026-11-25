@@ -1,3 +1,5 @@
+import { act } from '@testing-library/react'
+
 /**
  * jsdom에 없는 `<dialog>`의 showModal과 close를 규격의 순서대로 흉내 낸다.
  * 초점을 가두는 것과 뒤 화면을 누를 수 없는 것은 흉내 내지 않는다. 실제 브라우저에서 확인한다.
@@ -27,3 +29,6 @@ export function installDialog(): void {
     if (top.dispatchEvent(new Event('cancel', { cancelable: true }))) top.close()
   })
 }
+
+/** 시트나 판이 다 열려 누르기를 받을 때까지 기다린다. */
+export const untilOpened = () => act(() => new Promise((resolve) => setTimeout(resolve, 350)))

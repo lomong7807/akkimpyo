@@ -22,8 +22,14 @@
   background-color: transparent;
 }
 
-.scrim {
+.scrim:not([data-closing]) {
   background-color: var(--color-scrim);
+}
+
+/* 막 열었거나 닫는 중에는 면을 누르면 층을 누른 것이 된다 */
+.overlay[data-opening] > *,
+.overlay[data-closing] > * {
+  pointer-events: none;
 }
 
 :root:has(.overlay[open]) {
@@ -32,4 +38,11 @@
 
 :root:has(.overlay[data-scrollbar]) {
   scrollbar-gutter: stable;
+}
+
+/* 닫은 뒤 이어서 누른 것이 뒤 화면에 닿지 않게 덮는다. 초점이 돌아가야 하므로 모달이 아니고 상단 바와 하단 탭보다 위다 */
+.shield {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
 }

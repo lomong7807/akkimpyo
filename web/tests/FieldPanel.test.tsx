@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import FieldPanel from '../src/components/FieldPanel'
 import { readCssRule } from './support/cssRule'
+import { untilOpened } from './support/dialog'
 
 const rule = (selector: string) => readCssRule('src/components/FieldPanel.module.css', selector)
 
@@ -11,13 +12,21 @@ const WINDOW_HEIGHT = window.innerHeight
 
 function Sample() {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const [open, setOpen] = useState(false)
   return (
     <>
-      <button type="button" data-testid="칸" onClick={(event) => setAnchor(event.currentTarget)}>
+      <button
+        type="button"
+        data-testid="칸"
+        onClick={(event) => {
+          setAnchor(event.currentTarget)
+          setOpen(true)
+        }}
+      >
         칸
       </button>
       {anchor && (
-        <FieldPanel label="기준일" anchor={anchor} onClose={() => setAnchor(null)}>
+        <FieldPanel label="기준일" open={open} anchor={anchor} onClose={() => setOpen(false)}>
           <p>판의 내용</p>
           <button type="button">안의 버튼</button>
         </FieldPanel>
@@ -65,6 +74,7 @@ describe('펼친 판', () => {
     const user = userEvent.setup()
     render(<Sample />)
     await user.click(field())
+    await untilOpened()
     await close(user)
     await act(async () => {})
     expect(document.querySelector('dialog')).toBeNull()
@@ -75,6 +85,7 @@ describe('펼친 판', () => {
     const user = userEvent.setup()
     render(<Sample />)
     await user.click(field())
+    await untilOpened()
     await user.click(screen.getByText('판의 내용'))
     expect(dialog()?.open).toBe(true)
   })
@@ -137,6 +148,16 @@ describe('자리', () => {
     await open(100, 390)
     await user.keyboard('{Escape}')
     expect(remove.mock.calls.some(([type]) => type === 'resize')).toBe(true)
+  })
+
+  it('다시 열면 그때의 자리에 놓는다', async () => {
+    const user = userEvent.setup()
+    await open(100, 390)
+    await user.keyboard('{Escape}')
+    vi.mocked(field().getBoundingClientRect).mockReturnValue(new DOMRect(300, 200, 560, 48))
+    await user.click(field())
+    expect(panel().style.getPropertyValue('--field-left')).toBe('300px')
+    expect(panel().style.getPropertyValue('--field-top')).toBe('200px')
   })
 
   it('칸과 화면 끝에서 4px 떨어지고 남은 높이 안에서 스크롤한다', () => {

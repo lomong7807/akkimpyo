@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type PointerEvent, type ReactNode, type RefObject } from 'react'
+import { useId, useRef, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import { Button } from './Button'
 import Overlay from './Overlay'
 import styles from './BottomSheet.module.css'
@@ -17,13 +17,10 @@ interface BottomSheetProps {
 export default function BottomSheet({ open, title, onClose, children }: BottomSheetProps) {
   const titleId = useId()
   const sheet = useRef<HTMLDivElement>(null)
-  const { shown, closing } = useClosingMotion(open, sheet)
   const dragHandlers = useDragDown(sheet, onClose)
-
-  if (!shown) return null
   return (
-    <Overlay aria-labelledby={titleId} scrim={!closing} onClose={onClose}>
-      <div ref={sheet} className={closing ? `${styles.sheet} ${styles.closing}` : styles.sheet}>
+    <Overlay open={open} aria-labelledby={titleId} scrim onClose={onClose}>
+      <div ref={sheet} className={styles.sheet}>
         <div className={styles.head} {...dragHandlers}>
           <div className={styles.handle} aria-hidden="true" />
           <div className={styles.titleRow}>
@@ -37,27 +34,6 @@ export default function BottomSheet({ open, title, onClose, children }: BottomSh
       </div>
     </Overlay>
   )
-}
-
-/** 닫히는 움직임이 끝날 때까지 남긴다. 움직임을 줄인 기기에서는 바로 끝난다. */
-function useClosingMotion(open: boolean, sheet: RefObject<HTMLElement | null>) {
-  const [shown, setShown] = useState(open)
-  if (open && !shown) setShown(true)
-  const closing = shown && !open
-
-  useEffect(() => {
-    if (!closing) return
-    let reopened = false
-    const motions = sheet.current!.getAnimations().map(({ finished }) => finished)
-    void Promise.allSettled(motions).then(() => {
-      if (!reopened) setShown(false)
-    })
-    return () => {
-      reopened = true
-    }
-  }, [closing, sheet])
-
-  return { shown, closing }
 }
 
 /** 머리를 아래로 끌면 시트가 따라 내려온다. */

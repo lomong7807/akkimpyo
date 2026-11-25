@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DateField from '../src/components/DateField'
 import { TextField } from '../src/components/TextField'
 import { readCssRule } from './support/cssRule'
+import { untilOpened } from './support/dialog'
 import { installMatchMedia } from './support/viewport'
 
 const PHONE = 390
@@ -52,10 +53,12 @@ function described() {
     .map((id) => document.getElementById(id)?.textContent)
 }
 
+/** 다 열려 날짜를 누를 수 있을 때까지 기다린다. */
 async function open(props: Props = {}) {
   const user = userEvent.setup()
   render(<Sample {...props} />)
   await user.click(field())
+  if (dialog()) await untilOpened()
   return user
 }
 
@@ -134,6 +137,7 @@ describe('칸', () => {
       </form>,
     )
     await user.click(field())
+    await untilOpened()
     await user.click(day('2026년 11월 3일'))
     expect(onSubmit).not.toHaveBeenCalled()
   })
@@ -252,6 +256,44 @@ describe('고르기', () => {
       expect(document.activeElement).toBe(day('2026년 11월 27일'))
     })
 
+    it('열리는 동안 이어서 눌러도 날짜가 골라지지 않고 열려 있다', async () => {
+      const onChange = vi.fn()
+      const user = userEvent.setup()
+      render(<Sample onChange={onChange} />)
+      await user.click(field())
+      // 칸이 시트가 덮는 자리에 있으면 둘째 누름이 올라온 달력에 닿는다
+      for (const target of [day('2026년 11월 3일'), screen.getByRole('button', { name: '오늘' }), screen.getByRole('button', { name: '다음 달' })]) {
+        expect(getComputedStyle(target).pointerEvents).toBe('none')
+      }
+      await user.click(dialog()!)
+      expect(dialog()?.open).toBe(true)
+      expect(onChange).not.toHaveBeenCalled()
+      await untilOpened()
+      await user.click(day('2026년 11월 3일'))
+      expect(onChange.mock.calls).toEqual([['2026-11-03']])
+    })
+
+    it('고른 뒤 이어서 누른 것이 뒤 화면에 닿지 않게 덮었다가 푼다', async () => {
+      const user = await open()
+      await user.click(day('2026년 11월 3일'))
+      expect(document.querySelector('[class*="shield"]')).toBeTruthy()
+      expect(document.activeElement).toBe(field())
+      await untilOpened()
+      expect(document.querySelector('[class*="shield"]')).toBeNull()
+    })
+
+    it.each(['Enter', ' '])('고른 키 "%s"를 누르고 있어도 다시 열리지 않는다', async (key) => {
+      await open()
+      for (const repeat of [false, true, true]) {
+        const event = new KeyboardEvent('keydown', { key, repeat, bubbles: true, cancelable: true })
+        await act(async () => void document.activeElement!.dispatchEvent(event))
+        // 막지 않으면 브라우저가 칸을 누른 것으로 본다
+        expect(event.defaultPrevented).toBe(true)
+      }
+      expect(dialog()).toBeNull()
+      expect(document.activeElement).toBe(field())
+    })
+
     it('창의 폭이 1024px을 넘나들면 닫히고 초점이 칸으로 돌아간다', async () => {
       await open()
       await act(async () => viewport.resizeTo(width === PHONE ? WIDE : PHONE))
@@ -296,6 +338,16 @@ describe('고르기', () => {
     await user.keyboard('{Escape}')
     expect(document.activeElement).toBe(field())
   })
+})
+
+it.each([
+  ['처음 누른 Enter', 'Enter', false],
+  ['누르고 있는 Tab', 'Tab', true],
+])('칸에서 %s는 브라우저에 맡긴다', (_, key, repeat) => {
+  render(<Sample />)
+  const event = new KeyboardEvent('keydown', { key, repeat, bubbles: true, cancelable: true })
+  field().dispatchEvent(event)
+  expect(event.defaultPrevented).toBe(false)
 })
 
 describe('읽기 전용', () => {

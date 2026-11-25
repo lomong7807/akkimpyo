@@ -27,9 +27,8 @@
   transition: none;
 }
 
-.closing {
+dialog[data-closing] > .sheet {
   translate: 0 100%;
-  pointer-events: none;
 }
 
 .head {

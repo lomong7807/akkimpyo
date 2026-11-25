@@ -4,6 +4,7 @@ import { StrictMode, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import BottomSheet from '../src/components/BottomSheet'
 import { readCssRule } from './support/cssRule'
+import { untilOpened } from './support/dialog'
 
 const overlayRule = (selector: string) => readCssRule('src/components/Overlay.module.css', selector)
 const rule = (selector: string) => readCssRule('src/components/BottomSheet.module.css', selector)
@@ -82,6 +83,7 @@ describe('닫는 것', () => {
     '%s로 닫으면 사라지고 초점이 연 버튼으로 돌아간다',
     async (_, close) => {
       const user = await openSheet()
+      await untilOpened()
       await close(user)
       await act(async () => {})
       expect(document.querySelector('dialog')).toBeNull()
@@ -98,6 +100,7 @@ describe('닫는 것', () => {
 
   it('시트 안을 눌러서는 닫히지 않는다', async () => {
     const user = await openSheet()
+    await untilOpened()
     await user.click(screen.getByText('시트의 내용'))
     await user.click(screen.getByRole('heading', { name: '기준일' }))
     expect(dialog()?.open).toBe(true)
@@ -105,6 +108,7 @@ describe('닫는 것', () => {
 
   it('안에서 눌러 밖에서 떼거나 밖에서 눌러 안에서 떼면 닫히지 않는다', async () => {
     await openSheet()
+    await untilOpened()
     const inside = screen.getByText('시트의 내용')
     fireEvent.pointerDown(inside)
     fireEvent.click(dialog()!)
@@ -136,6 +140,7 @@ describe('닫는 것', () => {
     const { rerender } = render(<button type="button">밖의 버튼</button>)
     await user.click(screen.getByText('밖의 버튼'))
     rerender(<Leaving />)
+    await untilOpened()
     await user.click(screen.getByRole('button', { name: '떠나기' }))
     expect(document.querySelector('dialog')).toBeNull()
   })
@@ -392,7 +397,7 @@ describe('모양', () => {
   it('가림막이 화면을 덮고 뒤 화면은 스크롤되지 않는다', async () => {
     await openSheet()
     expect(overlayRule('.overlay')).toContain('inset: 0')
-    expect(overlayRule('.scrim')).toContain('background-color: var(--color-scrim)')
+    expect(overlayRule('.scrim:not([data-closing])')).toContain('background-color: var(--color-scrim)')
     expect(overlayRule(':root:has(.overlay[open])')).toContain('overflow: hidden')
   })
 
