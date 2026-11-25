@@ -33,6 +33,7 @@ afterEach(() => {
   document.documentElement.removeAttribute('data-covered')
 })
 
+const RETURN_ADDRESS = 'akkimpyo-return-address'
 const ended = '로그인이 풀렸어요. 다시 로그인해 주세요.'
 const failed = '불러오지 못했어요.'
 
@@ -232,6 +233,7 @@ describe.each(arrivals)('보관된 동안 로그아웃했으면(%s)', (_, arriva
     const opened = await openAsFirstUser('/list?month=2026-11')
     hidePage()
     await logOut()
+    sessionStorage.setItem(RETURN_ADDRESS, '/list?month=2026-10')
     const uncovered = watchUncovering()
     list.requests.length = 0
     backend.requests.me.length = 0
@@ -244,6 +246,7 @@ describe.each(arrivals)('보관된 동안 로그아웃했으면(%s)', (_, arriva
     expect(uncovered.join()).not.toMatch(/user-1|쓰던 값/)
     expect(list.requests).toEqual([])
     expect(backend.requests.me).toEqual([])
+    expect(sessionStorage.getItem(RETURN_ADDRESS)).toBeNull()
     expect(screen.queryByText(ended)).toBeNull()
   })
 
@@ -321,6 +324,69 @@ describe.each(arrivals)('보관된 동안 다른 계정으로 로그인했으면
     backend.refreshResponse = undefined
     await user.click(screen.getByRole('button', { name: '다시 시도' }))
     expect(await screen.findByText(itemOf('user-2'))).toBeTruthy()
+  })
+})
+
+describe('되살아난 화면이 로그인 화면으로 가게 되면', () => {
+  const unauthenticated = () => problem(401, 'UNAUTHENTICATED')
+  const serverError = () => problem(500, 'INTERNAL_ERROR')
+  const address = '/list?month=2026-11'
+
+  /** 이 화면이 보관된 동안 `change`가 있었고, 되살아나 다시 확인한 답은 `refresh`다. */
+  async function restoreAfter(change: 'logout' | 'login', refresh: () => Response) {
+    const opened = await openAsFirstUser(address)
+    hidePage()
+    const other = await openOtherPage()
+    if (change === 'logout') other.settleLogout(other.recordLogout())
+    other.recordLogin()
+    backend.refreshResponse = refresh
+    await showPage()
+    return opened
+  }
+
+  it('까닭이 로그아웃이면 보던 주소를 기억하지 않고 기억해 둔 주소도 지운다', async () => {
+    sessionStorage.setItem(RETURN_ADDRESS, '/list?month=2026-10')
+    const opened = await restoreAfter('logout', unauthenticated)
+    await loginHeading()
+    expect(addressOf(opened)).toBe('/login')
+    expect(sessionStorage.getItem(RETURN_ADDRESS)).toBeNull()
+  })
+
+  it('까닭이 다른 로그인이면 보던 주소를 기억한다', async () => {
+    const opened = await restoreAfter('login', unauthenticated)
+    await loginHeading()
+    expect(addressOf(opened)).toBe('/login')
+    expect(sessionStorage.getItem(RETURN_ADDRESS)).toBe(address)
+  })
+
+  it('까닭이 로그아웃이면 확인하지 못했다가 다시 시도해 가도 기억하지 않는다', async () => {
+    const { user } = await restoreAfter('logout', serverError)
+    await screen.findByText(failed)
+    backend.refreshResponse = unauthenticated
+    await user.click(screen.getByRole('button', { name: '다시 시도' }))
+    await loginHeading()
+    expect(sessionStorage.getItem(RETURN_ADDRESS)).toBeNull()
+  })
+
+  it.each([
+    ['로그아웃이면 기억하지 않는다', 'logout', null],
+    ['다른 로그인이면 기억한다', 'login', address],
+  ] as const)('확인하지 못해 "로그인하러 가기"를 누를 때도 까닭이 %s', async (_, change, remembered) => {
+    const { user } = await restoreAfter(change, serverError)
+    await screen.findByText(failed)
+    await user.click(screen.getByRole('link', { name: '로그인하러 가기' }))
+    await loginHeading()
+    expect(sessionStorage.getItem(RETURN_ADDRESS)).toBe(remembered)
+  })
+
+  it('새로 연 로그인이 뒤에 풀리면 그 까닭을 따라 보던 주소를 기억하고 알린다', async () => {
+    const { user } = await restoreAfter('logout', () => backend.issue('user-2'))
+    await screen.findByText(itemOf('user-2'))
+    backend.refreshResponse = unauthenticated
+    backend.expireTokens()
+    await user.click(screen.getByRole('button', { name: '새로 받기' }))
+    expect(await screen.findByText(ended)).toBeTruthy()
+    expect(sessionStorage.getItem(RETURN_ADDRESS)).toBe(address)
   })
 })
 

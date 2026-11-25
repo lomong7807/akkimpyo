@@ -218,27 +218,36 @@ describe('되살아난 화면', () => {
     expect(backend.requests.refresh).toHaveLength(0)
   })
 
-  it.each<[string, () => Promise<unknown> | unknown]>([
-    ['로그아웃 값이 바뀜', logOutElsewhere],
-    ['로그아웃 대기가 있음', async () => (await openTab()).recordLogout()],
-    ['로그인 값이 바뀜', logInElsewhere],
-    ['로그아웃한 뒤 다시 로그인함', async () => (await logOutElsewhere(), logInElsewhere())],
-    ['저장소가 지워짐', () => localStorage.clear()],
-    ['로그인 값이 지워짐', () => localStorage.removeItem('akkimpyo-login')],
+  const cases: [string, string, () => Promise<unknown> | unknown][] = [
+    ['로그아웃 값이 바뀜', 'replaced-after-logout', logOutElsewhere],
+    ['로그아웃 대기가 있음', 'replaced-after-logout', async () => (await openTab()).recordLogout()],
+    ['로그아웃한 뒤 다시 로그인함', 'replaced-after-logout', async () => (await logOutElsewhere(), logInElsewhere())],
+    ['로그인 값이 바뀜', 'replaced', logInElsewhere],
+    ['저장소가 지워짐', 'replaced', () => localStorage.clear()],
+    ['로그인 값이 지워짐', 'replaced', () => localStorage.removeItem('akkimpyo-login')],
     [
       '저장소를 읽지 못함',
+      'replaced',
       () =>
         vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
           throw new DOMException('막힘', 'SecurityError')
         }),
     ],
-  ])('%s: 쓰던 로그인을 버리고 새로 연다고 알린다', async (_, change) => {
+  ]
+
+  it.each(cases)('%s: 쓰던 로그인을 버리고 새로 연다고 알린다(%s)', async (_, end, change) => {
     const tab = await openSignedInTab()
     const ended = await resumeAfter(tab, change)
-    expect(ended).toHaveBeenCalledExactlyOnceWith('replaced')
+    expect(ended).toHaveBeenCalledExactlyOnceWith(end)
     backend.requests.me.length = 0
     await errorOf(tab.request('/me'))
     expect(backend.requests.me).toEqual(['만료'])
+  })
+
+  it('로그아웃 값이 지워진 것도 로그아웃으로 본다', async () => {
+    await logOutElsewhere()
+    const tab = await openSignedInTab()
+    expect(await resumeAfter(tab, () => localStorage.clear())).toHaveBeenCalledExactlyOnceWith('replaced-after-logout')
   })
 
   it('로그인 값을 남긴 적이 없으면 같은지 알 수 없으므로 새로 연다', async () => {

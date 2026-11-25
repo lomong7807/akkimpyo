@@ -16,7 +16,7 @@ export default function SessionProvider({ children }: { children: ReactNode }) {
     const check = () => void checkSession().then(dispatch)
     const stopListening = onSessionEnded((end) => {
       dispatch(end)
-      if (end === 'replaced') check()
+      if (end === 'replaced' || end === 'replaced-after-logout') check()
     })
     const stopWatching = watchSession(() => dispatch('resumed'))
     // 서버에 닿지 못한 로그아웃은 앱을 열 때와 다시 연결될 때만 또 보낸다

@@ -10,8 +10,8 @@ export interface Session {
   status: 'checking' | 'unknown' | 'retrying' | 'signed-out' | 'signed-in'
   /** 로그인할 때와 로그인이 끝날 때마다 바뀐다. 앞 사용자의 화면과 캐시를 이어 쓰지 않게 하는 key다. */
   id: number
-  /** 쓰던 로그인이 끝난 까닭. 다시 로그인하면 없다. */
-  end?: SessionEnd
+  /** 쓰던 로그인이 끝난 까닭. 로그인하지 않은 동안에만 뜻이 있다. */
+  end?: 'ended' | 'logged-out'
   /** 로그인을 보냈다. 그 뒤에 오는 확인 결과로는 화면을 옮기지 않는다. */
   loginSubmitted: boolean
   /** 이 로그인 동안 화면이 보관됐다가 되살아난 횟수 */
@@ -45,6 +45,8 @@ export function nextSession(session: Session, event: SessionEvent): Session {
       return { ...anew, status: 'signed-out', end: event }
     case 'replaced':
       return { ...anew, status: 'checking' }
+    case 'replaced-after-logout':
+      return { ...anew, status: 'checking', end: 'logged-out' }
     case 'login-submitted':
       return { ...session, loginSubmitted: true }
     case 'resumed':

@@ -46,9 +46,10 @@ let resending: Promise<void> | undefined
  * 이 탭에서 쓰던 로그인이 끝난 까닭
  * - ended: 로그인이 풀렸다
  * - logged-out: 사용자가 로그아웃했다(다른 탭 포함)
- * - replaced: 화면이 보관된 동안 로그아웃하거나 로그인했다. 지금 로그인을 다시 확인해야 안다
+ * - replaced, replaced-after-logout: 화면이 보관된 동안 로그인했거나(그랬을 수 있거나) 로그아웃했다. 지금 로그인을 다시
+ *   확인해야 안다
  */
-export type SessionEnd = 'ended' | 'logged-out' | 'replaced'
+export type SessionEnd = 'ended' | 'logged-out' | 'replaced' | 'replaced-after-logout'
 
 const endedListeners = new Set<(end: SessionEnd) => void>()
 
@@ -247,13 +248,20 @@ function acceptRenewed(renewed: string, seen: SeenMarks) {
 
 /** 이 탭의 로그인을 더 쓰면 안 되면 끝내고 true를 준다. */
 function endIfOver(): boolean {
-  if (accessToken === undefined) return false
-  if (suspended ? isSameLogin(seenMarks) : !loggedOutSince(seenMarks)) return false
-  const end = suspended ? 'replaced' : 'logged-out'
+  const end = overAs()
+  if (end === undefined) return false
   // 확인했으므로 뒤에 새로 여는 로그인은 보관된 화면의 것이 아니다
   suspended = false
   endSession(end)
   return true
+}
+
+function overAs(): SessionEnd | undefined {
+  if (accessToken === undefined) return undefined
+  const loggedOut = loggedOutSince(seenMarks)
+  if (!suspended) return loggedOut ? 'logged-out' : undefined
+  if (loggedOut) return 'replaced-after-logout'
+  return isSameLogin(seenMarks) ? undefined : 'replaced'
 }
 
 /** `seen` 뒤로 로그아웃이 있었거나, 서버에 닿지 않았을 수 있는 로그아웃이 있다. */
@@ -261,9 +269,9 @@ function loggedOutSince(seen: SeenMarks): boolean {
   return logoutValue() !== seen.logout || pendingLogout() !== undefined
 }
 
-/** `seen` 뒤로 로그아웃도 로그인도 없었다. 표시를 나누지 못하거나 남긴 로그인 값이 없으면 알 수 없으므로 아니라고 본다. */
+/** `seen` 뒤로 로그인이 없었다. 표시를 나누지 못하거나 남긴 로그인 값이 없으면 알 수 없으므로 아니라고 본다. */
 function isSameLogin(seen: SeenMarks): boolean {
-  return marksShared() && !loggedOutSince(seen) && seen.login !== undefined && loginValue() === seen.login
+  return marksShared() && seen.login !== undefined && loginValue() === seen.login
 }
 
 function endSession(end: SessionEnd) {

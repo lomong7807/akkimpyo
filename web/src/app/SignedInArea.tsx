@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
-import { Navigate, Outlet, useLocation } from 'react-router'
+import { Navigate, Outlet, useLocation, type Location } from 'react-router'
 import { ButtonLink } from '../components/Button'
 import LoadFailure from '../components/LoadFailure'
 import { CurrentLedgerContext } from '../features/me/CurrentLedgerContext'
@@ -52,13 +52,13 @@ function Gate() {
     if (signedIn) forgetReturnAddress()
   }, [signedIn])
 
-  if (session.status === 'signed-out') return <LoginRedirect end={session.end} />
+  if (session.status === 'signed-out') return <LoginRedirect session={session} />
 
   if (session.status === 'unknown' || session.status === 'retrying') {
     return (
       <PlainLayout>
         <LoadFailure onRetry={retry} busy={session.status === 'retrying'}>
-          <ButtonLink kind="text" to="/login" replace onClick={() => rememberReturnAddress(location)}>
+          <ButtonLink kind="text" to="/login" replace onClick={() => leaveAddress(session, location)}>
             로그인하러 가기
           </ButtonLink>
         </LoadFailure>
@@ -93,13 +93,14 @@ function Gate() {
 
 const endedState = { sessionEnded: true }
 
-/** 가려던 주소를 기억하고 로그인 화면으로 보낸다. 사용자가 로그아웃한 탭에는 앞 사용자의 주소를 남기지 않는다. */
-function LoginRedirect({ end }: Pick<Session, 'end'>) {
+function LoginRedirect({ session }: { session: Session }) {
   const location = useLocation()
-  const loggedOut = end === 'logged-out'
-  useEffect(() => {
-    if (loggedOut) forgetReturnAddress()
-    else rememberReturnAddress(location)
-  }, [loggedOut, location])
-  return <Navigate to="/login" replace state={end === 'ended' ? endedState : null} />
+  useEffect(() => leaveAddress(session, location), [session, location])
+  return <Navigate to="/login" replace state={session.end === 'ended' ? endedState : null} />
+}
+
+/** 로그인한 뒤 돌아오도록 가려던 주소를 기억한다. 사용자가 로그아웃했으면 앞 사용자의 주소를 남기지 않는다. */
+function leaveAddress({ end }: Session, location: Location) {
+  if (end === 'logged-out') forgetReturnAddress()
+  else rememberReturnAddress(location)
 }
