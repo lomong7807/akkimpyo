@@ -33,3 +33,7 @@ logging:
     org.apache.coyote.http11.Http11Processor: warn
     # 깨진 쿠키 헤더도 값째로 INFO로 남긴다.
     org.apache.tomcat.util.http.parser.Cookie: warn
+server:
+  tomcat:
+    # 보내다 멈춘 연결이 스레드를 오래 잡지 않게 한다(#21). 전체가 아니라 다음 바이트를 기다리는 시간이고 쉬는 유지 연결에도 걸린다.
+    connection-timeout: 10s
