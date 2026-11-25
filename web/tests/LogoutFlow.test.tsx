@@ -160,7 +160,7 @@ describe('로그아웃하면', () => {
     await settle()
     const stored = Object.entries({ ...localStorage })
     expect(stored.map(([key]) => key).sort()).toEqual(['akkimpyo-logout', 'akkimpyo-logout-done'])
-    for (const [, value] of stored) expect(value).toMatch(/^[0-9a-f-]{36}$/)
+    for (const [, value] of stored) expect(value).toMatch(/^[0-9a-f]{32}$/)
     expect(sessionStorage.length).toBe(0)
     expect(JSON.stringify(window.history.state)).not.toMatch(/user-1|eyJ/)
     expect(document.cookie).toBe('')

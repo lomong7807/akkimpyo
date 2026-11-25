@@ -34,7 +34,7 @@ export function pendingLogout(): string | undefined {
 
 /** 새 로그아웃을 대기로 남기고 그 값을 돌려준다. */
 export function recordLogout(): string {
-  return write(LOGOUT, crypto.randomUUID())
+  return write(LOGOUT, randomValue())
 }
 
 /** `value`의 로그아웃은 더 보낼 것이 없다. 그사이 새 로그아웃이 있었으면 그 대기는 남는다. */
@@ -44,7 +44,7 @@ export function settleLogout(value: string | undefined): void {
 
 /** 새 로그인을 남기고 그 값을 돌려준다. */
 export function recordLogin(): string {
-  return write(LOGIN, crypto.randomUUID())
+  return write(LOGIN, randomValue())
 }
 
 /** 다른 탭과 표시를 나누고 있는지 */
@@ -55,6 +55,12 @@ export function marksShared(): boolean {
   } catch {
     return false
   }
+}
+
+/** 128비트 난수. crypto.randomUUID는 https와 localhost에만 있어 LAN 주소로 연 개발 화면에서 쓸 수 없다. */
+function randomValue(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function read(key: string): string | undefined {

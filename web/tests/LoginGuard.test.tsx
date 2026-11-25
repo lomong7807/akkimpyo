@@ -304,7 +304,7 @@ describe('로그인하면', () => {
     await screen.findByText(secret)
     expect(sessionStorage.length).toBe(0)
     // 로그인했음을 다른 화면이 아는, 뜻이 없는 임의 값 하나만 남는다
-    expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f-]{36}$/) })
+    expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f]{32}$/) })
     expect(document.cookie).toBe('')
   })
 })

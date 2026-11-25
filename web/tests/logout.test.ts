@@ -394,6 +394,36 @@ describe('로그아웃이 잠금을 빼앗기면', () => {
   })
 })
 
+describe('https가 아닌 주소(개발 때의 LAN 주소)에서도', () => {
+  // 브라우저는 안전한 주소에서만 crypto.randomUUID와 Web Locks를 준다
+  beforeEach(() => {
+    removeLocks()
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
+    expect('randomUUID' in crypto).toBe(false)
+  })
+
+  it('로그인하고 로그아웃한다', async () => {
+    const tab = await openSignedInTab()
+    await tab.request('/me')
+    expect(backend.requests.me).toEqual(['user-1'])
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    tab.logout()
+    expect(ended).toHaveBeenCalledExactlyOnceWith('logged-out')
+    await vi.waitFor(() => expect(tab.pendingLogout()).toBeUndefined())
+    expect(backend.requests.logout).toHaveLength(1)
+  })
+
+  it('다른 탭이 그 로그아웃을 안다', async () => {
+    const [tab, other] = [await openSignedInTab(), await openSignedInTab()]
+    const ended = vi.fn()
+    other.onSessionEnded(ended)
+    tab.logout()
+    other.noticeLogout()
+    expect(ended).toHaveBeenCalledExactlyOnceWith('logged-out')
+  })
+})
+
 describe('저장소를 쓸 수 없어도', () => {
   it.each<[string, () => void]>([
     [

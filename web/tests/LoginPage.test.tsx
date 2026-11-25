@@ -571,7 +571,7 @@ describe('성공', () => {
     await fillAndSubmit(user)
     await vi.waitFor(() => expect(router.state.location.pathname).toBe('/home'))
     // 로그인했음을 다른 화면이 아는, 뜻이 없는 임의 값 하나만 남는다
-    expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f-]{36}$/) })
+    expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f]{32}$/) })
     expect(sessionStorage.length).toBe(0)
     expect(document.cookie).toBe('')
     expect(JSON.stringify(router.state.location)).not.toMatch(/token-1|pass1234/)

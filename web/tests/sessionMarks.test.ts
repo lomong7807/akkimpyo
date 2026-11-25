@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+/** 128비트의 16진 문자열 */
+const RANDOM = /^[0-9a-f]{32}$/
 
 /** 탭 하나. 모듈을 새로 불러와 메모리를 다른 탭과 나누지 않는다. 저장소는 함께 쓴다. */
 async function openTab() {
@@ -83,7 +84,7 @@ describe('로그아웃 값과 로그아웃 대기', () => {
     })
     tab.settleLogout(first)
     expect((await openTab()).pendingLogout()).not.toBe(first)
-    expect((await openTab()).pendingLogout()).toMatch(UUID)
+    expect((await openTab()).pendingLogout()).toMatch(RANDOM)
   })
 })
 
@@ -112,9 +113,17 @@ it('저장소에는 뜻이 없는 임의 값만 남는다', async () => {
   tab.settleLogout(tab.recordLogout())
   tab.recordLogout()
   expect(stored()).not.toHaveLength(0)
-  for (const value of stored()) expect(value).toMatch(UUID)
+  for (const value of stored()) expect(value).toMatch(RANDOM)
   expect(sessionStorage.length).toBe(0)
   expect(document.cookie).toBe('')
+})
+
+it('값은 128비트 난수를 빠짐없이 적은 것이라 앞의 0도 남는다', async () => {
+  vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+    ;(array as Uint8Array).set([0, 1, 10, 15, 16, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7])
+    return array
+  })
+  expect((await openTab()).recordLogout()).toBe('00010a0f10ff00000000000000000007')
 })
 
 describe('저장소를 쓸 수 없으면', () => {
