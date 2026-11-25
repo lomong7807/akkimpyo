@@ -92,6 +92,13 @@ class TransactionServiceTest {
         entityManager.clear();
     }
 
+    /** DB에 저장된 라인의 ledger_id. 라인 수만큼 나온다. */
+    private List<UUID> ledgersOfLines(UUID transactionId) {
+        entityManager.flush();
+        return jdbc.queryForList("select ledger_id from transaction_line where transaction_id = ?", UUID.class,
+                transactionId);
+    }
+
     @Test
     void create_expense_storesNegativeLineAndDefaults() {
         UUID id = UUID.randomUUID();
@@ -298,6 +305,51 @@ class TransactionServiceTest {
             assertThat(view.version()).isEqualTo(2);
             assertThat(view.lines()).containsExactly(new Line(cash.getId(), uncategorized, -15_000));
         });
+    }
+
+    @Test
+    void linesCarryTheLedgerOfTheirTransaction() {
+        User other = fixtures.user("other@example.com");
+        UUID otherLedgerId = fixtures.personalLedgerId(other);
+        Account othersCash = account(other, otherLedgerId, "현금", AccountType.CASH);
+
+        UUID expense = create(expense(UUID.randomUUID(), 12_000)).id();
+        UUID income = create(new Entry(UUID.randomUUID(), TransactionType.INCOME, DAY, null, bank.getId(),
+                salary.getId(), 50_000, false, "회사", null, null)).id();
+        UUID transfer = create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(), cash.getId(), 30_000,
+                null)).id();
+        UUID others = fixtures.expense(other, otherLedgerId, othersCash.getId(), null, DAY, 1_000).id();
+
+        assertThat(ledgersOfLines(expense)).containsExactly(ledgerId);
+        assertThat(ledgersOfLines(income)).containsExactly(ledgerId);
+        assertThat(ledgersOfLines(transfer)).containsExactly(ledgerId, ledgerId);
+        assertThat(ledgersOfLines(others)).containsExactly(otherLedgerId);
+    }
+
+    @Test
+    void linesCarryTheLedgerOfTheirTransactionAfterUpdate() {
+        UUID expense = create(expense(UUID.randomUUID(), 12_000)).id();
+        UUID transfer = create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(), cash.getId(), 30_000,
+                null)).id();
+        flushAndClear();
+
+        transactionService.update(owner.getId(), expense, 1, expense(expense, 15_000), DEVICE);
+        transactionService.update(owner.getId(), transfer, 1,
+                new Transfer(transfer, DAY, null, cash.getId(), bank.getId(), 40_000, null), DEVICE);
+
+        assertThat(ledgersOfLines(expense)).containsExactly(ledgerId);
+        assertThat(ledgersOfLines(transfer)).containsExactly(ledgerId, ledgerId);
+    }
+
+    @Test
+    void removingTransactionRemovesItsLines() {
+        UUID id = create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(), cash.getId(), 30_000, null)).id();
+        flushAndClear();
+
+        transactionRepository.deleteById(id);
+
+        assertThat(ledgersOfLines(id)).isEmpty();
+        assertThat(transactionRepository.findById(id)).isEmpty();
     }
 
     @Test
