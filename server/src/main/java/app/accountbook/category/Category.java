@@ -14,6 +14,9 @@ public class Category extends BaseEntity {
 
     public static final String UNCATEGORIZED_NAME = "미분류";
 
+    /** 이름은 앞뒤 공백을 지운 1~20자다(P-221). DB의 ck_category_name_length와 같은 값이다. */
+    public static final int NAME_MAX_LENGTH = 20;
+
     @Column(name = "ledger_id", nullable = false, updatable = false)
     private UUID ledgerId;
 

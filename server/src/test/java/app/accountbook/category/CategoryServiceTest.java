@@ -7,6 +7,7 @@ import app.accountbook.account.Account;
 import app.accountbook.account.AccountCommand;
 import app.accountbook.account.AccountService;
 import app.accountbook.account.AccountType;
+import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.support.Fixtures;
@@ -80,6 +81,98 @@ class CategoryServiceTest {
 
         assertThatThrownBy(() -> expense("점심", othersFood.getId()))
                 .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void create_storesTrimmedNameOfTwentyCharacters() {
+        String twenty = "가".repeat(19) + "😀";
+
+        Category created = expense("  " + twenty + "  ", null);
+
+        assertThat(categoryRepository.findById(created.getId()).orElseThrow().getName()).isEqualTo(twenty);
+    }
+
+    @Test
+    void create_rejectsNameOfTwentyOneCharacters() {
+        assertThatThrownBy(() -> expense("가".repeat(21), null))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void create_rejectsBlankName() {
+        assertThatThrownBy(() -> expense("   ", null))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void create_rejectsSameNameAmongTopLevel() {
+        expense("식비", null);
+
+        assertThatThrownBy(() -> expense(" 식비 ", null))
+                .isInstanceOf(DuplicateCategoryNameException.class)
+                .hasMessage("같은 이름의 카테고리가 있습니다.");
+    }
+
+    @Test
+    void create_rejectsSameNameUnderSameParent() {
+        Category food = expense("식비", null);
+        expense("점심", food.getId());
+
+        assertThatThrownBy(() -> expense("점심", food.getId()))
+                .isInstanceOf(DuplicateCategoryNameException.class);
+    }
+
+    @Test
+    void create_allowsSameNameUnderOtherParentOrOtherKind() {
+        Category food = expense("식비", null);
+        Category leisure = expense("여가", null);
+        expense("기타", food.getId());
+
+        Category underOtherParent = expense("기타", leisure.getId());
+        Category otherKind = categoryService.create(owner.getId(), ledgerId,
+                new CategoryCommand("식비", CategoryKind.INCOME, null));
+
+        assertThat(categoryService.list(owner.getId(), ledgerId)).extracting(Category::getId)
+                .contains(underOtherParent.getId(), otherKind.getId());
+    }
+
+    /** P-221에 "공백과 대소문자 무시"가 없으므로 앞뒤 공백만 지운 글자 그대로 비교한다. */
+    @Test
+    void create_treatsCaseAndInnerSpaceAsDifferentNames() {
+        expense("Cafe", null);
+        expense("식비", null);
+
+        expense("cafe", null);
+        expense("식 비", null);
+
+        assertThat(categoryService.list(owner.getId(), ledgerId)).extracting(Category::getName)
+                .contains("Cafe", "cafe", "식비", "식 비");
+    }
+
+    @Test
+    void rename_rejectsNameOfSibling() {
+        expense("식비", null);
+        Category leisure = expense("여가", null);
+
+        assertThatThrownBy(() -> categoryService.rename(owner.getId(), leisure.getId(), "식비"))
+                .isInstanceOf(DuplicateCategoryNameException.class);
+    }
+
+    @Test
+    void rename_rejectsNameOfTwentyOneCharacters() {
+        Category food = expense("식비", null);
+
+        assertThatThrownBy(() -> categoryService.rename(owner.getId(), food.getId(), "가".repeat(21)))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void rename_toOwnNameIsNotDuplicate() {
+        Category food = expense("식비", null);
+
+        Category renamed = categoryService.rename(owner.getId(), food.getId(), " 식비 ");
+
+        assertThat(renamed.getName()).isEqualTo("식비");
     }
 
     @Test
