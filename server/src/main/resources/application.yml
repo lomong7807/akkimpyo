@@ -2,9 +2,11 @@ spring:
   application:
     name: account-book
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5433/accountbook}
-    username: ${DB_USERNAME:accountbook}
-    password: ${DB_PASSWORD:accountbook}
+    # 기본값을 두지 않는다. 셋 중 하나라도 없으면 기동하지 않는다(RequiredDbSettings).
+    # 로컬 개발용 기본값은 application-local.yml(local 프로파일)에 있다.
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   jpa:
     open-in-view: false
     hibernate:
