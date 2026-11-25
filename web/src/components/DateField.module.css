@@ -1,0 +1,16 @@
+.button {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  justify-content: space-between;
+  /* 글자를 키워 값이 두 줄이 되면 늘어난다 */
+  height: auto;
+  min-height: var(--size-field);
+  padding-block: var(--space-4);
+  text-align: start;
+  cursor: pointer;
+}
+
+.button[aria-disabled='true'] {
+  cursor: default;
+}
