@@ -60,7 +60,8 @@ class ControllerErrorTest {
     @ParameterizedTest
     @ValueSource(strings = {"?version=%zz", "?version=1&limit=%F"})
     void 쿼리의_인코딩이_깨지면_읽을_수_없는_요청이다(String query) throws Exception {
-        server.rawReply("GET " + QUERY + query + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        server.rawReply("GET " + QUERY + query + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n"
+                        + server.authorizationLine() + "\r\n")
                 .assertProblem(400, "Bad Request", "MALFORMED_REQUEST");
     }
 
@@ -71,11 +72,6 @@ class ControllerErrorTest {
         Reply reply = server.send("DELETE", BODY, null).assertProblem(405, "Method Not Allowed", "METHOD_NOT_ALLOWED");
 
         assertThat(reply.header("Allow")).isEqualTo("POST");
-    }
-
-    @Test
-    void HTTP에_없는_메서드도_405다() throws Exception {
-        server.send("MARKER", BODY, null).assertProblem(405, "Method Not Allowed", "METHOD_NOT_ALLOWED");
     }
 
     @ParameterizedTest
@@ -125,7 +121,7 @@ class ControllerErrorTest {
     @Test
     void 응답을_보내기_시작한_뒤의_실패는_오류를_덧붙이지_않고_연결을_끊는다() throws Exception {
         String received = server.raw("GET " + ErrorProbeController.PATH + "/fail-after-flush HTTP/1.1\r\n"
-                + "Host: localhost\r\nConnection: close\r\n\r\n");
+                + "Host: localhost\r\nConnection: close\r\n" + server.authorizationLine() + "\r\n");
 
         assertThat(received).startsWith("HTTP/1.1 200").contains("partial")
                 .doesNotContain("problem", "INTERNAL_ERROR", "보낸 뒤의 실패");

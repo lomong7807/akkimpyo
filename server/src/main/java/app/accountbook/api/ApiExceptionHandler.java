@@ -21,6 +21,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingPathVariableException;
@@ -83,8 +84,8 @@ class ApiExceptionHandler {
                 .orElseGet(() -> respond(ErrorCode.MALFORMED_REQUEST, e, request));
     }
 
-    /** 쿼리나 본문의 인코딩이 깨졌다. */
-    @ExceptionHandler({BadRequestException.class, InvalidParameterException.class})
+    /** 쿼리나 본문의 인코딩이 깨졌거나, 쿼리의 이름에 쓸 수 없는 글자가 있다. 예외의 문구에 그 글자가 들어 있다. */
+    @ExceptionHandler({BadRequestException.class, InvalidParameterException.class, RequestRejectedException.class})
     ResponseEntity<Problem> unreadableRequest(Exception e, HttpServletRequest request) {
         return respond(ErrorCode.MALFORMED_REQUEST, e, request);
     }

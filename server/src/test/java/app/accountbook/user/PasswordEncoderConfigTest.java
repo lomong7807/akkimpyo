@@ -9,7 +9,6 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.util.ClassUtils;
 
 /** 운영 인코더가 만드는 값으로 방식과 매개변수를 고정한다(ADR 001 결정 7). 스프링 컨텍스트 없이 돈다. */
 class PasswordEncoderConfigTest {
@@ -57,16 +56,5 @@ class PasswordEncoderConfigTest {
 
         assertThat(encoder.matches(common + "나", encoded)).isTrue();
         assertThat(encoder.matches(common + "다", encoded)).isFalse();
-    }
-
-    /** crypto 모듈만 들어왔다. 필터 체인을 만드는 Spring Security 모듈이 클래스패스에 없어야 자동 설정이 켜지지 않는다. */
-    @Test
-    void springSecurityWebAndConfigAreNotOnClasspath() {
-        ClassLoader loader = getClass().getClassLoader();
-
-        assertThat(ClassUtils.isPresent("org.springframework.security.web.SecurityFilterChain", loader)).isFalse();
-        assertThat(ClassUtils.isPresent(
-                "org.springframework.security.config.annotation.web.configuration.EnableWebSecurity", loader))
-                .isFalse();
     }
 }

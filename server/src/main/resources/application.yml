@@ -22,6 +22,12 @@ spring:
     multipart:
       # 파일을 받는 API가 아직 없다. 켜 두면 모든 경로에서 본문을 읽고 깨진 본문이 415가 아니라 500이 된다.
       enabled: false
+management:
+  endpoint:
+    health:
+      probes:
+        # 공개하는 것은 /actuator/health 하나다. 쓰지 않는 하위 경로(liveness, readiness)를 만들지 않는다.
+        enabled: false
 logging:
   pattern:
     # 요청 id(ADR 005). 요청 밖의 로그에서는 빈칸이다.
