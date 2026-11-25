@@ -12,6 +12,7 @@ import {
   openTab,
   pass,
   settle,
+  starts,
   stopClock,
   type Tab,
 } from './support/sessionTab'
@@ -281,19 +282,20 @@ describe('앱을 여는 중에 로그아웃하면', () => {
   })
 })
 
-describe('로그아웃 대기가 있는 채 로그인하면', () => {
-  it('로그아웃을 다시 보내지 않고 로그인을 바로 보낸다', async () => {
+describe.each(starts)('로그아웃 대기가 있는 채: $name', (start) => {
+  it('로그아웃을 다시 보내지 않고 바로 보낸다', async () => {
     await logOutElsewhere()
     const tab = await openTab()
-    await tab.login(credentials)
+    await start.send(tab)
     await settle()
-    expect(backend.requests.login).toHaveLength(1)
+    expect(start.requests(backend)).toHaveLength(1)
     expect(backend.requests.logout).toHaveLength(0)
   })
 
   it('성공하면 대기가 없어지고 값은 남는다', async () => {
     const value = await logOutElsewhere()
-    const tab = await openSignedInTab()
+    const tab = await openTab()
+    await start.send(tab)
     expect(tab.pendingLogout()).toBeUndefined()
     expect(tab.logoutValue()).toBe(value)
   })
@@ -301,9 +303,9 @@ describe('로그아웃 대기가 있는 채 로그인하면', () => {
   it('답이 오기 전에는 대기가 남아 있다', async () => {
     const value = await logOutElsewhere()
     const login = delayed()
-    backend.loginResponse = login.respond
+    start.respond(backend, login.respond)
     const tab = await openTab()
-    const signedIn = tab.login(credentials)
+    const signedIn = start.send(tab)
     await login.arrived
     expect(tab.pendingLogout()).toBe(value)
     login.answer(backend.issue('user-1'))
@@ -318,18 +320,18 @@ describe('로그아웃 대기가 있는 채 로그인하면', () => {
     ['읽을 수 없는 응답', () => HttpResponse.json({})],
   ])('%s이면 대기가 남는다', async (_, respond) => {
     const value = await logOutElsewhere()
-    backend.loginResponse = respond
+    start.respond(backend, respond)
     const tab = await openTab()
-    await errorOf(tab.login(credentials))
+    await errorOf(start.send(tab))
     expect(tab.pendingLogout()).toBe(value)
   })
 
   it('지연되면 대기가 남는다', async () => {
     const value = await logOutElsewhere()
-    backend.loginResponse = delayed().respond
+    start.respond(backend, delayed().respond)
     stopClock()
     const tab = await openTab()
-    const error = errorOf(tab.login(credentials))
+    const error = errorOf(start.send(tab))
     await pass(15_000)
     expect(await error).toMatchObject({ kind: 'timeout' })
     expect(tab.pendingLogout()).toBe(value)
@@ -337,9 +339,9 @@ describe('로그아웃 대기가 있는 채 로그인하면', () => {
 
   it('잠금을 빼앗기면 늦게 온 성공을 버리고 대기가 남는다', async () => {
     const value = await logOutElsewhere()
-    const answer = answerRegardlessOfAbort('/auth/login')
+    const answer = answerRegardlessOfAbort(start.path)
     const tab = await openTab()
-    const error = errorOf(tab.login(credentials))
+    const error = errorOf(start.send(tab))
     const signal = await answer.arrived
     await locks.request(SESSION_LOCK, { steal: true }, async () => {})
     expect(await error).toMatchObject({ kind: 'timeout' })
@@ -351,12 +353,12 @@ describe('로그아웃 대기가 있는 채 로그인하면', () => {
   })
 })
 
-describe('로그인하는 동안 새로 로그아웃하면', () => {
+describe.each(starts)('보내는 동안 새로 로그아웃하면: $name', (start) => {
   async function logInWhile(logOut: () => Promise<string>) {
     const login = delayed()
-    backend.loginResponse = login.respond
+    start.respond(backend, login.respond)
     const tab = await openTab()
-    const error = errorOf(tab.login(credentials))
+    const error = errorOf(start.send(tab))
     await login.arrived
     const value = await logOut()
     login.answer(backend.issue('user-1'))
@@ -377,11 +379,11 @@ describe('로그인하는 동안 새로 로그아웃하면', () => {
     expect(backend.requests.refresh).toHaveLength(0)
   })
 
-  it('로그인이 잠금을 기다리는 동안 한 로그아웃도 이긴다', async () => {
+  it('잠금을 기다리는 동안 한 로그아웃도 이긴다', async () => {
     const release = Promise.withResolvers<void>()
     void locks.request(SESSION_LOCK, {}, () => release.promise)
     const tab = await openTab()
-    const error = errorOf(tab.login(credentials))
+    const error = errorOf(start.send(tab))
     const value = await logOutElsewhere()
     release.resolve()
     expect(await error).toMatchObject({ kind: 'timeout' })
@@ -389,20 +391,20 @@ describe('로그인하는 동안 새로 로그아웃하면', () => {
     await expectSignedOut(tab)
   })
 
-  it('새 로그아웃의 요청은 로그인이 끝난 뒤에 나가, 방금 생긴 쿠키를 지운다', async () => {
+  it('새 로그아웃의 요청은 그 뒤에 나가, 방금 생긴 쿠키를 지운다', async () => {
     const order: string[] = []
     const login = delayed()
-    backend.loginResponse = async () => {
+    start.respond(backend, async () => {
       const response = await login.respond()
       order.push('login')
       return response
-    }
+    })
     backend.logoutResponse = () => {
       order.push('logout')
       return noContent()
     }
     const [tab, other] = [await openTab(), await openTab()]
-    const error = errorOf(tab.login(credentials))
+    const error = errorOf(start.send(tab))
     await login.arrived
     other.logout()
     await settle()
@@ -416,18 +418,18 @@ describe('로그인하는 동안 새로 로그아웃하면', () => {
   it('잠금을 놓는 사이에 이 탭의 로그인이 끝났으면 성공으로 알리지 않는다', async () => {
     const tab = await openTab()
     logOutAfterUnlock(tab)
-    expect(await errorOf(tab.login(credentials))).toMatchObject({ kind: 'timeout' })
+    expect(await errorOf(start.send(tab))).toMatchObject({ kind: 'timeout' })
     await expectSignedOut(tab)
   })
 
-  it('다시 로그인하면 들어간다', async () => {
+  it('다시 보내면 들어간다', async () => {
     const { tab } = await logInWhile(logOutElsewhere)
-    backend.loginResponse = undefined
-    await tab.login(credentials)
+    start.respond(backend, undefined)
+    await start.send(tab)
     expect(tab.pendingLogout()).toBeUndefined()
     backend.requests.me.length = 0
     await tab.request('/me')
-    expect(backend.requests.me).toEqual(['user-1'])
+    expect(backend.requests.me).toEqual([start.user])
   })
 })
 

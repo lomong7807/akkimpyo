@@ -4,7 +4,7 @@ import { accessTokenNamed } from './support/accessToken'
 import { delayed, startBackend, type Backend } from './support/backend'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
-import { credentials, errorOf, openSignedInTab, openTab, settle, type Tab } from './support/sessionTab'
+import { errorOf, openSignedInTab, openSignedUpTab, openTab, settle, starts, type Tab } from './support/sessionTab'
 import { createFakeLocks, installLocks, removeLocks } from './support/webLocks'
 
 const server = startMockServer()
@@ -51,30 +51,42 @@ async function openRestoredTab() {
 
 const signedIn: [string, () => Promise<Tab>][] = [
   ['로그인한 탭', openSignedInTab],
+  ['가입한 탭', openSignedUpTab],
   ['되찾은 탭', openRestoredTab],
 ]
 
-describe('로그인 값', () => {
-  it('로그인을 보내기 전에 바뀐다', async () => {
+describe.each(starts)('로그인 값은: $name', (start) => {
+  it('요청을 보내기 전에 바뀐다', async () => {
     const tab = await openTab()
     const before = tab.recordLogin()
     const login = delayed()
-    backend.loginResponse = login.respond
-    const signedIn = tab.login(credentials)
+    start.respond(backend, login.respond)
+    const signedIn = start.send(tab)
     await login.arrived
     expect(tab.loginValue()).not.toBe(before)
     login.answer(backend.issue('user-1'))
     await signedIn
   })
 
-  it('로그인이 거부돼도 바뀌어 있다', async () => {
+  it('거부돼도 바뀌어 있다', async () => {
     const tab = await openTab()
     const before = tab.recordLogin()
-    backend.loginResponse = () => problem(401, 'INVALID_CREDENTIALS')
-    await errorOf(tab.login(credentials))
+    start.respond(backend, () => problem(400, 'VALIDATION_FAILED'))
+    await errorOf(start.send(tab))
     expect(tab.loginValue()).not.toBe(before)
   })
 
+  it('그사이 보관돼 있던 다른 화면은 되살아나면 새로 열린다', async () => {
+    const stored = await openSignedInTab()
+    const ended = watchEnd(stored)
+    stored.suspendSession()
+    await start.send(await openTab())
+    stored.resumeSession()
+    expect(ended).toHaveBeenCalledExactlyOnceWith('replaced')
+  })
+})
+
+describe('로그인 값', () => {
   it('되찾기와 갱신, 로그아웃으로는 바뀌지 않는다', async () => {
     const tab = await openSignedInTab()
     const value = tab.loginValue()
@@ -153,9 +165,10 @@ describe.each(signedIn)('%s은', (_, open) => {
   })
 })
 
-it('앞서 로그아웃한 적이 있어도, 그 뒤에 로그인했으면 끝나지 않는다', async () => {
+it.each(starts)('앞서 로그아웃한 적이 있어도, 그 뒤에 새로 시작한 로그인은 끝나지 않는다: $name', async (start) => {
   await logOutElsewhere()
-  const tab = await openSignedInTab()
+  const tab = await openTab()
+  await start.send(tab)
   const ended = watchEnd(tab)
   tab.noticeLogout()
   await tab.request('/me')
@@ -210,8 +223,10 @@ describe('되살아난 화면', () => {
     return ended
   }
 
-  it('로그아웃 값과 로그인 값이 그대로면 로그인도 그대로이고 갱신하지 않는다', async () => {
-    const tab = await openSignedInTab()
+  it.each(starts)('로그아웃 값과 로그인 값이 그대로면 로그인도 그대로이고 갱신하지 않는다: $name', async (start) => {
+    await logOutElsewhere()
+    const tab = await openTab()
+    await start.send(tab)
     const ended = await resumeAfter(tab, () => {})
     expect(ended).not.toHaveBeenCalled()
     await tab.request('/me')

@@ -4,6 +4,7 @@ import { delayed, startBackend, type Backend } from './support/backend'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import {
+  account,
   answerRegardlessOfAbort,
   credentials,
   errorOf,
@@ -12,6 +13,7 @@ import {
   pass,
   settle,
   settleResent,
+  starts,
   stopClock,
   type Tab,
 } from './support/sessionTab'
@@ -187,30 +189,31 @@ describe('로그아웃 요청', () => {
   })
 })
 
-describe('기다리던 로그아웃은 로그인 뒤에 나가지 않는다', () => {
+describe.each(starts)('기다리던 로그아웃은 새 로그인 뒤에 나가지 않는다: $name', (start) => {
   it.each([
-    ['같은 탭의 로그인', async (tab: Tab) => tab],
-    ['다른 탭의 로그인', async () => openTab()],
-  ])('%s', async (_, loginTab) => {
+    ['같은 탭', async (tab: Tab) => tab],
+    ['다른 탭', async () => openTab()],
+  ])('%s', async (_, tabOf) => {
     const tab = await openSignedInTab()
     const value = await leavePendingLogout(tab)
-    const signingIn = await loginTab(tab)
+    const starting = await tabOf(tab)
+    start.requests(backend).length = 0
     const release = holdLock()
-    const login = signingIn.login(credentials)
-    // 로그인 뒤에 줄을 선 로그아웃
-    signingIn.resendLogout()
+    const started = start.send(starting)
+    // 새 로그인 뒤에 줄을 선 로그아웃
+    starting.resendLogout()
     tab.resendLogout()
     await settle()
-    expect(backend.requests.login).toHaveLength(1)
+    expect(start.requests(backend)).toHaveLength(0)
     release()
-    await login
+    await started
     await settleResent()
-    expect(backend.requests.login).toHaveLength(2)
+    expect(start.requests(backend)).toHaveLength(1)
     expect(backend.requests.logout).toHaveLength(0)
     expect(tab.pendingLogout()).toBeUndefined()
     expect(tab.logoutValue()).toBe(value)
-    await signingIn.request('/me')
-    expect(backend.requests.me).toEqual(['user-1'])
+    await starting.request('/me')
+    expect(backend.requests.me).toEqual([start.user])
   })
 })
 
@@ -226,6 +229,7 @@ describe('탭을 바로 닫아도 요청이 나가게 하는 것(keepalive)은',
     const tab = await openSignedInTab()
     backend.expireTokens()
     await tab.request('/me')
+    await tab.signup(account)
     tab.logout()
     await vi.waitFor(() => expect(tab.pendingLogout()).toBeUndefined())
     expect(sent()).toEqual([
@@ -233,6 +237,7 @@ describe('탭을 바로 닫아도 요청이 나가게 하는 것(keepalive)은',
       ['/me', false],
       ['/auth/refresh', false],
       ['/me', false],
+      ['/auth/signup', false],
       ['/auth/logout', true],
     ])
   })

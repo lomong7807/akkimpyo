@@ -366,3 +366,31 @@ describe('로그인하는 동안 다른 탭에서 로그아웃하면', () => {
     expect(await screen.findByText(itemOf('user-1'))).toBeTruthy()
   })
 })
+
+describe('가입하는 동안 다른 탭에서 로그아웃하면', () => {
+  it('들어가지 않고 다시 시도할 수 있다', async () => {
+    const signup = delayed()
+    backend.signupResponse = signup.respond
+    const opened = await open('/signup')
+    await opened.user.type(await screen.findByLabelText('이메일'), 'new@example.com')
+    await opened.user.type(screen.getByLabelText('비밀번호'), 'pass1234')
+    await opened.user.type(screen.getByLabelText('비밀번호 확인'), 'pass1234')
+    await opened.user.type(screen.getByLabelText('표시 이름'), '이서연')
+    await press(opened.user, '가입')
+    await signup.arrived
+    const value = await leavePendingLogout()
+    const dom = recordDom()
+    signup.answer(backend.issue('new-user', 201))
+    expect(await screen.findByText('문제가 생겨 가입하지 못했어요. 잠시 후 다시 시도해 주세요.')).toBeTruthy()
+    expect(addressOf(opened)).toBe('/signup')
+    expect(dom.sawText('new-user')).toBe(false)
+    expect(backend.requests.me).toEqual([])
+    expect(localStorage.getItem('akkimpyo-logout')).toBe(value)
+    expect(localStorage.getItem('akkimpyo-logout-done')).toBeNull()
+
+    backend.signupResponse = undefined
+    await press(opened.user, '다시 시도')
+    await waitFor(() => expect(addressOf(opened)).toBe('/welcome'))
+    await waitFor(() => expect(backend.requests.me).toEqual(['new-user']))
+  })
+})

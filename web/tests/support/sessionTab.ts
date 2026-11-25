@@ -1,7 +1,9 @@
 import { vi } from 'vitest'
 import type { ApiError } from '../../src/api/apiError'
+import type { Backend } from './backend'
 
 export const credentials = { email: 'name@example.com', password: 'pass1234' }
+export const account = { email: 'new@example.com', password: 'pass1234', displayName: '이서연' }
 
 /** 탭 하나. 모듈을 새로 불러와 메모리를 다른 탭과 나누지 않는다. 저장소와 잠금은 함께 쓴다. */
 export async function openTab() {
@@ -19,6 +21,32 @@ export async function openSignedInTab() {
   await tab.login(credentials)
   return tab
 }
+
+export async function openSignedUpTab() {
+  const tab = await openTab()
+  await tab.signup(account)
+  return tab
+}
+
+/** 새 로그인을 시작하는 두 길. 세션 계층은 둘을 같은 순서로 다룬다. */
+export const starts = [
+  {
+    name: '로그인',
+    path: '/auth/login',
+    send: (tab: Tab) => tab.login(credentials),
+    respond: (backend: Backend, response: Backend['loginResponse']) => void (backend.loginResponse = response),
+    requests: (backend: Backend) => backend.requests.login,
+    user: 'user-1',
+  },
+  {
+    name: '가입',
+    path: '/auth/signup',
+    send: (tab: Tab) => tab.signup(account),
+    respond: (backend: Backend, response: Backend['signupResponse']) => void (backend.signupResponse = response),
+    requests: (backend: Backend) => backend.requests.signup,
+    user: 'new-user',
+  },
+]
 
 export async function errorOf(promise: Promise<unknown>): Promise<ApiError> {
   return promise.then(
