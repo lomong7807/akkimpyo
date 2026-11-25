@@ -19,6 +19,7 @@ async function startApp() {
 
 beforeEach(() => {
   window.history.replaceState(null, '', '/')
+  localStorage.clear()
 })
 
 afterEach(() => {
@@ -43,6 +44,20 @@ describe('앱 시작', () => {
     expect(backend.requests.refresh[0].headers.get('X-Akkimpyo-Client')).toBe('web')
     expect(unhandled).not.toHaveBeenCalled()
     process.off('unhandledRejection', unhandled)
+  })
+
+  it('서버에 닿지 못한 로그아웃이 있으면 갱신하지 않고 로그아웃을 한 번만 다시 보낸다', async () => {
+    const { recordLogout } = await import('../src/api/sessionMarks')
+    recordLogout()
+    const backend = startBackend(server)
+    backend.cookieUser = 'user-1'
+    backend.logoutResponse = () => HttpResponse.error()
+    await startApp()
+    expect(await screen.findByRole('heading', { level: 1, name: '로그인' })).toBeTruthy()
+    // 다시 보내는 로그아웃은 표시를 읽기까지 잠깐 기다린다
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    expect(backend.requests.logout).toHaveLength(1)
+    expect(backend.requests.refresh).toHaveLength(0)
   })
 
   it('개발 때의 StrictMode에서도 로그인하면 원래 주소의 화면이 열린다', async () => {

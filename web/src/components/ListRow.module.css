@@ -1,0 +1,59 @@
+/* 내용의 좌우 여백만큼 넓혀 줄의 바탕이 화면 끝까지 닿게 한다. 글은 다른 내용과 같은 선에서 시작한다 */
+.group {
+  margin-block: 0;
+  margin-inline: calc(-1 * var(--space-16));
+  padding: 0;
+  list-style: none;
+}
+
+.group + .group {
+  margin-top: var(--space-24);
+  padding-top: var(--space-24);
+  border-top: 1px solid var(--color-border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  width: 100%;
+  min-height: var(--size-row);
+  padding-block: var(--space-8);
+  padding-inline: var(--space-16);
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--color-text);
+  font: var(--text-body);
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.row:active {
+  background-color: var(--color-press);
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .row:hover {
+    background-color: var(--color-press);
+  }
+}
+
+/* 줄이 화면 끝까지 닿아 바깥에 그리면 좌우가 잘린다 */
+.row:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.icon {
+  display: flex;
+  flex: none;
+  color: var(--color-text-secondary);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+}

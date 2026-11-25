@@ -5,11 +5,14 @@ import { readWebFile } from './support/webFile'
 
 const files: Record<IconName, string> = {
   CaretLeft: 'caret-left',
+  CaretRight: 'caret-right',
   Check: 'check',
+  DotsThree: 'dots-three',
   Eye: 'eye',
   EyeSlash: 'eye-slash',
   Info: 'info',
   Plus: 'plus',
+  SignOut: 'sign-out',
   WarningCircle: 'warning-circle',
   X: 'x',
 }
