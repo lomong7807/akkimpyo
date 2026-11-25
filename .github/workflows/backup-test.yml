@@ -1,0 +1,56 @@
+name: Backup test
+
+# 백업·복원 스크립트를 로컬 DB로 끝까지 돌려 본다. 운영 서버와 Oracle Cloud에 접속하지 않고 secret을 쓰지 않는다.
+# 스키마나 점검 쿼리가 바뀌어 명세표·점검 쿼리가 깨지는 것도 여기서 잡는다.
+# ci.yml에 넣지 않은 것은 paths 필터가 job 단위로는 되지 않고, ci.yml은 docs/** 변경에 돌지 않기 때문이다.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/backup-test.yml'
+      - 'deploy/**'
+      - 'scripts/restore-drill'
+      - 'docs/db/integrity-checks.sql'
+      - 'server/src/main/resources/db/migration/**'
+      - '!**/*.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/backup-test.yml'
+      - 'deploy/**'
+      - 'scripts/restore-drill'
+      - 'docs/db/integrity-checks.sql'
+      - 'server/src/main/resources/db/migration/**'
+      - '!**/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backup:
+    name: backup (백업과 복원 로컬 시험)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
+
+      - name: Build server jar
+        working-directory: server
+        run: ./gradlew bootJar
+
+      - name: Test
+        run: deploy/tests/run

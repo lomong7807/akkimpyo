@@ -291,6 +291,11 @@ section '실패: 작업 폴더가 읽기 전용이다'
 config "BACKUP_LOCAL_DIR=$STORE" BACKUP_WORK_DIR=/readonly/work
 expect_failure '작업 폴더'
 
+section '실패: 작업 폴더가 다른 것이 쓰는 폴더다. 권한을 바꾸지 않는다'
+config "BACKUP_LOCAL_DIR=$STORE" BACKUP_WORK_DIR=/var/log
+expect_failure '작업 폴더'
+assert '권한이 그대로다' not equal 700 "$(stat -c %a /var/log)"
+
 section '실패: 올릴 곳에 쓸 수 없다'
 config BACKUP_LOCAL_DIR=/readonly/store
 expect_failure '올리기'
@@ -314,11 +319,15 @@ config "BACKUP_LOCAL_DIR=$STORE" INTEGRITY_SQL_FILE=/tmp/old-checks.sql
 count=$(bundles daily)
 run_backup
 assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
-assert '알림이 간다' alerted '단계: 명세표'
+assert '알림이 간다' alerted '단계: 명세표(덤프는 올라갔다)'
 assert '덤프는 올라갔다' equal $((count + 1)) "$(bundles daily)"
 assert '평문이 남지 않는다' clean "$RUN_DIR"
 run_drill --store "$STORE" --skip-server
 assert '복원 훈련은 실패로 본다' logged '^- 명세표: 실패 (백업할 때'
+sed 's/^-- \[명세표\]/-- [이름이 바뀐 구역]/' "$REPO/docs/db/integrity-checks.sql" >/tmp/old-checks.sql
+sleep 1
+run_backup
+assert '명세표 쿼리를 찾지 못해도 실패로 끝낸다' alerted '단계: 명세표'
 config "BACKUP_LOCAL_DIR=$STORE"
 
 section '실패: 다른 백업이 끝나지 않는다. 끝나면 이어서 돈다'
@@ -479,7 +488,7 @@ docker cp --quiet "$REPO/deploy/tests/oci-stub/sitecustomize.py" "$TEST_ID-oci-c
 docker commit --change "ENV OCI_CLI_ENDPOINT=http://$stub_ip:8000" "$TEST_ID-oci-cli" "$TEST_ID-oci" >/dev/null
 requests() { docker logs "$TEST_ID-oci-stub" 2>&1; }
 rm -f "$STATE/last-weekly"
-mkdir -p "$WORK/run"
+install -d -m 700 "$WORK/run"
 config OCI_NAMESPACE=testns OCI_BUCKET=testbucket "OCI_CLI_IMAGE=$TEST_ID-oci" "BACKUP_WORK_DIR=$WORK/run"
 run_backup
 assert '0으로 끝난다' equal 0 "$rc"

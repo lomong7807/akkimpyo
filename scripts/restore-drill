@@ -114,7 +114,7 @@ finish() {
   printf '\n복원 훈련 결과: %s\n- 백업: %s (덤프 시각 %s)\n%s- 걸린 시간: %d초\n' \
     "$result" "$object" "${dumped_at:-모름}" "$report" "$SECONDS"
   printf '\ndocs/db/backup-restore.md 훈련 기록에 넣을 줄:\n| %s | %s | %s | %d초 | %s |\n' \
-    "$(date +%F)" "${dumped_at%%T*}" "$result" "$SECONDS" "$object"
+    "$(TZ=Asia/Seoul date +%F)" "${dumped_at%%T*}" "$result" "$SECONDS" "$object"
   exit "$rc"
 }
 

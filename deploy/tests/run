@@ -23,12 +23,14 @@ cleanup() {
   docker volume rm "$id-db" >/dev/null 2>&1 || true
   docker network rm "$id" >/dev/null 2>&1 || true
   docker image rm "$id-oci" >/dev/null 2>&1 || true
-  rm -rf -- "$work"
+  # 시험 컨테이너가 root로 만든 파일이 있어 컨테이너에서 지운다.
+  docker run --rm --volume "$work:$work" "$image" find "$work" -mindepth 1 -delete || true
+  rmdir -- "$work"
 }
 trap cleanup EXIT
 cp -- "$jar" "$work/app.jar"
 
-docker run --rm --name "$id-suite" \
+docker run --rm --init --name "$id-suite" \
   --volume /var/run/docker.sock:/var/run/docker.sock \
   --volume "$repo:$repo:ro" --volume "$work:$work" \
   --tmpfs /run --tmpfs /small:size=128k --tmpfs /readonly:ro \

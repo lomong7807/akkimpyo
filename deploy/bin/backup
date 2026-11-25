@@ -18,6 +18,7 @@ alert() {
   log "알림: $1"
   printf '[아낌표 백업] %s\n' "$1" | notify && return
   log '알림을 보내지 못했다'
+  mkdir -p -- "$BACKUP_STATE_DIR"
   printf '[아낌표 백업] (늦게 보낸 알림) %s\n' "$1" >>"$BACKUP_STATE_DIR/unsent-alerts"
 }
 
@@ -98,8 +99,12 @@ done
 [[ -n $BACKUP_LOCAL_DIR || (-n $OCI_NAMESPACE && -n $OCI_BUCKET) ]] || die 'OCI_NAMESPACE와 OCI_BUCKET을 정한다'
 
 step='작업 폴더'
-mkdir -p -- "$BACKUP_WORK_DIR" "$BACKUP_STATE_DIR"
-chmod 700 "$BACKUP_WORK_DIR" "$BACKUP_STATE_DIR"
+for dir in "$BACKUP_WORK_DIR" "$BACKUP_STATE_DIR"; do
+  mkdir -p -- "$dir"
+  # 다른 것이 쓰는 폴더를 잘못 적은 경우를 막는다. 있는 폴더의 권한은 바꾸지 않는다.
+  [[ $(stat -c %a "$dir") == 700 ]] || die "$dir 의 권한이 700이 아니다"
+done
+[[ -z $BACKUP_LOCAL_DIR ]] || log "주의: Object Storage에 올리지 않고 $BACKUP_LOCAL_DIR 에 둔다(시험용)"
 
 step='잠금'
 exec 9>"$BACKUP_WORK_DIR/lock"
@@ -123,7 +128,7 @@ db_name=${db_name:-$db_user}
 # 덤프와 명세표가 같은 시점을 보게 한다. 이 세션이 스냅샷을 내보내고, 덤프가 끝날 때까지 트랜잭션을 열어 둔다.
 step='DB 접속'
 now=$(date +%s)
-coproc PSQL { docker exec -i "$container" psql -X -q -A -t -v ON_ERROR_STOP=1 -U "$db_user" -d "$db_name"; }
+coproc PSQL { docker exec -i "$container" psql -X -q -A -t -w -v ON_ERROR_STOP=1 -U "$db_user" -d "$db_name"; }
 # shellcheck disable=SC2153  # coproc가 만드는 변수다.
 psql_pid=$PSQL_PID
 # psql이 끝나면 bash가 coproc의 파일 기술자를 닫으므로, 남은 출력을 읽을 수 있게 복사해 쓴다.
@@ -149,9 +154,9 @@ free_bytes=$(df --output=avail --block-size=1 "$work" | tail -n 1)
 
 step='덤프'
 docker exec "$container" pg_dump --format=custom --snapshot="$snapshot" --lock-wait-timeout=60s \
-  -U "$db_user" -d "$db_name" >"$plain/db.dump.partial"
+  -w -U "$db_user" -d "$db_name" >"$plain/db.dump.partial"
 [[ -s $plain/db.dump.partial ]] || die '덤프가 비었다'
-docker exec "$container" pg_dumpall --globals-only -U "$db_user" >"$plain/globals.sql"
+docker exec "$container" pg_dumpall --globals-only -w -U "$db_user" >"$plain/globals.sql"
 [[ -s $plain/globals.sql ]] || die '역할 덤프가 비었다'
 
 # --list는 목차만 읽어 뒤가 잘린 파일도 통과한다. 그래서 전체를 한 번 더 읽는다.
@@ -202,7 +207,7 @@ if [[ $(state_get last-weekly sunday) != "$week" ]]; then
   printf 'sunday=%s\n' "$week" | state_put last-weekly
 fi
 
-step='명세표'
+step='명세표(덤프는 올라갔다)'
 [[ $manifest == ok ]] || die "명세표를 만들지 못했다. 덤프는 올렸다(daily/$bundle). $INTEGRITY_SQL_FILE 이 지금 스키마와 맞는지 본다"
 
 step='결과 기록'
