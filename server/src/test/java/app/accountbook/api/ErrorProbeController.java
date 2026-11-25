@@ -74,6 +74,11 @@ class ErrorProbeController {
         return new Saved(version + " " + size + " " + cursor);
     }
 
+    @PostMapping("/query-and-body")
+    Saved queryAndBody(@RequestParam @Max(100) int limit, @Valid @RequestBody Command command) {
+        return new Saved(limit + command.name());
+    }
+
     @GetMapping("/ledgers/{ledgerId}")
     Saved ledger(@PathVariable UUID ledgerId) {
         return new Saved(ledgerId.toString());

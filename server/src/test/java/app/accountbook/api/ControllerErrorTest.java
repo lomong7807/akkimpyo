@@ -16,7 +16,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
-/** 컨트롤러까지 온 요청의 오류가 ADR 002 4·5절의 모양으로 나간다(#12). */
+/** 컨트롤러까지 온 요청의 오류가 ADR 002 4·5절의 모양으로 나간다(#12). 입력란과 서비스 예외는 InputErrorTest가 본다. */
 @ApiErrorTest
 class ControllerErrorTest {
 

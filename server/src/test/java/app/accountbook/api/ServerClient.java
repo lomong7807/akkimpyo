@@ -12,6 +12,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -91,13 +92,14 @@ final class ServerClient {
             return JSON.readTree(body);
         }
 
-        /** ADR 002 4절의 모양이다: 정한 필드만 있고 값이 맞는다. */
+        /** ADR 002 4절의 모양이다: 정한 필드만 있고 값이 맞는다. 입력란 오류는 VALIDATION_FAILED에만 있다. */
         Reply assertProblem(int status, String title, String code) {
             assertThat(this.status).as(body).isEqualTo(status);
             assertThat(header("Content-Type")).isEqualTo("application/problem+json");
             JsonNode problem = json();
-            assertThat(problem.propertyNames())
-                    .containsExactlyInAnyOrder("type", "title", "status", "detail", "code", "requestId");
+            assertThat(problem.propertyNames()).containsExactlyInAnyOrderElementsOf(code.equals("VALIDATION_FAILED")
+                    ? Set.of("type", "title", "status", "detail", "code", "requestId", "fieldErrors")
+                    : Set.of("type", "title", "status", "detail", "code", "requestId"));
             assertThat(problem.get("type").asString()).isEqualTo("about:blank");
             assertThat(problem.get("title").asString()).isEqualTo(title);
             assertThat(problem.get("status").isInt()).isTrue();
@@ -108,6 +110,20 @@ final class ServerClient {
                     .matches("[A-Za-z0-9_-]{1,64}")
                     .isEqualTo(header("X-Request-Id"));
             assertThat(headers.get("X-Request-Id")).hasSize(1);
+            return this;
+        }
+
+        /** 400 VALIDATION_FAILED이고 입력란 오류가 정확히 이것이다. {@code 입력란:code}로 적는다. */
+        Reply assertFieldErrors(String... expected) {
+            assertProblem(400, "Bad Request", "VALIDATION_FAILED");
+            List<String> actual = json().get("fieldErrors").valueStream()
+                    .peek(error -> {
+                        assertThat(error.propertyNames()).containsExactlyInAnyOrder("field", "code", "message");
+                        assertThat(error.get("message").asString()).isNotBlank();
+                    })
+                    .map(error -> error.get("field").asString() + ":" + error.get("code").asString())
+                    .toList();
+            assertThat(actual).containsExactlyInAnyOrder(expected);
             return this;
         }
     }
