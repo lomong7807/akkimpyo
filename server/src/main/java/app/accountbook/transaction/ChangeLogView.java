@@ -1,8 +1,8 @@
 package app.accountbook.transaction;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.UUID;
+import tools.jackson.databind.JsonNode;
 
 /**
  * 변경 이력 1행. before·after는 그 시점 {@link TransactionView}의 JSON을 그대로 돌려준다.

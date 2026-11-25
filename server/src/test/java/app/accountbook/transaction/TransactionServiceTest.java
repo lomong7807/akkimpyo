@@ -454,7 +454,7 @@ class TransactionServiceTest {
         ChangeLogView update = history.get(1);
         assertThat(update.before().at("/lines/0/amount").asLong()).isEqualTo(-12_000);
         assertThat(update.after().at("/lines/0/amount").asLong()).isEqualTo(-15_000);
-        assertThat(history.get(2).after().at("/status").asText()).isEqualTo("CANCELED");
+        assertThat(history.get(2).after().at("/status").asString()).isEqualTo("CANCELED");
         assertThat(history.get(3).after().at("/deleted").asBoolean()).isTrue();
         assertThat(history.get(4).after().at("/deleted").asBoolean()).isFalse();
         assertThat(history.get(4).after().at("/version").asLong()).isEqualTo(5);

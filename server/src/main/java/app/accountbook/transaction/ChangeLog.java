@@ -1,7 +1,6 @@
 package app.accountbook.transaction;
 
 import app.accountbook.common.BaseEntity;
-import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -11,6 +10,7 @@ import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import tools.jackson.databind.JsonNode;
 
 /** 거래 변경 이력. 추가만 하고 고치거나 지우지 않는다. 전후 값은 TransactionView의 JSON이다. */
 @Entity
