@@ -1,10 +1,12 @@
 import { useMutation } from '@tanstack/react-query'
 import { ApiError } from '../../api/apiError'
-import { login } from '../../api/session'
+import type { LoginValues } from './loginForm'
 
-export function useLogin() {
+export type SignIn = (values: LoginValues) => Promise<void>
+
+export function useLogin(signIn: SignIn) {
   return useMutation({
-    mutationFn: login,
+    mutationFn: (values: LoginValues) => signIn(values),
     // 화면을 떠나면 보낸 비밀번호를 캐시에서 바로 지운다
     gcTime: 0,
   })

@@ -6,6 +6,10 @@
   padding-top: var(--space-24);
 }
 
+.notice {
+  margin-bottom: var(--space-24);
+}
+
 .form {
   display: flex;
   flex-direction: column;

@@ -52,6 +52,9 @@ public class TransactionService {
     /** V1 마이그레이션의 거래 기본키 제약 이름. */
     private static final String ID_CONSTRAINT = "transaction_pkey";
 
+    /** V10 마이그레이션의 (id, ledger_id) 유니크. 같은 장부의 같은 id는 이것과 기본키 중 DB가 먼저 본 쪽에 걸린다. */
+    private static final String ID_LEDGER_CONSTRAINT = "uq_transaction_id_ledger";
+
     private final TransactionRepository transactionRepository;
     private final ChangeLogRepository changeLogRepository;
     private final AccountRepository accountRepository;
@@ -131,7 +134,8 @@ public class TransactionService {
 
     private static boolean isIdTaken(DataIntegrityViolationException e) {
         return e.getCause() instanceof ConstraintViolationException violation
-                && ID_CONSTRAINT.equals(violation.getConstraintName());
+                && (ID_CONSTRAINT.equals(violation.getConstraintName())
+                || ID_LEDGER_CONSTRAINT.equals(violation.getConstraintName()));
     }
 
     /** 내용과 라인을 통째로 바꾼다. 거래 종류는 바꿀 수 없다. paidBy가 null이면 기존 값을 유지한다. */

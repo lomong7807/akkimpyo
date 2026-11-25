@@ -5,10 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import app.accountbook.common.DuplicateEmailException;
+import app.accountbook.support.CapturedLogs;
 import app.accountbook.support.IntegrationTest;
 import java.time.Duration;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -32,7 +32,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 class SignupEmailRaceTest {
 
     private static final String EMAIL = "race@example.com";
-    private static final List<String> TABLES = List.of("users", "ledger", "ledger_member", "category");
 
     @Autowired UserService userService;
     @Autowired JdbcTemplate jdbc;
@@ -40,22 +39,15 @@ class SignupEmailRaceTest {
 
     @AfterEach
     void deleteCommittedSignup() {
-        List<UUID> ledgerIds = jdbc.queryForList("""
-                select m.ledger_id from ledger_member m join users u on u.id = m.user_id where u.email = ?
-                """, UUID.class, EMAIL);
-        ledgerIds.forEach(ledgerId -> {
-            jdbc.update("delete from category where ledger_id = ?", ledgerId);
-            jdbc.update("delete from ledger_member where ledger_id = ?", ledgerId);
-            jdbc.update("delete from ledger where id = ?", ledgerId);
-        });
-        jdbc.update("delete from users where email = ?", EMAIL);
+        SignupRows.delete(jdbc, EMAIL);
     }
 
     @Test
     @Timeout(60)
     void createUser_letsOnlyOneOfTwoOverlappingSignupsSucceed() {
-        List<Long> before = rowCounts();
-        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+        List<Long> before = SignupRows.counts(jdbc);
+        String logged;
+        try (CapturedLogs logs = CapturedLogs.start(); ExecutorService executor = Executors.newSingleThreadExecutor()) {
             Future<User> second = transactionTemplate.execute(status -> {
                 userService.createUser(EMAIL, "password1", "먼저");
                 Future<User> overlapping = executor.submit(
@@ -67,12 +59,16 @@ class SignupEmailRaceTest {
             // 여기서는 먼저 온 가입이 커밋된 뒤다.
             assertThatThrownBy(() -> second.get(10, TimeUnit.SECONDS))
                     .hasCauseExactlyInstanceOf(DuplicateEmailException.class);
+            logged = logs.text();
         }
+
+        // 진 쪽의 유일 위반이 로그에 남지만 제약 이름뿐이고 이메일과 이름은 없다(#20).
+        assertThat(logged).contains("users_email_key").doesNotContain(EMAIL, "나중");
 
         assertThat(jdbc.queryForList("select display_name from users where email = ?", String.class, EMAIL))
                 .containsExactly("먼저");
         // 먼저 온 가입의 사용자, 장부, 구성원, 카테고리 17개만 늘었다. 나중 가입은 아무것도 남기지 않는다.
-        assertThat(rowCounts()).containsExactly(
+        assertThat(SignupRows.counts(jdbc)).containsExactly(
                 before.get(0) + 1, before.get(1) + 1, before.get(2) + 1, before.get(3) + 17);
     }
 
@@ -86,11 +82,5 @@ class SignupEmailRaceTest {
                         select exists (select 1 from pg_locks
                                         where not granted and pg_backend_pid() = any (pg_blocking_pids(pid)))
                         """, Boolean.class));
-    }
-
-    private List<Long> rowCounts() {
-        return TABLES.stream()
-                .map(table -> jdbc.queryForObject("select count(*) from " + table, Long.class))
-                .toList();
     }
 }

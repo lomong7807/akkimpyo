@@ -1,16 +1,23 @@
 import { useRef, useState, type MouseEvent, type SubmitEvent } from 'react'
-import { useNavigate } from 'react-router'
 import { Button, ButtonLink } from '../../components/Button'
 import ErrorMessage from '../../components/ErrorMessage'
+import Notice from '../../components/Notice'
 import { PasswordField, TextField } from '../../components/TextField'
 import { loginFields, validateLogin, type LoginField } from './loginForm'
-import { isWrongCredentials, useLogin } from './useLogin'
+import { isWrongCredentials, useLogin, type SignIn } from './useLogin'
 import styles from './LoginPage.module.css'
 
+interface LoginPageProps {
+  signIn: SignIn
+  /** 로그인했고 이 화면을 아직 떠나지 않았다 */
+  onSignedIn: () => void
+  /** 쓰던 로그인이 풀려 이 화면에 왔다 */
+  sessionEnded: boolean
+}
+
 /** A-02 로그인 */
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const login = useLogin()
+export default function LoginPage({ signIn, onSignedIn, sessionEnded }: LoginPageProps) {
+  const login = useLogin(signIn)
   const [values, setValues] = useState({ email: '', password: '' })
   /** 칸을 벗어나거나 제출해 오류 문구를 보이고 있는 칸 */
   const [shown, setShown] = useState({ email: false, password: false })
@@ -41,7 +48,7 @@ export default function LoginPage() {
       input.current?.focus()
       return
     }
-    login.mutate(values, { onSuccess: () => navigate('/home', { replace: true }) })
+    login.mutate(values, { onSuccess: onSignedIn })
   }
 
   function handleSubmit(event: SubmitEvent) {
@@ -67,6 +74,11 @@ export default function LoginPage() {
 
   return (
     <div className={styles.page} onMouseDown={keepFocusInField}>
+      {sessionEnded && (
+        <div className={styles.notice}>
+          <Notice>로그인이 풀렸어요. 다시 로그인해 주세요.</Notice>
+        </div>
+      )}
       <h1>로그인</h1>
       <form className={styles.form} noValidate onSubmit={handleSubmit}>
         <TextField

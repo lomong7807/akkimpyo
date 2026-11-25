@@ -8,6 +8,8 @@ import { watchAppTimers } from './support/timers'
 
 const server = startMockServer()
 
+afterEach(() => vi.restoreAllMocks())
+
 async function errorOf(promise: Promise<unknown>): Promise<ApiError> {
   const error = await promise.then(
     () => undefined,
@@ -67,6 +69,19 @@ describe('요청', () => {
     const requests = captureRequest()
     await send('/me')
     expect(requests[0].headers.has('Authorization')).toBe(false)
+  })
+
+  it.each([
+    ['GET', '/me'],
+    ['POST', '/ledgers'],
+    ['DELETE', '/ledgers'],
+    ['POST', '/auth/login'],
+    ['POST', '/auth/refresh'],
+  ] as const)('%s %s의 응답을 브라우저 캐시에 남기지도, 거기서 받지도 않는다', async (method, path) => {
+    captureRequest()
+    const fetch = vi.spyOn(globalThis, 'fetch')
+    await send(path, { method })
+    expect(fetch.mock.calls.map(([, init]) => init?.cache)).toEqual(['no-store'])
   })
 
   it.each(['/auth/login', '/auth/refresh', '/auth/signup'] as const)(
