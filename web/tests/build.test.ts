@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { build } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { webPath } from './support/webFile'
+import { readWebFile, webPath } from './support/webFile'
 
 // 주소가 깊은 화면에서도 같은 파일을 가리키는지 보려고 깊은 주소를 기준으로 삼는다.
 const page = 'https://akkimpyo.test/transactions/1/edit'
@@ -53,6 +53,53 @@ describe('배포 빌드', () => {
 })
 
 describe('홈 화면 설치 (F-120)', () => {
+  type Icon = { src: string; sizes: string; type: string; purpose: string }
+
+  function manifestAddress(): string {
+    const found = links('manifest')
+    expect(found).toHaveLength(1)
+    return new URL(found[0].href, page).href
+  }
+
+  function manifest() {
+    return JSON.parse(builtFile(manifestAddress()).toString()) as Record<string, unknown> & { icons: Icon[] }
+  }
+
+  it('매니페스트의 이름은 "아낌표"이고 /home에서 독립 창으로 연다', () => {
+    expect(manifest()).toMatchObject({
+      name: '아낌표',
+      short_name: '아낌표',
+      lang: 'ko',
+      start_url: '/home',
+      scope: '/',
+      display: 'standalone',
+    })
+  })
+
+  it('매니페스트의 배경색과 테마 색은 color-bg의 밝은 값이다', () => {
+    const colorBg = /^:root\s*{[^}]*--color-bg:\s*([^;]+);/m.exec(readWebFile('src/styles/tokens.css'))?.[1]
+    expect(colorBg).toMatch(/^#[0-9A-F]{6}$/)
+    expect(manifest()).toMatchObject({ background_color: colorBg, theme_color: colorBg })
+  })
+
+  it('매니페스트의 192와 512 아이콘은 같은 파일을 any와 maskable 두 용도로 쓴다', () => {
+    const { icons } = manifest()
+    const purposes = ['any', 'maskable']
+    expect(icons.map((icon) => `${icon.sizes} ${icon.purpose}`).sort()).toEqual(
+      ['192x192', '512x512'].flatMap((size) => purposes.map((purpose) => `${size} ${purpose}`)),
+    )
+    expect(new Set(icons.map((icon) => icon.src)).size).toBe(2)
+  })
+
+  it('매니페스트의 아이콘 주소는 빌드 결과의 PNG를 가리키고 크기가 적힌 값과 같다', () => {
+    const { icons } = manifest()
+    expect(icons).not.toHaveLength(0)
+    for (const icon of icons) {
+      expect(icon.type).toBe('image/png')
+      expect(pngSize(builtFile(icon.src, manifestAddress())), icon.src).toBe(icon.sizes)
+    }
+  })
+
   it('iPhone 홈 화면 아이콘은 180x180 PNG다', () => {
     const [icon, ...others] = links('apple-touch-icon')
     expect(others).toEqual([])
