@@ -1,0 +1,139 @@
+package app.accountbook.transaction;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.awaitility.Awaitility.await;
+
+import app.accountbook.account.AccountType;
+import app.accountbook.support.Fixtures;
+import app.accountbook.support.IntegrationTest;
+import app.accountbook.transaction.TransactionCommand.Entry;
+import app.accountbook.user.User;
+import jakarta.persistence.EntityManager;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/**
+ * 같은 id의 만들기 요청이 동시에 오면 한 건만 만들어지고 나머지는 판정 표대로 답한다(ADR 006 결정 3).
+ *
+ * <p>앞 요청을 커밋하지 않은 채 뒤 요청을 다른 스레드에서 보낸다. 뒤 요청은 "같은 id 없음"을 본 뒤 INSERT에서
+ * 앞 요청을 기다리고, 앞 요청이 커밋되는 순간 기본키 위반을 만난다. 두 트랜잭션이 실제로 겹쳐야 하므로 테스트
+ * 트랜잭션 없이 돌고, 커밋한 데이터는 끝날 때 지운다.
+ */
+@IntegrationTest
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
+class TransactionCreateRaceTest {
+
+    static final LocalDate DAY = LocalDate.of(2026, 11, 18);
+    static final Duration TIMEOUT = Duration.ofSeconds(10);
+
+    @Autowired TransactionService transactionService;
+    @Autowired TransactionTemplate transactionTemplate;
+    @Autowired Fixtures fixtures;
+    @Autowired EntityManager entityManager;
+    @Autowired JdbcTemplate jdbc;
+
+    final UUID id = UUID.randomUUID();
+    User owner;
+    UUID ledgerId;
+    UUID cash;
+    User stranger;
+    UUID strangerLedgerId;
+    UUID strangerCash;
+
+    @BeforeEach
+    void setUp() {
+        owner = fixtures.user("race-owner@example.com");
+        ledgerId = fixtures.personalLedgerId(owner);
+        cash = fixtures.account(owner, ledgerId, "현금", AccountType.CASH, 0, DAY).getId();
+        stranger = fixtures.user("race-stranger@example.com");
+        strangerLedgerId = fixtures.personalLedgerId(stranger);
+        strangerCash = fixtures.account(stranger, strangerLedgerId, "남의현금", AccountType.CASH, 0, DAY).getId();
+    }
+
+    /** 참조하는 쪽부터 지운다. 라인은 거래를 지우면 같이 지워진다. */
+    @AfterEach
+    void removeCommittedData() {
+        Stream.of("change_log", "transaction", "account", "category", "ledger_member").forEach(table ->
+                jdbc.update("delete from " + table + " where ledger_id in (?, ?)", ledgerId, strangerLedgerId));
+        jdbc.update("delete from ledger where id in (?, ?)", ledgerId, strangerLedgerId);
+        jdbc.update("delete from users where id in (?, ?)", owner.getId(), stranger.getId());
+    }
+
+    @Test
+    void 내용이_같으면_한_건만_만들고_나머지는_재전송이다() {
+        Race race = race(() -> create(owner, ledgerId, cash, 12_000), () -> create(owner, ledgerId, cash, 12_000));
+
+        assertThat(race.first().created()).isTrue();
+        assertThat(race.second().join()).isEqualTo(new CreateResult(race.first().transaction(), false));
+        assertOnlyFirstIsStored(race);
+    }
+
+    @Test
+    void 내용이_다르면_먼저_저장된_거래를_담은_충돌이다() {
+        Race race = race(() -> create(owner, ledgerId, cash, 12_000), () -> create(owner, ledgerId, cash, 13_000));
+
+        assertThat(conflictOf(race).current()).contains(race.first().transaction());
+        assertOnlyFirstIsStored(race);
+    }
+
+    @Test
+    void 다른_장부에서_먼저_쓴_id면_아무것도_담지_않은_충돌이다() {
+        Race race = race(() -> create(owner, ledgerId, cash, 12_000),
+                () -> create(stranger, strangerLedgerId, strangerCash, 12_000));
+
+        assertThat(conflictOf(race).current()).isEmpty();
+        assertOnlyFirstIsStored(race);
+    }
+
+    /** 앞 요청의 트랜잭션을 연 채로 뒤 요청을 보내고, 뒤 요청이 앞 요청을 기다리게 된 것을 본 뒤 앞 요청을 커밋한다. */
+    private Race race(Supplier<CreateResult> first, Supplier<CreateResult> second) {
+        return transactionTemplate.execute(status -> {
+            CreateResult result = first.get();
+            entityManager.flush();
+            CompletableFuture<CreateResult> waiting = CompletableFuture.supplyAsync(second)
+                    .orTimeout(2 * TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+            // 같은 스레드에서 물어야 이 트랜잭션의 연결(pg_backend_pid)을 기준으로 본다.
+            await().pollInSameThread().atMost(TIMEOUT).until(() -> jdbc.queryForObject("""
+                    select exists (select 1 from pg_locks
+                                    where not granted and pg_backend_pid() = any (pg_blocking_pids(pid)))
+                    """, Boolean.class));
+            return new Race(result, waiting);
+        });
+    }
+
+    private CreateResult create(User actor, UUID ledger, UUID account, long amount) {
+        return transactionService.createOrReplay(actor.getId(), ledger, new Entry(id, TransactionType.EXPENSE, DAY,
+                null, account, null, amount, false, "김밥천국", null, null), "iphone.safari");
+    }
+
+    private static IdConflictException conflictOf(Race race) {
+        Throwable thrown = catchThrowable(() -> race.second().join());
+        assertThat(thrown).isInstanceOf(CompletionException.class);
+        assertThat(thrown.getCause()).isExactlyInstanceOf(IdConflictException.class);
+        return (IdConflictException) thrown.getCause();
+    }
+
+    private void assertOnlyFirstIsStored(Race race) {
+        assertThat(transactionService.get(owner.getId(), id)).isEqualTo(race.first().transaction());
+        assertThat(transactionService.history(owner.getId(), id)).extracting(ChangeLogView::action)
+                .containsExactly(ChangeAction.CREATE);
+    }
+
+    record Race(CreateResult first, CompletableFuture<CreateResult> second) {
+    }
+}

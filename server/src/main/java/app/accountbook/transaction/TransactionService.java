@@ -29,9 +29,13 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -45,6 +49,9 @@ public class TransactionService {
     static final int PAYEE_MAX_LENGTH = 100;
     static final int MEMO_MAX_LENGTH = 500;
 
+    /** V1 마이그레이션의 거래 기본키 제약 이름. */
+    private static final String ID_CONSTRAINT = "transaction_pkey";
+
     private final TransactionRepository transactionRepository;
     private final ChangeLogRepository changeLogRepository;
     private final AccountRepository accountRepository;
@@ -54,11 +61,13 @@ public class TransactionService {
     private final LedgerRepository ledgerRepository;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final TransactionTemplate transactionTemplate;
 
     TransactionService(TransactionRepository transactionRepository, ChangeLogRepository changeLogRepository,
                        AccountRepository accountRepository, CategoryRepository categoryRepository,
                        CategoryService categoryService, LedgerAccess ledgerAccess,
-                       LedgerRepository ledgerRepository, ObjectMapper objectMapper, Clock clock) {
+                       LedgerRepository ledgerRepository, ObjectMapper objectMapper, Clock clock,
+                       TransactionTemplate transactionTemplate) {
         this.transactionRepository = transactionRepository;
         this.changeLogRepository = changeLogRepository;
         this.accountRepository = accountRepository;
@@ -68,10 +77,10 @@ public class TransactionService {
         this.ledgerRepository = ledgerRepository;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.transactionTemplate = transactionTemplate;
     }
 
     /** {@link #createOrReplay}와 같고, 새로 만들었는지 알 필요가 없을 때 쓴다. */
-    @Transactional
     public TransactionView create(UUID actorId, UUID ledgerId, TransactionCommand cmd, String deviceId) {
         return createOrReplay(actorId, ledgerId, cmd, deviceId).transaction();
     }
@@ -83,9 +92,25 @@ public class TransactionService {
      *
      * <p>검사 순서(ADR 006 결정 4): 구성원 → 형식 검증 → 같은 id 조회 → 참조 검증 → 저장.
      * 이미 저장된 거래의 재전송이 그사이 없어진 계좌나 카테고리 때문에 거부되지 않게 한다.
+     *
+     * <p>같은 id의 요청이 동시에 와서 둘 다 "같은 id 없음"을 보면, 나중 것이 앞 것의 커밋을 기다렸다가 기본키 위반을
+     * 만난다. 위반이 난 트랜잭션에서는 더 조회할 수 없으므로 새 트랜잭션에서 처음부터 다시 판정한다. 그래서 트랜잭션을
+     * 여기서 열고, 이미 열린 트랜잭션 안에서 부르지 않는다(ADR 004 결정 6: api는 트랜잭션을 열지 않는다).
      */
-    @Transactional
     public CreateResult createOrReplay(UUID actorId, UUID ledgerId, TransactionCommand cmd, String deviceId) {
+        Supplier<CreateResult> attempt = () -> transactionTemplate.execute(
+                status -> judgeAndCreate(actorId, ledgerId, cmd, deviceId));
+        try {
+            return attempt.get();
+        } catch (DataIntegrityViolationException e) {
+            if (!isIdTaken(e)) {
+                throw e;
+            }
+            return attempt.get();
+        }
+    }
+
+    private CreateResult judgeAndCreate(UUID actorId, UUID ledgerId, TransactionCommand cmd, String deviceId) {
         ledgerAccess.requireMember(actorId, ledgerId);
         Content content = normalize(ledgerId, cmd, actorId);
         Optional<Transaction> existing = transactionRepository.findById(content.id());
@@ -96,10 +121,16 @@ public class TransactionService {
         Transaction tx = Transaction.of(content.id(), ledgerId, content.type(), content.occurredOn(),
                 content.occurredTime(), content.payee(), content.memo(), actorId, content.paidBy());
         content.lines().forEach(line -> tx.addLine(line.accountId(), line.categoryId(), line.amount()));
-        transactionRepository.save(tx);
+        // 바로 flush해서 기본키 위반을 다른 오류와 섞이기 전에 받는다.
+        transactionRepository.saveAndFlush(tx);
         TransactionView after = TransactionView.of(tx);
         appendLog(tx, ChangeAction.CREATE, actorId, deviceId, null, after);
         return new CreateResult(after, true);
+    }
+
+    private static boolean isIdTaken(DataIntegrityViolationException e) {
+        return e.getCause() instanceof ConstraintViolationException violation
+                && ID_CONSTRAINT.equals(violation.getConstraintName());
     }
 
     /** 내용과 라인을 통째로 바꾼다. 거래 종류는 바꿀 수 없다. paidBy가 null이면 기존 값을 유지한다. */
