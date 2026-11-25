@@ -17,6 +17,18 @@ describe('불러오지 못함(F-907)', () => {
     expect(getComputedStyle(retryButton()).minHeight).toBe('var(--size-touch)')
   })
 
+  it('화면 이름(h1)이 따로 있는 화면에서는 제목이 2단계이고 모양은 같다', () => {
+    render(<LoadFailure onRetry={() => {}} />)
+    const { font, margin } = getComputedStyle(screen.getByRole('heading'))
+    cleanup()
+    render(<LoadFailure headingLevel={2} onRetry={() => {}} />)
+    const heading = screen.getByRole('heading', { level: 2, name: '불러오지 못했어요.' })
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
+    expect(font).toBe('var(--text-title)')
+    expect(getComputedStyle(heading).font).toBe(font)
+    expect(getComputedStyle(heading).margin).toBe(margin)
+  })
+
   it('"다시 시도"를 누르면 알린다', async () => {
     const onRetry = vi.fn()
     render(<LoadFailure onRetry={onRetry} />)
