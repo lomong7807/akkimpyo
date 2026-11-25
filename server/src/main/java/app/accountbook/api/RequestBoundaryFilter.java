@@ -50,7 +50,9 @@ class RequestBoundaryFilter extends OncePerRequestFilter {
             // 읽을 수 없는 요청이다. Tomcat이 400으로 정하고 /error로 넘긴다.
             throw e;
         } catch (Throwable e) {
-            log.error("처리하지 못한 예외", e);
+            if (!ApiExceptionHandler.isClientGone(e)) {
+                log.error("처리하지 못한 예외", e);
+            }
             if (response.isCommitted()) {
                 // 이미 보낸 응답에 오류를 덧붙이지 않는다. 끊어야 받는 쪽이 잘린 응답인 것을 안다.
                 throw new CloseNowException(e);

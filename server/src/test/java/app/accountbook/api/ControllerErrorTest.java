@@ -16,7 +16,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
-/** 컨트롤러까지 온 요청의 오류가 ADR 002 4·5절의 모양으로 나간다(#12). */
+/** 컨트롤러까지 온 요청의 오류가 ADR 002 4·5절의 모양으로 나간다(#12). 입력란과 서비스 예외는 InputErrorTest가 본다. */
 @ApiErrorTest
 class ControllerErrorTest {
 
@@ -49,7 +49,8 @@ class ControllerErrorTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"", "{", "{\"name\":\"a\"", "{\"name\":tru}", "{\"amount\":12x}", "{'name':'a'}",
-            "{\"lines\":[{\"amount\":1}", "{\"lines\":[{\"amount\":}]}", "not json", "{\"name\":\"a\u0001\"}"})
+            "{\"lines\":[{\"amount\":1}", "{\"lines\":[{\"amount\":}]}", "not json", "{\"name\":\"a\u0001\"}",
+            "{\"name\":\"a\",\"amount\":1}{}", "{\"name\":\"a\",\"amount\":1} 1", "{\"name\":\"a\",\"amount\":1} null"})
     void 본문을_JSON으로_읽을_수_없으면_문구가_고정이다(String body) throws Exception {
         Reply reply = server.postJson(BODY, body).assertProblem(400, "Bad Request", "MALFORMED_REQUEST");
 
