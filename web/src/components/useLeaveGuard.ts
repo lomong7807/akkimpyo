@@ -27,8 +27,9 @@ export function useLeaveGuard({ parent, changed, busy }: LeaveGuardOptions) {
     if (blocker.state === 'blocked' && busy) blocker.reset()
   }, [blocker, busy])
 
-  /** 묻지 않고 떠난다. */
+  /** 묻지 않고 떠난다. 화면이 바뀌기 전에 또 눌러도 한 번만 떠난다. */
   function leave(go: () => void) {
+    if (leaving.current) return
     leaving.current = true
     go()
   }
@@ -47,8 +48,7 @@ export function useLeaveGuard({ parent, changed, busy }: LeaveGuardOptions) {
       blocker.reset?.()
     },
     discard() {
-      if (blocker.state === 'blocked') blocker.proceed()
-      else leave(goBack)
+      leave(blocker.state === 'blocked' ? blocker.proceed : goBack)
     },
     leave,
   }

@@ -270,6 +270,62 @@ describe('바꾼 값이 있으면', () => {
   })
 })
 
+describe('두 번 누르기', () => {
+  /** 홈에서 목록으로, 목록에서 입력으로 온다. */
+  async function openFromHome() {
+    const user = openAt('/home')
+    await user.click(screen.getByRole('link', { name: '목록으로' }))
+    await user.click(await screen.findByRole('link', { name: '추가' }))
+    await screen.findByRole('heading', { name: '계좌 추가' })
+    return user
+  }
+
+  it('닫기를 두 번 눌러도 한 화면만 돌아간다', async () => {
+    const user = await openFromHome()
+    await user.dblClick(closeButton())
+    await screen.findByText('목록')
+    await settle()
+    expect(path()).toBe('/list')
+  })
+
+  it.each([
+    ['닫기로 묻고', (user: User) => user.click(closeButton())],
+    ['뒤로로 묻고', () => act(() => router.navigate(-1))],
+  ])('%s "버리기"를 두 번 눌러도 한 화면만 돌아간다', async (_, close) => {
+    const user = await openFromHome()
+    await user.type(name(), '급여통장')
+    await close(user)
+    await screen.findByRole('dialog', { name: question })
+    await untilOpened()
+    await user.dblClick(screen.getByRole('button', { name: '버리기' }))
+    await screen.findByText('목록')
+    await settle()
+    expect(path()).toBe('/list')
+  })
+})
+
+describe('떠난 뒤', () => {
+  const shield = () => document.querySelector('body > [class*="shield"]')
+
+  it.each(ways)('%s로 떠나면 이어서 누른 것이 앞 화면에 닿지 않게 잠깐 덮는다', async (_, close) => {
+    const user = await openFromList()
+    expect(shield()).toBeNull()
+    await close(user)
+    await screen.findByText('목록')
+    expect(fireEvent.mouseDown(shield()!)).toBe(false)
+    expect(fireEvent.touchStart(shield()!)).toBe(false)
+    await act(() => new Promise((resolve) => setTimeout(resolve, 350)))
+    expect(shield()).toBeNull()
+  })
+
+  it('저장을 마치고 떠나도 같다', async () => {
+    const user = await openFromList()
+    await user.click(screen.getByRole('button', { name: '저장을 마침' }))
+    await screen.findByText('목록')
+    expect(shield()).toBeTruthy()
+  })
+})
+
 describe('Esc', () => {
   function pressEscape(init: KeyboardEventInit) {
     const event = createEvent.keyDown(name(), { key: 'Escape', bubbles: true, cancelable: true, ...init })

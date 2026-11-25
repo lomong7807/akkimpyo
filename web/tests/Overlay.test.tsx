@@ -10,7 +10,7 @@ const GUARD = 300
 /** 여는 것과 닫는 것이 화면에 그려지기까지의 한 화면(ms) */
 const FRAME = 17
 
-const overlayRule = (selector: string) => readCssRule('src/components/Overlay.module.css', selector)
+const shieldRule = () => readCssRule('src/components/pressGuard.module.css', '.shield')
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -355,12 +355,12 @@ describe('브라우저가 강제로 닫으면', () => {
 })
 
 it('덮는 것은 화면 전체이고 상단 바와 하단 탭보다 위다', () => {
-  expect(overlayRule('.shield')).toContain('position: fixed')
-  expect(overlayRule('.shield')).toContain('inset: 0')
+  expect(shieldRule()).toContain('position: fixed')
+  expect(shieldRule()).toContain('inset: 0')
   const zIndexOf = (rule: string) => Number(/z-index: (\d+)/.exec(rule)?.[1])
   const bars = [
     readCssRule('src/components/Screen.module.css', '.topBar'),
     readCssRule('src/app/TabBar.module.css', '.tabBar'),
   ]
-  for (const bar of bars) expect(zIndexOf(overlayRule('.shield'))).toBeGreaterThan(zIndexOf(bar))
+  for (const bar of bars) expect(zIndexOf(shieldRule())).toBeGreaterThan(zIndexOf(bar))
 })

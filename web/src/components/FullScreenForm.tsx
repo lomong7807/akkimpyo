@@ -4,6 +4,7 @@ import ConfirmDialog from './ConfirmDialog'
 import { keepFocusInField } from './keepFocusInField'
 import layout from './layout.module.css'
 import { isModalOpen } from './openModal'
+import { usePressShield } from './pressGuard'
 import type { LeaveGuard } from './useLeaveGuard'
 import styles from './FullScreenForm.module.css'
 
@@ -25,6 +26,8 @@ export default function FullScreenForm({ title, guard, onSubmit, bottom, childre
   const screen = useRef<HTMLDivElement>(null)
   useVisibleArea(screen)
   useEscape(guard.close)
+  // 닫기는 앞 화면의 "뒤로", 저장은 하단 탭과 같은 자리다
+  usePressShield(true)
 
   function handleSubmit(event: SubmitEvent) {
     event.preventDefault()
@@ -67,6 +70,8 @@ export default function FullScreenForm({ title, guard, onSubmit, bottom, childre
 function useEscape(onEscape: () => void) {
   const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.key !== 'Escape' || event.isComposing || event.repeat || isModalOpen()) return
+    // 그냥 두면 브라우저가 이 Esc로 막 연 확인 창을 닫는다
+    event.preventDefault()
     onEscape()
   })
 

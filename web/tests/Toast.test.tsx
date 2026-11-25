@@ -75,7 +75,7 @@ describe('토스트의 자리', () => {
   it('상단 바와 하단 탭, 덮개보다 위다', () => {
     const zIndexOf = (path: string, selector: string) => Number(/z-index: (\d+)/.exec(readCssRule(path, selector))?.[1])
     const own = zIndexOf(CSS, '.region')
-    expect(own).toBeGreaterThan(zIndexOf('src/components/Overlay.module.css', '.shield'))
+    expect(own).toBeGreaterThan(zIndexOf('src/components/pressGuard.module.css', '.shield'))
     expect(own).toBeGreaterThan(zIndexOf('src/app/TabBar.module.css', '.tabBar'))
   })
 
