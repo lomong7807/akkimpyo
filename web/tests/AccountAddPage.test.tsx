@@ -451,6 +451,16 @@ describe('저장', () => {
     for (const input of document.querySelectorAll('input')) expect(input.hasAttribute('name')).toBe(false)
   })
 
+  it('토스트가 보이는 동안 다시 "추가"를 열면 토스트가 저장 버튼을 덮지 않게 걷는다', async () => {
+    const { user } = await openFromList()
+    await fillAndSave(user)
+    await waitFor(() => expect(screen.getByText("'급여통장' 계좌를 추가했어요.")).toBeTruthy())
+    await untilUnshielded()
+    await user.click(screen.getByRole('link', { name: '추가' }))
+    await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+    expect(screen.queryByText("'급여통장' 계좌를 추가했어요.")).toBeNull()
+  })
+
   it('두 번 누르거나 엔터를 눌러도 한 번만 보낸다', async () => {
     accounts.addResponse = delayed().respond
     const { user } = await open()
@@ -675,11 +685,43 @@ describe('서버 오류와 지연', () => {
     const notice = saveButton().previousElementSibling as HTMLElement
     expect(notice.contains(alert)).toBe(true)
     expect(notice.contains(retryButton())).toBe(true)
-    expect(document.activeElement).toBe(retryButton())
     expect([name().value, balance().value]).toEqual(['급여통장', '350,000'])
     expect(errors()).toEqual([undefined, undefined, undefined, undefined])
     expect(path(opened)).toBe('/accounts/new')
     expect(document.body.textContent).not.toContain('개발자가 읽는')
+  })
+
+  it.each([
+    ['저장을 눌렀으면 쓰던 칸에', async (user: User) => user.click(saveButton()), balance],
+    ['칸에서 엔터를 쳤으면 그 칸에', async (user: User) => user.keyboard('{Enter}'), balance],
+    [
+      '키보드로 저장을 눌렀으면 저장에',
+      async (user: User) => {
+        saveButton().focus()
+        await user.keyboard('{Enter}')
+      },
+      saveButton,
+    ],
+  ] as const)('실패해도 초점을 옮기지 않고 읽어 주기만 한다: %s 남는다', async (_, save, stays) => {
+    accounts.addResponse = () => problem(500, 'INTERNAL_ERROR')
+    const { user } = await open()
+    await fill(user)
+    await save(user)
+    expect((await screen.findByRole('alert')).textContent).toBe(failed)
+    await settle()
+    expect(document.activeElement).toBe(stays())
+  })
+
+  it('다시 시도한 것이 또 실패하면 초점이 저장에 남는다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await open()
+    await fillAndSave(user)
+    await screen.findByRole('alert')
+    await user.click(retryButton())
+    await waitFor(() => expect(accounts.added).toHaveLength(2))
+    await screen.findByRole('alert')
+    expect(document.activeElement).toBe(saveButton())
   })
 
   it('"다시 시도"는 지금 화면의 값으로 다시 보내고 초점을 잃지 않는다', async () => {

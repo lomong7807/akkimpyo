@@ -60,8 +60,9 @@ export default function AccountAddPage() {
       onSubmit={submit}
       bottom={
         <>
+          {/* 초점은 옮기지 않는다. 문구는 role="alert"로 읽힌다 */}
           {failed && (
-            <RetryMessage onRetry={retry} autoFocus>
+            <RetryMessage onRetry={retry}>
               문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.
             </RetryMessage>
           )}
