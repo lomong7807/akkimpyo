@@ -311,6 +311,19 @@ describe('처리 중', () => {
     expect(bodies).toHaveLength(1)
   })
 
+  it('처리 중에 "가입"으로 떠나면 로그인이 끝나도 화면을 옮기지 않고 비밀번호를 캐시에 남기지 않는다', async () => {
+    const answer = Promise.withResolvers<Response>()
+    const bodies = respondToLogin(() => answer.promise)
+    const queryClient = createQueryClient()
+    const { user, router } = openLogin(queryClient)
+    await fillAndSubmit(user)
+    await vi.waitFor(() => expect(bodies).toHaveLength(1))
+    await user.click(screen.getByRole('link', { name: '가입' }))
+    answer.resolve(success())
+    await vi.waitFor(() => expect(queryClient.getMutationCache().getAll()).toEqual([]))
+    expect(router.state.location.pathname).toBe('/signup')
+  })
+
   it('다시 보내는 동안 앞선 오류 문구를 지운다', async () => {
     const answers = [Promise.resolve(problem(401, 'INVALID_CREDENTIALS')), new Promise<Response>(() => {})]
     respondToLogin(() => answers.shift()!)
