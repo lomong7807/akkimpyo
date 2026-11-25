@@ -48,7 +48,9 @@ class ServiceMethodInventoryTest {
             "TransactionAccountUsage.isUsed",
             "계좌 삭제 제한용 포트(AccountUsage) 구현. AccountService가 구성원 확인 뒤에 부른다",
             "TransactionCategoryUsage.isUsed",
-            "카테고리 삭제 제한용 포트(CategoryUsage) 구현. CategoryService가 구성원 확인 뒤에 부른다");
+            "카테고리 삭제 제한용 포트(CategoryUsage) 구현. CategoryService가 구성원 확인 뒤에 부른다",
+            "RequiredDbSettings.postProcessAfterInitialization",
+            "기동할 때 스프링이 부르는 BeanPostProcessor. DB 접속 변수가 있는지만 보고 장부 데이터를 다루지 않는다");
 
     @Test
     void 대상_클래스를_찾는다() {
