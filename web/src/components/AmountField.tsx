@@ -128,16 +128,20 @@ export default function AmountField({
               onChange={handleChange}
               onCompositionEnd={handleCompositionEnd}
               onPaste={handlePaste}
-              // 눌러서 초점을 받으면 브라우저가 누른 자리에 커서를 놓은 뒤에 다시 고른다
+              // 눌러서 초점을 받으면 브라우저가 누른 자리에 커서를 놓으므로 다 누른 뒤에 고른다.
+              // WebKit은 미리 고른 것 위에서 누르면 다 누른 뒤에 선택을 푼다
               onMouseDown={(event) => {
                 pressedToFocus.current = document.activeElement !== event.currentTarget
               }}
-              onFocus={(event) => selectZero(event.currentTarget)}
+              onFocus={(event) => {
+                if (!pressedToFocus.current) selectZero(event.currentTarget)
+              }}
               onClick={(event) => {
                 if (pressedToFocus.current) selectZero(event.currentTarget)
                 pressedToFocus.current = false
               }}
               onBlur={() => {
+                pressedToFocus.current = false
                 setRefused(false)
                 onBlur?.()
               }}

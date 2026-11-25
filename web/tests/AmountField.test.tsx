@@ -383,11 +383,23 @@ describe('초점을 받을 때', () => {
 
   it('눌러서 받아도 값이 0이면 모두 고른다. 브라우저가 누른 자리에 커서를 놓은 뒤다', () => {
     renderField({ initial: 0 })
+    input().setSelectionRange(1, 1)
     fireEvent.mouseDown(input())
     input().focus()
-    input().setSelectionRange(1, 1)
+    // 누르는 동안 미리 고르면 WebKit이 다 누른 뒤에 선택을 푼다
+    expect(selection()).toEqual([1, 1])
     fireEvent.mouseUp(input())
     fireEvent.click(input())
+    expect(selection()).toEqual([0, 1])
+  })
+
+  it('눌러서 받았다가 떠난 뒤 키보드로 돌아와도 고른다', () => {
+    renderField({ initial: 0 })
+    fireEvent.mouseDown(input())
+    act(() => input().focus())
+    act(() => input().blur())
+    input().setSelectionRange(1, 1)
+    act(() => input().focus())
     expect(selection()).toEqual([0, 1])
   })
 
@@ -603,7 +615,7 @@ describe('읽기 전용', () => {
 
 describe('모양', () => {
   it('오른쪽 끝의 "원" 자리를 비우고 글자를 오른쪽에 맞춘다', () => {
-    expect(readCssRule(CSS, '.input')).toContain('padding-inline-end: calc(var(--space-12) + 1em + var(--space-8))')
+    expect(readCssRule(CSS, '.input')).toContain('padding-inline-end: calc(var(--space-12) + 0.875em + var(--space-8))')
     expect(readCssRule(CSS, '.unit')).toContain('inset-inline-end: calc(var(--space-12) + 1px)')
   })
 })

@@ -10,9 +10,9 @@
   min-width: 0;
 }
 
-/* 칸의 안쪽 12px, "원" 한 글자, 숫자와의 사이 8px을 비운다 */
+/* 칸의 안쪽 12px, "원"의 폭, 숫자와의 사이 8px을 비운다. 글꼴의 한글 폭은 글자 크기의 0.86배다 */
 .input {
-  padding-inline-end: calc(var(--space-12) + 1em + var(--space-8));
+  padding-inline-end: calc(var(--space-12) + 0.875em + var(--space-8));
   text-align: end;
 }
 
