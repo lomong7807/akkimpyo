@@ -5,7 +5,6 @@ import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
 import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.ledger.LedgerAccess;
-import app.accountbook.transaction.TransactionLineRepository;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -15,13 +14,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
-    private final TransactionLineRepository lineRepository;
+    private final CategoryUsage categoryUsage;
     private final LedgerAccess ledgerAccess;
 
-    CategoryService(CategoryRepository categoryRepository, TransactionLineRepository lineRepository,
+    CategoryService(CategoryRepository categoryRepository, CategoryUsage categoryUsage,
                     LedgerAccess ledgerAccess) {
         this.categoryRepository = categoryRepository;
-        this.lineRepository = lineRepository;
+        this.categoryUsage = categoryUsage;
         this.ledgerAccess = ledgerAccess;
     }
 
@@ -58,7 +57,7 @@ public class CategoryService {
         if (categoryRepository.existsByParentId(categoryId)) {
             throw new InUseException("하위 분류가 있는 카테고리는 지울 수 없습니다.");
         }
-        if (lineRepository.existsByCategoryId(categoryId)) {
+        if (categoryUsage.isUsed(categoryId)) {
             throw new InUseException("거래가 있는 카테고리는 지울 수 없습니다.");
         }
         categoryRepository.delete(category);
