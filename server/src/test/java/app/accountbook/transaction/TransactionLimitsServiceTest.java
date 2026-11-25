@@ -6,6 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import app.accountbook.account.Account;
 import app.accountbook.account.AccountType;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.ledger.Ledger;
+import app.accountbook.ledger.LedgerRepository;
+import app.accountbook.ledger.LedgerRole;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.transaction.TransactionCommand.Entry;
@@ -52,6 +55,7 @@ class TransactionLimitsServiceTest {
 
     @Autowired TransactionService transactionService;
     @Autowired TransactionRepository transactionRepository;
+    @Autowired LedgerRepository ledgerRepository;
     @Autowired Fixtures fixtures;
     @Autowired EntityManager entityManager;
 
@@ -137,6 +141,25 @@ class TransactionLimitsServiceTest {
                 cash.getId(), 1_000, null)))
                 .isInstanceOf(InvalidRequestException.class);
         assertThat(transactionRepository.count()).isZero();
+    }
+
+    /** "오늘"은 그 장부의 시간대로 정한다. 서울은 2026-11-26이지만 로스앤젤레스 장부는 아직 2026-11-25(15:30)다. */
+    @Test
+    void create_countsTheYearFromTodayInTheLedgerZone() {
+        UUID laLedgerId = ledgerRepository.saveAndFlush(Ledger.of("장부", "America/Los_Angeles")).getId();
+        fixtures.addMember(laLedgerId, owner, LedgerRole.OWNER);
+        UUID from = fixtures.account(owner, laLedgerId, "은행", AccountType.BANK, 0, SEOUL_TODAY).getId();
+        UUID to = fixtures.account(owner, laLedgerId, "현금", AccountType.CASH, 0, SEOUL_TODAY).getId();
+        LocalDate lastDay = LocalDate.of(2027, 11, 25);
+        UUID id = UUID.randomUUID();
+
+        assertThatThrownBy(() -> transactionService.create(owner.getId(), laLedgerId,
+                new Transfer(UUID.randomUUID(), lastDay.plusDays(1), null, from, to, 1_000, null), DEVICE))
+                .isInstanceOf(InvalidRequestException.class);
+        transactionService.create(owner.getId(), laLedgerId,
+                new Transfer(id, lastDay, null, from, to, 1_000, null), DEVICE);
+
+        assertThat(reload(id).occurredOn()).isEqualTo(lastDay);
     }
 
     @Test
