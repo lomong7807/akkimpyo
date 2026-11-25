@@ -23,18 +23,23 @@ type LayerProps = {
  */
 export default function Overlay({ open, ...layer }: LayerProps & { open: boolean }) {
   const ref = useRef<HTMLDialogElement>(null)
-  const { shown, shielding } = useClosing(open, ref)
-  if (shown) return <Layer {...layer} ref={ref} closing={!open} />
-  return shielding ? <div ref={ignorePresses} className={styles.shield} /> : null
+  const shown = useClosing(open, ref)
+
+  // 닫은 때부터 덮는다. 안의 버튼이 다른 화면으로 보내 층이 통째로 빠질 때도 같다
+  useLayoutEffect(() => {
+    if (!open) return
+    unshieldPage()
+    return shieldPage
+  }, [open])
+
+  return shown ? <Layer {...layer} ref={ref} closing={!open} /> : null
 }
 
-/** 닫히는 움직임이 끝나면 층을 빼고, 닫은 때부터 누름을 막는 시간이 지날 때까지 뒤 화면을 덮는다. */
-function useClosing(open: boolean, layer: RefObject<HTMLDialogElement | null>) {
+/** 닫히는 움직임이 끝나면 층을 뺀다. */
+function useClosing(open: boolean, layer: RefObject<HTMLDialogElement | null>): boolean {
   const [shown, setShown] = useState(open)
-  const [shielding, setShielding] = useState(open)
   if (open && !shown) setShown(true)
-  if (open && !shielding) setShielding(true)
-  const closing = !open && (shown || shielding)
+  const closing = !open && shown
 
   useEffect(() => {
     if (!closing) return
@@ -43,14 +48,12 @@ function useClosing(open: boolean, layer: RefObject<HTMLDialogElement | null>) {
     void Promise.allSettled(motions).then(() => {
       if (!reopened) setShown(false)
     })
-    const cancelShield = afterPressGuard(() => setShielding(false))
     return () => {
       reopened = true
-      cancelShield()
     }
   }, [closing, layer])
 
-  return { shown, shielding }
+  return shown
 }
 
 function Layer({
@@ -62,6 +65,7 @@ function Layer({
   ...name
 }: LayerProps & { ref: RefObject<HTMLDialogElement | null>; closing: boolean }) {
   const pressedOutside = useRef(false)
+  const [forcedCloses, setForcedCloses] = useState(0)
 
   useLayoutEffect(() => {
     const dialog = ref.current!
@@ -79,6 +83,10 @@ function Layer({
     }
   }, [ref])
 
+  useLayoutEffect(() => {
+    if (!closing && !ref.current!.open) ref.current!.showModal()
+  }, [ref, closing, forcedCloses])
+
   return (
     <dialog
       {...name}
@@ -90,9 +98,12 @@ function Layer({
         event.preventDefault()
         onClose()
       }}
-      // 브라우저가 cancel을 막지 못하게 하고 닫을 때가 있다. 개발 모드에서 다시 연 뒤에 오는 알림은 거른다
+      // 브라우저가 cancel을 막지 못하게 하고 닫을 때가 있다. 부르는 쪽이 그대로 열어 두면 다시 연다.
+      // 개발 모드에서 다시 연 뒤에 오는 알림은 거른다
       onClose={(event) => {
-        if (!event.currentTarget.open) onClose()
+        if (event.currentTarget.open) return
+        onClose()
+        setForcedCloses((count) => count + 1)
       }}
       // 면을 누른 것은 면의 요소로 온다. 이 요소로 온 것은 바깥이다. 안에서 눌러 밖에서 뗀 것은 거른다
       onPointerDown={(event) => {
@@ -107,6 +118,26 @@ function Layer({
   )
 }
 
+/** 덮은 것을 걷는다. */
+let unshieldPage = () => {}
+
+/**
+ * 이어서 누른 것이 뒤 화면에 닿지 않게 누름을 막는 시간 동안 화면 전체를 덮는다.
+ * 층을 그린 화면이 바뀌어도 남고, 움직이는 조상이 있으면 화면을 다 덮지 못하므로 body에 바로 둔다.
+ */
+function shieldPage() {
+  unshieldPage()
+  const shield = document.createElement('div')
+  shield.className = styles.shield
+  ignorePresses(shield)
+  document.body.append(shield)
+  const cancel = afterPressGuard(() => unshieldPage())
+  unshieldPage = () => {
+    cancel()
+    shield.remove()
+  }
+}
+
 /** 막 열었거나 닫는 중이다. 이때는 면을 누른 것도 층으로 온다. */
 function isGuarded(layer: HTMLElement): boolean {
   return layer.hasAttribute('data-opening') || layer.hasAttribute('data-closing')
@@ -116,15 +147,15 @@ function isGuarded(layer: HTMLElement): boolean {
  * 이 요소에서 시작한 누르기를 없던 것으로 한다. 초점도 옮기지 않는다.
  * 손가락은 떼는 자리의 것을 누른 것이 되므로 시작할 때 막아야 한다. 리액트는 그때 막을 수 없게 듣는다.
  */
-function ignorePresses(element: HTMLElement | null, active = () => true) {
+function ignorePresses(element: HTMLElement, active = () => true) {
   function ignore(event: Event) {
     if (active()) event.preventDefault()
   }
-  element?.addEventListener('touchstart', ignore)
-  element?.addEventListener('mousedown', ignore)
+  element.addEventListener('touchstart', ignore)
+  element.addEventListener('mousedown', ignore)
   return () => {
-    element?.removeEventListener('touchstart', ignore)
-    element?.removeEventListener('mousedown', ignore)
+    element.removeEventListener('touchstart', ignore)
+    element.removeEventListener('mousedown', ignore)
   }
 }
 

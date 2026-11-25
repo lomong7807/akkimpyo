@@ -18,6 +18,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  // 화면에서 빠진 뒤에 남은 덮개를 걷는다
+  vi.runAllTimers()
   vi.restoreAllMocks()
   vi.useRealTimers()
 })
@@ -149,12 +151,12 @@ describe.each(['바닥 시트', '펼친 판'])('%s', (kind) => {
       expect(fireEvent.mouseDown(dialog()!)).toBe(true)
     })
 
-    it('화면에서 빠지면 남는 시계가 없다', async () => {
+    it('화면에서 빠져도 남는 시계가 없다', async () => {
       const { unmount } = await start()
       await pass(FRAME)
-      const timers = vi.getTimerCount()
       unmount()
-      expect(vi.getTimerCount()).toBe(timers - 1)
+      await pass(GUARD + FRAME)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('Esc는 바로 받는다', async () => {
@@ -206,13 +208,43 @@ describe.each(['바닥 시트', '펼친 판'])('%s', (kind) => {
       expect(shield()).toBeNull()
     })
 
-    it('덮은 동안 화면에서 빠지면 덮은 것도 사라진다', async () => {
+    it('덮은 동안 화면에서 빠져도 시간이 다 될 때까지 덮고, 남는 것이 없다', async () => {
       const { unmount } = await startAndClose()
-      await pass(FRAME)
-      const timers = vi.getTimerCount()
+      await pass(GUARD - 1)
       unmount()
+      expect(shield()).toBeTruthy()
+      await pass(FRAME + 1)
       expect(shield()).toBeNull()
-      expect(vi.getTimerCount()).toBe(timers - 1)
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('연 채로 화면에서 빠지면 그때부터 덮는다. 안의 버튼이 다른 화면으로 보낸 때다', async () => {
+      const { unmount } = await start()
+      await pass(GUARD + FRAME)
+      unmount()
+      expect(dialog()).toBeNull()
+      expect(fireEvent.mouseDown(shield()!)).toBe(false)
+      expect(fireEvent.touchStart(shield()!)).toBe(false)
+      await pass(GUARD - 1)
+      expect(shield()).toBeTruthy()
+      await pass(FRAME + 1)
+      expect(shield()).toBeNull()
+    })
+
+    it('두 번 그리는 개발 모드에서도 열려 있는 동안에는 덮지 않는다', async () => {
+      render(
+        <StrictMode>
+          <Sample />
+        </StrictMode>,
+      )
+      await open()
+      expect(dialog()?.open).toBe(true)
+      expect(shield()).toBeNull()
+    })
+
+    it('덮은 것은 화면의 어느 요소 안에도 있지 않다. 움직이는 조상이 있으면 화면을 다 덮지 못한다', async () => {
+      await startAndClose()
+      expect(shield()!.parentElement).toBe(document.body)
     })
 
     it('연 적이 없으면 덮지 않는다', async () => {
@@ -268,6 +300,57 @@ describe('바닥 시트의 X', () => {
     const onClose = start()
     fireEvent.click(closeButton(), { detail: 0 })
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('브라우저가 강제로 닫으면', () => {
+  // 사용자 동작 없이 Esc를 두 번 누르면 브라우저가 cancel을 막지 못하게 하고 닫는다
+  const forceClose = () => act(async () => dialog()!.close())
+
+  it('부르는 쪽이 그대로 열어 두면 다시 연다', async () => {
+    const onClose = vi.fn()
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal')
+    render(
+      <BottomSheet title="기준일" open onClose={onClose}>
+        내용
+      </BottomSheet>,
+    )
+    await forceClose()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(dialog()?.open).toBe(true)
+    await forceClose()
+    expect(dialog()?.open).toBe(true)
+    expect(showModal).toHaveBeenCalledTimes(3)
+  })
+
+  it('부르는 쪽이 늦게 닫아도 닫힌다', async () => {
+    function Late() {
+      const [open, setOpen] = useState(true)
+      return (
+        <BottomSheet title="기준일" open={open} onClose={() => setTimeout(() => setOpen(false), 50)}>
+          내용
+        </BottomSheet>
+      )
+    }
+    render(<Late />)
+    await forceClose()
+    expect(dialog()?.open).toBe(true)
+    await pass(50)
+    expect(dialog()).toBeNull()
+  })
+
+  it('두 번 그리는 개발 모드에서는 여는 것을 강제로 닫은 것으로 보지 않는다', async () => {
+    const onClose = vi.fn()
+    render(
+      <StrictMode>
+        <BottomSheet title="기준일" open onClose={onClose}>
+          내용
+        </BottomSheet>
+      </StrictMode>,
+    )
+    await pass(FRAME)
+    expect(onClose).not.toHaveBeenCalled()
+    expect(dialog()?.open).toBe(true)
   })
 })
 
