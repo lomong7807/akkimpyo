@@ -17,7 +17,9 @@ import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
+import app.accountbook.common.NotLedgerOwnerException;
 import app.accountbook.common.StaleVersionException;
+import app.accountbook.ledger.LedgerAccess;
 import app.accountbook.stats.BalanceQuery;
 import app.accountbook.stats.MonthlyStatsQuery;
 import app.accountbook.stats.MonthlySummary;
@@ -33,17 +35,24 @@ import app.accountbook.user.User;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.aopalliance.intercept.MethodInterceptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -58,7 +67,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *       요청 자체가 틀려서 거부된 것이 아님을 보인다. 대조 요청은 SAVEPOINT로 되돌린다.</li>
  * </ol>
  *
- * <p>준비 데이터는 한 번만 만들고, 표 전체가 테스트 트랜잭션 하나 안에서 돈다.
+ * <p>준비 데이터는 한 번만 만들고, 표 전체가 테스트 트랜잭션 하나 안에서 돈다. 그래서 어느 줄이 실제로 뚫려
+ * DB가 바뀌면 뒤의 줄들도 "DB가 달라졌다"로 함께 실패한다. 원인은 처음 실패한 줄이다.
+ *
+ * <p>표의 마지막 줄은 서비스와 조회 클래스의 공개 메서드 가운데 호출자(actorId)를 받는 것이 모두 이 표에서
+ * A의 요청으로 불렸는지 확인한다({@link ServiceMethodInventoryTest}). 새 공개 메서드를 더하면 이 표에 줄을
+ * 더해야 통과한다. 불렸는지는 손으로 적지 않고, 서비스를 감싼 프록시가 실제 호출을 기록한다.
  */
 @IntegrationTest
 class CrossLedgerAccessTest {
@@ -73,6 +87,7 @@ class CrossLedgerAccessTest {
     @Autowired TransactionService transactionService;
     @Autowired BalanceQuery balanceQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
+    @Autowired LedgerAccess ledgerAccess;
     @Autowired Fixtures fixtures;
     @Autowired EntityManager entityManager;
     @Autowired JdbcTemplate jdbc;
@@ -107,6 +122,10 @@ class CrossLedgerAccessTest {
     List<String> secretsOfB;
     Map<String, List<Map<String, Object>>> baseline;
 
+    /** 표의 거부 단계(A가 B의 대상으로 요청)에서 실제로 불린 "클래스.메서드". */
+    final Set<String> calledByA = new HashSet<>();
+    boolean recording;
+
     @BeforeEach
     void setUp() {
         User userA = fixtures.user("a@example.com");
@@ -137,13 +156,46 @@ class CrossLedgerAccessTest {
 
         secretsOfB = List.of("B월급통장", "B비상금", "B빈계좌", "B식비", "B점심", "B안쓰는분류", "B단골식당", "B의메모",
                 "5432100", "5,432,100", "73100", "73,100", "41700", "41,700", "58300", "58,300", "66900", "66,900",
-                "b@example.com", ledgerB.toString());
+                "b@example.com", ledgerB.toString(), bBank.toString(), bCash.toString(), bEmptyAccount.toString(),
+                bFood.toString(), bLunch.toString(), bSpare.toString(), bUncategorized.toString(),
+                bExpense.id().toString(), bTransfer.id().toString(), bDeleted.id().toString(),
+                bCanceled.id().toString());
         baseline = snapshot();
+
+        accountService = recorded(accountService);
+        categoryService = recorded(categoryService);
+        transactionService = recorded(transactionService);
+        balanceQuery = recorded(balanceQuery);
+        monthlyStatsQuery = recorded(monthlyStatsQuery);
+        ledgerAccess = recorded(ledgerAccess);
     }
 
     @TestFactory
     Stream<DynamicTest> A는_B의_장부에_닿을_수_없다() {
-        return rows().map(row -> dynamicTest(row.label(), () -> verify(row)));
+        return Stream.concat(
+                rows().map(row -> dynamicTest(row.label(), () -> verify(row))),
+                Stream.of(
+                        dynamicTest("구성원 확인: 예외 없이 답하는 isMember", this::verifyIsMember),
+                        dynamicTest("표가 호출자를 받는 공개 메서드를 모두 다룬다", this::verifyTableCoversInventory)));
+    }
+
+    /** {@code isMember}는 거부를 예외가 아니라 false로 답해 표의 줄 모양에 맞지 않는다. 같은 것을 값으로 본다. */
+    void verifyIsMember() {
+        assertThat(asA(() -> ledgerAccess.isMember(a, ledgerB))).as("A가 B의 장부").isFalse();
+        assertThat(ledgerAccess.isMember(a, missing)).as("A가 없는 장부").isFalse();
+        assertThat(ledgerAccess.isMember(b, ledgerB)).as("대조: B가 자기 장부").isTrue();
+        assertThat(snapshot()).isEqualTo(baseline);
+    }
+
+    /**
+     * 새 공개 메서드가 표에서 빠지는 것을 막는다. 앞의 줄이 실패해도 호출은 기록되므로 이 줄은 따로 판정된다.
+     * 서비스 클래스가 새로 생기면 {@link #setUp()}에서 감싸고 표에 줄을 더한다.
+     */
+    void verifyTableCoversInventory() {
+        assertThat(calledByA)
+                .as("호출자(actorId)를 받는 공개 메서드는 모두 이 표에서 A가 B의 대상으로 불러 봐야 한다. "
+                        + "빠진 메서드가 있으면 표에 줄을 더한다")
+                .containsAll(ServiceMethodInventoryTest.actorMethodNames());
     }
 
     /**
@@ -191,7 +243,7 @@ class CrossLedgerAccessTest {
                 .flatMap(Function.identity());
     }
 
-    /** 조회: 계좌, 카테고리, 거래(지출, 이체, 삭제, 취소), 변경 이력, 휴지통, 잔액, 월 통계. */
+    /** 조회: 계좌, 카테고리, 거래(지출, 이체, 삭제, 취소), 변경 이력, 휴지통, 잔액, 월 통계, 구성원·소유자 확인. */
     Stream<Row> readRows() {
         return Stream.of(
                 denied("조회: 계좌 목록", NotLedgerMemberException.class, ledgerB,
@@ -217,7 +269,11 @@ class CrossLedgerAccessTest {
                 denied("조회: 장부의 모든 잔액", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> balanceQuery.balances(actor, ledger)),
                 denied("조회: 월 통계", NotLedgerMemberException.class, ledgerB,
-                        (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, NOVEMBER)));
+                        (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, NOVEMBER)),
+                denied("구성원 확인: B의 장부", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> ledgerAccess.requireMember(actor, ledger)),
+                denied("소유자 확인: B의 장부", NotLedgerOwnerException.class, ledgerB,
+                        (actor, ledger) -> ledgerAccess.requireOwner(actor, ledger)));
     }
 
     /** 생성: B의 장부에 만들기. 요청 내용은 B가 보내면 그대로 통과하는 것이다. */
@@ -231,6 +287,10 @@ class CrossLedgerAccessTest {
                 denied("생성: B의 장부에 하위 카테고리", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> categoryService.create(actor, ledger,
                                 new CategoryCommand("새하위", CategoryKind.EXPENSE, bFood))),
+                // 대조: B의 장부에는 이미 기본 카테고리(미분류)가 있어 B도 DB 유일 제약에 걸린다.
+                denied("생성: B의 장부에 기본 카테고리", NotLedgerOwnerException.class, ledgerB,
+                        DataIntegrityViolationException.class,
+                        (actor, ledger) -> categoryService.createDefaults(actor, ledger)),
                 denied("생성: B의 장부에 지출", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionService.create(actor, ledger,
                                 entry(UUID.randomUUID(), bBank, bFood, 1_000), DEVICE)),
@@ -366,7 +426,7 @@ class CrossLedgerAccessTest {
     // ---------------------------------------------------------------- 확인
 
     void verify(Row row) {
-        Throwable denied = catchThrowable(() -> row.call().run(a, row.target()));
+        Throwable denied = asA(() -> catchThrowable(() -> row.call().run(a, row.target())));
         assertThat(denied).as("A가 B의 대상으로 요청").isExactlyInstanceOf(row.expected());
         assertNoSecret(denied);
 
@@ -394,6 +454,32 @@ class CrossLedgerAccessTest {
     void assertNoSecret(Throwable denied) {
         assertThat(String.valueOf(denied.getMessage())).doesNotContain(secretsOfB);
         assertThat(denied.getCause()).isNull();
+    }
+
+    /** 거부 단계의 요청만 기록한다. 없는 id로 한 요청과 대조 요청은 "표가 다뤘다"로 치지 않는다. */
+    <T> T asA(Supplier<T> request) {
+        recording = true;
+        try {
+            return request.get();
+        } finally {
+            recording = false;
+        }
+    }
+
+    /** 서비스를 감싸, 거부 단계에서 A가 부른 메서드를 "클래스.메서드"로 적어 둔다. 동작은 바꾸지 않는다. */
+    @SuppressWarnings("unchecked")
+    <T> T recorded(T service) {
+        String type = AopUtils.getTargetClass(service).getSimpleName();
+        ProxyFactory factory = new ProxyFactory(service);
+        factory.setProxyTargetClass(true);
+        factory.addAdvice((MethodInterceptor) invocation -> {
+            Object[] arguments = invocation.getArguments();
+            if (recording && arguments.length > 0 && a.equals(arguments[0])) {
+                calledByA.add(type + "." + invocation.getMethod().getName());
+            }
+            return invocation.proceed();
+        });
+        return (T) factory.getProxy();
     }
 
     /** 요청을 실행하고 SAVEPOINT로 되돌린다. 영속성 컨텍스트도 비워 다음 줄이 DB에서 다시 읽게 한다. */
