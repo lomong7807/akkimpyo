@@ -12,12 +12,13 @@
   outline: 1px solid transparent;
 }
 
+/* 칸과도 화면 끝과도 4px 떨어진다 */
 .panel[data-side='below'] {
   top: calc(var(--field-bottom) + var(--space-4));
-  max-height: calc(100% - var(--field-bottom) - var(--space-4));
+  max-height: calc(100% - var(--field-bottom) - 2 * var(--space-4));
 }
 
 .panel[data-side='above'] {
   bottom: calc(100% - var(--field-top) + var(--space-4));
-  max-height: calc(var(--field-top) - var(--space-4));
+  max-height: calc(var(--field-top) - 2 * var(--space-4));
 }

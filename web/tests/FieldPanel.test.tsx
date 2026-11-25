@@ -139,12 +139,12 @@ describe('자리', () => {
     expect(remove.mock.calls.some(([type]) => type === 'resize')).toBe(true)
   })
 
-  it('칸과 4px 떨어지고 남은 높이 안에서 스크롤한다', () => {
+  it('칸과 화면 끝에서 4px 떨어지고 남은 높이 안에서 스크롤한다', () => {
     expect(rule('.panel')).toContain('overflow-y: auto')
     expect(rule(".panel[data-side='below']")).toContain('top: calc(var(--field-bottom) + var(--space-4))')
-    expect(rule(".panel[data-side='below']")).toContain('max-height: calc(100% - var(--field-bottom) - var(--space-4))')
+    expect(rule(".panel[data-side='below']")).toContain('max-height: calc(100% - var(--field-bottom) - 2 * var(--space-4))')
     expect(rule(".panel[data-side='above']")).toContain('bottom: calc(100% - var(--field-top) + var(--space-4))')
-    expect(rule(".panel[data-side='above']")).toContain('max-height: calc(var(--field-top) - var(--space-4))')
+    expect(rule(".panel[data-side='above']")).toContain('max-height: calc(var(--field-top) - 2 * var(--space-4))')
   })
 
   it('칸의 왼쪽에 맞추되 화면 오른쪽으로 넘치지 않는다', () => {
