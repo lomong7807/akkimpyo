@@ -3,6 +3,8 @@ import { MainScreen } from '../components/Screen'
 import NotFoundPage from '../features/not-found/NotFoundPage'
 import LedgerLayout from './LedgerLayout'
 import LoginRoute from './LoginRoute'
+import MoreRoute from './MoreRoute'
+import { moreItem } from './navigation'
 import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
 import SessionProvider from './SessionProvider'
@@ -46,7 +48,10 @@ export const routes: RouteObject[] = [
                     <ScreenError />
                   </MainScreen>
                 ),
-                children: [{ path: '*', element: <NotFoundPage /> }],
+                children: [
+                  { path: '/more', element: <MoreRoute />, handle: { navigationItem: moreItem } },
+                  { path: '*', element: <NotFoundPage /> },
+                ],
               },
             ],
           },

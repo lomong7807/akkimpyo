@@ -7,9 +7,11 @@ interface SidebarProps {
   items: Navigation['sidebar']
   current?: NavigationItem
   ledgerName?: string
+  onLogout: () => void
 }
 
-export default function Sidebar({ items, current, ledgerName }: SidebarProps) {
+/** 로그아웃은 1A 동안 여기에 둔다. 프로필(M-02)이 들어오면 그 화면으로 옮긴다. */
+export default function Sidebar({ items, current, ledgerName, onLogout }: SidebarProps) {
   return (
     <div className={styles.sidebar}>
       {ledgerName && <p className={styles.ledgerName}>{ledgerName}</p>}
@@ -37,6 +39,11 @@ export default function Sidebar({ items, current, ledgerName }: SidebarProps) {
             ))}
           </ul>
         )}
+        <div className={styles.logout}>
+          <button type="button" className={styles.row} onClick={onLogout}>
+            로그아웃
+          </button>
+        </div>
       </nav>
     </div>
   )

@@ -22,6 +22,8 @@ const navigation: Navigation = {
   sidebar: { main: [home, transactions], more: [accounts, trash] },
 }
 
+const onLogout = vi.fn()
+
 const links = (
   <>
     <Link to="/transactions/7">거래 7</Link>
@@ -40,7 +42,7 @@ function routesWith(ledgerName?: string): RouteObject[] {
   )
   return [
     {
-      element: <AppLayout navigation={navigation} ledgerName={ledgerName} />,
+      element: <AppLayout navigation={navigation} ledgerName={ledgerName} onLogout={onLogout} />,
       children: [
         { path: '/home', element: main('홈'), handle: { navigationItem: home } },
         {
@@ -258,6 +260,42 @@ describe('사이드바', () => {
     expect(readCssRule('src/app/Sidebar.module.css', '.more')).toContain('border-top: 1px solid var(--color-border)')
   })
 
+  it('더보기 항목 아래에 구분선 뒤 이름만 있는 44px 로그아웃 줄을 둔다. 누르면 로그아웃한다', () => {
+    onLogout.mockClear()
+    open('/home', wide)
+    const row = within(menu()).getByRole('button', { name: '로그아웃' })
+    expect(row.querySelector('svg')).toBeNull()
+    expect(styleOf(row).minHeight).toBe('var(--size-touch)')
+    expect(styleOf(row).font).toBe('var(--text-body)')
+    expect(styleOf(row).color).toBe('var(--color-text)')
+    expect(styleOf(row).width).toBe('100%')
+    const lists = within(menu()).getAllByRole('list')
+    expect(lists.at(-1)!.compareDocumentPosition(row)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    const divider = styleOf(row.parentElement!)
+    expect(divider.marginTop).toBe('var(--space-8)')
+    expect(divider.paddingTop).toBe('var(--space-8)')
+    expect(readCssRule('src/app/Sidebar.module.css', '.menu + .logout')).toContain(
+      'border-top: 1px solid var(--color-border)',
+    )
+    fireEvent.click(row)
+    expect(onLogout).toHaveBeenCalledTimes(1)
+  })
+
+  it('위에 항목이 없으면 로그아웃 위에 선을 두지 않는다', () => {
+    renderRoutes(
+      [
+        {
+          element: <AppLayout navigation={{ tabs: [], sidebar: { main: [], more: [] } }} onLogout={onLogout} />,
+          children: [{ path: '/', element: <MainScreen>내용</MainScreen> }],
+        },
+      ],
+      '/',
+    )
+    setViewportWidth(1280)
+    const row = within(menu()).getByRole('button', { name: '로그아웃' })
+    expect(styleOf(row.parentElement!).marginTop).not.toBe('var(--space-8)')
+  })
+
   it('창 높이가 모자라면 사이드바 안에서 스크롤한다', () => {
     open('/home', wide)
     const sidebar = styleOf(menu().parentElement!)
@@ -315,7 +353,7 @@ describe('하단 탭', () => {
   it('항목이 하나도 없어도 틀은 그린다', () => {
     const empty: Navigation = { tabs: [], sidebar: { main: [], more: [] } }
     renderRoutes(
-      [{ element: <AppLayout navigation={empty} />, children: [{ path: '/', element: <MainScreen>내용</MainScreen> }] }],
+      [{ element: <AppLayout navigation={empty} onLogout={onLogout} />, children: [{ path: '/', element: <MainScreen>내용</MainScreen> }] }],
       '/',
     )
     expect(within(menu()).queryAllByRole('link')).toEqual([])
