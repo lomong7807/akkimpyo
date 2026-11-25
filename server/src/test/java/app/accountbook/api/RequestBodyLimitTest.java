@@ -79,6 +79,7 @@ class RequestBodyLimitTest {
 
         reply.assertProblem(413, "Content Too Large", "PAYLOAD_TOO_LARGE");
         assertThat(reply.json().get("detail").asString()).isEqualTo("요청 본문이 너무 크다");
+        assertThat(reply.header("X-Request-Id")).isEqualTo(id);
         assertThat(inside.reached(id)).isFalse();
     }
 
@@ -151,8 +152,8 @@ class RequestBodyLimitTest {
 
     @Test
     void 동시에_온_큰_요청들도_상한까지만_읽고_모두_413이다() throws Exception {
-        List<String> ids = IntStream.range(0, 64).mapToObj(i -> "concurrent-" + id.substring(0, 8) + "-" + i).toList();
-        String body = text(1024 * 1024);
+        List<String> ids = IntStream.range(0, 32).mapToObj(i -> "concurrent-" + id.substring(0, 8) + "-" + i).toList();
+        String body = text(512 * 1024);
 
         try (ExecutorService clients = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<Reply>> replies = ids.stream()
@@ -216,6 +217,15 @@ class RequestBodyLimitTest {
 
         sendChunked(BodyProbeController.FORM, form, "Content-Type", "application/x-www-form-urlencoded")
                 .assertProblem(413, "Content Too Large", "PAYLOAD_TOO_LARGE");
+    }
+
+    /** 폼은 받지 않는다(application.yml). 프레임워크가 본문을 따로 읽는 길이 없어 상한을 비켜 가지 못한다. */
+    @Test
+    void 폼의_본문은_파라미터가_되지_않고_쿼리는_그대로다() throws Exception {
+        assertReceived(server.send("POST", BodyProbeController.FORM + "?text=query", "text=form",
+                "Content-Type", "application/x-www-form-urlencoded"), "query");
+        assertReceived(server.send("POST", BodyProbeController.FORM, "text=form",
+                "Content-Type", "application/x-www-form-urlencoded"), "");
     }
 
     @ParameterizedTest

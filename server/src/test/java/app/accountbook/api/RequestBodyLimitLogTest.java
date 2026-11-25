@@ -2,6 +2,7 @@ package app.accountbook.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import app.accountbook.api.ServerClient.Reply;
 import app.accountbook.support.CapturedLogs;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -54,9 +55,10 @@ class RequestBodyLimitLogTest {
         String sent = length.startsWith("Content") ? body
                 : Integer.toHexString(TOO_BIG) + "\r\n" + body + "\r\n0\r\n\r\n";
         for (int i = 0; i < 20; i++) {
-            new ServerClient(port).rawReply("POST /test/body/bytes HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n"
-                            + "X-Request-Id: too-big-" + i + "\r\n" + length + "\r\n" + sent)
+            Reply reply = new ServerClient(port).rawReply("POST /test/body/bytes HTTP/1.1\r\nHost: localhost\r\n"
+                            + "Connection: close\r\nX-Request-Id: too-big-" + i + "\r\n" + length + "\r\n" + sent)
                     .assertProblem(413, "Content Too Large", "PAYLOAD_TOO_LARGE");
+            assertThat(reply.body()).doesNotContain(MARKER, "65537", "65536");
         }
 
         assertThat(atLeast(Level.INFO)).isEmpty();
@@ -71,17 +73,17 @@ class RequestBodyLimitLogTest {
 
     /** Tomcat은 남은 본문을 2MB까지만 읽어 버리고 연결을 끊는다. */
     @ParameterizedTest
-    @ValueSource(strings = {"Content-Length: 10485760\r\n", "Transfer-Encoding: chunked\r\n"})
+    @ValueSource(strings = {"Content-Length: 67108864\r\n", "Transfer-Encoding: chunked\r\n"})
     void 응답을_보지_않고_계속_보내다_끊긴_것도_INFO_이상으로_남지_않는다(String length) throws Exception {
         String piece = MARKER + "a".repeat(65_536 - MARKER.length());
         String sent = length.startsWith("Content") ? piece : "10000\r\n" + piece + "\r\n";
         try (OpenConnection connection = new OpenConnection(port)) {
             connection.send("POST /test/body/bytes HTTP/1.1\r\nHost: localhost\r\n" + length + "\r\n");
             boolean cut = false;
-            for (int i = 0; i < 160 && !cut; i++) {
+            for (int i = 0; i < 1024 && !cut; i++) {
                 cut = isCut(connection, sent);
             }
-            assertThat(cut).as("10MB를 다 받아 주지 않는다").isTrue();
+            assertThat(cut).as("64MB를 다 받아 주지 않는다").isTrue();
         }
 
         assertThat(atLeast(Level.INFO)).isEmpty();
