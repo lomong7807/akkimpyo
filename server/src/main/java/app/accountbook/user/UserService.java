@@ -10,6 +10,7 @@ import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.ledger.LedgerRole;
 import java.util.Locale;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,13 +21,16 @@ public class UserService {
     private final LedgerRepository ledgerRepository;
     private final LedgerMemberRepository memberRepository;
     private final CategoryService categoryService;
+    private final PasswordEncoder passwordEncoder;
 
     UserService(UserRepository userRepository, LedgerRepository ledgerRepository,
-                LedgerMemberRepository memberRepository, CategoryService categoryService) {
+                LedgerMemberRepository memberRepository, CategoryService categoryService,
+                PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.ledgerRepository = ledgerRepository;
         this.memberRepository = memberRepository;
         this.categoryService = categoryService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     /**
@@ -35,15 +39,18 @@ public class UserService {
      * 중간에 실패하면 아무것도 남지 않는다(F-002).
      * 이메일은 앞뒤 공백을 지우고 소문자로 바꾼 값으로 저장하고 중복을 검사한다(P-101).
      * 표시 이름은 앞뒤 공백을 지운 1~{@value User#DISPLAY_NAME_MAX_LENGTH}자다(P-101).
+     * 비밀번호는 입력 그대로 받아 규칙({@link PasswordPolicy})을 본 뒤 Argon2id 해시로만 저장한다.
+     * 해시는 비싸므로 입력 검사와 중복 확인이 끝난 뒤에 한다(ADR 001 결정 7).
      */
     @Transactional
-    public User createUser(String rawEmail, String passwordHash, String rawDisplayName) {
+    public User createUser(String rawEmail, String password, String rawDisplayName) {
         String email = normalizeEmail(rawEmail);
         String displayName = Names.normalize(rawDisplayName, User.DISPLAY_NAME_MAX_LENGTH);
+        PasswordPolicy.validate(password);
         if (userRepository.existsByEmail(email)) {
             throw new DuplicateEmailException();
         }
-        User user = userRepository.save(User.of(email, passwordHash, displayName));
+        User user = userRepository.save(User.of(email, passwordEncoder.encode(password), displayName));
         Ledger ledger = ledgerRepository.save(Ledger.personal());
         memberRepository.save(LedgerMember.of(ledger.getId(), user.getId(), LedgerRole.OWNER));
         categoryService.createDefaults(user.getId(), ledger.getId());
