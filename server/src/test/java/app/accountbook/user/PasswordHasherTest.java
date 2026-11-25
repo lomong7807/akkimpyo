@@ -16,6 +16,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import java.text.Normalizer;
 import java.text.Normalizer.Form;
+import java.time.Duration;
 import java.util.List;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -36,6 +37,7 @@ import org.springframework.security.crypto.scrypt.SCryptPasswordEncoder;
 /** 비밀번호를 해시하고 비교하는 입구(ADR 001 결정 7). 스프링 컨텍스트 없이 돈다. */
 class PasswordHasherTest {
 
+    private static final PasswordHashProperties PROPERTIES = new PasswordHashProperties(4, Duration.ofSeconds(2));
     private static final String PASSWORD = "password1";
     private static final String SALT = "YWNjb3VudC1ib29rLXRzdA";
     private static final String HASH = "vHygWA0jNvBLxOELjrkU6R1OAPyuN/Ro9FrihcYD2KI";
@@ -49,7 +51,7 @@ class PasswordHasherTest {
             "$argon2i$v=19$m=256,t=1,p=1$" + SALT + "$8SajVwRO0S1qukeO0LXK2HT8KsMIF6BEUKY98i9FEqg";
 
     private final PasswordEncoder encoder = spy(new Argon2PasswordEncoder(16, 32, 1, 256, 1));
-    private final PasswordHasher hasher = new PasswordHasher(encoder);
+    private final PasswordHasher hasher = new PasswordHasher(encoder, PROPERTIES);
 
     /** 우리 코드와 해시 라이브러리의 로그. 다른 로거(JUnit 등)는 실행 순서에 따라 섞여 들어와 보지 않는다. */
     private static final List<Logger> WATCHED_LOGGERS = Stream.of("app.accountbook", "org.springframework.security")
@@ -113,7 +115,7 @@ class PasswordHasherTest {
 
     @Test
     void matches_acceptsValueHashedWithProductionParameters() {
-        PasswordHasher production = new PasswordHasher(PasswordEncoderConfig.argon2id());
+        PasswordHasher production = new PasswordHasher(PasswordEncoderConfig.argon2id(), PROPERTIES);
         String stored = production.hash(PASSWORD);
 
         assertThat(stored).startsWith("$argon2id$v=19$m=19456,t=2,p=1$");

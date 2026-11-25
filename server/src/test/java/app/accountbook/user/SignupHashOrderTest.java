@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.support.IntegrationTest;
+import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +29,7 @@ class SignupHashOrderTest {
     private static final PasswordEncoder passwordEncoder = spy(new Argon2PasswordEncoder(16, 32, 1, 256, 1));
 
     static PasswordHasher passwordHasher() {
-        return new PasswordHasher(passwordEncoder);
+        return new PasswordHasher(passwordEncoder, new PasswordHashProperties(4, Duration.ofSeconds(2)));
     }
 
     @BeforeEach
