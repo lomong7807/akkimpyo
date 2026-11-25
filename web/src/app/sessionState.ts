@@ -1,3 +1,5 @@
+import type { SessionEnd } from '../api/session'
+
 /** 이 탭의 로그인 상태 */
 export interface Session {
   /**
@@ -6,10 +8,10 @@ export interface Session {
    * - retrying: unknown에서 사용자가 다시 확인하고 있다
    */
   status: 'checking' | 'unknown' | 'retrying' | 'signed-out' | 'signed-in'
-  /** 로그인할 때와 로그인이 풀릴 때마다 바뀐다. 앞 사용자의 화면과 캐시를 이어 쓰지 않게 하는 key다. */
+  /** 로그인할 때와 로그인이 끝날 때마다 바뀐다. 앞 사용자의 화면과 캐시를 이어 쓰지 않게 하는 key다. */
   id: number
-  /** 쓰던 로그인이 풀렸다 */
-  ended: boolean
+  /** 쓰던 로그인이 끝난 까닭. 다시 로그인하면 없다. */
+  end?: SessionEnd
   /** 로그인을 보냈다. 그 뒤에 오는 확인 결과로는 화면을 옮기지 않는다. */
   loginSubmitted: boolean
 }
@@ -25,16 +27,17 @@ export type SessionEvent =
   | 'login-submitted'
   | 'signed-in'
   // 세션 계층이 알린 것
-  | 'ended'
+  | SessionEnd
 
-export const initialSession: Session = { status: 'checking', id: 0, ended: false, loginSubmitted: false }
+export const initialSession: Session = { status: 'checking', id: 0, loginSubmitted: false }
 
 export function nextSession(session: Session, event: SessionEvent): Session {
   switch (event) {
     case 'signed-in':
-      return { status: 'signed-in', id: session.id + 1, ended: false, loginSubmitted: false }
+      return { status: 'signed-in', id: session.id + 1, loginSubmitted: false }
     case 'ended':
-      return { status: 'signed-out', id: session.id + 1, ended: true, loginSubmitted: false }
+    case 'logged-out':
+      return { status: 'signed-out', id: session.id + 1, end: event, loginSubmitted: false }
     case 'login-submitted':
       return { ...session, loginSubmitted: true }
   }

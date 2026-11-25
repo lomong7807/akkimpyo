@@ -1,6 +1,6 @@
 import { useEffect, useReducer, type ReactNode } from 'react'
 import { TIMEOUT_MS } from '../api/http'
-import { login, onSessionEnded, restoreSession, signup } from '../api/session'
+import { login, onSessionEnded, resendLogout, restoreSession, signup } from '../api/session'
 import type { SignIn } from '../features/auth/useLogin'
 import type { SignUp } from '../features/auth/useSignup'
 import { initialSession, nextSession, type SessionEvent } from './sessionState'
@@ -12,9 +12,16 @@ export default function SessionProvider({ children }: { children: ReactNode }) {
   const waiting = session.status === 'checking' || session.status === 'retrying'
 
   useEffect(() => {
-    const stopListening = onSessionEnded(() => dispatch('ended'))
+    const stopListening = onSessionEnded(dispatch)
     void checkSession().then(dispatch)
     return stopListening
+  }, [])
+
+  // 서버에 닿지 못한 로그아웃은 앱을 열 때와 다시 연결될 때만 또 보낸다
+  useEffect(() => {
+    resendLogout()
+    window.addEventListener('online', resendLogout)
+    return () => window.removeEventListener('online', resendLogout)
   }, [])
 
   // 늦어도 확인은 끊지 않는다. 그 뒤에 결과가 오면 그때 쓴다

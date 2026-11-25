@@ -10,10 +10,11 @@ import PlainLayout from './PlainLayout'
 import { createQueryClient } from './queryClient'
 import { forgetReturnAddress, rememberReturnAddress } from './returnAddress'
 import { useSession } from './SessionContext'
+import type { Session } from './sessionState'
 
 /**
  * 로그인이 필요한 주소의 문. 로그인을 확인하고 내 정보를 받기 전에는 안쪽 화면과 공통 틀을 그리지 않는다.
- * 로그인할 때와 로그인이 풀릴 때마다 안쪽을 처음부터 다시 만들어, 앞 사용자의 값이 그려지지 않게 한다.
+ * 로그인할 때와 로그인이 끝날 때마다 안쪽을 처음부터 다시 만들어, 앞 사용자의 값이 그려지지 않게 한다.
  */
 export default function SignedInArea() {
   const { session } = useSession()
@@ -46,7 +47,7 @@ function Gate() {
     if (signedIn) forgetReturnAddress()
   }, [signedIn])
 
-  if (session.status === 'signed-out') return <LoginRedirect ended={session.ended} />
+  if (session.status === 'signed-out') return <LoginRedirect end={session.end} />
 
   if (session.status === 'unknown' || session.status === 'retrying') {
     return (
@@ -87,9 +88,13 @@ function Gate() {
 
 const endedState = { sessionEnded: true }
 
-/** 가려던 주소를 기억하고 로그인 화면으로 보낸다. */
-function LoginRedirect({ ended }: { ended: boolean }) {
+/** 가려던 주소를 기억하고 로그인 화면으로 보낸다. 사용자가 로그아웃한 탭에는 앞 사용자의 주소를 남기지 않는다. */
+function LoginRedirect({ end }: Pick<Session, 'end'>) {
   const location = useLocation()
-  useEffect(() => rememberReturnAddress(location), [location])
-  return <Navigate to="/login" replace state={ended ? endedState : null} />
+  const loggedOut = end === 'logged-out'
+  useEffect(() => {
+    if (loggedOut) forgetReturnAddress()
+    else rememberReturnAddress(location)
+  }, [loggedOut, location])
+  return <Navigate to="/login" replace state={end === 'ended' ? endedState : null} />
 }
