@@ -66,7 +66,8 @@ PostgreSQL 17 + Flyway 기준이다. 마이그레이션 규칙은 [migration-sta
 - 살아 있는 거래(휴지통에 있는 거래 포함)의 이력은 추가만 한다. 형식과 삭제 때 처리는 [ADR 007](../adr/007-change-log-format.md)이 정한다.
 - 이력 행을 지우는 경로는 둘뿐이다: 거래 완전 삭제(그 거래의 기존 이력 행을 모두 지우고 완전 삭제 기록 행 하나만 남긴다), 장부 영구 삭제(그 장부의 이력을 모두 지운다).
 - 이력 행을 고치는 경로는 하나뿐이다: 탈퇴 정리(`actor_id`, 전후 값 JSON 안의 `createdBy`·`paidBy`, 그 사람 행의 `device_id`를 비운다). `actor_id`와 `device_id`는 같은 문장에서 비운다.
-- 순서는 `created_at`이 아니라 거래 `version`으로 정한다. `UNIQUE (transaction_id, version)`을 건다(#60). 완전 삭제 기록 행의 `version`은 마지막 `version` + 1이다.
+- 순서는 `created_at`이 아니라 거래 `version`으로 정한다. `UNIQUE (transaction_id, version)`을 건다(#60). 완전 삭제 기록 행의 `version`은 거래 행의 `version` + 1이다.
+- 거래의 `version`은 구멍이 있을 수 있고 이력의 마지막 `version`보다 클 수 있다(전체 복원, ADR 008 결정 10). 둘을 맞춰 보는 점검은 '이상'으로 한다.
 - 완전히 지운 거래의 id는 다시 쓸 수 없다. DB 제약으로는 걸 수 없어 만들기 경로가 완전 삭제 기록을 확인한다.
 - `actor_id`가 NULL인 행은 action이 서버 동작이면 자동 삭제, 사람 동작이면 탈퇴한 사람이다.
 - 행마다 `format_version`을 둔다(1부터). 지난 행은 다시 쓰지 않는다.

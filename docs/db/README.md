@@ -10,6 +10,7 @@ PostgreSQL 17 + Flyway. 이 폴더는 DB 기준이고 dba 봇이 관리한다. �
 | [migration-standards.md](migration-standards.md) | 마이그레이션 기준. 지금부터 지킬 것, 공개 전·후 규칙, 배포 순서, 자동 검사 |
 | [backup-restore.md](backup-restore.md) | 백업·복원 설계. 1단계 목표, 방법, 보관, 복원 훈련 |
 | [restore-runbook.md](restore-runbook.md) | 실제 복원 절차서. 장애 때 사람이 따라 하는 단계와 DB 명령 |
+| [restore-step7.sql](restore-step7.sql) | 전체 복원한 DB에 앱을 붙이기 전에 한 번 돌리는 SQL. refresh token 행을 지우고(테이블이 생기면, #26) 거래의 `version`을 올린다. 데이터를 바꾼다 |
 | [integrity-checks.sql](integrity-checks.sql) | 데이터 점검 쿼리와 백업 명세표 쿼리. 읽기만 한다 |
 
 ## 결정 기록
