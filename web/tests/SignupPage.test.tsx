@@ -34,7 +34,7 @@ const confirmRequired = '비밀번호 확인을 입력해 주세요'
 const confirmDifferent = '비밀번호가 서로 달라요'
 const nameRequired = '표시 이름을 입력해 주세요'
 const nameTooLong = '1자부터 20자까지 쓸 수 있어요'
-const nameUnusable = '쓸 수 없는 글자가 있어요. 지우고 다시 써 주세요.'
+const nameUnusable = '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'
 const duplicate = '이미 가입된 이메일이에요. 로그인해 주세요.'
 const notAllowed = '지금은 허용된 이메일만 가입할 수 있어요'
 const failed = '문제가 생겨 가입하지 못했어요. 잠시 후 다시 시도해 주세요.'
@@ -867,7 +867,7 @@ describe('"뒤로"와 로그인 링크', () => {
 
   it('"이미 계정이 있나요?" 뒤에 로그인 링크가 있다', () => {
     openSignup()
-    expect(loginLink().parentElement!.textContent).toBe('이미 계정이 있나요? 로그인')
+    expect(loginLink().closest('p')!.textContent).toBe('이미 계정이 있나요? 로그인')
     expect(loginLink().getAttribute('href')).toBe('/login')
   })
 

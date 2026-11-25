@@ -19,7 +19,7 @@ export const passwordRule = '8자 이상, 영문과 숫자를 함께 써 주세�
 export const passwordTooLong = '72자까지 쓸 수 있어요'
 export const nameRequired = '표시 이름을 입력해 주세요'
 export const nameTooLong = '1자부터 20자까지 쓸 수 있어요'
-export const nameUnusable = '쓸 수 없는 글자가 있어요. 지우고 다시 써 주세요.'
+export const nameUnusable = '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'
 
 /** 칸마다 오류 문구. 맞는 칸은 없다(화면설계서 A-03 입력값 오류). */
 export function validateSignup(values: SignupValues): FieldErrors<SignupField> {
