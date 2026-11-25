@@ -29,9 +29,13 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 @Configuration(proxyBeanMethods = false)
 class SecurityConfig {
 
+    /** 401에 적는 인증 방식. RFC 6750 3절: Bearer 뒤에 값이 하나는 있어야 한다. */
+    static final String CHALLENGE = "Bearer realm=\"account-book\"";
+
     /** 토큰 없이 열리는 주소. 메서드와 경로를 글자 그대로 적는다(별표를 쓰지 않는다). 더할 때는 security 검토를 받는다. */
     private static final RequestMatcher[] PUBLIC = {
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/actuator/health"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login"),
     };
 
     @Bean
@@ -69,8 +73,7 @@ class SecurityConfig {
     /** 이유를 나누지 않는다. 본문은 {@link ApiErrorController}가 쓴다. */
     private static void unauthenticated(HttpServletRequest request, HttpServletResponse response,
                                         AuthenticationException e) throws IOException {
-        // RFC 6750 3절: Bearer 뒤에 값이 하나는 있어야 한다.
-        response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer realm=\"account-book\"");
+        response.setHeader(HttpHeaders.WWW_AUTHENTICATE, CHALLENGE);
         response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
     }
 }
