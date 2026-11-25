@@ -212,6 +212,91 @@ class SchemaTest {
                 .hasMessageContaining("ck_users_display_name_trimmed");
     }
 
+    @Test
+    void lineAmountAtRangeEdgesIsAcceptedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        insertLine(tx, 9_999_999_999L);
+        insertLine(tx, -9_999_999_999L);
+
+        assertThat(jdbc.queryForList("select amount from transaction_line where transaction_id = ? order by amount",
+                Long.class, tx)).containsExactly(-9_999_999_999L, 9_999_999_999L);
+    }
+
+    @Test
+    void lineAmountOverMaxIsRejectedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        assertThatThrownBy(() -> insertLine(tx, 10_000_000_000L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_line_amount_range");
+    }
+
+    @Test
+    void lineAmountUnderMinIsRejectedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        assertThatThrownBy(() -> insertLine(tx, -10_000_000_000L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_line_amount_range");
+    }
+
+    @Test
+    void lineAmountZeroIsRejectedByRangeConstraint() {
+        // V1의 이름 없는 CHECK(amount <> 0)를 지워도 0은 새 제약이 막는다.
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+
+        assertThatThrownBy(() -> insertLine(tx, 0L))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_line_amount_range");
+    }
+
+    @Test
+    void occurredOnAtMinIsAcceptedByDatabase() {
+        UUID tx = insertTransaction(LocalDate.of(2000, 1, 1));
+
+        assertThat(jdbc.queryForObject("select occurred_on from transaction where id = ?", LocalDate.class, tx))
+                .isEqualTo(LocalDate.of(2000, 1, 1));
+    }
+
+    @Test
+    void occurredOnBeforeMinIsRejectedByDatabase() {
+        assertThatThrownBy(() -> insertTransaction(LocalDate.of(1999, 12, 31)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_occurred_on_min");
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 장부와 사용자를 새로 만들고 거래 id를 돌려준다. */
+    private UUID insertTransaction(LocalDate occurredOn) {
+        UUID user = UUID.randomUUID();
+        UUID ledger = UUID.randomUUID();
+        UUID tx = UUID.randomUUID();
+        jdbc.update("""
+                insert into users (id, email, password_hash, display_name, created_at)
+                values (?, ?, 'hash', '스키마', now())
+                """, user, user + "@example.com");
+        jdbc.update("insert into ledger (id, name, created_at) values (?, '장부', now())", ledger);
+        jdbc.update("""
+                insert into transaction (id, ledger_id, type, occurred_on, status, created_by, version,
+                                         created_at, updated_at)
+                values (?, ?, 'EXPENSE', ?, 'POSTED', ?, 1, now(), now())
+                """, tx, ledger, occurredOn, user);
+        return tx;
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 계좌는 거래의 장부에 새로 만든다. */
+    private void insertLine(UUID transactionId, long amount) {
+        UUID account = UUID.randomUUID();
+        jdbc.update("""
+                insert into account (id, ledger_id, name, type, opening_date, created_at)
+                select ?, ledger_id, '현금', 'CASH', DATE '2026-11-01', now() from transaction where id = ?
+                """, account, transactionId);
+        jdbc.update("""
+                insert into transaction_line (id, transaction_id, account_id, amount, created_at)
+                values (?, ?, ?, ?, now())
+                """, UUID.randomUUID(), transactionId, account, amount);
+    }
+
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. */
     private void insertUser(String email, String displayName) {
         jdbc.update("""
