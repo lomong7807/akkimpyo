@@ -20,7 +20,7 @@ export function meOf(user: string) {
   }
 }
 
-/** 로그인, 갱신, 내 정보가 되는 가짜 서버. 로그인하지 않은 기기에서 시작한다. */
+/** 로그인, 가입, 갱신, 로그아웃, 내 정보가 되는 가짜 서버. 로그인하지 않은 기기에서 시작한다. */
 export function startBackend(server: SetupServer) {
   const tokens = new Map<string, string>()
   let issued = 0
@@ -30,20 +30,30 @@ export function startBackend(server: SetupServer) {
     cookieUser: undefined as string | undefined,
     /** 다음에 로그인할 사용자 */
     loginUser: 'user-1',
+    /** 다음에 가입할 사용자 */
+    signupUser: 'new-user',
     /** 정해 두면 그 응답을 준다. 없으면 위의 상태대로 답한다. */
     refreshResponse: undefined as Respond | undefined,
     loginResponse: undefined as Respond | undefined,
+    signupResponse: undefined as Respond | undefined,
+    logoutResponse: undefined as Respond | undefined,
     meResponse: undefined as Respond | undefined,
-    requests: { refresh: [] as Request[], login: [] as Request[], me: [] as string[] },
+    requests: {
+      refresh: [] as Request[],
+      login: [] as Request[],
+      signup: [] as Request[],
+      logout: [] as Request[],
+      me: [] as string[],
+    },
     /** access token을 모두 만료시킨다. */
     expireTokens: () => tokens.clear(),
     /** 요청을 보낸 사용자. 토큰이 없거나 만료됐으면 없다. */
     userOf: (request: Request) => tokens.get(request.headers.get('Authorization')?.replace('Bearer ', '') ?? ''),
-    issue(user: string) {
+    issue(user: string, status = 200) {
       issued += 1
       const token = accessTokenNamed(`token-${issued}`, { sub: user })
       tokens.set(token, user)
-      return HttpResponse.json({ accessToken: token })
+      return HttpResponse.json({ accessToken: token }, { status })
     },
   }
 
@@ -58,6 +68,18 @@ export function startBackend(server: SetupServer) {
       if (backend.loginResponse) return backend.loginResponse()
       backend.cookieUser = backend.loginUser
       return backend.issue(backend.loginUser)
+    }),
+    http.post('/api/v1/auth/signup', ({ request }) => {
+      backend.requests.signup.push(request)
+      if (backend.signupResponse) return backend.signupResponse()
+      backend.cookieUser = backend.signupUser
+      return backend.issue(backend.signupUser, 201)
+    }),
+    http.post('/api/v1/auth/logout', ({ request }) => {
+      backend.requests.logout.push(request)
+      if (backend.logoutResponse) return backend.logoutResponse()
+      backend.cookieUser = undefined
+      return new HttpResponse(null, { status: 204 })
     }),
     http.get('/api/v1/me', ({ request }) => {
       const user = backend.userOf(request)

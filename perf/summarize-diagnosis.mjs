@@ -109,6 +109,20 @@ export function topJoin(run) {
   return run.nodes.find((n) => isJoin(n.kind));
 }
 
+/**
+ * 테이블을 읽는 노드(계획 위에서부터 첫 번째). Bitmap Heap Scan은 아래의 Bitmap Index Scan에서 인덱스를 가져온다.
+ * 없으면 null(계획에 그 테이블이 없다).
+ */
+export function tableScan(run, table) {
+  const at = run.nodes.findIndex((n) => n.table === table);
+  if (at < 0) return null;
+  const node = run.nodes[at];
+  const index = node.index ?? (/^(Parallel )?Bitmap Heap Scan$/.test(node.kind) ? run.nodes.slice(at + 1).find((n) => n.kind === 'Bitmap Index Scan')?.index : null);
+  return { ...node, index: index ?? null };
+}
+
+export const scanText = (scan) => (scan ? `${scan.kind}${scan.index ? ` \`${scan.index}\`` : ''}` : '없음');
+
 export function summary(path) {
   const all = parseFile(path);
   const runs = counted(all);
@@ -144,29 +158,33 @@ export const num = (value) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ','
 export const range = (s) => (s.min === s.max ? num(s.min) : `${num(s.min)}~${num(s.max)}`);
 export const estActual = (node) => (node ? `${num(node.est)} / ${num(node.rows)}${node.loops > 1 ? ` ×${num(node.loops)}` : ''}` : '없음');
 
-function* walk(dir) {
+/** 시간 제한에 걸린 것(.timeout)은 숫자를 내지 않고 이름만 보인다. */
+function* walk(dir, wanted) {
   for (const name of readdirSync(dir).sort()) {
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) yield* walk(path);
-    else if (name.endsWith('.txt') && readFileSync(path, 'utf8').includes('Execution Time:')) yield path;
+    if (statSync(path).isDirectory()) yield* walk(path, wanted);
+    else if (wanted(name, path)) yield path;
   }
 }
+const isResult = (name, path) => name.endsWith('.txt') && readFileSync(path, 'utf8').includes('Execution Time:');
+const isTimeout = (name) => name.endsWith('.timeout');
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const json = args[0] === '--json';
   const root = json ? args[1] : args[0];
   if (!root) throw new Error('결과 폴더를 준다');
-  const rows = [...walk(root)].map((path) => ({ name: relative(root, path).replace(/\.txt$/, ''), ...summary(path) }));
+  const rows = [...walk(root, isResult)].map((path) => ({ name: relative(root, path).replace(/\.txt$/, ''), ...summary(path) }));
   if (json) {
     console.log(JSON.stringify(rows.map(({ mid, ...rest }) => rest), null, 1));
   } else {
-    console.log('| 파일 | n | 최소 / 중앙 / 최대 (ms) | I/O 읽기 중앙 (ms) | 버퍼 hit / read | 블록 장치 읽기 중앙 (MB) | 조인 | 인덱스 | Seq Scan | 작업자 | 조인 예상 / 실제 | Heap Fetches |');
-    console.log('|---|---|---|---|---|---|---|---|---|---|---|---|');
+    console.log('| 파일 | n | 최소 / 중앙 / 최대 (ms) | I/O 읽기 중앙 (ms) | 버퍼 hit / read | 블록 장치 읽기 중앙 (MB) | 조인 | 인덱스 | Seq Scan | 작업자 | 조인 예상 / 실제 | 라인을 읽는 노드 예상 / 실제 | 거래를 읽는 노드 예상 / 실제 | account | Heap Fetches |');
+    console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const r of rows) {
       console.log(
-        `| ${r.name} | ${r.n} | ${ms(r.time.min)} / ${ms(r.time.median)} / ${ms(r.time.max)} | ${ms(r.io.median)} | ${range(r.hit)} / ${range(r.read)} | ${r.disk ? (r.disk.median / 1048576).toFixed(1) : ''} | ${r.joins.join('<br>')} | ${r.indexes.join('<br>')} | ${r.seq.join('<br>') || '없음'} | ${r.parallel} | ${estActual(r.join)} | ${r.heapFetches.map((h) => `${h.index}: ${num(h.count)}`).join('<br>')} |`,
+        `| ${r.name} | ${r.n} | ${ms(r.time.min)} / ${ms(r.time.median)} / ${ms(r.time.max)} | ${ms(r.io.median)} | ${range(r.hit)} / ${range(r.read)} | ${r.disk ? (r.disk.median / 1048576).toFixed(1) : ''} | ${r.joins.join('<br>')} | ${r.indexes.join('<br>')} | ${r.seq.join('<br>') || '없음'} | ${r.parallel} | ${estActual(r.join)} | ${estActual(tableScan(r.mid, 'transaction_line'))} | ${estActual(tableScan(r.mid, 'transaction'))} | ${scanText(tableScan(r.mid, 'account'))} | ${r.heapFetches.map((h) => `${h.index}: ${num(h.count)}`).join('<br>')} |`,
       );
     }
+    for (const path of walk(root, isTimeout)) console.log(`| ${relative(root, path)} | 시간 제한에 걸림 |`);
   }
 }

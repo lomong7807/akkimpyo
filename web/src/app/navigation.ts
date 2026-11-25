@@ -28,8 +28,11 @@ export interface ScreenHandle {
   navigationItem?: NavigationItem
 }
 
+export const moreItem: MainNavigationItem = { label: '더보기', to: '/more', icon: 'DotsThree' }
+
 /** 하단 탭과 사이드바의 항목. 화면을 만드는 이슈가 자기 항목을 더한다. */
 export const navigation: Navigation = {
-  tabs: [],
+  tabs: [moreItem],
+  fallbackTab: moreItem,
   sidebar: { main: [], more: [] },
 }

@@ -2,6 +2,7 @@ import { onlineManager } from '@tanstack/react-query'
 import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
+import type { ReactNode } from 'react'
 import { useNavigate, type RouteObject } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { login } from '../src/api/session'
@@ -37,27 +38,29 @@ const retryButton = () => screen.getByRole('button', { name: '다시 시도' })
 const signIn = vi.fn(login)
 
 /** 로그인한 뒤 어디로 갈지는 앱이 정한다(LoginReturn.test.tsx). 여기서는 홈으로 보낸다. */
-function Login({ sessionEnded = false }) {
+function Login({ sessionEnded = false, initialEmail = '' }) {
   const navigate = useNavigate()
   return (
     <LoginPage
       signIn={signIn}
       onSignedIn={() => navigate('/home', { replace: true })}
       sessionEnded={sessionEnded}
+      initialEmail={initialEmail}
     />
   )
 }
 
-function routesWith(sessionEnded: boolean): RouteObject[] {
+function routesWith(login: ReactNode): RouteObject[] {
   return [
-    { element: <PlainLayout />, children: [{ path: '/login', element: <Login sessionEnded={sessionEnded} /> }] },
+    { element: <PlainLayout />, children: [{ path: '/login', element: login }] },
     { path: '/home', element: <h1>홈</h1> },
     { path: '/signup', element: <h1>가입</h1> },
   ]
 }
 
-function openLogin({ queryClient = createQueryClient(), sessionEnded = false } = {}) {
-  const router = renderRoutes(routesWith(sessionEnded), '/login', queryClient)
+function openLogin({ queryClient = createQueryClient(), sessionEnded = false, initialEmail = '' } = {}) {
+  const login = <Login sessionEnded={sessionEnded} initialEmail={initialEmail} />
+  const router = renderRoutes(routesWith(login), '/login', queryClient)
   return { user: userEvent.setup(), router }
 }
 
@@ -116,6 +119,15 @@ describe('로그인(A-02)의 요소', () => {
   it('화면을 열면 이메일 칸에 초점을 둔다', () => {
     openLogin()
     expect(document.activeElement).toBe(email())
+  })
+
+  it('가입 화면에서 넘어온 이메일이 있으면 채우고 비밀번호 칸에 초점을 둔다', async () => {
+    const bodies = respondToLogin(success)
+    const { user } = openLogin({ initialEmail: ' Name@example.com' })
+    expect(email().value).toBe(' Name@example.com')
+    expect(document.activeElement).toBe(password())
+    await user.keyboard('pass1234{Enter}')
+    await vi.waitFor(() => expect(bodies).toEqual([{ email: ' Name@example.com', password: 'pass1234' }]))
   })
 
   it('1단계에 없는 요소를 두지 않는다', () => {
@@ -552,12 +564,14 @@ describe('성공', () => {
   })
 
   it('로그인 뒤 저장소와 쿠키, 주소, 캐시에 토큰과 비밀번호가 남지 않는다', async () => {
+    localStorage.clear()
     respondToLogin(success)
     const queryClient = createQueryClient()
     const { user, router } = openLogin({ queryClient })
     await fillAndSubmit(user)
     await vi.waitFor(() => expect(router.state.location.pathname).toBe('/home'))
-    expect(localStorage.length).toBe(0)
+    // 로그인했음을 다른 화면이 아는, 뜻이 없는 임의 값 하나만 남는다
+    expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f]{32}$/) })
     expect(sessionStorage.length).toBe(0)
     expect(document.cookie).toBe('')
     expect(JSON.stringify(router.state.location)).not.toMatch(/token-1|pass1234/)
@@ -616,7 +630,7 @@ describe('가입 링크', () => {
   it('"계정이 없나요?" 뒤에 있고 /signup으로 간다', () => {
     openLogin()
     const link = screen.getByRole('link', { name: '가입' })
-    expect(link.parentElement!.textContent).toBe('계정이 없나요? 가입')
+    expect(link.closest('p')!.textContent).toBe('계정이 없나요? 가입')
     expect(link.getAttribute('href')).toBe('/signup')
   })
 

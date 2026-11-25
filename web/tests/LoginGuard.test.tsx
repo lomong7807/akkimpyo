@@ -16,6 +16,7 @@ let backend: Backend
 beforeEach(() => {
   backend = startBackend(server)
   sessionStorage.clear()
+  localStorage.clear()
 })
 
 afterEach(() => {
@@ -185,18 +186,6 @@ describe('로그인 없이 볼 수 있는 주소', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it.each([390, 1280])('/signup은 화면이 아직 없으므로 폭 %dpx에서 공통 틀 없이 찾을 수 없음이다', async (width) => {
-    const { router } = await open('/signup')
-    setViewportWidth(width)
-    await notFound()
-    await waitFor(() => expect(backend.requests.refresh).toHaveLength(1))
-    await settle()
-    expect(router.state.location.pathname).toBe('/signup')
-    expect(screen.queryByRole('navigation')).toBeNull()
-    expect(screen.queryByRole('banner')).toBeNull()
-    expect(screen.getAllByRole('main')).toHaveLength(1)
-  })
-
   describe.each(['/login', '/signup', '/LOGIN', '/login/'])('로그인한 채 %s을 열면', (path) => {
     beforeEach(signedIn)
 
@@ -314,7 +303,8 @@ describe('로그인하면', () => {
     await logIn(user)
     await screen.findByText(secret)
     expect(sessionStorage.length).toBe(0)
-    expect(localStorage.length).toBe(0)
+    // 로그인했음을 다른 화면이 아는, 뜻이 없는 임의 값 하나만 남는다
+    expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f]{32}$/) })
     expect(document.cookie).toBe('')
   })
 })

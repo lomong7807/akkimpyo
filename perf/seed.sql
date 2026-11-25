@@ -18,8 +18,8 @@
 --
 -- 안전장치: DB 이름이 perf_로 시작하고 비어 있을 때만 넣는다. 지우는 문장은 없다.
 --
--- V1 스키마 기준이다. 이슈 #58(transaction_line에 ledger_id 추가)이 머지되면
--- 아래 transaction_line INSERT에 ledger_id를 넣어야 한다.
+-- V12 스키마 기준이다(V10부터 transaction_line에 ledger_id가 있다).
+-- V9까지의 스키마에는 git show c415677:perf/seed.sql을 쓴다. 만드는 값은 ledger_id를 빼면 같다.
 
 \set ON_ERROR_STOP on
 
@@ -229,7 +229,7 @@ SELECT s.id,
   FROM seed_tx s;
 
 -- 지출과 수입은 라인 1개, 이체는 카테고리 없는 라인 2개(합 0)
-INSERT INTO transaction_line (id, transaction_id, account_id, category_id, amount, created_at)
+INSERT INTO transaction_line (id, transaction_id, account_id, category_id, amount, created_at, ledger_id)
 SELECT md5('perf-line-' || s.i || '-' || n.line_no)::uuid,
        s.id,
        md5('perf-account-' || s.ledger_no || '-'
@@ -237,7 +237,8 @@ SELECT md5('perf-line-' || s.i || '-' || n.line_no)::uuid,
        CASE WHEN s.type <> 'TRANSFER'
             THEN md5('perf-category-' || s.ledger_no || '-' || s.type || '-' || s.category_no)::uuid END,
        CASE n.line_no WHEN 1 THEN s.amount ELSE -s.amount END,
-       s.created_at
+       s.created_at,
+       md5('perf-ledger-' || s.ledger_no)::uuid
   FROM seed_tx s
  CROSS JOIN (VALUES (1), (2)) AS n(line_no)
  WHERE n.line_no = 1 OR s.type = 'TRANSFER';

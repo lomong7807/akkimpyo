@@ -14,6 +14,11 @@ body {
   overflow-wrap: break-word;
 }
 
+/* 브라우저가 보관했다 되살린 화면. 로그인이 그대로인지 확인할 때까지 앞 사용자의 값을 보이지 않는다(app/sessionWatch.ts) */
+:root[data-covered] body {
+  visibility: hidden;
+}
+
 /* 브라우저 기본 제목 크기는 글자 토큰에 없으므로 지운다. 화면 제목만 정해 둔다 */
 h1,
 h2,

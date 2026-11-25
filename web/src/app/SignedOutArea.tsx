@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { Navigate, useLocation } from 'react-router'
-import PlainLayout from './PlainLayout'
+import { Navigate, Outlet, useLocation } from 'react-router'
 import { readReturnAddress } from './returnAddress'
 import { useSession } from './SessionContext'
 
@@ -25,5 +24,5 @@ function Visit() {
     return <Navigate to={opened.status === 'checking' ? '/home' : readReturnAddress()} replace />
   }
 
-  return <PlainLayout />
+  return <Outlet />
 }

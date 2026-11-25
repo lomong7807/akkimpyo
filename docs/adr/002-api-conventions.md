@@ -2,6 +2,7 @@
 
 - 상태: 제안됨 (2026-11-24)
 - 보완: 2026-11-25, 5절에서 `TOO_MANY_REQUESTS`에 비밀번호 해시의 상한과 `Retry-After`의 값을 더하고 예외 목록을 main과 맞춘다. "지금 코드와 다른 점"의 `IdConflictException` 줄을 맞춘다(PR #167)
+- 보완: 2026-11-26, `MALFORMED_REQUEST`의 뜻과 표에 없는 상태의 처리, 본문 전체 오류의 `field`, 장부 경로의 구성원 확인 자리, 쓰기 API가 `Accept`를 거절하는 때, JSON 값의 형을 바꿔 받지 않는 것을 더한다. 4절의 `ProblemDetail` 문장과 오류 응답을 만드는 곳, 예외 목록, `InvalidRequestException` 줄을 지금에 맞춘다(PR #182)
 - 결정한 사람: architect (검토: owner, 의견: frontend)
 
 ## 배경
@@ -27,6 +28,7 @@
 
 - 필드 이름은 camelCase, 열거 값은 대문자와 밑줄이다(`POSTED`).
 - 금액은 JSON 정수이고 단위는 원이다. 소수와 문자열은 받지 않는다. 상한은 #5가 정한 값이며 JavaScript의 안전한 정수 범위 안이다.
+- JSON을 읽을 때 문자열·소수를 정수로, 숫자를 문자열이나 열거 값으로 바꿔 받지 않는다. 서버 전체에 적용한다. 바꿔 받으면 금액 `1.9`가 1로, `"5"`가 5로 저장된다(architect 결정 2026-11-26, #102. 구현은 #12).
 - 날짜는 `YYYY-MM-DD`, 사용자가 고른 시각은 `HH:mm`만 주고받는다(초 이하는 없다). 둘 다 시간대가 없다.
 - 서버가 기록한 시각(만든 시각, 고친 시각)은 ISO 8601, UTC, `Z` 표기이고 밀리초 3자리 고정이다(예: `2026-11-24T03:15:00.123Z`). 화면이 Asia/Seoul로 바꿔 보여 준다.
 - id는 UUID 문자열, 소문자다.
@@ -46,20 +48,20 @@
 
 ### 4. 오류 응답: RFC 9457 problem+json을 채택한다
 
-- Content-Type은 `application/problem+json`이다. Spring의 `ProblemDetail`로 만들 수 있어 새 의존성이 없다(확인: spring-web 7.1.0에 있다. Spring Boot 4.2.0에서 확장 필드가 최상위에 나가는 것을 PR #100의 임시 테스트로 확인했다).
+- Content-Type은 `application/problem+json`이다. 어느 클래스로 만드는지는 이 ADR이 정하지 않는다. 구현은 Spring의 `ProblemDetail`이 아니라 record를 쓴다(PR #177. Tomcat 밸브와 공통 처리기가 같은 타입을 쓰고 `instance`가 끼어들 자리가 없다. 새 의존성은 없다).
 - 필드는 `type`(항상 `about:blank`), `title`(HTTP 상태 문구), `status`, `detail`(개발자가 읽는 한 줄)이고, 확장 필드는 `code`, `requestId`, 해당할 때만 `fieldErrors`, `current`다. `instance`는 넣지 않는다(경로에 토큰이 들 수 있다).
 - `type`은 직접 `about:blank`로 넣는다(Spring Boot 4.2는 넣지 않으면 본문에서 뺀다, PR #100).
-- 오류 응답은 전부 서버의 공통 처리기가 만들고, 프레임워크의 기본 오류 응답(`spring.mvc.problemdetails` 포함)은 그대로 내보내지 않는다(`code`와 `requestId`가 없고 `detail`에 요청 값이 들어간다, PR #100).
+- 오류 응답은 전부 서버 코드가 한 모양으로 만들고(컨트롤러의 공통 처리기, `/error`, Tomcat 밸브), 프레임워크의 기본 오류 응답(`spring.mvc.problemdetails` 포함)은 그대로 내보내지 않는다(`code`와 `requestId`가 없고 `detail`에 요청 값이 들어간다, PR #100).
 - 필드 순서는 정하지 않으며, 본문 문자열을 통째로 비교하는 테스트는 쓰지 않는다.
 - 오류 종류는 `code`로 구분한다. 화면은 화면설계서의 문구를 `code`로 골라 쓰고, 모르는 `code`는 `status`로 처리한다. `code`는 추가만 하고 뜻을 바꾸거나 없애지 않는다.
-- `fieldErrors`는 입력란별 검증 오류의 배열이다. 항목은 `field`(요청 본문의 경로, 예: `lines[0].amount`), `code`, `message`다. `message`와 `detail`은 개발자가 읽는 글이고 화면 문구로 쓰지 않는다. 거래 요청의 줄 순서와 금액 부호 규칙은 OpenAPI 문서에 적는다(#14).
+- `fieldErrors`는 입력란별 검증 오류의 배열이다. 항목은 `field`(요청 본문의 경로, 예: `lines[0].amount`), `code`, `message`다. 어느 입력란도 아닌 오류(본문 전체)의 `field`는 빈 글자다. `message`와 `detail`은 개발자가 읽는 글이고 화면 문구로 쓰지 않는다. 거래 요청의 줄 순서와 금액 부호 규칙은 OpenAPI 문서에 적는다(#14).
 - `detail`과 `message`에는 요청으로 받은 값을 그대로 넣지 않는다. `MALFORMED_REQUEST`의 `detail`은 고정 문구다.
 - `fieldErrors[].code`의 시작 목록은 `REQUIRED`, `INVALID_FORMAT`, `OUT_OF_RANGE`, `TOO_LONG`, `DUPLICATE`, `NOT_FOUND`(가리킨 계좌나 카테고리가 없음), `NOT_ALLOWED`(형식은 맞지만 규칙상 받을 수 없는 값이나 조합: 같은 계좌 사이 이체, 카테고리 구분 불일치 등), `INCORRECT`(현재 비밀번호가 맞지 않음)다. 추가만 한다.
 - 화면 문구가 갈리는 경우에는 `fieldErrors[].code`를 따로 둔다. 예:
   - 가입의 허용 목록 밖 이메일: `field`=`email`, `code`=`NOT_ALLOWED`
   - 같은 계좌 사이 이체: 받는 계좌 입력란에 `NOT_ALLOWED`
   - 비밀번호 바꾸기에서 현재 비밀번호가 틀림: 401이 아니라 400 `VALIDATION_FAILED`, `field`=`currentPassword`, `code`=`INCORRECT`(화면의 "401이면 토큰 갱신"과 섞이지 않게)
-- 본문을 JSON으로 읽을 수 없을 때만 400 `MALFORMED_REQUEST`다. JSON은 읽히지만 값의 형이 틀린 경우는 400 `VALIDATION_FAILED`이고 그 입력란에 `INVALID_FORMAT`을 준다.
+- 요청을 읽을 수 없거나 받을 수 없는 모양일 때만 400 `MALFORMED_REQUEST`다(5절). JSON은 읽히지만 값의 형이 틀린 경우는 400 `VALIDATION_FAILED`이고 그 입력란에 `INVALID_FORMAT`을 준다.
 - 쿼리 값(`version`, `limit`, `cursor`, 달)의 오류도 400 `VALIDATION_FAILED`이고 `field`에는 쿼리 이름을 그대로 적는다. 경로의 id가 UUID 형식이 아니면 404 `NOT_FOUND`다(없는 자원과 같게).
 - `current`는 수정 충돌(409 `STALE_VERSION`) 때 서버의 최신 자원 전체다. 화면이 최신 내용과 내 입력을 나란히 보여 주는 데 쓴다(F-909). 409 `ID_CONFLICT` 가운데 같은 장부에서 내가 만든 거래일 때도 있다(ADR 006).
 - `requestId`는 프록시가 만든 `X-Request-Id` 값이다. 프록시는 밖에서 온 `X-Request-Id`를 덮어쓴다. 영문, 숫자, 하이픈, 밑줄로 된 64자 이하의 문자열이고 클라이언트는 해석하지 않는다. 서버는 형식을 검사해, 헤더가 없거나(로컬 개발, 테스트) 이 형식이 아니면 새로 만든다. 응답 헤더에도 같은 값을 넣는다(ADR 005).
@@ -107,8 +109,8 @@
 
 | 상태 | code | 언제 |
 |---|---|---|
-| 400 | `VALIDATION_FAILED` | 입력란에 붙일 수 있는 오류 전부. 겹치는 이름과 이메일도 여기에 넣는다(`fieldErrors[].code`는 `DUPLICATE`). `fieldErrors`가 항상 1개 이상 있다 |
-| 400 | `MALFORMED_REQUEST` | 본문을 JSON으로 읽을 수 없다 |
+| 400 | `VALIDATION_FAILED` | 입력란에 붙일 수 있는 오류 전부와 본문 전체의 검증 오류(`field`가 빈 글자). 본문 전체의 오류를 화면에서 보일 자리는 화면설계서와 frontend가 정한다. 겹치는 이름과 이메일도 여기에 넣는다(`fieldErrors[].code`는 `DUPLICATE`). `fieldErrors`가 항상 1개 이상 있다 |
+| 400 | `MALFORMED_REQUEST` | 요청을 읽을 수 없거나 받을 수 없는 모양(JSON이 아닌 본문, JSON 뒤에 글자가 더 있는 본문, 깨진 인코딩, 받을 수 없는 Accept, 너무 큰 헤더, Tomcat이 거절한 요청) |
 | 401 | `UNAUTHENTICATED` | 토큰이 없거나 만료됐거나 틀렸다. 갱신 요청이 실패했을 때도 같으며, 화면은 갱신 요청의 401을 로그인 풀림으로 처리한다 |
 | 401 | `INVALID_CREDENTIALS` | 로그인 실패. 이메일과 비밀번호 중 무엇이 틀렸는지 구분하지 않는다(P-105) |
 | 403 | `FORBIDDEN` | 구성원이지만 권한이 모자란다(보기 전용의 쓰기, 소유자 전용 동작) |
@@ -126,7 +128,13 @@
 | 429 | `TOO_MANY_REQUESTS` | 동시에 도는 비밀번호 해시의 상한(1단계부터, ADR 001 결정 7)과 출시 단계의 요청 횟수 제한. `Retry-After` 헤더를 넣는다. 초 단위 정수이고 해시 상한은 1이다 |
 | 500 | `INTERNAL_ERROR` | 서버 오류. `detail`은 고정 문구다 |
 
+서버는 표에 없는 오류 상태를 밖으로 내보내지 않는다. 501·505와 그 밖의 4xx는 400 `MALFORMED_REQUEST`로, 408·503과 그 밖의 5xx는 500 `INTERNAL_ERROR`로 바꾼다. 408을 4xx로 두지 않는 것은 `code`가 있는 4xx를 오프라인 대기열이 다시 보내지 않기 때문이다(ADR 006 결정 6. architect 결정 2026-11-26, #102).
+
+만들거나 바꾸는 API는 응답 형식을 선언해 동작하기 전에 `Accept`를 거절한다. 저장된 뒤에 400이 나가면 오프라인 대기열이 "보낼 수 없음"으로 본다(architect 결정 2026-11-26).
+
 검사 순서는 인증(401) → 구성원 확인(404) → 권한(403) → 입력 검증(400) → 상태와 version(409)이다. 409의 `current`는 구성원 확인을 지난 요청에만 나간다.
+
+장부 경로(`/api/v1/ledgers/{ledgerId}/**`)의 구성원 확인은 api의 인터셉터 하나가 인자를 읽기 전에 한다. 서비스의 확인은 그대로 둔다. 보기 전용의 403도 같은 자리다(#11). `@Valid`가 컨트롤러 코드보다 먼저 돌아, 이슈마다 지키게 하면 구성원이 아닌 사람이 404 대신 400을 받는 곳이 생기기 때문이다(architect 결정 2026-11-26, #102, #13).
 
 만들기는 입력 검증을 형식 검증과 참조 검증으로 나누고 그 사이에 같은 id 조회를 둔다(ADR 006).
 
@@ -136,7 +144,7 @@
 
 이슈 #24의 목록(400, 401, 403, 404, 409)에 405, 413, 415, 429, 500을 더했다. 로그인 잠금을 429로 둔 것은 architect 판단이며 security가 429에 동의했다(PR #97 검토, 2026-11-24). 잠금 응답이 계정의 존재를 드러내지 않게 하는 방법은 ADR 001에서 security와 정한다.
 
-지금 `common` 패키지에 있는 예외 9개와 `transaction` 패키지의 `IdConflictException`은 다음 code가 된다(클래스 이름 확인, main `38a65a3`).
+지금 `common` 패키지에 있는 예외 9개, `transaction` 패키지의 `IdConflictException`, `user` 패키지의 `PasswordHashBusyException`은 다음 code가 된다(클래스 이름 확인, main `e3376c3`).
 
 - `DuplicateAccountNameException`, `DuplicateCategoryNameException`, `DuplicateEmailException` → 400 `VALIDATION_FAILED`(`fieldErrors[].code`=`DUPLICATE`)
 - `IdConflictException`(`transaction`) → 409 `ID_CONFLICT`
@@ -145,6 +153,7 @@
 - `NotFoundException` → 404 `NOT_FOUND`
 - `NotLedgerMemberException` → 404 `NOT_FOUND`
 - `NotLedgerOwnerException` → 403 `FORBIDDEN`
+- `PasswordHashBusyException`(`user`) → 429 `TOO_MANY_REQUESTS`
 - `StaleVersionException` → 409 `STALE_VERSION`
 
 남의 장부에 관한 정보를 응답으로 구분할 수 없어야 한다. 다른 장부에 이미 있는 id로 만들려 할 때도 장부의 존재가 드러나지 않아야 하며, 이때의 응답은 ADR 006 결정 3이 정한다.
@@ -182,7 +191,7 @@
 
 - `LedgerAccess.requireOwner`는 구성원이 아니어도 `NotLedgerOwnerException`을 던진다. 404가 먼저여야 한다.
 - `IdConflictException`이 내용이 다를 때와 다른 장부의 id일 때를 함께 다루던 것은 끝났다(#21, PR #151). 이제 앞의 경우만 저장된 거래(`current`)를 담는다(확인, main `38a65a3`).
-- `InvalidRequestException`은 입력란 정보가 없고 상태 오류에도 쓰인다. `VALIDATION_FAILED`와 `INVALID_STATE`로 나눠야 한다.
+- `InvalidRequestException`은 입력란 정보가 없고 상태 오류에도 쓰인다(확인, main `e3376c3`). 입력란을 담게 되고(PR #178, 2026-11-26 머지 전), 409 `INVALID_STATE`가 되는 상태 오류는 #36~#38을 열기 전에 다른 예외로 나눈다(#14).
 - 거래 서비스의 조회, 수정, 취소, 삭제, 복원은 거래 id만 받는다. 거래 API는 경로의 `ledgerId`와 거래의 장부가 같은지 확인해야 한다. 다르면 404다.
 - 거래에 마지막으로 고친 사람을 담는 값이 없다. V1의 `transaction`과 `TransactionView`에는 고친 시각만 있고, 바꾼 사람은 `change_log.actor_id`에만 남는다.
 - `TransactionService.update`는 version을 입력 검증보다 먼저 본다. 검사 순서(검증 400 → version 409)와 맞춰야 한다.
