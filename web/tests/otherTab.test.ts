@@ -247,6 +247,27 @@ describe('되살아난 화면', () => {
     expect(await resumeAfter(tab, () => {})).toHaveBeenCalledExactlyOnceWith('replaced')
   })
 
+  it.each<[string, () => void]>([
+    [
+      '막힘',
+      () =>
+        vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+          throw new DOMException('막힘', 'SecurityError')
+        }),
+    ],
+    [
+      '가득 참',
+      () =>
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+          throw new DOMException('가득 참', 'QuotaExceededError')
+        }),
+    ],
+  ])('저장소를 처음부터 쓰지 못했으면(%s) 같은지 알 수 없으므로 새로 연다', async (_, block) => {
+    block()
+    const tab = await openSignedInTab()
+    expect(await resumeAfter(tab, () => {})).toHaveBeenCalledExactlyOnceWith('replaced')
+  })
+
   it('로그인 값을 본 뒤 되찾았으면 그대로 연다', async () => {
     await openSignedInTab()
     const tab = await openRestoredTab()
@@ -271,6 +292,19 @@ describe('되살아난 화면', () => {
     const ended = watchEnd(tab)
     tab.suspendSession()
     await logInElsewhere()
+    tab.noticeLogout()
+    tab.resumeSession()
+    expect(ended).toHaveBeenCalledExactlyOnceWith('replaced')
+  })
+
+  it('되살아났다고 알기 전에 새로 연 로그인을 다시 버리지 않는다', async () => {
+    const tab = await openSignedInTab()
+    const ended = watchEnd(tab)
+    tab.suspendSession()
+    localStorage.clear()
+    tab.noticeLogout()
+    expect(await tab.restoreSession()).toBe(true)
+    await tab.request('/me')
     tab.noticeLogout()
     tab.resumeSession()
     expect(ended).toHaveBeenCalledExactlyOnceWith('replaced')

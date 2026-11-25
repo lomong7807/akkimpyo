@@ -69,26 +69,28 @@ async function openOtherPage() {
 const hidePage = (persisted = true) =>
   act(() => void window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted })))
 
-/** 보관된 화면이 되살아난다. 브라우저는 다시 보인다는 신호를 먼저 보낸다. */
-function showPage() {
-  act(() => void document.dispatchEvent(new Event('visibilitychange', { bubbles: true })))
+/**
+ * 보관된 화면이 되살아난다. 브라우저는 다시 보인다는 신호를 먼저 보내고, 두 신호 사이에 응답이 올 틈은 없다.
+ * 앞의 신호가 오지 않는 경우도 보려면 `visibility`를 끈다.
+ */
+async function showPage({ visibility = true } = {}) {
+  if (visibility) {
+    act(() => void document.dispatchEvent(new Event('visibilitychange', { bubbles: true })))
+    for (let turn = 0; turn < 10; turn += 1) await Promise.resolve()
+  }
   act(() => void window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })))
 }
 
-/** 화면이 가려져 있지 않은 동안 그려져 있던 글을 모은다. */
-function watchVisibleText() {
-  const seen: string[] = []
-  const collect = () => {
-    if (!document.documentElement.hasAttribute('data-covered')) seen.push(document.body.textContent ?? '')
-  }
-  const observer = new MutationObserver(collect)
-  observer.observe(document.documentElement, { attributes: true, childList: true, subtree: true, characterData: true })
-  return {
-    saw(text: string) {
-      if (observer.takeRecords().length > 0) collect()
-      return seen.some((shown) => shown.includes(text))
-    },
-  }
+/** 가림을 푸는 순간마다 화면에 남아 있던 글. 그 뒤에 바로 지워도 남는다. */
+function watchUncovering() {
+  const root = document.documentElement
+  const texts: string[] = []
+  const remove = root.removeAttribute.bind(root)
+  vi.spyOn(root, 'removeAttribute').mockImplementation((name) => {
+    if (root.hasAttribute(name)) texts.push(document.body.textContent ?? '')
+    remove(name)
+  })
+  return texts
 }
 
 describe('화면이 브라우저에 보관되면', () => {
@@ -110,7 +112,7 @@ describe('화면이 브라우저에 보관되면', () => {
     act(() => void document.dispatchEvent(new Event('visibilitychange', { bubbles: true })))
     await settle()
     expect(isCovered()).toBe(true)
-    showPage()
+    await showPage()
     expect(isCovered()).toBe(false)
   })
 
@@ -125,7 +127,7 @@ describe('되살아난 화면의 표시가 그대로면', () => {
   it('갱신하지 않고 쓰던 화면을 그대로 연다', async () => {
     const opened = await openAsFirstUser()
     hidePage()
-    showPage()
+    await showPage()
     expect(isCovered()).toBe(false)
     await settle()
     expect(addressOf(opened)).toBe('/list')
@@ -141,7 +143,7 @@ describe('되살아난 화면의 표시가 그대로면', () => {
     list.requests.length = 0
     backend.requests.me.length = 0
     hidePage()
-    showPage()
+    await showPage()
     await settle()
     expect(list.requests).toEqual(['user-1'])
     expect(backend.requests.me).toEqual(['user-1'])
@@ -158,12 +160,12 @@ describe('되살아난 화면의 표시가 그대로면', () => {
   it('다시 되살아나면 또 한 번 보낸다', async () => {
     await openAsFirstUser()
     hidePage()
-    showPage()
+    await showPage()
     await settle()
     list.requests.length = 0
     hidePage()
     expect(isCovered()).toBe(true)
-    showPage()
+    await showPage()
     await settle()
     expect(isCovered()).toBe(false)
     expect(list.requests).toEqual(['user-1'])
@@ -174,7 +176,7 @@ describe('되살아난 화면의 표시가 그대로면', () => {
     list.response = () => HttpResponse.error()
     backend.meResponse = () => HttpResponse.error()
     hidePage()
-    showPage()
+    await showPage()
     await settle()
     expect(addressOf(opened)).toBe('/list')
     expect(screen.getByText(itemOf('user-1'))).toBeTruthy()
@@ -187,7 +189,7 @@ describe('되살아난 화면의 표시가 그대로면', () => {
     backend.expireTokens()
     backend.cookieUser = undefined
     hidePage()
-    showPage()
+    await showPage()
     expect(await screen.findByText(ended)).toBeTruthy()
     expect(addressOf(opened)).toBe('/login')
   })
@@ -196,7 +198,7 @@ describe('되살아난 화면의 표시가 그대로면', () => {
     const opened = await openAsFirstUser()
     backend.expireTokens()
     hidePage()
-    showPage()
+    await showPage()
     await waitFor(() => expect(backend.requests.refresh).toHaveLength(2))
     await settle()
     expect(addressOf(opened)).toBe('/list')
@@ -204,7 +206,13 @@ describe('되살아난 화면의 표시가 그대로면', () => {
   })
 })
 
-describe('보관된 동안 로그아웃했으면', () => {
+/** 되살아난 화면에 오는 신호. 브라우저에 따라 화면이 다시 보인다는 신호가 먼저 온다. */
+const arrivals = [
+  ['다시 보인다는 신호가 먼저 옴', { visibility: true }],
+  ['열렸다는 신호만 옴', { visibility: false }],
+] as const
+
+describe.each(arrivals)('보관된 동안 로그아웃했으면(%s)', (_, arrival) => {
   it.each<[string, () => Promise<void>]>([
     [
       '서버도 끝냄',
@@ -224,16 +232,16 @@ describe('보관된 동안 로그아웃했으면', () => {
     const opened = await openAsFirstUser('/list?month=2026-11')
     hidePage()
     await logOut()
-    const visible = watchVisibleText()
+    const uncovered = watchUncovering()
     list.requests.length = 0
     backend.requests.me.length = 0
-    showPage()
+    await showPage(arrival)
     expect(isCovered()).toBe(false)
     await loginHeading()
     await settle()
     expect(addressOf(opened)).toBe('/login')
-    expect(visible.saw('user-1')).toBe(false)
-    expect(visible.saw('쓰던 값')).toBe(false)
+    expect(uncovered).toHaveLength(1)
+    expect(uncovered.join()).not.toMatch(/user-1|쓰던 값/)
     expect(list.requests).toEqual([])
     expect(backend.requests.me).toEqual([])
     expect(screen.queryByText(ended)).toBeNull()
@@ -244,28 +252,29 @@ describe('보관된 동안 로그아웃했으면', () => {
     hidePage()
     ;(await openOtherPage()).recordLogout()
     backend.requests.refresh.length = 0
-    showPage()
+    await showPage(arrival)
     await loginHeading()
     await settle()
     expect(backend.requests.refresh).toHaveLength(0)
   })
 })
 
-describe('보관된 동안 다른 계정으로 로그인했으면', () => {
+describe.each(arrivals)('보관된 동안 다른 계정으로 로그인했으면(%s)', (_, arrival) => {
   it('앞 사용자의 값을 한 번도 보이지 않고 새 사용자의 화면을 처음부터 연다', async () => {
     const opened = await openAsFirstUser()
     hidePage()
     ;(await openOtherPage()).recordLogin()
     backend.cookieUser = 'user-2'
     backend.requests.refresh.length = 0
-    const visible = watchVisibleText()
+    const uncovered = watchUncovering()
     const dom = recordDom()
-    showPage()
+    await showPage(arrival)
     expect(await screen.findByText(itemOf('user-2'))).toBeTruthy()
     expect(isCovered()).toBe(false)
     expect(addressOf(opened)).toBe('/list')
     expect(screen.getByLabelText<HTMLInputElement>('메모').value).toBe('')
-    expect(visible.saw('user-1')).toBe(false)
+    expect(uncovered).toHaveLength(1)
+    expect(uncovered.join()).not.toMatch(/user-1|쓰던 값/)
     expect(dom.sawText('user-1')).toBe(false)
     expect(dom.sawText(ledgerNameOf('user-2'))).toBe(true)
     expect(backend.requests.refresh).toHaveLength(1)
@@ -281,11 +290,12 @@ describe('보관된 동안 다른 계정으로 로그인했으면', () => {
     other.settleLogout(other.recordLogout())
     other.recordLogin()
     backend.cookieUser = 'user-2'
-    const visible = watchVisibleText()
-    showPage()
+    const uncovered = watchUncovering()
+    await showPage(arrival)
     expect(await screen.findByText(itemOf('user-2'))).toBeTruthy()
     expect(addressOf(opened)).toBe('/list')
-    expect(visible.saw('user-1')).toBe(false)
+    expect(uncovered).toHaveLength(1)
+    expect(uncovered.join()).not.toMatch(/user-1|쓰던 값/)
   })
 
   it('확인하는 동안에는 빈 화면이다', async () => {
@@ -294,7 +304,7 @@ describe('보관된 동안 다른 계정으로 로그인했으면', () => {
     ;(await openOtherPage()).recordLogin()
     const refresh = delayed()
     backend.refreshResponse = refresh.respond
-    showPage()
+    await showPage(arrival)
     await refresh.arrived
     expect(isCovered()).toBe(false)
     expect(document.body.textContent).toBe('')
@@ -306,7 +316,7 @@ describe('보관된 동안 다른 계정으로 로그인했으면', () => {
     ;(await openOtherPage()).recordLogin()
     backend.cookieUser = 'user-2'
     backend.refreshResponse = () => problem(500, 'INTERNAL_ERROR')
-    showPage()
+    await showPage(arrival)
     expect(await screen.findByText(failed)).toBeTruthy()
     backend.refreshResponse = undefined
     await user.click(screen.getByRole('button', { name: '다시 시도' }))
@@ -329,7 +339,7 @@ describe('표시를 확인할 수 없으면', () => {
     hidePage()
     change()
     backend.requests.refresh.length = 0
-    showPage()
+    await showPage()
     await screen.findByText(itemOf('user-1'))
     expect(addressOf(opened)).toBe('/list')
     expect(screen.getByLabelText<HTMLInputElement>('메모').value).toBe('')
@@ -346,7 +356,7 @@ describe('로그인하지 않은 화면이 되살아나면', () => {
     hidePage()
     expect(isCovered()).toBe(true)
     ;(await openOtherPage()).recordLogin()
-    showPage()
+    await showPage()
     expect(isCovered()).toBe(false)
     expect(screen.getByLabelText<HTMLInputElement>('이메일').value).toBe('name')
   })
@@ -356,7 +366,7 @@ describe('로그인하지 않은 화면이 되살아나면', () => {
     await open('/list')
     await screen.findByText(failed)
     hidePage()
-    showPage()
+    await showPage()
     expect(isCovered()).toBe(false)
     expect(screen.getByText(failed)).toBeTruthy()
   })

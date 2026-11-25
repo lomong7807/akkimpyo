@@ -377,6 +377,18 @@ describe('로그인하는 동안 새로 로그아웃하면', () => {
     expect(backend.requests.refresh).toHaveLength(0)
   })
 
+  it('로그인이 잠금을 기다리는 동안 한 로그아웃도 이긴다', async () => {
+    const release = Promise.withResolvers<void>()
+    void locks.request(SESSION_LOCK, {}, () => release.promise)
+    const tab = await openTab()
+    const error = errorOf(tab.login(credentials))
+    const value = await logOutElsewhere()
+    release.resolve()
+    expect(await error).toMatchObject({ kind: 'timeout' })
+    expect(tab.pendingLogout()).toBe(value)
+    await expectSignedOut(tab)
+  })
+
   it('새 로그아웃의 요청은 로그인이 끝난 뒤에 나가, 방금 생긴 쿠키를 지운다', async () => {
     const order: string[] = []
     const login = delayed()

@@ -176,7 +176,7 @@ function renew(stale: string | undefined): Promise<string | undefined> {
   return renewal.token
 }
 
-/** 시작한 뒤에 로그아웃이 있었으면 서버의 답과 상관없이 이 탭의 로그인도 끝난 것이다. */
+/** 시작한 뒤에 로그아웃이 있었으면 보내지 않거나 답을 쓰지 않는다. 이 탭의 로그인은 부른 쪽이 끝낸다(endIfOver). */
 async function renewUnlessLoggedOut(stale: string | undefined): Promise<string | undefined> {
   const seen = stale === undefined ? { logout: logoutValue(), login: loginValue() } : seenMarks
   const loggedOut = () => loggedOutSince(seen)
@@ -189,7 +189,6 @@ async function renewUnlessLoggedOut(stale: string | undefined): Promise<string |
       if (!loggedOut()) throw error
     }
   }
-  if (accessToken === stale && loggedOut()) endSession('logged-out')
   return accessToken
 }
 
@@ -236,7 +235,10 @@ function acceptRenewed(renewed: string, seen: SeenMarks) {
 function endIfOver(): boolean {
   if (accessToken === undefined) return false
   if (suspended ? isSameLogin(seenMarks) : !loggedOutSince(seenMarks)) return false
-  endSession(suspended ? 'replaced' : 'logged-out')
+  const end = suspended ? 'replaced' : 'logged-out'
+  // 확인했으므로 뒤에 새로 여는 로그인은 보관된 화면의 것이 아니다
+  suspended = false
+  endSession(end)
   return true
 }
 
