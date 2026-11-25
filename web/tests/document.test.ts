@@ -26,6 +26,14 @@ describe('index.html', () => {
     expect(page.querySelectorAll('meta[name="theme-color"]')).toHaveLength(2)
   })
 
+  it('홈 화면에서 열면 독립 창이고, 내용은 상태 표시줄 아래에서 시작한다', () => {
+    const content = (name: string) => page.querySelector(`meta[name="${name}"]`)?.getAttribute('content')
+    expect(content('mobile-web-app-capable')).toBe('yes')
+    expect(content('apple-mobile-web-app-capable')).toBe('yes')
+    // black-translucent는 내용을 상태 표시줄 밑까지 올리고 시계를 늘 흰 글자로 그려 밝은 상단 바에서 보이지 않는다.
+    expect(content('apple-mobile-web-app-status-bar-style')).toBe('default')
+  })
+
   it('글꼴 파일을 미리 받아, 브라우저를 다시 열어도 받아 둔 글꼴로 처음부터 그린다', () => {
     // font-display: optional은 첫 그리기까지 글꼴이 준비되지 않으면 대체 글꼴로 남는다.
     const preload = page.querySelector('link[rel="preload"][as="font"]')
