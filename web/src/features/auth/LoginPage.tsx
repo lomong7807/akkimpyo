@@ -16,14 +16,16 @@ interface LoginPageProps {
   onSignedIn: () => void
   /** 쓰던 로그인이 풀려 이 화면에 왔다 */
   sessionEnded: boolean
+  /** 가입 화면에서 넘어온 이메일. 없으면 빈 글자다. */
+  initialEmail: string
 }
 
 /** A-02 로그인 */
-export default function LoginPage({ signIn, onSignedIn, sessionEnded }: LoginPageProps) {
+export default function LoginPage({ signIn, onSignedIn, sessionEnded, initialEmail }: LoginPageProps) {
   const login = useLogin(signIn)
   const { values, fieldProps, checkAll } = useFormFields({
     fields: loginFields,
-    initialValues: { email: '', password: '' },
+    initialValues: { email: initialEmail, password: '' },
     validate: validateLogin,
   })
   const loginButton = useRef<HTMLButtonElement>(null)
@@ -68,13 +70,14 @@ export default function LoginPage({ signIn, onSignedIn, sessionEnded }: LoginPag
           autoCorrect="off"
           spellCheck={false}
           placeholder="name@example.com"
-          autoFocus
+          autoFocus={initialEmail === ''}
         />
         <PasswordField
           {...fieldProps('password')}
           readOnly={busy}
           label="비밀번호"
           autoComplete="current-password"
+          autoFocus={initialEmail !== ''}
         />
         {login.isError && <LoginFailure error={login.error} onRetry={retry} />}
         <Button ref={loginButton} kind="primary" type="submit" busy={busy}>
