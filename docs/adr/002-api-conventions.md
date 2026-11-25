@@ -2,7 +2,7 @@
 
 - 상태: 제안됨 (2026-11-24)
 - 보완: 2026-11-25, 5절에서 `TOO_MANY_REQUESTS`에 비밀번호 해시의 상한과 `Retry-After`의 값을 더하고 예외 목록을 main과 맞춘다. "지금 코드와 다른 점"의 `IdConflictException` 줄을 맞춘다(PR #167)
-- 보완: 2026-11-26, `MALFORMED_REQUEST`의 뜻과 표에 없는 상태의 처리, 본문 전체 오류의 `field`, 장부 경로의 구성원 확인 자리, JSON 값의 형을 바꿔 받지 않는 것을 더한다. 4절의 `ProblemDetail` 문장, 예외 목록, `InvalidRequestException` 줄을 지금에 맞춘다(이 PR)
+- 보완: 2026-11-26, `MALFORMED_REQUEST`의 뜻과 표에 없는 상태의 처리, 본문 전체 오류의 `field`, 장부 경로의 구성원 확인 자리, JSON 값의 형을 바꿔 받지 않는 것을 더한다. 4절의 `ProblemDetail` 문장, 예외 목록, `InvalidRequestException` 줄을 지금에 맞춘다(PR #182)
 - 결정한 사람: architect (검토: owner, 의견: frontend)
 
 ## 배경
