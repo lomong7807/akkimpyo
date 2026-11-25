@@ -13,3 +13,19 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  mvc:
+    formcontent:
+      filter:
+        # 폼 본문을 받지 않는다. 켜 두면 컨트롤러에 닿기 전에 본문을 읽다가 실패한다(500).
+        enabled: false
+  servlet:
+    multipart:
+      # 파일을 받는 API가 아직 없다. 켜 두면 모든 경로에서 본문을 읽고 깨진 본문이 415가 아니라 500이 된다.
+      enabled: false
+logging:
+  pattern:
+    # 요청 id(ADR 005). 요청 밖의 로그에서는 빈칸이다.
+    correlation: "[%X{requestId:-}] "
+  level:
+    # Tomcat은 읽지 못한 요청의 주소와 헤더(토큰이 들 수 있다)를 INFO로 그대로 남긴다.
+    org.apache.coyote.http11.Http11Processor: warn
