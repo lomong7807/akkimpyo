@@ -1,32 +1,42 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 
 /** 칸마다 오류 문구. 맞는 칸은 없다. */
-export type FieldErrors<Field extends string> = Partial<Record<Field, string>>
+export type FieldErrors<Field extends PropertyKey> = Partial<Record<Field, string>>
 
-interface FormFieldsOptions<Field extends string> {
-  /** 화면 위쪽부터 놓인 순서 */
-  fields: Field[]
-  initialValues: Record<Field, string>
-  validate: (values: Record<Field, string>) => FieldErrors<Field>
+interface FormFieldsOptions<Values> {
+  /** 오류를 보이는 칸. 화면 위쪽부터 놓인 순서 */
+  fields: (keyof Values)[]
+  initialValues: Values
+  validate: (values: Values) => FieldErrors<keyof Values>
 }
 
+/** 글자를 쓰는 칸 */
+type TextField<Values> = { [Field in keyof Values]: Values[Field] extends string ? Field : never }[keyof Values]
+
 /** 입력칸의 값과 오류 문구. 검사하는 때와 초점의 규칙은 화면설계서 00-common 4.4다. */
-export function useFormFields<Field extends string>({ fields, initialValues, validate }: FormFieldsOptions<Field>) {
-  const [values, setValues] = useState(initialValues)
+export function useFormFields<Values extends object>({ fields, initialValues, validate }: FormFieldsOptions<Values>) {
+  type Field = keyof Values
+  const [initial] = useState(initialValues)
+  const [values, setValues] = useState(initial)
   /** 칸을 벗어나거나 제출해 오류 문구를 보이고 있는 칸 */
   const [shown, setShown] = useState<Set<Field>>(new Set())
   /** 서버가 거부한 칸의 문구 */
   const [rejected, setRejected] = useState<FieldErrors<Field>>({})
-  const inputs = useRef<Partial<Record<Field, HTMLInputElement | null>>>({})
+  const elements = useRef<Partial<Record<Field, HTMLElement | null>>>({})
   const errors = validate(values)
 
-  function change(field: Field, value: string) {
-    const changed = { ...values, [field]: value }
+  /** 함께 바뀌는 칸은 한 번에 바꾼다. */
+  function change(changes: Partial<Values>) {
+    const changed = { ...values, ...changes }
     const remaining = validate(changed)
     setValues(changed)
     // 맞게 고치면 바로 지운다. 다시 틀려도 칸을 벗어나기 전에는 띄우지 않는다.
     setShown((current) => new Set([...current].filter((name) => remaining[name])))
-    setRejected((current) => ({ ...current, [field]: undefined }))
+    setRejected((current) => {
+      const kept = { ...current }
+      for (const field of Object.keys(changes) as Field[]) delete kept[field]
+      return kept
+    })
   }
 
   /** 칸을 벗어났을 때의 검사 */
@@ -49,25 +59,37 @@ export function useFormFields<Field extends string>({ fields, initialValues, val
 
   function focusFirst(messages: FieldErrors<Field>): boolean {
     const first = fields.find((field) => messages[field])
-    if (!first) return false
-    const input = inputs.current[first]
-    input?.focus()
+    if (first === undefined) return false
+    const element = elements.current[first]
+    element?.focus()
     // 이미 초점이 있는 칸이면 focus()는 스크롤하지 않는다
-    input?.scrollIntoView({ block: 'nearest' })
+    element?.scrollIntoView({ block: 'nearest' })
     return true
   }
 
-  function fieldProps(field: Field) {
+  /** 칸에 넘기는 것. 바뀐 값은 화면이 `change`로 알린다. */
+  function control<Name extends Field>(field: Name) {
     return {
-      ref: (input: HTMLInputElement | null) => {
-        inputs.current[field] = input
+      ref: (element: HTMLElement | null) => {
+        elements.current[field] = element
       },
       value: values[field],
       error: (shown.has(field) && errors[field]) || rejected[field],
-      onChange: (event: ChangeEvent<HTMLInputElement>) => change(field, event.target.value),
+    }
+  }
+
+  /** 글자를 쓰는 칸에 넘기는 것 */
+  function fieldProps<Name extends TextField<Values>>(field: Name) {
+    return {
+      ...control(field),
+      onChange: (event: ChangeEvent<HTMLInputElement>) =>
+        change({ [field]: event.target.value } as unknown as Partial<Values>),
       onBlur: () => check(field),
     }
   }
 
-  return { values, fieldProps, check, checkAll, reject }
+  /** 연 뒤에 바꾼 값이 있다. 되돌린 값은 바꾸지 않은 것이다. */
+  const changed = (Object.keys(initial) as Field[]).some((field) => values[field] !== initial[field])
+
+  return { values, changed, change, control, fieldProps, check, checkAll, reject }
 }
