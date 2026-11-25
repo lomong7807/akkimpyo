@@ -14,10 +14,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** 기기 값의 형식(이슈 #21, ADR 007 결정 10). DB와 스프링 없이 돈다. */
+/** 기기 값의 형식과 목록(이슈 #21, ADR 007 결정 10). DB와 스프링 없이 돈다. */
 class DeviceIdsTest {
 
     static final String ALLOWED = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-";
+
+    static final String MESSAGE = "기기 값은 영문, 숫자와 . _ : - 만 쓴 1~64자여야 합니다.";
+
+    /** 화면이 보낼 값의 목록(#21의 frontend 댓글). */
+    static final List<String> SENT_BY_WEB = Stream.of("iphone", "ipad", "mac", "windows", "android", "linux", "unknown")
+            .flatMap(device -> Stream.of("safari", "chrome", "edge", "firefox", "samsung", "unknown")
+                    .map(browser -> device + "." + browser))
+            .toList();
 
     @Test
     void 한_글자로는_정해진_글자만_받는다() {
@@ -54,15 +62,38 @@ class DeviceIdsTest {
         assertThatCode(() -> DeviceIds.requireValidFormat(null)).doesNotThrowAnyException();
     }
 
-    /** 화면이 보낼 값의 목록(#21의 frontend 댓글). 서버는 이 목록이 아니라 형식만 본다. */
     @Test
-    void 화면이_보내는_값_42가지를_모두_받는다() {
-        List<String> sentByWeb = Stream.of("iphone", "ipad", "mac", "windows", "android", "linux", "unknown")
-                .flatMap(device -> Stream.of("safari", "chrome", "edge", "firefox", "samsung", "unknown")
-                        .map(browser -> device + "." + browser))
-                .toList();
+    void 목록은_화면이_보내는_값_42가지다() {
+        assertThat(SENT_BY_WEB).hasSize(42);
+        assertThat(DeviceIds.KNOWN).containsExactlyInAnyOrderElementsOf(SENT_BY_WEB);
+    }
 
-        assertThat(sentByWeb).hasSize(42).allMatch(DeviceIdsTest::accepts);
+    @Test
+    void 목록에_있는_값은_그대로_저장할_값이다() {
+        assertThat(SENT_BY_WEB).allSatisfy(deviceId -> assertThat(DeviceIds.storable(deviceId)).isEqualTo(deviceId));
+    }
+
+    /** 글자 그대로 비교한다. 대소문자를 맞추거나 앞부분만 보지 않는다. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "iphone.opera", "pixel.chrome", "iphone", "safari", "unknown",
+            "IPHONE.safari", "iphone.Safari", "iphone-safari", "iphone.safari.18", "safari.iphone", ".", "iphone.",
+            "3f0c7a52-9d1e-4b7b-8c55-0e6f1a2b3c4d", "a", ":-"})
+    void 목록에_없는_값은_unknown으로_저장한다(String deviceId) {
+        assertThat(DeviceIds.storable(deviceId)).isEqualTo("unknown");
+    }
+
+    @Test
+    void 기기_값이_없으면_없는_채로_저장한다() {
+        assertThat(DeviceIds.storable(null)).isNull();
+    }
+
+    /** 형식이 틀린 값은 목록에도 없지만 unknown이 아니라 오류다. 형식 검증을 빠뜨린 경로가 생겨도 조용히 저장되지 않는다. */
+    @Test
+    void 형식이_틀린_값은_unknown으로_바꾸지_않는다() {
+        assertThatThrownBy(() -> DeviceIds.storable("iphone.safari\n"))
+                .isExactlyInstanceOf(InvalidRequestException.class)
+                .hasMessage(MESSAGE);
     }
 
     private static boolean accepts(String deviceId) {
@@ -78,6 +109,6 @@ class DeviceIdsTest {
     private static void assertRejected(String deviceId) {
         assertThatThrownBy(() -> DeviceIds.requireValidFormat(deviceId))
                 .isExactlyInstanceOf(InvalidRequestException.class)
-                .hasMessage("기기 값은 영문, 숫자와 . _ : - 만 쓴 1~64자여야 합니다.");
+                .hasMessage(MESSAGE);
     }
 }
