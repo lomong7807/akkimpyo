@@ -2,6 +2,7 @@ package app.accountbook;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 import app.accountbook.account.Account;
@@ -200,22 +201,25 @@ class CrossLedgerAccessTest {
 
     /**
      * 다른 장부에 이미 있는 거래 id로 내 장부에 만들기는 "없는 id"와 같을 수 없다(없는 id면 만들어진다).
-     * ADR 006 결정 3이 이 경우의 답을 따로 정했다: 내 거래의 id에 다른 내용을 보냈을 때와 같은 고정 문구의
-     * {@link IdConflictException}이고, B의 거래는 돌려주지 않는다.
+     * ADR 006 결정 3: B의 거래가 어떤 상태든 답이 같은 고정 문구의 {@link IdConflictException}이고 아무것도 담지 않는다.
+     * 거래를 담는 것은 내가 만든 거래의 id에 다른 내용을 보낸 충돌뿐이다.
      */
     @Test
-    void B의_거래_id로_A의_장부에_만들면_내용이_다른_내_id와_같은_충돌로_답한다() {
-        Throwable ownIdOtherContent = catchThrowable(() -> transactionService.create(a, ledgerA,
-                entry(aExpense.id(), aBank, aFood, 9_999), DEVICE));
+    void B의_거래_id로_A의_장부에_만들면_답이_모두_같고_B의_거래를_담지_않는다() {
+        List<IdConflictException> answers = Stream.of(bExpense, bTransfer, bDeleted, bCanceled)
+                .map(tx -> catchThrowableOfType(IdConflictException.class, () -> transactionService.create(a, ledgerA,
+                        entry(tx.id(), aBank, aFood, 9_999), DEVICE)))
+                .toList();
 
-        Stream.of(bExpense, bTransfer, bDeleted, bCanceled).forEach(tx -> {
-            Throwable denied = catchThrowable(() -> transactionService.create(a, ledgerA,
-                    entry(tx.id(), aBank, aFood, 9_999), DEVICE));
-
+        assertThat(answers).allSatisfy(denied -> {
             assertThat(denied).isExactlyInstanceOf(IdConflictException.class);
+            assertThat(denied.current()).isEmpty();
             assertNoSecret(denied);
-            assertSameAnswer(denied, ownIdOtherContent);
+            assertSameAnswer(denied, answers.getFirst());
         });
+        IdConflictException ownIdOtherContent = catchThrowableOfType(IdConflictException.class,
+                () -> transactionService.create(a, ledgerA, entry(aExpense.id(), aBank, aFood, 9_999), DEVICE));
+        assertThat(ownIdOtherContent.current()).contains(aExpense);
         assertThat(snapshot()).isEqualTo(baseline);
     }
 
@@ -293,6 +297,9 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> categoryService.createDefaults(actor, ledger)),
                 denied("생성: B의 장부에 지출", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionService.create(actor, ledger,
+                                entry(UUID.randomUUID(), bBank, bFood, 1_000), DEVICE)),
+                denied("생성: B의 장부에 지출(재전송 구분)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionService.createOrReplay(actor, ledger,
                                 entry(UUID.randomUUID(), bBank, bFood, 1_000), DEVICE)),
                 denied("생성: B의 장부에 이체", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionService.create(actor, ledger,

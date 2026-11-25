@@ -70,20 +70,27 @@ public class TransactionService {
         this.clock = clock;
     }
 
+    /** {@link #createOrReplay}와 같고, 새로 만들었는지 알 필요가 없을 때 쓴다. */
+    @Transactional
+    public TransactionView create(UUID actorId, UUID ledgerId, TransactionCommand cmd, String deviceId) {
+        return createOrReplay(actorId, ledgerId, cmd, deviceId).transaction();
+    }
+
     /**
-     * 거래를 만든다. id는 클라이언트 값이다. 같은 id가 이미 있으면(삭제된 것 포함) 같은 장부·같은 내용일 때
-     * 저장된 거래를 그대로 돌려주고(이력 추가 없음), 아니면 {@link IdConflictException}.
+     * 거래를 만든다. id는 클라이언트 값이다. 같은 id의 거래가 이미 있으면(휴지통에 있는 것 포함) 새로 만들지 않고
+     * 재전송으로 답하거나 {@link IdConflictException}으로 거부한다(판정은 {@link #replay}).
+     * 재전송은 아무것도 바꾸지 않고 이력도 남기지 않는다.
      *
      * <p>검사 순서(ADR 006 결정 4): 구성원 → 형식 검증 → 같은 id 조회 → 참조 검증 → 저장.
      * 이미 저장된 거래의 재전송이 그사이 없어진 계좌나 카테고리 때문에 거부되지 않게 한다.
      */
     @Transactional
-    public TransactionView create(UUID actorId, UUID ledgerId, TransactionCommand cmd, String deviceId) {
+    public CreateResult createOrReplay(UUID actorId, UUID ledgerId, TransactionCommand cmd, String deviceId) {
         ledgerAccess.requireMember(actorId, ledgerId);
         Content content = normalize(ledgerId, cmd, actorId);
         Optional<Transaction> existing = transactionRepository.findById(content.id());
         if (existing.isPresent()) {
-            return replay(existing.get(), ledgerId, content);
+            return new CreateResult(replay(existing.get(), actorId, ledgerId, content), false);
         }
         requireReferences(ledgerId, cmd);
         Transaction tx = Transaction.of(content.id(), ledgerId, content.type(), content.occurredOn(),
@@ -92,7 +99,7 @@ public class TransactionService {
         transactionRepository.save(tx);
         TransactionView after = TransactionView.of(tx);
         appendLog(tx, ChangeAction.CREATE, actorId, deviceId, null, after);
-        return after;
+        return new CreateResult(after, true);
     }
 
     /** 내용과 라인을 통째로 바꾼다. 거래 종류는 바꿀 수 없다. paidBy가 null이면 기존 값을 유지한다. */
@@ -174,11 +181,20 @@ public class TransactionService {
                 .toList();
     }
 
-    private static TransactionView replay(Transaction existing, UUID ledgerId, Content requested) {
-        if (!existing.getLedgerId().equals(ledgerId) || !Content.of(existing).sameAs(requested)) {
-            throw new IdConflictException();
+    /**
+     * 같은 id의 거래가 있을 때의 판정(ADR 006 결정 3). 재전송이면 그 거래의 지금 내용을 돌려준다.
+     * 만든 뒤 고쳐졌으면(version 2 이상) 내용을 비교하지 않는다. 다른 기기가 고친 뒤의 재전송이 충돌로 보이지 않게 한다.
+     */
+    private static TransactionView replay(Transaction existing, UUID actorId, UUID ledgerId, Content requested) {
+        if (!existing.getLedgerId().equals(ledgerId) || !actorId.equals(existing.getCreatedBy())) {
+            throw IdConflictException.unusableId();
         }
-        return TransactionView.of(existing);
+        TransactionView current = TransactionView.of(existing);
+        boolean neverChanged = existing.getVersion() == Transaction.INITIAL_VERSION;
+        if (neverChanged && !Content.of(existing).sameAs(requested)) {
+            throw IdConflictException.differentContent(current);
+        }
+        return current;
     }
 
     /**
