@@ -1,0 +1,54 @@
+/* 고른 칸의 바탕은 상자가 모서리를 따라 자른다 */
+.box {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  min-height: var(--size-field);
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-10);
+  background-color: var(--color-surface);
+}
+
+/* 칸의 바깥은 상자가 자르므로 칸의 키보드 초점을 상자에 그린다 */
+.box:has(:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.option {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.option + .option {
+  border-inline-start: 1px solid var(--color-border);
+}
+
+.option[aria-checked='true'] {
+  background-color: var(--color-accent-weak);
+  color: var(--color-accent);
+  font: var(--text-body-strong);
+}
+
+.option[aria-checked='false']:active {
+  background-color: var(--color-press);
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .option[aria-checked='false']:hover {
+    background-color: var(--color-press);
+  }
+}
+
+/* 초점은 상자의 테두리로 보인다. 색이 강제되는 고대비 모드에서는 투명한 테두리가 보이게 된다 */
+.option:focus-visible {
+  outline-color: transparent;
+}

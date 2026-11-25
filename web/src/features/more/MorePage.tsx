@@ -11,6 +11,9 @@ export default function MorePage({ onLogout }: { onLogout: () => void }) {
           <ListLink icon="Wallet" to="/accounts">
             계좌
           </ListLink>
+          <ListLink icon="Tag" to="/categories">
+            카테고리
+          </ListLink>
         </ListGroup>
         <ListGroup>
           <ListButton icon="SignOut" onClick={onLogout}>
