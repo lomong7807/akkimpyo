@@ -4,6 +4,8 @@ import app.accountbook.account.Account;
 import app.accountbook.account.AccountCommand;
 import app.accountbook.account.AccountService;
 import app.accountbook.account.AccountType;
+import app.accountbook.category.Category;
+import app.accountbook.category.CategoryRepository;
 import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRole;
@@ -30,19 +32,32 @@ public class Fixtures {
     private final TransactionService transactionService;
     private final LedgerMemberRepository memberRepository;
     private final TransactionRepository transactionRepository;
+    private final CategoryRepository categoryRepository;
 
     Fixtures(UserService userService, AccountService accountService, TransactionService transactionService,
-             LedgerMemberRepository memberRepository, TransactionRepository transactionRepository) {
+             LedgerMemberRepository memberRepository, TransactionRepository transactionRepository,
+             CategoryRepository categoryRepository) {
         this.userService = userService;
         this.accountService = accountService;
         this.transactionService = transactionService;
         this.memberRepository = memberRepository;
         this.transactionRepository = transactionRepository;
+        this.categoryRepository = categoryRepository;
     }
 
-    /** 가입과 같다: 사용자, 개인 장부, OWNER 구성원, 기본 카테고리가 함께 생긴다. */
+    /**
+     * 가입한 사용자: 사용자, 개인 장부, OWNER 구성원이 생긴다. 카테고리는 지출과 수입의 미분류만 남긴다.
+     * 가입이 만드는 기본 카테고리 15개(P-223)는 지운다. 테스트가 "식비", "급여" 같은 이름으로 직접 만드는
+     * 카테고리와 겹치지 않게 하기 위해서다. 기본 카테고리 자체는 UserServiceTest가 본다.
+     */
     public User user(String email) {
-        return userService.createUser(email, "{noop}password", email.substring(0, email.indexOf('@')));
+        User user = userService.createUser(email, "{noop}password", email.substring(0, email.indexOf('@')));
+        categoryRepository.deleteAll(categoryRepository.findByLedgerIdOrderByCreatedAtAsc(personalLedgerId(user))
+                .stream()
+                .filter(category -> !category.isSystem())
+                .toList());
+        categoryRepository.flush();
+        return user;
     }
 
     /** 가입 시 생긴 개인 장부(그 사용자가 OWNER인 장부)의 id. */
