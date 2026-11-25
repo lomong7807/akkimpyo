@@ -134,6 +134,24 @@ describe('쓸 수 없는 글자(P-214)', () => {
     expect(hasUnusableCharacter(text)).toBe(true)
   })
 
+  it.each([
+    ['짝 없는 앞쪽', '\uD83D'],
+    ['짝 없는 뒤쪽', '\uDE00'],
+    ['순서가 바뀐 짝', '\uDE00\uD83D'],
+    // 이모지를 걷어 내고 검사해도 양옆이 붙어 짝이 되지 않는다
+    ['이모지를 사이에 둔 짝', '\uD83D\u2764\uFE0F\uDE00'],
+    ['앞쪽이 겹친 짝', '\uD83D\uD83D\uDE00'],
+  ])('서로게이트: %s', (_, text) => {
+    expect(hasUnusableCharacter(text)).toBe(true)
+    expect(hasUnusableCharacter(`앞${text}뒤`)).toBe(true)
+  })
+
+  it('짝이 맞는 서로게이트는 글자 하나다', () => {
+    expect(hasUnusableCharacter('\uD83D\uDE00')).toBe(false)
+    // 이모지가 아닌 글자(한자 확장)
+    expect(hasUnusableCharacter('\uD840\uDC00')).toBe(false)
+  })
+
   it('여러 번 물어도 답이 같다', () => {
     expect([1, 2, 3].map(() => hasUnusableCharacter('가\u200B나'))).toEqual([true, true, true])
     expect([1, 2, 3].map(() => hasUnusableCharacter('\u2764\uFE0F'))).toEqual([false, false, false])
@@ -148,6 +166,12 @@ describe('앞뒤의 공백류 글자(유니코드 White_Space)', () => {
   )('%s는 앞뒤에서 모두 지우고 가운데는 남긴다', (_, space) => {
     expect(trimWhiteSpace(`${space}${space}가${space}나${space}`)).toBe(`가${space}나`)
     expect(trimWhiteSpace(space)).toBe('')
+  })
+
+  it('가운데에 긴 공백이 있어도 앞뒤만 지운다', () => {
+    const middle = `가${' '.repeat(10_000)}나`
+    expect(trimWhiteSpace(`  ${middle}  `)).toBe(middle)
+    expect(trimWhiteSpace(' '.repeat(10_000))).toBe('')
   })
 
   it.each(table(['\u200B', '\uFEFF', '\u180E', '\u3164', '\u2800']))('공백류가 아닌 %s는 남긴다', (_, text) => {
