@@ -14,6 +14,7 @@ export interface SendOptions extends RequestOptions {
   accessToken?: string
   /** 중단되면 응답을 기다리지 않고 지연 오류로 끝낸다 */
   signal?: AbortSignal
+  timeoutMs?: number
 }
 
 /** /api/v1 아래로 요청을 한 번 보낸다. 앱에서 fetch를 부르는 곳은 여기뿐이다. 실패하면 ApiError를 던진다. */
@@ -30,7 +31,10 @@ export async function send(path: `/${string}`, options: SendOptions = {}): Promi
   }
 }
 
-async function exchange(path: `/${string}`, { method = 'GET', body, accessToken, signal }: SendOptions) {
+async function exchange(
+  path: `/${string}`,
+  { method = 'GET', body, accessToken, signal, timeoutMs = TIMEOUT_MS }: SendOptions,
+) {
   if (signal?.aborted) throw ApiError.timeout()
 
   const headers = new Headers()
@@ -42,7 +46,7 @@ async function exchange(path: `/${string}`, { method = 'GET', body, accessToken,
 
   const aborter = new AbortController()
   const abort = () => aborter.abort()
-  const timer = setTimeout(abort, TIMEOUT_MS)
+  const timer = setTimeout(abort, timeoutMs)
   signal?.addEventListener('abort', abort)
   try {
     const response = await fetch(BASE_PATH + path, {

@@ -645,6 +645,205 @@ describe('잠금 없이 갱신과 로그인이 겹칠 때', () => {
   })
 })
 
+describe('갱신에 답이 없을 때', () => {
+  /** 갱신 요청이 올 때마다 응답을 하나씩 미뤄 둔다. 순서대로 `answers[0]`, `answers[1]`... */
+  function holdRefreshes(backend: ReturnType<typeof startBackend>) {
+    const answers: PromiseWithResolvers<Response>[] = []
+    backend.refreshResponse = () => {
+      const answer = Promise.withResolvers<Response>()
+      answers.push(answer)
+      return answer.promise
+    }
+    return answers
+  }
+
+  const renewed = (name: string) => HttpResponse.json({ accessToken: accessTokenNamed(name) })
+
+  /** 시계를 멈춘 채, 실제 시간이 걸리는 가짜 서버의 일이 끝나기를 기다린다. */
+  async function settleServer() {
+    for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve))
+  }
+
+  /** 갱신 요청이 서버에 `times`번 닿아 응답을 미뤄 둘 때까지 기다린다. */
+  async function untilAsked(backend: ReturnType<typeof startBackend>, times: number) {
+    while (backend.requests.refresh.length < times) await new Promise((resolve) => setImmediate(resolve))
+    await settleServer()
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('5초 동안 답이 없으면 중단하고 한 번만 더 보내, 답이 오면 로그인이 이어진다', async () => {
+    const backend = startBackend()
+    const answers = holdRefreshes(backend)
+    const tab = await openTab()
+    const restored = tab.restoreSession()
+    await untilAsked(backend, 1)
+    await vi.advanceTimersByTimeAsync(4_999)
+    await settleServer()
+    expect(backend.requests.refresh).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1)
+    await untilAsked(backend, 2)
+    expect(backend.requests.refresh[0].signal.aborted).toBe(true)
+    answers[1].resolve(renewed('token-2'))
+    expect(await restored).toBe(true)
+    backend.refreshResponse = () => problem(500, 'INTERNAL_ERROR')
+    await errorOf(tab.request('/ledgers'))
+    expect(backend.requests.ledgers).toEqual(['token-2'])
+  })
+
+  it('두 번째도 5초 동안 답이 없으면 지연 오류다. 로그인 풀림이 아니고 토큰이 남는다', async () => {
+    vi.useRealTimers()
+    const { backend, tab } = await openTabWithExpiredToken()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    holdRefreshes(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const error = errorOf(tab.request('/ledgers'))
+    await untilAsked(backend, 1)
+    await vi.advanceTimersByTimeAsync(5_000)
+    await untilAsked(backend, 2)
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(await error).toMatchObject({ name: 'ApiError', kind: 'timeout' })
+    await settleServer()
+    expect(backend.requests.refresh).toHaveLength(2)
+    expect(ended).not.toHaveBeenCalled()
+
+    vi.useRealTimers()
+    backend.refreshResponse = undefined
+    backend.requests.ledgers.length = 0
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-2'])
+  })
+
+  it.each([
+    ['401', () => problem(401, 'UNAUTHENTICATED')],
+    ['500', () => problem(500, 'INTERNAL_ERROR')],
+    ['504', () => new HttpResponse('<html>', { status: 504 })],
+    ['연결 오류', () => HttpResponse.error()],
+    ['약속과 다른 200', () => HttpResponse.json({})],
+  ])('%s을 받았으면 다시 보내지 않는다', async (_, response) => {
+    const backend = startBackend()
+    backend.refreshResponse = response
+    const tab = await openTab()
+    await tab.restoreSession().catch(() => {})
+    await vi.advanceTimersByTimeAsync(20_000)
+    await settleServer()
+    expect(backend.requests.refresh).toHaveLength(1)
+  })
+
+  it('두 번째가 401이면 로그인이 풀린 것이고 더 보내지 않는다', async () => {
+    vi.useRealTimers()
+    const { backend, tab } = await openTabWithExpiredToken()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    const answers = holdRefreshes(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const error = errorOf(tab.request('/ledgers'))
+    await untilAsked(backend, 1)
+    await vi.advanceTimersByTimeAsync(5_000)
+    await untilAsked(backend, 2)
+    answers[1].resolve(problem(401, 'UNAUTHENTICATED'))
+    expect(await error).toMatchObject({ status: 401 })
+    expect(ended).toHaveBeenCalledTimes(1)
+    expect(backend.requests.refresh).toHaveLength(2)
+  })
+
+  it('중단한 첫 요청의 늦은 결과를 쓰지 않는다', async () => {
+    const lateAnswers = [Promise.withResolvers<Response>(), Promise.withResolvers<Response>()]
+    const asked: string[] = []
+    const realFetch = fetch
+    vi.stubGlobal('fetch', (input: string, init: RequestInit) => {
+      if (input !== '/api/v1/auth/refresh') return realFetch(input, init)
+      const answer = lateAnswers[asked.length]
+      asked.push(input)
+      // 실제 fetch처럼 중단하면 거절하되, 늦은 응답은 그 뒤에 온다
+      init.signal!.addEventListener('abort', () => answer.reject(init.signal!.reason))
+      return answer.promise
+    })
+    try {
+      const backend = startBackend()
+      const tab = await openTab()
+      const restored = tab.restoreSession()
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(asked).toHaveLength(2)
+      lateAnswers[0].resolve(Response.json({ accessToken: accessTokenNamed('late-token') }))
+      lateAnswers[1].resolve(Response.json({ accessToken: accessTokenNamed('token-2') }))
+      expect(await restored).toBe(true)
+      vi.unstubAllGlobals()
+      backend.refreshResponse = () => problem(500, 'INTERNAL_ERROR')
+      await errorOf(tab.request('/ledgers'))
+      expect(backend.requests.ledgers).toEqual(['token-2'])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('두 요청 사이에 잠금을 놓지 않아 다른 탭의 갱신이 끼어들지 않는다', async () => {
+    const locks = createFakeLocks()
+    installLocks(locks)
+    const backend = startBackend()
+    const answers = holdRefreshes(backend)
+    const [first, second] = [await openTab(), await openTab()]
+    const restoredFirst = first.restoreSession()
+    await untilAsked(backend, 1)
+    const restoredSecond = second.restoreSession()
+    let released = false
+    void locks.request(SESSION_LOCK, {}, async () => {
+      released = true
+    })
+    await vi.advanceTimersByTimeAsync(5_000)
+    await untilAsked(backend, 2)
+    await settleServer()
+    expect(backend.requests.refresh).toHaveLength(2)
+    expect(released).toBe(false)
+
+    answers[1].resolve(renewed('token-2'))
+    expect(await restoredFirst).toBe(true)
+    await untilAsked(backend, 3)
+    answers[2].resolve(renewed('token-3'))
+    expect(await restoredSecond).toBe(true)
+  })
+
+  it('첫 요청이 답이 없는 동안 잠금을 빼앗기면 다시 보내지 않는다', async () => {
+    const locks = createFakeLocks()
+    installLocks(locks)
+    const backend = startBackend()
+    holdRefreshes(backend)
+    const tab = await openTab()
+    const error = errorOf(tab.restoreSession())
+    await untilAsked(backend, 1)
+    await locks.request(SESSION_LOCK, { steal: true }, async () => {})
+    expect(await error).toMatchObject({ kind: 'timeout' })
+    await vi.advanceTimersByTimeAsync(20_000)
+    await settleServer()
+    expect(backend.requests.refresh).toHaveLength(1)
+  })
+
+  it('로그인과 그 밖의 요청은 5초가 지나도 기다리고 저절로 다시 보내지 않는다', async () => {
+    const asked: string[] = []
+    const answer = Promise.withResolvers<Response>()
+    server.use(
+      http.post('/api/v1/auth/login', () => {
+        asked.push('login')
+        return answer.promise
+      }),
+    )
+    const tab = await openTab()
+    const login = tab.login(credentials)
+    while (asked.length < 1) await new Promise((resolve) => setImmediate(resolve))
+    await vi.advanceTimersByTimeAsync(14_000)
+    await settleServer()
+    answer.resolve(renewed('token-1'))
+    await login
+    expect(asked).toEqual(['login'])
+  })
+})
+
 describe('탭 사이의 잠금', () => {
   beforeEach(() => installLocks(createFakeLocks()))
 
@@ -698,16 +897,26 @@ describe('탭 사이의 잠금', () => {
     expect(await late).toMatchObject({ method: 'GET' })
   })
 
-  it('잠금을 얻은 뒤 요청이 지연되면 지연 오류이고 다시 보내지 않는다', async () => {
-    const backend = startBackend()
-    backend.refreshResponse = () => new Promise(() => {})
+  it('잠금을 얻은 뒤 로그인이 지연되면 지연 오류이고 다시 보내지 않는다', async () => {
+    const bodies: unknown[] = []
+    server.use(
+      http.post('/api/v1/auth/login', async ({ request }) => {
+        bodies.push(await request.json())
+        return new Promise<Response>(() => {})
+      }),
+    )
     const tab = await openTab()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
-      const error = errorOf(tab.restoreSession())
-      await vi.advanceTimersByTimeAsync(15_000)
+      let settled = false
+      const error = errorOf(tab.login(credentials)).finally(() => {
+        settled = true
+      })
+      await vi.advanceTimersByTimeAsync(14_999)
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
       expect(await error).toMatchObject({ kind: 'timeout' })
-      expect(backend.requests.refresh).toHaveLength(1)
+      expect(bodies).toHaveLength(1)
     } finally {
       vi.useRealTimers()
     }

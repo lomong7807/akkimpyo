@@ -16,9 +16,12 @@ export async function requestLogin({ email, password }: Credentials, signal: Abo
   return accessTokenIn(await send('/auth/login', { method: 'POST', body: { email, password }, signal }))
 }
 
+/** 갱신은 다시 보낸 요청이 서버의 허용 시간 안에 닿도록 짧게 기다린다(session.ts의 requestRefreshTwice). */
+const REFRESH_TIMEOUT_MS = 5_000
+
 /** refresh 쿠키로 새 access token을 받는다. */
 export async function requestRefresh(signal: AbortSignal): Promise<string> {
-  return accessTokenIn(await send('/auth/refresh', { method: 'POST', signal }))
+  return accessTokenIn(await send('/auth/refresh', { method: 'POST', signal, timeoutMs: REFRESH_TIMEOUT_MS }))
 }
 
 /** Authorization 헤더에 넣을 수 있는 글자만 받는다(RFC 6750 2.1절 b64token). */

@@ -72,7 +72,7 @@ function renew(stale: string | undefined): Promise<string | undefined> {
 async function refresh(stale: string | undefined, lost: AbortSignal): Promise<string | undefined> {
   const isCurrent = () => !lost.aborted && accessToken === stale
   try {
-    const renewed = await requestRefresh(lost)
+    const renewed = await requestRefreshTwice(lost)
     if (isCurrent()) acceptRenewed(renewed)
   } catch (error) {
     // 연결 문제와 서버 오류는 로그인 풀림이 아니다
@@ -80,6 +80,19 @@ async function refresh(stale: string | undefined, lost: AbortSignal): Promise<st
     if (isCurrent()) endSession()
   }
   return accessToken
+}
+
+/**
+ * 답이 없으면 한 번만 더 보낸다. 앞 요청이 서버에서 회전을 마치고 응답만 못 왔다면 쿠키는 옛것이고,
+ * 옛 쿠키는 회전 시각부터 10초 안에만 받아들여진다(ADR 001 결정 3). 어떤 답이든 받았으면 다시 보내지 않는다.
+ */
+async function requestRefreshTwice(lost: AbortSignal): Promise<string> {
+  try {
+    return await requestRefresh(lost)
+  } catch (error) {
+    if (!(error instanceof ApiError && error.kind === 'timeout')) throw error
+    return requestRefresh(lost)
+  }
 }
 
 /** 쓰던 토큰과 사용자가 다르면 이 탭의 로그인은 끝난 것이다. 새 토큰을 두지 않는다. */
