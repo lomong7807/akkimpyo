@@ -17,11 +17,6 @@
   margin-block: var(--space-24) var(--space-8);
 }
 
-/* 글자가 오류 문구의 글자와 같은 선에서 시작한다 */
-.retry {
-  margin-inline-start: var(--space-16);
-}
-
 .signup {
   margin: 0;
   color: var(--color-text-secondary);

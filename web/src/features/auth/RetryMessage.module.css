@@ -1,0 +1,4 @@
+/* 글자가 오류 문구의 글자와 같은 선에서 시작한다 */
+.retry {
+  margin-inline-start: var(--space-16);
+}
