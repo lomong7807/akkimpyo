@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent, Ref } from 'react'
 import styles from './SegmentedChoice.module.css'
 
 // 모양은 화면에서 덮어쓰지 않는다
@@ -10,6 +10,11 @@ interface SegmentedChoiceProps<T extends string> {
   value: T
   /** 다른 칸을 고르면 부른다. */
   onChange: (value: T) => void
+  /** 바꿀 수 없다. 모양은 그대로다. */
+  readOnly?: boolean
+  'aria-describedby'?: string
+  /** 고른 칸 */
+  ref?: Ref<HTMLButtonElement>
 }
 
 /** 화살표 키가 옮기는 칸 수 */
@@ -26,15 +31,18 @@ export default function SegmentedChoice<T extends string>({
   options,
   value,
   onChange,
+  readOnly = false,
+  'aria-describedby': describedBy,
+  ref,
 }: SegmentedChoiceProps<T>) {
   function choose(next: T) {
-    if (next !== value) onChange(next)
+    if (next !== value && !readOnly) onChange(next)
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const step = steps.get(event.key)
     const withModifier = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
-    if (step === undefined || withModifier) return
+    if (step === undefined || withModifier || readOnly) return
     event.preventDefault()
     const current = options.findIndex((option) => option.value === value)
     const next = (current + step + options.length) % options.length
@@ -43,12 +51,20 @@ export default function SegmentedChoice<T extends string>({
   }
 
   return (
-    <div role="radiogroup" aria-label={label} className={styles.box} onKeyDown={handleKeyDown}>
+    <div
+      role="radiogroup"
+      aria-label={label}
+      aria-describedby={describedBy}
+      aria-readonly={readOnly || undefined}
+      className={styles.box}
+      onKeyDown={handleKeyDown}
+    >
       {options.map((option) => {
         const checked = option.value === value
         return (
           <button
             key={option.value}
+            ref={checked ? ref : undefined}
             type="button"
             role="radio"
             aria-checked={checked}

@@ -9,6 +9,8 @@ export interface FieldLabels {
 }
 
 interface FieldProps extends FieldLabels {
+  /** 칸이 여럿인 묶음. 이름을 한 칸과 묶지 않고 글자로만 둔다. 묶음은 스스로 이름을 단다. */
+  group?: boolean
   /** 글자 수 제한이 있는 칸의 지금 글자 수와 최대. 최대에 가까워지면 보인다. */
   count?: { current: number; max: number }
   /** 칸. 받은 속성을 칸의 요소에 넘겨 모양을 입히고 이름과 설명을 잇는다. */
@@ -16,7 +18,7 @@ interface FieldProps extends FieldLabels {
 }
 
 /** 입력칸의 틀(화면설계서 00-common 5.2). 이름, 칸, 도움말, 오류 문구를 놓는다. */
-export default function Field({ label, help, error, count, children }: FieldProps) {
+export default function Field({ label, help, error, group = false, count, children }: FieldProps) {
   const id = useId()
   const labelId = `${id}-label`
   const helpId = `${id}-help`
@@ -28,9 +30,15 @@ export default function Field({ label, help, error, count, children }: FieldProp
   const className = error ? `${styles.control} ${styles.invalid}` : styles.control
   return (
     <div className={styles.field}>
-      <label id={labelId} htmlFor={id} className={styles.label}>
-        {label}
-      </label>
+      {group ? (
+        <span id={labelId} className={styles.label}>
+          {label}
+        </span>
+      ) : (
+        <label id={labelId} htmlFor={id} className={styles.label}>
+          {label}
+        </label>
+      )}
       <div className={styles.box}>{children({ id, className, 'aria-describedby': describedBy || undefined }, labelId)}</div>
       {(help || shownCount) && (
         <div className={styles.hint}>
