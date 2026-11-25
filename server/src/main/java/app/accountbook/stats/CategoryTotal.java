@@ -8,6 +8,7 @@ public record CategoryTotal(UUID categoryId, CategoryKind kind, long total) {
 
     /** 라인 amount의 합(지출은 음수)을 표시용 합계로 바꾼다. */
     public static CategoryTotal of(UUID categoryId, CategoryKind kind, long lineSum) {
-        return new CategoryTotal(categoryId, kind, kind == CategoryKind.EXPENSE ? -lineSum : lineSum);
+        return new CategoryTotal(categoryId, kind,
+                kind == CategoryKind.EXPENSE ? Math.negateExact(lineSum) : lineSum);
     }
 }
