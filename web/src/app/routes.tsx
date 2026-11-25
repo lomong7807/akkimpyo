@@ -1,5 +1,6 @@
 import { Navigate, Outlet, ScrollRestoration, type RouteObject } from 'react-router'
 import { MainScreen } from '../components/Screen'
+import AccountAddPage from '../features/accounts/AccountAddPage'
 import AccountsPage from '../features/accounts/AccountsPage'
 import CategoriesPage from '../features/categories/CategoriesPage'
 import NotFoundPage from '../features/not-found/NotFoundPage'
@@ -53,6 +54,11 @@ export const routes: RouteObject[] = [
                 children: [
                   { path: '/more', element: <MoreRoute />, handle: { navigationItem: moreItem } },
                   { path: '/accounts', element: <AccountsPage />, handle: { navigationItem: accountsItem } },
+                  {
+                    path: '/accounts/new',
+                    element: <AccountAddPage />,
+                    handle: { navigationItem: accountsItem, fullScreen: true },
+                  },
                   { path: '/categories', element: <CategoriesPage />, handle: { navigationItem: categoriesItem } },
                   { path: '*', element: <NotFoundPage /> },
                 ],

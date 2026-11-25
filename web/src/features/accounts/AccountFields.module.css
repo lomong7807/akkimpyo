@@ -1,0 +1,10 @@
+/* 알림 영역은 늘 있고, 비어 있으면 자리를 차지하지 않는다 */
+.notice {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}
+
+.notice:not(:empty) {
+  margin-top: var(--space-4);
+}
