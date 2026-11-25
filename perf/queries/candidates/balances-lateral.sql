@@ -21,7 +21,7 @@
   \set ledger_no 1
 \endif
 SELECT md5('perf-ledger-' || :ledger_no)::uuid AS ledger_id \gset
-SELECT array_agg(id ORDER BY created_at) AS account_ids, array_agg(opening_date ORDER BY created_at) AS opening_dates
+SELECT array_agg(id ORDER BY created_at, id) AS account_ids, array_agg(opening_date ORDER BY created_at, id) AS opening_dates
   FROM account WHERE ledger_id = :'ledger_id' \gset
 \set canceled CANCELED
 
