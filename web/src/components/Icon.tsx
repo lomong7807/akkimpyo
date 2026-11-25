@@ -7,6 +7,7 @@ import eye from '../assets/icons/phosphor/eye.svg?raw'
 import info from '../assets/icons/phosphor/info.svg?raw'
 import plus from '../assets/icons/phosphor/plus.svg?raw'
 import signOut from '../assets/icons/phosphor/sign-out.svg?raw'
+import wallet from '../assets/icons/phosphor/wallet.svg?raw'
 import warningCircle from '../assets/icons/phosphor/warning-circle.svg?raw'
 import x from '../assets/icons/phosphor/x.svg?raw'
 import styles from './Icon.module.css'
@@ -22,6 +23,7 @@ const svgs = {
   Info: info,
   Plus: plus,
   SignOut: signOut,
+  Wallet: wallet,
   WarningCircle: warningCircle,
   X: x,
 }

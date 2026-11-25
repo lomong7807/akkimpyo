@@ -1,4 +1,4 @@
-import { ListButton, ListGroup } from '../../components/ListRow'
+import { ListButton, ListGroup, ListLink } from '../../components/ListRow'
 import { MainScreen } from '../../components/Screen'
 import styles from './MorePage.module.css'
 
@@ -7,6 +7,11 @@ export default function MorePage({ onLogout }: { onLogout: () => void }) {
   return (
     <MainScreen>
       <div className={styles.groups}>
+        <ListGroup>
+          <ListLink icon="Wallet" to="/accounts">
+            계좌
+          </ListLink>
+        </ListGroup>
         <ListGroup>
           <ListButton icon="SignOut" onClick={onLogout}>
             로그아웃

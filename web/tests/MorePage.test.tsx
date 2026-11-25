@@ -1,5 +1,6 @@
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { startAccounts, type Accounts } from './support/accounts'
 import { ledgerNameOf, startBackend, type Backend } from './support/backend'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
@@ -8,10 +9,12 @@ import { installMatchMedia, resetViewport, setViewportWidth } from './support/vi
 
 const server = startMockServer()
 let backend: Backend
+let accounts: Accounts
 
 beforeEach(() => {
   vi.stubGlobal('scrollTo', vi.fn())
   backend = startBackend(server)
+  accounts = startAccounts(server, backend)
   backend.cookieUser = 'user-1'
   localStorage.clear()
   sessionStorage.clear()
@@ -51,28 +54,44 @@ describe('더보기(M-01)', () => {
     expect(screen.queryByRole('heading')).toBeNull()
   })
 
-  it('1A에는 로그아웃 줄 하나만 있고 선과 자리 표시가 없다', async () => {
+  it('1A에는 계좌 묶음과 맨 아래의 로그아웃 묶음만 있고 자리 표시가 없다', async () => {
     await open('/more')
-    expect(content().getAllByRole('listitem')).toHaveLength(1)
-    expect(content().getByRole('button', { name: '로그아웃' })).toBeTruthy()
-    expect(content().queryAllByRole('link')).toEqual([])
-    expect(screen.getByRole('main').textContent).toBe('로그아웃')
-    expect(getComputedStyle(content().getByRole('list')).marginTop).not.toBe('var(--space-24)')
+    const groups = content()
+      .getAllByRole('list')
+      .map((list) => within(list).getAllByRole('listitem').map((item) => item.textContent))
+    expect(groups).toEqual([['계좌'], ['로그아웃']])
+    expect(content().getAllByRole('link')).toHaveLength(1)
+    expect(content().getAllByRole('button')).toHaveLength(1)
+    expect(screen.getByRole('main').textContent).toBe('계좌로그아웃')
   })
 
-  it('로그아웃 줄은 본문 글자색의 목록 줄이고 화살표가 없다. 첫 줄 위는 8px이다', async () => {
+  it('계좌 줄은 아이콘과 화살표가 있고 누르면 계좌 목록으로 간다', async () => {
+    const { router, user } = await open('/more')
+    const row = content().getByRole('link', { name: '계좌' })
+    expect(row.querySelectorAll('svg')).toHaveLength(2)
+    expect(row.lastElementChild!.querySelector('svg')).toBeTruthy()
+    await user.click(row)
+    expect(await screen.findByRole('heading', { level: 1, name: '계좌' })).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/accounts')
+  })
+
+  it('로그아웃 줄은 본문 글자색의 목록 줄이고 화살표가 없다. 첫 묶음 위는 8px이고 묶음 사이에 선이 있다', async () => {
     await open('/more')
     const row = content().getByRole('button', { name: '로그아웃' })
     expect(getComputedStyle(row).minHeight).toBe('var(--size-row)')
     expect(getComputedStyle(row).color).toBe('var(--color-text)')
     expect(row.querySelectorAll('svg')).toHaveLength(1)
-    expect(getComputedStyle(content().getByRole('list').parentElement!).paddingTop).toBe('var(--space-8)')
+    const [first, last] = content().getAllByRole('list')
+    expect(getComputedStyle(first.parentElement!).paddingTop).toBe('var(--space-8)')
+    expect(getComputedStyle(first).marginTop).not.toBe('var(--space-24)')
+    expect(getComputedStyle(last).marginTop).toBe('var(--space-24)')
   })
 
   it('불러오는 것이 없다', async () => {
     await open('/more')
     await act(() => new Promise((resolve) => setTimeout(resolve, 30)))
     expect(backend.requests.me).toHaveLength(1)
+    expect(accounts.requests).toEqual([])
     expect(screen.queryByRole('status')).toBeNull()
   })
 
@@ -108,6 +127,41 @@ describe('하단 탭의 더보기', () => {
   it('넓은 화면의 사이드바에는 없다', async () => {
     await open('/home', 1280)
     expect(within(menu()).queryByRole('link', { name: '더보기' })).toBeNull()
+  })
+})
+
+describe('계좌 항목', () => {
+  it('하단 탭에서는 더보기를 강조한다. 더보기에서 들어와도, 주소를 바로 열어도 같다', async () => {
+    const { user } = await open('/more')
+    await user.click(content().getByRole('link', { name: '계좌' }))
+    await screen.findByRole('heading', { level: 1, name: '계좌' })
+    expect(currentNames()).toEqual(['더보기'])
+    cleanup()
+    await open('/accounts')
+    expect(currentNames()).toEqual(['더보기'])
+  })
+
+  it('사이드바에는 아이콘 없이 이름만 있고 로그아웃 위에 있다', async () => {
+    await open('/home', 1280)
+    const link = within(menu()).getByRole('link', { name: '계좌' })
+    expect(link.querySelector('svg')).toBeNull()
+    const rows = within(menu()).getAllByText(/^(계좌|로그아웃)$/)
+    expect(rows.map((row) => row.textContent)).toEqual(['계좌', '로그아웃'])
+  })
+
+  it('사이드바에서 누르면 계좌 목록으로 가고 지금 항목이 된다. 바뀌는 것은 색뿐이다', async () => {
+    const { router, user } = await open('/home', 1280)
+    const link = within(menu()).getByRole('link', { name: '계좌' })
+    expect(currentNames()).toEqual([])
+    const before = getComputedStyle(link)
+    const look = [before.font, before.backgroundColor, before.minHeight]
+    await user.click(link)
+    await screen.findByRole('heading', { level: 1, name: '계좌' })
+    expect(router.state.location.pathname).toBe('/accounts')
+    expect(currentNames()).toEqual(['계좌'])
+    const after = getComputedStyle(within(menu()).getByRole('link', { name: '계좌' }))
+    expect(after.color).toBe('var(--color-accent)')
+    expect([after.font, after.backgroundColor, after.minHeight]).toEqual(look)
   })
 })
 
