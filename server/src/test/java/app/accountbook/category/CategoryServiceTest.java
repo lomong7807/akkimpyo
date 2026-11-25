@@ -10,6 +10,7 @@ import app.accountbook.account.AccountType;
 import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.NotLedgerOwnerException;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.user.User;
@@ -18,6 +19,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @IntegrationTest
 class CategoryServiceTest {
@@ -214,5 +216,22 @@ class CategoryServiceTest {
         assertThatThrownBy(() -> categoryService.delete(owner.getId(), food.getId()))
                 .isInstanceOf(InUseException.class);
         assertThat(categoryRepository.findById(food.getId())).isPresent();
+    }
+
+    // --- 기본 카테고리 만들기 (P-223): 장부의 소유자만, 장부마다 한 번 ---
+
+    @Test
+    void createDefaults_rejectsNonOwner() {
+        User outsider = fixtures.user("defaults-outsider@example.com");
+
+        assertThatThrownBy(() -> categoryService.createDefaults(outsider.getId(), ledgerId))
+                .isInstanceOf(NotLedgerOwnerException.class);
+    }
+
+    @Test
+    void createDefaults_cannotRunTwiceOnSameLedger() {
+        // 가입 때 이미 한 번 만들어졌다. 다시 부르면 미분류 유일 제약(uq_category_system)이나 이름 유일 제약에 걸린다.
+        assertThatThrownBy(() -> categoryService.createDefaults(owner.getId(), ledgerId))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 }

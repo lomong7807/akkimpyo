@@ -2,25 +2,34 @@ package app.accountbook.user;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import app.accountbook.category.Category;
+import app.accountbook.category.CategoryCommand;
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryRepository;
+import app.accountbook.category.CategoryService;
+import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.Names;
 import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.ledger.LedgerRole;
 import app.accountbook.support.IntegrationTest;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @IntegrationTest
 class UserServiceTest {
@@ -30,6 +39,8 @@ class UserServiceTest {
     @Autowired LedgerRepository ledgerRepository;
     @Autowired LedgerMemberRepository memberRepository;
     @Autowired CategoryRepository categoryRepository;
+    @Autowired CategoryService categoryService;
+    @Autowired JdbcTemplate jdbc;
 
     @Test
     void createUser_createsPersonalLedgerWithOwnerAndDefaultCategories() {
@@ -45,13 +56,82 @@ class UserServiceTest {
         assertThat(ledger.getTimezone()).isEqualTo("Asia/Seoul");
 
         List<Category> categories = categoryRepository.findByLedgerIdOrderByCreatedAtAsc(ledger.getId());
-        assertThat(categories).hasSize(2).allSatisfy(category -> {
-            assertThat(category.getName()).isEqualTo("미분류");
-            assertThat(category.isSystem()).isTrue();
-            assertThat(category.isTopLevel()).isTrue();
-        });
-        assertThat(categories).extracting(Category::getKind)
-                .containsExactlyInAnyOrder(CategoryKind.INCOME, CategoryKind.EXPENSE);
+        assertThat(categories).hasSize(17).allSatisfy(category -> assertThat(category.isTopLevel()).isTrue());
+        assertThat(categories).filteredOn(Category::isSystem)
+                .extracting(Category::getKind, Category::getName)
+                .containsExactlyInAnyOrder(tuple(CategoryKind.EXPENSE, "미분류"), tuple(CategoryKind.INCOME, "미분류"));
+    }
+
+    // --- 기본 카테고리 (P-223): 지출 11개, 수입 4개, 미분류 2개가 명세에 적힌 이름과 순서로 생긴다 ---
+
+    @Test
+    void createUser_createsDefaultCategoriesWithSpecNamesInSpecOrder() {
+        User user = userService.createUser("defaults@example.com", "hash", "주인");
+        UUID ledgerId = memberRepository.findByUserId(user.getId()).get(0).getLedgerId();
+
+        // 화면이 쓰는 목록(CategoryService.list)의 순서다. 미분류는 구분마다 맨 뒤에 온다(F-509).
+        List<Category> categories = categoryService.list(user.getId(), ledgerId);
+
+        assertThat(categories).filteredOn(category -> category.getKind() == CategoryKind.EXPENSE)
+                .extracting(Category::getName)
+                .containsExactly("식비", "카페·간식", "교통", "주거·통신", "생활용품", "의료·건강", "문화·여가", "쇼핑",
+                        "경조사·선물", "교육", "기타", "미분류");
+        assertThat(categories).filteredOn(category -> category.getKind() == CategoryKind.INCOME)
+                .extracting(Category::getName)
+                .containsExactly("급여", "부수입", "용돈", "기타", "미분류");
+        assertThat(categories).filteredOn(category -> !category.isSystem()).hasSize(15);
+    }
+
+    @Test
+    void createUser_givesDefaultCategoriesStrictlyIncreasingCreatedAtSoListOrderCannotTie() {
+        User user = userService.createUser("order@example.com", "hash", "주인");
+        UUID ledgerId = memberRepository.findByUserId(user.getId()).get(0).getLedgerId();
+        categoryRepository.flush();
+
+        List<Instant> createdAt = jdbc.queryForList(
+                "select created_at from category where ledger_id = ? order by created_at", Timestamp.class, ledgerId)
+                .stream().map(Timestamp::toInstant).toList();
+
+        // 목록은 created_at으로만 정렬한다. DB에 저장된 값이 모두 달라야 순서가 흔들리지 않는다.
+        assertThat(createdAt).hasSize(17).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void createUser_defaultCategoryNamesFollowCategoryNameRule() {
+        User user = userService.createUser("rule@example.com", "hash", "주인");
+        UUID ledgerId = memberRepository.findByUserId(user.getId()).get(0).getLedgerId();
+
+        // 기본 카테고리는 CategoryService.create의 검증을 거치지 않고 들어간다. 같은 규칙(P-221)에 맞는지 본다.
+        assertThat(categoryService.list(user.getId(), ledgerId)).allSatisfy(category ->
+                assertThat(category.getName()).isEqualTo(Names.normalize(category.getName(), Category.NAME_MAX_LENGTH)));
+    }
+
+    @Test
+    void createUser_defaultCategoriesBlockSameNameInSameKindOnly() {
+        User user = userService.createUser("unique@example.com", "hash", "주인");
+        UUID ledgerId = memberRepository.findByUserId(user.getId()).get(0).getLedgerId();
+
+        // 지출의 "기타"와 수입의 "기타"는 구분이 달라 함께 있다. 같은 구분에 다시 만들면 거부된다.
+        assertThat(categoryService.list(user.getId(), ledgerId)).filteredOn(category -> category.getName().equals("기타"))
+                .extracting(Category::getKind)
+                .containsExactlyInAnyOrder(CategoryKind.EXPENSE, CategoryKind.INCOME);
+        assertThatThrownBy(() -> categoryService.create(user.getId(), ledgerId,
+                new CategoryCommand("식비", CategoryKind.EXPENSE, null)))
+                .isInstanceOf(DuplicateCategoryNameException.class);
+        assertThat(categoryService.create(user.getId(), ledgerId, new CategoryCommand("식비", CategoryKind.INCOME, null))
+                .getName()).isEqualTo("식비");
+    }
+
+    @Test
+    void createUser_givesEachUserTheirOwnDefaultCategories() {
+        User first = userService.createUser("first-ledger@example.com", "hash", "처음");
+        User second = userService.createUser("second-ledger@example.com", "hash", "두번째");
+        UUID firstLedger = memberRepository.findByUserId(first.getId()).get(0).getLedgerId();
+        UUID secondLedger = memberRepository.findByUserId(second.getId()).get(0).getLedgerId();
+
+        assertThat(categoryService.list(first.getId(), firstLedger)).hasSize(17);
+        assertThat(categoryService.list(second.getId(), secondLedger)).hasSize(17)
+                .allSatisfy(category -> assertThat(category.getLedgerId()).isEqualTo(secondLedger));
     }
 
     @Test

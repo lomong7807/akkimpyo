@@ -1,8 +1,6 @@
 package app.accountbook.user;
 
-import app.accountbook.category.Category;
-import app.accountbook.category.CategoryKind;
-import app.accountbook.category.CategoryRepository;
+import app.accountbook.category.CategoryService;
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
@@ -11,7 +9,6 @@ import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.ledger.LedgerRole;
-import java.util.Arrays;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,19 +19,20 @@ public class UserService {
     private final UserRepository userRepository;
     private final LedgerRepository ledgerRepository;
     private final LedgerMemberRepository memberRepository;
-    private final CategoryRepository categoryRepository;
+    private final CategoryService categoryService;
 
     UserService(UserRepository userRepository, LedgerRepository ledgerRepository,
-                LedgerMemberRepository memberRepository, CategoryRepository categoryRepository) {
+                LedgerMemberRepository memberRepository, CategoryService categoryService) {
         this.userRepository = userRepository;
         this.ledgerRepository = ledgerRepository;
         this.memberRepository = memberRepository;
-        this.categoryRepository = categoryRepository;
+        this.categoryService = categoryService;
     }
 
     /**
      * 사용자와 개인 장부({@code 내 가계부}, Asia/Seoul), OWNER 구성원,
-     * 수입·지출 {@code 미분류} 기본 카테고리를 한 트랜잭션으로 만든다.
+     * 기본 카테고리(P-223: 지출 11개, 수입 4개, 지출과 수입의 {@code 미분류})를 한 트랜잭션으로 만든다.
+     * 중간에 실패하면 아무것도 남지 않는다(F-002).
      * 이메일은 앞뒤 공백을 지우고 소문자로 바꾼 값으로 저장하고 중복을 검사한다(P-101).
      * 표시 이름은 앞뒤 공백을 지운 1~{@value User#DISPLAY_NAME_MAX_LENGTH}자다(P-101).
      */
@@ -48,9 +46,7 @@ public class UserService {
         User user = userRepository.save(User.of(email, passwordHash, displayName));
         Ledger ledger = ledgerRepository.save(Ledger.personal());
         memberRepository.save(LedgerMember.of(ledger.getId(), user.getId(), LedgerRole.OWNER));
-        categoryRepository.saveAll(Arrays.stream(CategoryKind.values())
-                .map(kind -> Category.uncategorized(ledger.getId(), kind))
-                .toList());
+        categoryService.createDefaults(user.getId(), ledger.getId());
         return user;
     }
 

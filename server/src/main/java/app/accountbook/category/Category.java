@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -47,12 +48,21 @@ public class Category extends BaseEntity {
         this.system = system;
     }
 
+    private Category(UUID ledgerId, CategoryKind kind, String name, boolean system, Instant createdAt) {
+        super(UUID.randomUUID(), createdAt);
+        this.ledgerId = ledgerId;
+        this.kind = kind;
+        this.name = name;
+        this.system = system;
+    }
+
     public static Category of(UUID ledgerId, CategoryKind kind, String name, UUID parentId) {
         return new Category(ledgerId, kind, name, parentId, false);
     }
 
-    public static Category uncategorized(UUID ledgerId, CategoryKind kind) {
-        return new Category(ledgerId, kind, UNCATEGORIZED_NAME, null, true);
+    /** 장부를 만들 때 넣는 최상위 기본 카테고리. 목록 순서를 정하려고 만든 시각을 받는다({@link DefaultCategories}). */
+    static Category ofDefault(UUID ledgerId, CategoryKind kind, String name, boolean system, Instant createdAt) {
+        return new Category(ledgerId, kind, name, system, createdAt);
     }
 
     public void rename(String name) {
