@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { build } from 'vite'
@@ -117,14 +117,14 @@ describe('홈 화면 설치 (F-120)', () => {
       expect(pngSize(builtFile(icon.href)), icon.href).toBe(icon.sizes)
     }
   })
+})
 
-  it('테스트용 가짜 응답(msw)이 들어가지 않는다', async () => {
-    const files = await builtFiles()
-    const scripts = [...files].filter(([name]) => name.endsWith('.js'))
+describe('테스트용 도구', () => {
+  it('가짜 응답(msw)과 그 service worker가 빌드 결과에 들어가지 않는다', () => {
+    const files = readdirSync(outDir, { recursive: true, encoding: 'utf8' })
+    expect(files.filter((file) => file.includes('mockServiceWorker'))).toEqual([])
+    const scripts = files.filter((file) => file.endsWith('.js'))
     expect(scripts).not.toHaveLength(0)
-    for (const [name, code] of scripts) {
-      expect(name).not.toContain('mockServiceWorker')
-      expect(code).not.toMatch(/mockServiceWorker|\[MSW\]/)
-    }
+    for (const script of scripts) expect(builtFile(`/${script}`).toString()).not.toMatch(/mockServiceWorker|\[MSW\]/)
   })
 })
