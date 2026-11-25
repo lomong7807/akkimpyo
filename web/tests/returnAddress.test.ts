@@ -71,6 +71,8 @@ describe.each([
   ['다른 출처(.을 풀면 나오는 것)', '/.//evil.example/'],
   ['다른 출처(안쪽 ..을 풀면 나오는 것)', '/home/..//evil.example/'],
   ['읽을 수 없는 주소', '/\t/:80'],
+  ['우리 출처라도 //로 시작하는 주소', `//${location.host}/home`],
+  ['우리 출처라도 /\\로 시작하는 주소', `/\\${location.host}/home`],
   ['스크립트', 'javascript:alert(1)'],
   ['/로 시작하지 않는 주소', 'home'],
   ['앞에 공백이 있는 주소', ' /home'],
