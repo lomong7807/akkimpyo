@@ -1,0 +1,74 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* 이름과 칸 사이는 8px이다 */
+.label {
+  margin-bottom: var(--space-4);
+  font: var(--text-label);
+}
+
+.box {
+  position: relative;
+}
+
+.input {
+  --border-width: 1px;
+  --border-color: var(--color-border-strong);
+
+  width: 100%;
+  height: var(--size-field);
+  /* 테두리가 굵어져도 글자가 움직이지 않도록 굵어진 만큼 안쪽 여백을 줄인다 */
+  padding: 0 calc(var(--space-12) + 1px - var(--border-width));
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-10);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: var(--text-body);
+  text-overflow: ellipsis;
+}
+
+.input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 1;
+}
+
+/* 비밀번호 보기 버튼은 앱이 그린다. Edge가 그리는 버튼은 감춘다 */
+.input::-ms-reveal {
+  display: none;
+}
+
+.input[aria-invalid='true'] {
+  --border-width: var(--border-width-strong);
+  --border-color: var(--color-danger);
+}
+
+/* 오류 칸도 초점이 있는 동안은 초점의 색이다 */
+.input:focus {
+  --border-width: var(--border-width-strong);
+  --border-color: var(--color-accent);
+}
+
+/* 초점은 안쪽 테두리 하나로 보인다. 색이 강제되는 고대비 모드에서는 투명한 바깥 테두리가 보이게 된다 */
+.input:focus-visible {
+  outline-color: transparent;
+}
+
+.withAction {
+  padding-inline-end: calc(var(--size-touch) + var(--space-4));
+}
+
+/* 44px 버튼을 48px 칸 안의 오른쪽 끝에 같은 여백으로 둔다 */
+.action {
+  position: absolute;
+  inset: calc((var(--size-field) - var(--size-touch)) / 2);
+  inset-inline-start: auto;
+}
+
+.help {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}
