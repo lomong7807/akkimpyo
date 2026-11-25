@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { typeErrorsOf } from './support/typeErrors'
 
 const imports = `
+import AmountField from './components/AmountField'
 import DateField from './components/DateField'
 import { PasswordField, TextField } from './components/TextField'
 `
@@ -16,6 +17,8 @@ describe('입력칸의 타입', () => {
         <TextField label="이름" count={{ current: 17, max: 20 }} />
         <PasswordField label="비밀번호" autoComplete="current-password" ref={() => {}} />
         <DateField label="기준일" value="2026-11-26" onChange={(date: string) => date} help="도움말" error="오류" readOnly ref={() => {}} />
+        <AmountField label="금액" value={undefined} onChange={(value: number | undefined) => value} help="도움말" error="오류" onBlur={() => {}} readOnly ref={() => {}} />
+        <AmountField label="시작 잔액" value={0} onChange={() => {}} sign={{ negative: true, onChange: (negative: boolean) => negative }} />
       `),
     ).toEqual([])
   })
@@ -38,6 +41,10 @@ describe('입력칸의 타입', () => {
     ['Date를 값으로 받는 날짜 칸', '<DateField label="기준일" value={new Date()} onChange={() => {}} />', 'string'],
     ['날짜 칸의 모양 덮어쓰기', '<DateField label="기준일" value="" onChange={() => {}} className="a" />', 'className'],
     ['모양이 정해지지 않은 날짜 칸의 비활성', '<DateField label="기준일" value="" onChange={() => {}} disabled />', 'disabled'],
+    ['이름 없는 금액 칸', '<AmountField value={0} onChange={() => {}} />', 'label'],
+    ['글자를 값으로 받는 금액 칸', '<AmountField label="금액" value="1,000" onChange={() => {}} />', 'number'],
+    ['금액 칸의 모양 덮어쓰기', '<AmountField label="금액" value={0} onChange={() => {}} className="a" />', 'className'],
+    ['바꿀 수 없는 부호', '<AmountField label="금액" value={0} onChange={() => {}} sign={{ negative: true }} />', 'onChange'],
     ['날짜 칸의 글자 수', '<DateField label="기준일" value="" onChange={() => {}} count={{ current: 1, max: 2 }} />', 'count'],
   ])('%s는 타입 오류다', (_, jsx, word) => {
     const errors = typeErrors(jsx)
