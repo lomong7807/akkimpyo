@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiError } from '../src/api/apiError'
+import { accessTokenNamed, tokenNameIn } from './support/accessToken'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { createFakeLocks, createStuckLocks, installLocks, removeLocks } from './support/webLocks'
@@ -18,7 +19,7 @@ async function openTab() {
 const credentials = { email: 'name@example.com', password: 'pass1234' }
 
 /**
- * 로그인과 갱신이 되는 가짜 서버. 토큰은 내준 순서대로 token-1, token-2...이고 마지막에 내준 것만 유효하다.
+ * 로그인과 갱신이 되는 가짜 서버. 토큰의 이름은 내준 순서대로 token-1, token-2...이고 마지막에 내준 것만 유효하다.
  * 보호된 자원은 /api/v1/ledgers 하나다.
  */
 function startBackend() {
@@ -34,7 +35,7 @@ function startBackend() {
 
   function issue() {
     issued += 1
-    valid = `token-${issued}`
+    valid = backend.makeToken(`token-${issued}`)
     return HttpResponse.json({ accessToken: valid })
   }
 
@@ -51,6 +52,7 @@ function startBackend() {
 
   const backend = {
     requests,
+    makeToken: (name: string) => accessTokenNamed(name),
     /** 갱신 요청에 줄 응답. 없으면 새 토큰을 준다. */
     refreshResponse: undefined as (() => Response | Promise<Response>) | undefined,
     expireToken() {
@@ -70,7 +72,7 @@ function startBackend() {
     }),
     http.all('/api/v1/ledgers', async ({ request }) => {
       const authorization = request.headers.get('Authorization')
-      requests.ledgers.push(authorization)
+      requests.ledgers.push(tokenNameIn(authorization))
       if (valid === undefined || authorization !== `Bearer ${valid}`) return problem(401, 'UNAUTHENTICATED')
       return HttpResponse.json({ method: request.method, body: await request.text() })
     }),
@@ -131,7 +133,7 @@ describe('로그인', () => {
     const tab = await openTab()
     await tab.login(credentials)
     await tab.request('/ledgers')
-    expect(backend.requests.ledgers).toEqual(['Bearer token-1'])
+    expect(backend.requests.ledgers).toEqual(['token-1'])
   })
 
   it('거부되면 갱신하지 않고 오류를 그대로 던진다', async () => {
@@ -171,13 +173,13 @@ describe('access token이 머무는 곳', () => {
     backend.refreshResponse = () => problem(500, 'INTERNAL_ERROR')
     await errorOf(tab.request('/ledgers'))
 
-    expect(backend.requests.ledgers).toContain('Bearer token-2')
+    expect(backend.requests.ledgers).toContain('token-2')
     expect(localStorage.length).toBe(0)
     expect(sessionStorage.length).toBe(0)
     expect(openDatabase).not.toHaveBeenCalled()
     expect(document.cookie).toBe('')
-    expect(window.location.href).not.toContain('token-')
-    expect(JSON.stringify(window.history.state)).not.toContain('token-')
+    expect(window.location.href).not.toMatch(/token-|eyJ/)
+    expect(JSON.stringify(window.history.state)).not.toMatch(/token-|eyJ/)
     for (const spy of consoleSpies) expect(spy).not.toHaveBeenCalled()
   })
 
@@ -200,7 +202,7 @@ describe('access token이 머무는 곳', () => {
     }
     expect(errors).toHaveLength(5)
     for (const error of errors) {
-      expect(everythingIn(error)).not.toMatch(/token-\d/)
+      expect(everythingIn(error)).not.toMatch(/token-\d|eyJ/)
       expect(everythingIn(error)).not.toContain('pass1234')
     }
   })
@@ -212,7 +214,7 @@ describe('401과 갱신', () => {
     const result = await tab.request('/ledgers', { method: 'POST', body: { name: '내 가계부' } })
     expect(result).toEqual({ method: 'POST', body: '{"name":"내 가계부"}' })
     expect(backend.requests.refresh).toHaveLength(1)
-    expect(backend.requests.ledgers).toEqual(['Bearer token-1', 'Bearer token-2'])
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-2'])
   })
 
   it('갱신 요청은 쿠키로 인증한다. 전용 헤더를 붙이고 본문과 access token은 보내지 않는다', async () => {
@@ -257,7 +259,7 @@ describe('401과 갱신', () => {
     const { backend, tab } = await openTabWithExpiredToken()
     await Promise.all([tab.request('/ledgers'), tab.request('/ledgers'), tab.request('/ledgers')])
     expect(backend.requests.refresh).toHaveLength(1)
-    expect(backend.requests.ledgers.filter((token) => token === 'Bearer token-2')).toHaveLength(3)
+    expect(backend.requests.ledgers.filter((token) => token === 'token-2')).toHaveLength(3)
   })
 
   it('갱신이 끝난 뒤에 늦게 온 401에는 다시 갱신하지 않고 새 토큰으로 보낸다', async () => {
@@ -269,7 +271,7 @@ describe('401과 갱신', () => {
     answerLate.with(problem(401, 'UNAUTHENTICATED'))
     await late
     expect(backend.requests.refresh).toHaveLength(1)
-    expect(backend.requests.ledgers.at(-1)).toBe('Bearer token-2')
+    expect(backend.requests.ledgers.at(-1)).toBe('token-2')
   })
 
   it('토큰이 다시 만료되면 다시 갱신한다', async () => {
@@ -278,7 +280,7 @@ describe('401과 갱신', () => {
     backend.expireToken()
     await tab.request('/ledgers')
     expect(backend.requests.refresh).toHaveLength(2)
-    expect(backend.requests.ledgers.at(-1)).toBe('Bearer token-3')
+    expect(backend.requests.ledgers.at(-1)).toBe('token-3')
   })
 })
 
@@ -294,7 +296,7 @@ describe('로그인 풀림', () => {
     const error = await errorOf(tab.request('/ledgers'))
     expect(error).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
     expect(ended).toHaveBeenCalledTimes(1)
-    expect(backend.requests.ledgers).toEqual(['Bearer token-1'])
+    expect(backend.requests.ledgers).toEqual(['token-1'])
   })
 
   it('여러 요청이 함께 풀려도 한 번만 알린다', async () => {
@@ -312,7 +314,7 @@ describe('로그인 풀림', () => {
     backend.refreshResponse = () => problem(401, 'UNAUTHENTICATED')
     await errorOf(tab.request('/ledgers'))
     await errorOf(tab.request('/ledgers'))
-    expect(backend.requests.ledgers).toEqual(['Bearer token-1', null])
+    expect(backend.requests.ledgers).toEqual(['token-1', null])
   })
 
   it('다시 로그인하면 이어서 쓴다', async () => {
@@ -321,7 +323,7 @@ describe('로그인 풀림', () => {
     await errorOf(tab.request('/ledgers'))
     await tab.login(credentials)
     await tab.request('/ledgers')
-    expect(backend.requests.ledgers.at(-1)).toBe('Bearer token-2')
+    expect(backend.requests.ledgers.at(-1)).toBe('token-2')
   })
 
   it('알림을 끊으면 더 알리지 않는다', async () => {
@@ -351,7 +353,171 @@ describe('로그인 풀림', () => {
 
     backend.refreshResponse = undefined
     await tab.request('/ledgers')
-    expect(backend.requests.ledgers.at(-1)).toBe('Bearer token-2')
+    expect(backend.requests.ledgers.at(-1)).toBe('token-2')
+  })
+})
+
+describe('갱신한 토큰의 사용자가 다를 때', () => {
+  const otherUser = (name: string) => accessTokenNamed(name, { sub: 'user-2' })
+  const otherLogin = { email: 'other@example.com', password: 'other1234' }
+
+  it('원래 요청을 다시 보내지 않고 새 토큰을 두지 않으며 이 탭의 로그인을 끝낸다', async () => {
+    const { backend, tab } = await openTabWithExpiredToken()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    backend.makeToken = otherUser
+    const error = await errorOf(tab.request('/ledgers', { method: 'POST', body: { name: '앞 사람의 내용' } }))
+    expect(error).toMatchObject({ kind: 'rejected', status: 401, code: 'UNAUTHENTICATED' })
+    expect(backend.requests.ledgers).toEqual(['token-1'])
+    expect(ended).toHaveBeenCalledTimes(1)
+
+    await errorOf(tab.request('/ledgers'))
+    expect(backend.requests.ledgers).toEqual(['token-1', null])
+    expect(backend.requests.refresh).toHaveLength(1)
+  })
+
+  it('동시에 401을 받은 요청을 하나도 다시 보내지 않고 한 번만 알린다', async () => {
+    const { backend, tab } = await openTabWithExpiredToken()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    backend.makeToken = otherUser
+    const errors = await Promise.all([1, 2, 3].map(() => errorOf(tab.request('/ledgers'))))
+    for (const error of errors) expect(error).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-1', 'token-1'])
+    expect(backend.requests.refresh).toHaveLength(1)
+    expect(ended).toHaveBeenCalledTimes(1)
+  })
+
+  it('잠금을 기다리는 동안 이 탭에서 다른 계정으로 로그인했으면, 앞 계정의 요청만 끝내고 로그인은 남긴다', async () => {
+    const locks = createFakeLocks()
+    installLocks(locks)
+    const { backend, tab } = await openTabWithExpiredToken()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    const otherTab = Promise.withResolvers<void>()
+    void locks.request('akkimpyo-session', { signal: new AbortController().signal }, () => otherTab.promise)
+    backend.makeToken = otherUser
+    const login = tab.login(otherLogin)
+    const error = errorOf(tab.request('/ledgers'))
+    await vi.waitFor(() => expect(backend.requests.ledgers).toEqual(['token-1']))
+    otherTab.resolve()
+    await login
+    expect(await error).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
+    expect(backend.requests.refresh).toHaveLength(0)
+    expect(ended).not.toHaveBeenCalled()
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-2'])
+  })
+
+  it('늦게 온 401 앞에 다른 계정으로 로그인했으면, 앞 계정의 요청만 끝내고 로그인은 남긴다', async () => {
+    const { backend, tab } = await openTabWithExpiredToken()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    const answerLate = delayNextLedgersResponse()
+    const late = errorOf(tab.request('/ledgers'))
+    await answerLate.arrived
+    backend.makeToken = otherUser
+    await tab.login(otherLogin)
+    answerLate.with(problem(401, 'UNAUTHENTICATED'))
+    expect(await late).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
+    expect(ended).not.toHaveBeenCalled()
+    expect(backend.requests.ledgers).toEqual([])
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['token-2'])
+  })
+
+  it('갱신하는 동안 다른 계정으로 로그인했으면, 늦은 갱신을 버리고 앞 계정의 요청만 끝낸다', async () => {
+    const { backend, tab } = await openTabWithExpiredToken()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    const answer = Promise.withResolvers<Response>()
+    backend.refreshResponse = () => answer.promise
+    const error = errorOf(tab.request('/ledgers'))
+    await vi.waitFor(() => expect(backend.requests.refresh).toHaveLength(1))
+    backend.makeToken = otherUser
+    await tab.login(otherLogin)
+    answer.resolve(HttpResponse.json({ accessToken: accessTokenNamed('late-token') }))
+    expect(await error).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
+    expect(ended).not.toHaveBeenCalled()
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-2'])
+  })
+
+  it('같은 사용자면 한 번 다시 보낸다', async () => {
+    const { backend, tab } = await openTabWithExpiredToken()
+    backend.makeToken = (name) => accessTokenNamed(name, { sub: 'user-1', iat: 1 })
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-2'])
+  })
+
+  it.each([
+    ['base64url의 - 와 _ 가 든 값', '>>>???~~~'],
+    ['한글', '사용자'],
+  ])('사용자를 %s로 적어도 같은 사용자로 읽는다', async (_, sub) => {
+    const backend = startBackend()
+    backend.makeToken = (name) => accessTokenNamed(name, { sub })
+    const tab = await openTab()
+    await tab.login(credentials)
+    backend.expireToken()
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-2'])
+  })
+
+  const unreadable: [string, (name: string) => string][] = [
+    ['JWT가 아님', (name) => name],
+    ['마디가 넷', (name) => `a.eyJzdWIiOiJ1c2VyLTEifQ.b.${name}`],
+    ['base64가 아님', (name) => `a.~~~.${name}`],
+    ['JSON이 아님', (name) => `a.bm90LWpzb24.${name}`],
+    ['null', (name) => `a.bnVsbA.${name}`],
+    ['sub가 없음', (name) => accessTokenNamed(name, {})],
+    ['sub가 글자가 아님', (name) => accessTokenNamed(name, { sub: 1 })],
+    ['sub가 빈 글자', (name) => accessTokenNamed(name, { sub: '' })],
+  ]
+
+  it.each(unreadable)('새 토큰의 사용자를 읽지 못하면 다른 사용자로 본다: %s', async (_, makeToken) => {
+    const { backend, tab } = await openTabWithExpiredToken()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    backend.makeToken = makeToken
+    expect(await errorOf(tab.request('/ledgers'))).toMatchObject({ status: 401 })
+    expect(backend.requests.ledgers).toEqual(['token-1'])
+    expect(ended).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(unreadable)('앞 토큰의 사용자를 읽지 못하면 다른 사용자로 본다: %s', async (_, makeToken) => {
+    const backend = startBackend()
+    backend.makeToken = makeToken
+    const tab = await openTab()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    await tab.login(credentials)
+    backend.expireToken()
+    expect(await errorOf(tab.request('/ledgers'))).toMatchObject({ status: 401 })
+    expect(backend.requests.ledgers).toEqual(['token-1'])
+    expect(ended).toHaveBeenCalledTimes(1)
+  })
+
+  it('오류와 console에 토큰과 사용자가 남지 않는다', async () => {
+    const methods = ['log', 'info', 'warn', 'error', 'debug', 'trace'] as const
+    const consoleSpies = methods.map((method) => vi.spyOn(console, method))
+    const { backend, tab } = await openTabWithExpiredToken()
+    backend.makeToken = otherUser
+    const error = await errorOf(tab.request('/ledgers'))
+    expect(everythingIn(error)).not.toMatch(/token-\d|eyJ|user-\d/)
+    for (const spy of consoleSpies) expect(spy).not.toHaveBeenCalled()
+  })
+})
+
+describe('토큰 없이 보낸 요청', () => {
+  it('누구의 요청인지 알 수 없으므로 401이어도 갱신하지 않고 다시 보내지 않는다', async () => {
+    const backend = startBackend()
+    const tab = await openTab()
+    const ended = vi.fn()
+    tab.onSessionEnded(ended)
+    expect(await errorOf(tab.request('/ledgers'))).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
+    expect(backend.requests.refresh).toHaveLength(0)
+    expect(backend.requests.ledgers).toEqual([null])
+    expect(ended).not.toHaveBeenCalled()
   })
 })
 
@@ -362,7 +528,7 @@ describe('새로고침한 뒤 로그인 상태 되찾기', () => {
     expect(await tab.restoreSession()).toBe(true)
     await tab.request('/ledgers')
     expect(backend.requests.refresh).toHaveLength(1)
-    expect(backend.requests.ledgers).toEqual(['Bearer token-1'])
+    expect(backend.requests.ledgers).toEqual(['token-1'])
   })
 
   it('갱신이 401이면 로그인하지 않은 것이다. 이 탭에서 로그인이 풀린 것은 아니므로 알리지 않는다', async () => {
@@ -387,11 +553,32 @@ describe('새로고침한 뒤 로그인 상태 되찾기', () => {
     expect(await tab.restoreSession()).toBe(true)
   })
 
-  it('되찾는 동안 보낸 요청과 갱신을 한 번으로 묶는다', async () => {
+  it('함께 불러도 갱신은 한 번이다', async () => {
     const backend = startBackend()
     const tab = await openTab()
-    await Promise.all([tab.restoreSession(), tab.request('/ledgers')])
+    expect(await Promise.all([tab.restoreSession(), tab.restoreSession()])).toEqual([true, true])
     expect(backend.requests.refresh).toHaveLength(1)
+  })
+
+  it('되찾는 동안 토큰 없이 보낸 요청은 401로 끝나고, 되찾은 로그인은 남는다', async () => {
+    const backend = startBackend()
+    const tab = await openTab()
+    const [restored, error] = await Promise.all([tab.restoreSession(), errorOf(tab.request('/ledgers'))])
+    expect(restored).toBe(true)
+    expect(error).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
+    expect(backend.requests.refresh).toHaveLength(1)
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual([null, 'token-1'])
+  })
+
+  it('앞 토큰이 없으므로 사용자를 비교하지 않는다', async () => {
+    const backend = startBackend()
+    backend.makeToken = (name) => `unreadable.${name}`
+    const tab = await openTab()
+    expect(await tab.restoreSession()).toBe(true)
+    backend.requests.ledgers.length = 0
+    await tab.request('/ledgers')
+    expect(backend.requests.ledgers).toEqual(['token-1'])
   })
 
   it('이미 로그인했으면 갱신하지 않는다', async () => {
@@ -425,15 +612,15 @@ describe('잠금 없이 갱신과 로그인이 겹칠 때', () => {
     expect(restored).toBe(true)
     expect(ended).not.toHaveBeenCalled()
     await tab.request('/ledgers')
-    expect(backend.requests.ledgers).toEqual(['Bearer token-1'])
+    expect(backend.requests.ledgers).toEqual(['token-1'])
     expect(backend.requests.refresh).toHaveLength(1)
   })
 
   it('늦게 온 갱신의 토큰이 방금 한 로그인을 덮지 않는다', async () => {
-    const { backend, tab, restored } = await loginDuringRefresh(HttpResponse.json({ accessToken: 'late-token' }))
+    const { backend, tab, restored } = await loginDuringRefresh(HttpResponse.json({ accessToken: accessTokenNamed('late-token') }))
     expect(restored).toBe(true)
     await tab.request('/ledgers')
-    expect(backend.requests.ledgers).toEqual(['Bearer token-1'])
+    expect(backend.requests.ledgers).toEqual(['token-1'])
     expect(backend.requests.refresh).toHaveLength(1)
   })
 
@@ -449,7 +636,7 @@ describe('잠금 없이 갱신과 로그인이 겹칠 때', () => {
     answer.resolve(problem(401, 'UNAUTHENTICATED'))
     await waiting
     expect(ended).not.toHaveBeenCalled()
-    expect(backend.requests.ledgers).toEqual(['Bearer token-1', 'Bearer token-2'])
+    expect(backend.requests.ledgers).toEqual(['token-1', 'token-2'])
   })
 })
 
@@ -479,7 +666,7 @@ describe('탭 사이의 잠금', () => {
     tab.onSessionEnded(ended)
     await Promise.all([tab.restoreSession(), tab.login(credentials)])
     await tab.request('/ledgers')
-    expect(backend.requests.ledgers).toEqual(['Bearer token-1'])
+    expect(backend.requests.ledgers).toEqual(['token-1'])
     expect(ended).not.toHaveBeenCalled()
   })
 

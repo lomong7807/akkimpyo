@@ -1,6 +1,7 @@
 import { ApiError } from './apiError'
 import { requestLogin, requestRefresh, type Credentials } from './authApi'
 import { withSessionLock } from './sessionLock'
+import { isSameUser } from './tokenUser'
 
 /** access token은 이 변수에만 둔다(ADR 001 결정 1). 이 모듈 밖에는 요청을 보낼 때만 넘긴다. */
 let accessToken: string | undefined
@@ -33,15 +34,21 @@ export function onSessionEnded(listener: () => void): () => void {
   }
 }
 
-/** 지금 access token으로 보내고, 만료됐으면 갱신을 한 번 한 뒤 같은 요청을 다시 보낸다(ADR 001 결정 6). */
+/**
+ * 지금 access token으로 보내고, 만료됐으면 갱신을 한 번 한 뒤 같은 요청을 다시 보낸다(ADR 001 결정 6).
+ *
+ * refresh 쿠키는 브라우저의 모든 탭이 함께 쓴다. 다른 탭에서 다른 계정으로 로그인하면 갱신이 그 계정의 토큰을 준다.
+ * 앞 사용자의 요청을 다른 사용자로 보내지 않도록, 토큰의 사용자가 같을 때만 다시 보낸다.
+ * 토큰 없이 보낸 요청은 누구의 것인지 알 수 없으므로 갱신하지 않는다.
+ */
 export async function withAccessToken<T>(sendWith: (accessToken: string | undefined) => Promise<T>): Promise<T> {
   const used = accessToken
   try {
     return await sendWith(used)
   } catch (error) {
-    if (!isUnauthenticated(error)) throw error
+    if (used === undefined || !isUnauthenticated(error)) throw error
     const renewed = await renew(used)
-    if (renewed === undefined) throw error
+    if (renewed === undefined || !isSameUser(used, renewed)) throw error
     return sendWith(renewed)
   }
 }
@@ -59,13 +66,19 @@ function renew(stale: string | undefined): Promise<string | undefined> {
 async function refresh(stale: string | undefined): Promise<string | undefined> {
   try {
     const renewed = await requestRefresh()
-    if (accessToken === stale) accessToken = renewed
+    if (accessToken === stale) acceptRenewed(renewed)
   } catch (error) {
     // 연결 문제와 서버 오류는 로그인 풀림이 아니다
     if (!(error instanceof ApiError && error.status === 401)) throw error
     if (accessToken === stale) endSession()
   }
   return accessToken
+}
+
+/** 쓰던 토큰과 사용자가 다르면 이 탭의 로그인은 끝난 것이다. 새 토큰을 두지 않는다. */
+function acceptRenewed(renewed: string) {
+  if (accessToken !== undefined && !isSameUser(accessToken, renewed)) endSession()
+  else accessToken = renewed
 }
 
 function endSession() {
