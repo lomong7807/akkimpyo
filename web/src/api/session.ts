@@ -1,6 +1,14 @@
 import { ApiError } from './apiError'
-import { requestLogin, requestRefresh, requestSignup, type Credentials, type Registration } from './authApi'
+import {
+  requestLogin,
+  requestLogout,
+  requestRefresh,
+  requestSignup,
+  type Credentials,
+  type Registration,
+} from './authApi'
 import { withSessionLock } from './sessionLock'
+import { logoutValue, pendingLogout, recordLogout, settleLogout } from './sessionMarks'
 import { isSameUser } from './tokenUser'
 
 /** access token은 이 변수에만 둔다(ADR 001 결정 1). 이 모듈 밖에는 요청을 보낼 때만 넘긴다. */
@@ -9,7 +17,17 @@ let accessToken: string | undefined
 /** 진행 중인 갱신. 한 탭 안에서 갱신을 하나로 묶는다. */
 let renewal: Promise<string | undefined> | undefined
 
-const endedListeners = new Set<() => void>()
+/** 진행 중인 로그아웃 다시 보내기 */
+let resending: Promise<void> | undefined
+
+/**
+ * 이 탭에서 쓰던 로그인이 끝난 까닭
+ * - ended: 로그인이 풀렸다
+ * - logged-out: 사용자가 로그아웃했다
+ */
+export type SessionEnd = 'ended' | 'logged-out'
+
+const endedListeners = new Set<(end: SessionEnd) => void>()
 
 /** 실패하면 ApiError를 던진다. */
 export function login(credentials: Credentials): Promise<void> {
@@ -22,10 +40,43 @@ export function signup(registration: Registration): Promise<void> {
 }
 
 async function startSession(requestToken: (lost: AbortSignal) => Promise<string>): Promise<void> {
+  const logoutSeen = logoutValue()
   await withSessionLock('steal', async (lost) => {
     const token = await requestToken(lost)
-    if (!lost.aborted) accessToken = token
+    if (lost.aborted) return
+    settleLogout(logoutSeen)
+    accessToken = token
   })
+}
+
+/** 이 기기에서 로그아웃한다. 서버의 답을 기다리지 않는다. */
+export function logout(): void {
+  const value = recordLogout()
+  endSession('logged-out')
+  // 앞 탭이 멈춰 있어도 사용자가 누른 로그아웃은 서버에 닿게 한다
+  void sendLogout(value, 'steal')
+}
+
+/** 닿지 못한 로그아웃이 있으면 한 번 다시 보낸다. 실패해도 되풀이하지 않는다. */
+export function resendLogout(): void {
+  const value = pendingLogout()
+  if (value === undefined) return
+  resending ??= sendLogout(value, 'fail').finally(() => {
+    resending = undefined
+  })
+}
+
+async function sendLogout(value: string, whenStuck: 'fail' | 'steal'): Promise<void> {
+  try {
+    await withSessionLock(whenStuck, async (lost) => {
+      // 기다리는 사이 로그인이 끝났으면 방금 한 로그인을 끝내게 되고, 새 로그아웃이 있으면 그것이 보낸다
+      if (pendingLogout() !== value) return
+      await requestLogout(lost)
+      if (!lost.aborted) settleLogout(value)
+    })
+  } catch {
+    // 대기를 남긴다. 앱을 열 때와 다시 연결될 때 또 보낸다
+  }
 }
 
 /**
@@ -36,8 +87,8 @@ export async function restoreSession(): Promise<boolean> {
   return (await renew(undefined)) !== undefined
 }
 
-/** 이 탭에서 쓰던 로그인이 풀리면 부른다. 돌려받은 함수로 끊는다. */
-export function onSessionEnded(listener: () => void): () => void {
+/** 이 탭에서 쓰던 로그인이 끝나면 부른다. 돌려받은 함수로 끊는다. */
+export function onSessionEnded(listener: (end: SessionEnd) => void): () => void {
   endedListeners.add(listener)
   return () => {
     endedListeners.delete(listener)
@@ -86,7 +137,7 @@ async function refresh(stale: string | undefined, lost: AbortSignal): Promise<st
   } catch (error) {
     // 연결 문제와 서버 오류는 로그인 풀림이 아니다
     if (!(error instanceof ApiError && error.status === 401)) throw error
-    if (isCurrent()) endSession()
+    if (isCurrent()) endSession('ended')
   }
   return accessToken
 }
@@ -106,14 +157,14 @@ async function requestRefreshTwice(lost: AbortSignal): Promise<string> {
 
 /** 쓰던 토큰과 사용자가 다르면 이 탭의 로그인은 끝난 것이다. 새 토큰을 두지 않는다. */
 function acceptRenewed(renewed: string) {
-  if (accessToken !== undefined && !isSameUser(accessToken, renewed)) endSession()
+  if (accessToken !== undefined && !isSameUser(accessToken, renewed)) endSession('ended')
   else accessToken = renewed
 }
 
-function endSession() {
+function endSession(end: SessionEnd) {
   const wasSignedIn = accessToken !== undefined
   accessToken = undefined
-  if (wasSignedIn) endedListeners.forEach((notify) => notify())
+  if (wasSignedIn) endedListeners.forEach((notify) => notify(end))
 }
 
 function isUnauthenticated(error: unknown): boolean {
