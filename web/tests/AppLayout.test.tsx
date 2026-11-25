@@ -260,6 +260,25 @@ describe('사이드바', () => {
     expect(readCssRule('src/app/Sidebar.module.css', '.more')).toContain('border-top: 1px solid var(--color-border)')
   })
 
+  it('주 메뉴가 없으면 더보기 항목 위에 선을 두지 않는다', () => {
+    const moreOnly = { tabs: [], sidebar: { main: [], more: [accounts] } }
+    renderRoutes(
+      [
+        {
+          element: <AppLayout navigation={moreOnly} onLogout={onLogout} />,
+          children: [{ path: '/', element: <MainScreen>내용</MainScreen> }],
+        },
+      ],
+      '/',
+    )
+    setViewportWidth(1280)
+    const list = styleOf(within(menu()).getByRole('list'))
+    expect(list.marginTop).not.toBe('var(--space-8)')
+    expect(list.paddingTop).not.toBe('var(--space-8)')
+    const logout = within(menu()).getByRole('button', { name: '로그아웃' })
+    expect(styleOf(logout.parentElement!).marginTop).toBe('var(--space-8)')
+  })
+
   it('더보기 항목 아래에 구분선 뒤 이름만 있는 44px 로그아웃 줄을 둔다. 누르면 로그아웃한다', () => {
     onLogout.mockClear()
     open('/home', wide)

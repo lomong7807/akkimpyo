@@ -36,7 +36,7 @@
   list-style: none;
 }
 
-.more {
+.menu + .more {
   margin-top: var(--space-8);
   padding-top: var(--space-8);
   border-top: 1px solid var(--color-border);
