@@ -255,10 +255,11 @@ public class TransactionService {
         return after;
     }
 
+    /** 거래의 version이 이 변경 뒤의 값이 된 다음에 부른다. 이력의 번호가 그 값이다. */
     private void appendLog(Transaction tx, ChangeAction action, UUID actorId, String deviceId,
                            TransactionView before, TransactionView after) {
-        changeLogRepository.save(ChangeLog.of(tx.getId(), tx.getLedgerId(), action, actorId, deviceId,
-                toJson(before), toJson(after), nextLogTime(tx.getId())));
+        changeLogRepository.save(ChangeLog.of(tx.getId(), tx.getLedgerId(), tx.getVersion(), action, actorId,
+                deviceId, toJson(before), toJson(after), nextLogTime(tx.getId())));
     }
 
     /**
