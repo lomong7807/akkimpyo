@@ -192,6 +192,7 @@ assert '명세표를 맞춰 봤다' logged '^- 명세표: 통과'
 assert '점검 13개를 돌렸다' logged '^- 점검 쿼리: 통과 (13개 모두 0건)'
 assert 'Flyway validate를 봤다' logged '^- Flyway validate: 통과 (Successfully validated'
 assert '서버가 떴다' logged '^- 서버 기동: 통과'
+assert '쿼리 파일이 같으면 말하지 않는다' not logged '쿼리 파일'
 assert '컨테이너가 남지 않는다' equal '' "$(docker ps --all --quiet --filter 'name=akkimpyo-drill')"
 assert '평문이 남지 않는다' equal '' "$(find /tmp -maxdepth 1 -name 'akkimpyo-drill*')"
 
@@ -203,6 +204,34 @@ assert '2로 끝난다' equal 2 "$rc"
 assert '사본은 가장 새것 하나다' equal "$(basename "$out")" "$(cd "$WORK/copy" && echo ./*.tar.age | sed 's|^\./||')"
 run_drill --file "$WORK/copy/$(basename "$out")" --skip-server
 assert '사본 파일로도 된다' equal 2 "$rc"
+
+section '복원 훈련: 서버의 쿼리 파일이 레포와 다르면 알려 주고, 실패로 만들지는 않는다'
+{
+  cat "$REPO/docs/db/integrity-checks.sql"
+  echo '-- 옛 파일'
+} >/tmp/old-checks.sql
+config "BACKUP_LOCAL_DIR=$STORE" INTEGRITY_SQL_FILE=/tmp/old-checks.sql
+sleep 1
+run_backup
+run_drill --store "$STORE" --skip-server
+assert '결과에 나온다' logged '^- 쿼리 파일: 다름'
+assert '실패가 아니다(건너뛴 서버 때문에 불완전)' equal 2 "$rc"
+assert '명세표와 점검은 그대로 통과다' logged '^- 점검 쿼리: 통과'
+config "BACKUP_LOCAL_DIR=$STORE"
+sleep 1
+run_backup
+run_drill --store "$STORE" --skip-server --keep-copy "$WORK/copy"
+
+section '복원 훈련: FileVault가 꺼져 있으면 경고하고 계속한다'
+mkdir -p /tmp/fake-fdesetup
+printf '#!/bin/sh\necho "FileVault is Off."\n' >/tmp/fake-fdesetup/fdesetup
+chmod 755 /tmp/fake-fdesetup/fdesetup
+PATH=/tmp/fake-fdesetup:$PATH run_drill --store "$STORE" --skip-server
+assert '경고한다' logged '주의: FileVault가 꺼져 있다'
+assert '멈추지 않는다' equal 2 "$rc"
+printf '#!/bin/sh\necho "FileVault is On."\n' >/tmp/fake-fdesetup/fdesetup
+PATH=/tmp/fake-fdesetup:$PATH run_drill --store "$STORE" --skip-server
+assert '켜져 있으면 경고하지 않는다' not logged 'FileVault'
 
 section '복원 훈련: 잘못된 것을 잡아낸다'
 work_dir=$(mktemp -d)
@@ -476,9 +505,27 @@ printf 'TELEGRAM_BOT_TOKEN=bad token"\nTELEGRAM_CHAT_ID=1\n' >/tmp/telegram.env
 telegram '글'
 assert '형식이 틀린 토큰은 쓰지 않는다' [ "$rc" -ne 0 ]
 assert '  값을 출력하지 않는다' not logged 'bad token'
-rm /tmp/telegram.env
+printf 'TELEGRAM_BOT_TOKEN=12345:test-token\nTELEGRAM_CHAT_ID=-100200\n' >/tmp/telegram.env
+# refused 설명: 보내지 않고 실패하며, 값을 출력하지 않는다.
+refused() {
+  rm -f /tmp/curl-args
+  telegram '글'
+  assert "$1: 실패로 멈춘다" [ "$rc" -ne 0 ]
+  assert '  보내지 않는다' not test -e /tmp/curl-args
+  assert '  값을 출력하지 않는다' not logged 'test-token'
+}
+for mode in 640 604 660 400 700; do
+  chmod "$mode" /tmp/telegram.env
+  refused "토큰 파일 권한 $mode"
+done
+chmod 600 /tmp/telegram.env
+chown 1000 /tmp/telegram.env
+refused '토큰 파일이 root 소유가 아니다'
+chown 0 /tmp/telegram.env
 telegram '글'
-assert '파일이 없으면 실패한다' [ "$rc" -ne 0 ]
+assert 'root 소유 600이면 보낸다' equal 0 "$rc"
+rm /tmp/telegram.env
+refused '토큰 파일이 없다'
 
 # ---------------------------------------------------------------------------
 section 'Object Storage 올리기: 진짜 OCI CLI를 대역 서버에 붙인다'
@@ -510,6 +557,14 @@ assert '복원 훈련이 가장 새것을 내려받아 복원한다' equal 2 "$r
 assert '  명세표가 맞는다' logged '^- 명세표: 통과'
 run_drill --object "weekly/$name" --skip-server
 assert '이름을 정해 내려받을 수 있다' equal 2 "$rc"
+mkdir -p "$WORK/drill-oci"
+OCI_CONFIG_DIR=$WORK/drill-oci run_drill --skip-server
+assert '설정 폴더를 따로 정할 수 있다' equal 2 "$rc"
+printf '[DEFAULT]\nuser=ocid1.user.oc1..test\n' >"$WORK/drill-oci/config"
+OCI_CLI_AUTH=api_key OCI_CONFIG_DIR=$WORK/drill-oci run_drill --skip-server
+assert '  그 폴더의 config를 읽는다' logged "$WORK/drill-oci/config"
+OCI_CONFIG_DIR=$WORK/no-such-dir run_drill --skip-server
+assert '  폴더가 없으면 실패한다' logged 'OCI 설정 폴더가 없다'
 assert '내려받기는 읽기 요청만 보냈다' equal '' "$(requests | tail -n +5 | grep -v '^GET \|^HEAD ' || true)"
 config OCI_NAMESPACE=testns OCI_BUCKET=denied "OCI_CLI_IMAGE=$TEST_ID-oci" "BACKUP_WORK_DIR=$WORK/run"
 expect_failure '올리기'

@@ -122,7 +122,66 @@ age-keygen -o akkimpyo-backup.key
 - 개인키 파일은 owner만 오프라인으로 가진다. 레포, 서버, CI에 두지 않는다.
 - **개인키를 잃으면 백업을 아무도 풀 수 없다.** 서로 다른 곳에 두 벌 두거나, 키 쌍을 하나 더 만들어 공개키를 두 줄 넣는다.
 
+## owner가 할 일: 서버 설치 전 조건
+
+security 검토(PR #129)의 조건이다. 서버에 설치하기 전에 둘 다 끝낸다.
+
+### 1. 다른 컨테이너가 이 VM의 자격을 얻지 못하게 막는다
+
+instance principal 자격은 VM에서 메타데이터 주소(`http://169.254.169.254`)에 닿는 모든 프로세스가 얻을 수 있다.
+같은 VM의 다른 컨테이너가 뚫리면 공개키로 암호화한 가짜 백업을 더 늦은 이름으로 올릴 수 있다. age는 누가 암호화했는지 증명하지 않는다.
+그래서 Docker 브리지에서 메타데이터로 가는 요청을 `DOCKER-USER` 체인으로 막는다. 규칙 예시는 이렇다.
+
+```
+iptables -I DOCKER-USER -d 169.254.169.254/32 -p tcp --dport 80 -j REJECT
+```
+
+- **서버 방화벽을 바꾸는 일이라 owner가 한다.** 여기 있는 것은 예시다. 적용 시점과 재부팅 뒤에도 남게 하는 방법은 #52에서 정한다.
+- **TCP 80만 막는다.** OCI에서는 같은 주소가 [DNS 리졸버](https://docs.oracle.com/en-us/iaas/Content/Network/Concepts/dns.htm)와 [NTP(UDP 123)](https://docs.oracle.com/en-us/iaas/Content/Compute/Tasks/configuringntpservice.htm)로도 쓰인다. 주소 전체를 막으면 컨테이너의 DNS가 끊길 수 있다.
+- **owner의 다른 컨테이너가 메타데이터를 쓰는지 먼저 확인한다.** 쓰고 있으면 막는 순간 그 기능이 멈춘다. 동작이 없는 규칙을 먼저 넣어 며칠 세어 보면 된다. `pkts`가 늘면 쓰는 컨테이너가 있는 것이다.
+
+  ```
+  iptables -I DOCKER-USER -d 169.254.169.254/32 -p tcp --dport 80   # 세기만 한다
+  iptables -L DOCKER-USER -v -n
+  iptables -D DOCKER-USER -d 169.254.169.254/32 -p tcp --dport 80   # 다 세었으면 지운다
+  ```
+- **백업의 OCI CLI 컨테이너는 영향이 없다.** `--network host`라 `DOCKER-USER`를 지나지 않는다. 격리된 Docker 29.9.2와 대역 메타데이터 서버로 확인했다(2026-11-25).
+
+  | | 규칙 없음 | TCP 80만 막음 | 주소 전체를 막음 |
+  |---|---|---|---|
+  | 브리지(기본, 사용자 정의)에서 메타데이터 | 됨 | **막힘** | 막힘 |
+  | 브리지에서 DNS(53), NTP(123) | 됨 | **됨** | 끊김 |
+  | `--network host`에서 메타데이터, DNS, NTP | 됨 | **됨** | 됨 |
+  | 백업과 같은 옵션의 OCI CLI가 메타데이터에 닿는가 | - | **닿음** | - |
+
+  실제 VM에서는 확인하지 않았다.
+- 막은 뒤에는 서버에서 확인한다. `Connection refused`가 나와야 하고, 막기 전에는 `200`이 나온다.
+
+  ```
+  docker run --rm --entrypoint python3 "$(sed -n 's/^DEFAULT_OCI_CLI_IMAGE=//p' deploy/bin/backup-lib.sh)" -c \
+    "import urllib.request as u; print(u.urlopen(u.Request('http://169.254.169.254/opc/v2/instance/', headers={'Authorization': 'Bearer Oracle'}), timeout=5).status)"
+  ```
+- Docker가 nftables 방화벽을 쓰면 `DOCKER-USER` 체인이 [없다](https://docs.docker.com/engine/network/firewall-nftables/). `docker info`의 `Firewall Backend`가 `iptables`인지 본다.
+- VM의 프로세스와 `--network host`로 도는 다른 컨테이너는 막히지 않는다.
+
+### 2. 복원 훈련에는 버킷 읽기만 되는 전용 사용자를 쓴다
+
+훈련은 OCI 설정 폴더를 OCI CLI 컨테이너에 읽기 전용으로 넘긴다. owner의 `~/.oci`에 계정 관리자 키가 있으면 훈련에 필요한 것(버킷 하나 읽기)보다 훨씬 넓다.
+그래서 전용 사용자와 API 키를 쓰기를 권한다. 계정을 만드는 일이라 owner가 정한다.
+
+1. 콘솔에서 사용자와 그룹(예: `akkimpyo-drill`)을 만들고 그룹에 이 정책만 준다.
+
+   ```
+   Allow group akkimpyo-drill to read objects in compartment <구획> where target.bucket.name='<버킷>'
+   ```
+
+   [Common Policies](https://docs.oracle.com/en-us/iaas/Content/Identity/Concepts/commonpolicies.htm)의 "Let users download objects" 문장이다. 같은 예시의 `read buckets`는 버킷 목록을 보는 권한이라 뺐다. 콘솔에 넣어 보지는 않았다.
+2. 그 사용자의 API 키를 만들어 `config`와 키를 따로 둔 폴더(예: `~/.oci-akkimpyo-drill`, 권한 700)에 둔다. `key_file`은 그 폴더 안의 절대 경로로 적는다.
+3. 훈련할 때 `OCI_CONFIG_DIR`로 그 폴더를 준다. 그러면 그 폴더만 컨테이너에 넘어간다.
+
 ## 서버 설치 (owner가 따로 OK한 뒤)
+
+위의 조건 둘을 끝낸 뒤에 한다.
 
 레포를 받은 폴더에서 root로 실행한다.
 
@@ -172,7 +231,7 @@ oci get --name daily/permission-check --file -                                # 
 oci delete --name daily/permission-check --force                              # 거부돼야 한다
 ```
 
-VM 안의 모든 프로세스와 컨테이너가 같은 instance principal 자격을 얻을 수 있다. 그래서 VM이 침해되면 공격자는 백업 버킷에 객체를 **만들 수는** 있다(읽기, 덮어쓰기, 삭제는 못 한다).
+VM이 침해되면 공격자는 백업 버킷에 객체를 **만들 수는** 있다(읽기, 덮어쓰기, 삭제는 못 한다).
 
 ## 알림
 
@@ -182,6 +241,7 @@ VM 안의 모든 프로세스와 컨테이너가 같은 instance principal 자�
 | 덤프 크기가 직전보다 20% 넘게 줄었다(백업은 올라간다) | `backup` |
 | 성공한 백업이 26시간 넘게 없다 | `backup-check`(매시간 점검, 같은 문제는 6시간마다) |
 
+토큰 파일이 root 소유, 권한 600이 아니면 보내지 않고 실패로 끝난다.
 보내지 못한 알림은 `/var/lib/akkimpyo-backup/unsent-alerts`에 남고 `backup-check`가 다시 보낸다.
 서버가 통째로 죽으면 두 알림 모두 나가지 않는다. 서버 밖의 감시가 따로 필요하다.
 
@@ -198,15 +258,20 @@ object=$(/opt/akkimpyo/bin/backup | tail -n 1) || 중단
 
 ## 복원 훈련 (owner, 맥)
 
-매월 한 번, 그리고 조각이 끝날 때. Docker, age, JDK 21이 필요하다. 운영에 배포된 커밋을 체크아웃하고 돌린다.
+매월 한 번, 그리고 조각이 끝날 때. Docker, age, JDK 21이 필요하다.
+
+- **운영에 배포된 버전의 체크아웃에서 돌린다.** 점검 쿼리와 서버는 체크아웃의 것을 쓴다. 레포가 운영보다 앞서 있으면(머지됐지만 배포 전인 마이그레이션) 점검이 쿼리 오류로 실패할 수 있다.
+- **FileVault가 켜진 owner 맥을 전제로 한다.** 복호화한 덤프가 맥 디스크(`$TMPDIR`)에 잠깐 놓인다. 끝나면 지우지만 덮어써 지우는 것은 아니다. 꺼져 있으면 스크립트가 경고하고 계속한다.
 
 ```
-OCI_NAMESPACE=<네임스페이스> OCI_BUCKET=<버킷> \
+git checkout <운영에 배포된 커밋>
+OCI_NAMESPACE=<네임스페이스> OCI_BUCKET=<버킷> OCI_CONFIG_DIR=~/.oci-akkimpyo-drill \
   scripts/restore-drill --identity <개인키 파일> --keep-copy ~/akkimpyo-backup-copy
 ```
 
-- `~/.oci/config`의 owner 계정으로 내려받는다. 콘솔에서 받은 파일로 하려면 `--file <파일>.tar.age`를 준다(`.sha256`도 같은 폴더에 둔다).
+- `OCI_CONFIG_DIR`의 계정으로 내려받는다. 정하지 않으면 `~/.oci`를 쓴다([전용 사용자를 권한다](#2-복원-훈련에는-버킷-읽기만-되는-전용-사용자를-쓴다)). 콘솔에서 받은 파일로 하려면 `--file <파일>.tar.age`를 준다(`.sha256`도 같은 폴더에 둔다).
 - 통과하면 0으로 끝나고, `docs/db/backup-restore.md`의 훈련 기록에 넣을 줄을 출력한다.
+- 백업 안의 `integrity-checks.sql`(서버에 설치된 것)이 체크아웃의 파일과 다르면 결과에 "쿼리 파일: 다름"이 나온다. 실패는 아니다. 체크아웃이 배포된 버전이 맞으면 서버의 파일을 다시 설치한다.
 - `--keep-copy`는 암호화된 파일 하나만 남긴다. 이 사본도 덤프 시각부터 35일 안에 지워야 한다. 다음 훈련이 옛 사본을 지운다. 훈련을 거르면 직접 지운다.
 - 실제 복구 절차는 [docs/db/backup-restore.md](../docs/db/backup-restore.md) 10절이다. 파일을 푸는 명령은 이렇다.
 

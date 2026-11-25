@@ -23,7 +23,11 @@ usage() {
   --server-jar 파일   이 jar로 서버를 띄운다. 정하지 않으면 server/에서 빌드한다
   --skip-server       서버 기동과 Flyway validate를 건너뛴다. 훈련은 "불완전"으로 끝난다
 
-버킷에서 받을 때는 환경변수 OCI_NAMESPACE, OCI_BUCKET과 ~/.oci 설정(owner 계정)을 쓴다.
+버킷에서 받을 때는 환경변수를 쓴다.
+  OCI_NAMESPACE, OCI_BUCKET   버킷
+  OCI_CONFIG_DIR              OCI 설정 폴더(config와 API 키). 기본값 ~/.oci.
+                              이 폴더만 OCI CLI 컨테이너에 읽기 전용으로 넘긴다
+
 종료 코드: 0 통과, 1 실패, 2 불완전
 USAGE
 }
@@ -65,6 +69,11 @@ POSTGRES_IMAGE=${POSTGRES_IMAGE:-postgres:17}
 JRE_IMAGE=${JRE_IMAGE:-eclipse-temurin:21.0.13_9-jre-noble@sha256:b4f9d2a0bc273417cf5219b7b832bbf0493ed500b7b57d5001d9f83374659060}
 command -v -- "$AGE_BIN" >/dev/null || die "age가 없다(macOS: brew install age)"
 command -v docker >/dev/null || die 'docker가 없다'
+
+# 복호화한 덤프가 잠깐 디스크에 놓인다. 지워도 덮어써 지우는 것은 아니므로 디스크 암호화를 전제로 한다.
+if command -v fdesetup >/dev/null && [[ $(fdesetup status 2>/dev/null) != *'FileVault is On'* ]]; then
+  log '주의: FileVault가 꺼져 있다. 복호화한 평문이 암호화되지 않은 디스크에 잠깐 놓인다'
+fi
 
 sha256_of() {
   if command -v sha256sum >/dev/null; then
@@ -122,8 +131,9 @@ finish() {
 # --- 백업 가져오기 ---
 
 oci_cli() {
-  docker run --rm --init --user "$(id -u):$(id -g)" --volume "$HOME/.oci:$HOME/.oci:ro" \
-    --env "HOME=$HOME" ${OCI_CLI_AUTH:+--env "OCI_CLI_AUTH=$OCI_CLI_AUTH"} \
+  docker run --rm --init --user "$(id -u):$(id -g)" --volume "$oci_config_dir:$oci_config_dir:ro" \
+    --env "HOME=$HOME" --env "OCI_CLI_CONFIG_FILE=$oci_config_dir/config" \
+    ${OCI_CLI_AUTH:+--env "OCI_CLI_AUTH=$OCI_CLI_AUTH"} \
     "$OCI_CLI_IMAGE" os object "$@" --namespace "$OCI_NAMESPACE" --bucket-name "$OCI_BUCKET"
 }
 
@@ -149,6 +159,7 @@ if [[ -n $file ]]; then
 else
   if [[ -z $store ]]; then
     [[ -n ${OCI_NAMESPACE:-} && -n ${OCI_BUCKET:-} ]] || die '환경변수 OCI_NAMESPACE와 OCI_BUCKET을 정한다'
+    oci_config_dir=$(cd -- "${OCI_CONFIG_DIR:-$HOME/.oci}" && pwd) || die 'OCI 설정 폴더가 없다'
   fi
   if [[ -z $object ]]; then
     if [[ -n $store ]]; then
@@ -242,6 +253,10 @@ else
 fi
 
 checks=$repo/docs/db/integrity-checks.sql
+if ! cmp -s "$work/plain/integrity-checks.sql" "$checks"; then
+  report="$report- 쿼리 파일: 다름. 서버에 설치된 integrity-checks.sql이 이 체크아웃의 파일과 다르다."
+  report="$report 운영에 배포된 버전의 체크아웃인지, 서버의 파일을 다시 설치해야 하는지 본다"$'\n'
+fi
 bad=''
 for number in $(check_numbers "$checks"); do
   if sql_section "$checks" "점검 $number" | psql_restored -A -t >"$work/check.txt"; then

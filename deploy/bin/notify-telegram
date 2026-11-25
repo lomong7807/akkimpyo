@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 표준 입력의 글을 텔레그램으로 보낸다. 보내지 못하면 0이 아닌 코드로 끝난다.
 # 토큰과 chat id는 root 전용 파일(TELEGRAM_ENV_FILE)에서 읽고, 명령줄과 출력에 값을 내지 않는다.
+# 그 파일이 root 소유, 권한 600이 아니면 보내지 않는다.
 set +x
 set -euo pipefail
 umask 077
@@ -12,7 +13,7 @@ fail() {
 
 env_file=${TELEGRAM_ENV_FILE:-/etc/akkimpyo/telegram.env}
 [[ -r $env_file ]] || fail "파일을 읽을 수 없다: $env_file"
-[[ $(stat -c %a "$env_file") == *00 ]] || printf '텔레그램 알림: %s의 권한을 600으로 바꾼다\n' "$env_file" >&2
+[[ $(stat -c '%u %a' "$env_file") == '0 600' ]] || fail "$env_file 이 root 소유, 권한 600이 아니라서 보내지 않는다"
 
 token=$(sed -n 's/^TELEGRAM_BOT_TOKEN=//p' "$env_file")
 chat_id=$(sed -n 's/^TELEGRAM_CHAT_ID=//p' "$env_file")
