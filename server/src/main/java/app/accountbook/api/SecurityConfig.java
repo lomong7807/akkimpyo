@@ -42,7 +42,7 @@ class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(PUBLIC).permitAll()
                         .anyRequest().authenticated())
-                // 거절하는 응답에도 Cache-Control이 붙게 헤더를 쓰는 필터 바로 다음에 둔다.
+                // 토큰 확인(사용자 조회)보다 먼저 거절한다.
                 .addFilterAfter(new AuthRequestFilter(webOrigin), HeaderWriterFilter.class)
                 .addFilterBefore(new AccessTokenFilter(verifier), AnonymousAuthenticationFilter.class)
                 .exceptionHandling(handling -> handling.authenticationEntryPoint(SecurityConfig::unauthenticated))
