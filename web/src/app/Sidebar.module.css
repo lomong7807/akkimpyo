@@ -79,3 +79,15 @@
 .row[aria-current] {
   color: var(--color-accent);
 }
+
+/* 버튼이 사이드바 폭에서 좌우 16px을 뺀 폭을 다 쓴다 */
+.quickEntry {
+  display: grid;
+  flex: none;
+}
+
+.quickEntryLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}

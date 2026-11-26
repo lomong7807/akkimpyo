@@ -8,6 +8,8 @@ export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   /** JSON으로 보낼 본문 */
   body?: unknown
+  /** 더 붙일 헤더. Authorization, Content-Type, 전용 헤더는 이 계층이 정하므로 덮어쓰지 못한다. */
+  headers?: Readonly<Record<string, string>>
 }
 
 export interface SendOptions extends RequestOptions {
@@ -23,6 +25,14 @@ export interface SendOptions extends RequestOptions {
 
 /** /api/v1 아래로 요청을 한 번 보낸다. 앱에서 fetch를 부르는 곳은 여기뿐이다. 실패하면 ApiError를 던진다. */
 export async function send(path: `/${string}`, options: SendOptions = {}): Promise<unknown> {
+  return (await sendForResponse(path, options)).body
+}
+
+/** send와 같고, 성공한 응답의 상태도 준다(만들기의 201과 재전송의 200처럼 상태로 뜻이 갈리는 곳). */
+export async function sendForResponse(
+  path: `/${string}`,
+  options: SendOptions = {},
+): Promise<{ status: number; body: unknown }> {
   const { response, text } = await exchange(path, options)
   if (!response.ok) {
     throw ApiError.response(response.status, parseProblem(response.headers.get('Content-Type'), text))
@@ -30,9 +40,9 @@ export async function send(path: `/${string}`, options: SendOptions = {}): Promi
   if (options.successStatus !== undefined && response.status !== options.successStatus) {
     throw ApiError.unreadable(response.status)
   }
-  if (text === '') return undefined
+  if (text === '') return { status: response.status, body: undefined }
   try {
-    return JSON.parse(text)
+    return { status: response.status, body: JSON.parse(text) }
   } catch {
     throw ApiError.unreadable(response.status)
   }
@@ -40,12 +50,16 @@ export async function send(path: `/${string}`, options: SendOptions = {}): Promi
 
 async function exchange(
   path: `/${string}`,
-  { method = 'GET', body, accessToken, signal, timeoutMs = TIMEOUT_MS, keepalive }: SendOptions,
+  { method = 'GET', body, headers: extraHeaders = {}, accessToken, signal, timeoutMs = TIMEOUT_MS, keepalive }: SendOptions,
 ) {
   if (signal?.aborted) throw ApiError.timeout()
 
-  const headers = new Headers()
+  // 더 붙인 헤더를 먼저 넣어 아래의 헤더가 덮어쓰게 한다
+  const headers = new Headers(extraHeaders)
+  headers.delete('Authorization')
+  headers.delete('X-Akkimpyo-Client')
   if (body !== undefined) headers.set('Content-Type', 'application/json')
+  else headers.delete('Content-Type')
   if (accessToken !== undefined) headers.set('Authorization', `Bearer ${accessToken}`)
   // 다른 출처의 요청을 막는 전용 헤더(ADR 001 결정 5)
   if (path.startsWith('/auth/')) headers.set('X-Akkimpyo-Client', 'web')

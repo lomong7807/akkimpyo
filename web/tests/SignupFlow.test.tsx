@@ -1,7 +1,7 @@
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { startAccounts } from './support/accounts'
-import { delayed, ledgerNameOf, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, ledgerNameOf, startBackend, type Backend } from './support/backend'
 import { startCategories, type Categories } from './support/categories'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
@@ -95,7 +95,7 @@ describe('가입하면', () => {
     expect(router.state.location.pathname).toBe('/welcome')
     expect(router.state.historyAction).toBe('REPLACE')
     expect(router.state.location.state).toBeNull()
-    await waitFor(() => expect(categories.requests).toEqual(['new-user-ledger']))
+    await waitFor(() => expect(categories.requests).toEqual([ledgerIdOf('new-user')]))
     expect(backend.requests.me).toEqual(['new-user'])
     expect(backend.requests.refresh).toHaveLength(1)
   })
@@ -145,7 +145,7 @@ describe('가입하면', () => {
     await welcome()
     expect(router.state.location.pathname).toBe('/welcome')
     // 안내에는 공통 틀이 없어 장부 이름이 보이지 않는다. 새 사용자의 장부를 받았는지로 본다
-    await waitFor(() => expect(categories.requests).toEqual(['new-user-ledger']))
+    await waitFor(() => expect(categories.requests).toEqual([ledgerIdOf('new-user')]))
     expect(dom.sawText(ledgerNameOf('user-1'))).toBe(false)
     expect(dom.sawText(secret)).toBe(false)
   })

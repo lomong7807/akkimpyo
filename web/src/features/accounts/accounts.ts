@@ -1,5 +1,6 @@
 import { ApiError } from '../../api/apiError'
 import { request } from '../../api/request'
+import { ledgerPath } from '../me/ledgerPath'
 
 /* 계좌의 경로와 필드 이름(#13의 응답 계약)은 이 파일에만 있다. */
 
@@ -18,7 +19,7 @@ export interface Account {
 
 /** 만든 순서대로 준다. 실패하면 ApiError를 던진다. */
 export async function fetchAccounts(ledgerId: string): Promise<Account[]> {
-  const body = await request<{ items?: unknown } | null | undefined>(`/ledgers/${ledgerId}/accounts`)
+  const body = await request<{ items?: unknown } | null | undefined>(ledgerPath(ledgerId, 'accounts'))
   const items = body?.items
   // 하나라도 읽을 수 없으면 모두 받지 않는다. 빼고 보이면 합계가 틀린다
   if (!Array.isArray(items) || !items.every(isAccount)) throw ApiError.unreadable()
@@ -37,7 +38,7 @@ export interface NewAccount {
 
 /** 만들어진 계좌를 준다. 실패하면 ApiError를 던진다. */
 export async function createAccount(ledgerId: string, account: NewAccount): Promise<Account> {
-  const body = await request<Partial<Account> | null | undefined>(`/ledgers/${ledgerId}/accounts`, {
+  const body = await request<Partial<Account> | null | undefined>(ledgerPath(ledgerId, 'accounts'), {
     method: 'POST',
     body: account,
   })

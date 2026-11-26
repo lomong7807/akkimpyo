@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Button } from '../src/components/Button'
 import StatusChip from '../src/components/StatusChip'
 import { accountOf, startAccounts, type Accounts } from './support/accounts'
-import { delayed, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { categoryOf, defaultExpenses, defaultIncomes, startCategories, type Categories } from './support/categories'
 import { readCssRule } from './support/cssRule'
 import { readWebFile } from './support/webFile'
@@ -228,7 +228,7 @@ describe('첫 장(1/2)', () => {
     const opened = await openFirst()
     await opened.user.click(nextButton())
     await secondHeading()
-    expect(categories.requests).toEqual(['user-1-ledger'])
+    expect(categories.requests).toEqual([ledgerIdOf('user-1')])
   })
 })
 
@@ -514,7 +514,7 @@ describe('계좌 만들기', () => {
     expect(toast()).toBe('계좌를 만들었어요')
     expect(accounts.added).toEqual([
       {
-        ledgerId: 'user-1-ledger',
+        ledgerId: ledgerIdOf('user-1'),
         body: { name: '국민은행 통장', type: 'BANK', openingBalance: 350000, openingDate: '2026-11-03' },
       },
     ])
