@@ -1,6 +1,6 @@
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse } from 'msw'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { ledgerIdOf, meOf, type Backend } from './support/backend'
 import { goOnline } from './support/connection'
 import { copyKeys, ledgerCopy, meCopy, seedLedgerCopy, seedLogin, seedMeCopy } from './support/device'
@@ -146,6 +146,19 @@ describe('장부 단위로 지우는 때(security Q4)', () => {
     expect(await meCopy('user-1')).toBeDefined()
   })
 
+  it('지우는 코드를 따로 받을 수 없어도(배포 직후, 그 순간의 끊김) 404 뒤에 그 장부의 사본을 지운다(architect)', async () => {
+    // 지우기가 따로 싣는 조각이면 받기가 실패해 조용히 건너뛴다. 첫 묶음에 있어야 한다
+    vi.doMock('../src/device/ledgerCopies', () => {
+      throw new Error('조각을 받지 못함')
+    })
+    onTestFinished(() => void vi.doUnmock('../src/device/ledgerCopies'))
+    await seedDevice()
+    backend.cookieUser = 'user-1'
+    accounts.response = () => problem(404, 'NOT_FOUND')
+    await openApp('/accounts')
+    await waitFor(async () => expect(await ledgerKinds(LEDGER)).toEqual([]))
+  })
+
   it.each<[string, string, () => void]>([
     ['403 FORBIDDEN(구성원이지만 권한이 모자람)', '/accounts', () => void (accounts.response = () => problem(403, 'FORBIDDEN'))],
     ['서버 오류', '/accounts', () => void (accounts.response = () => problem(500, 'INTERNAL_ERROR'))],
@@ -206,6 +219,22 @@ describe('새 거래 입력은 사본을 먼저 쓴다', () => {
     await openPicker(user, accountField())
     expect(optionNames()).toContain('급여통장')
     expect(optionNames()).not.toContain('사본의 통장')
+  })
+
+  it('서버의 목록을 받는 중에도 고르기 칸은 받는 중 표시 대신 사본의 목록을 보인다(architect)', async () => {
+    await seedDevice()
+    accounts.response = () => new Promise(() => {})
+    categories.response = () => new Promise(() => {})
+    backend.cookieUser = 'user-1'
+    const { user } = await openApp('/transactions/new')
+    await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+    await waitFor(() => expect(accountField().textContent).toContain('사본의 통장'))
+    await openPicker(user, accountField())
+    expect(optionNames()).toEqual(['사본의 통장'])
+    expect(screen.queryByText('불러오고 있어요')).toBeNull()
+    await user.keyboard('{Escape}')
+    await openPicker(user, categoryField())
+    expect(optionNames()).toContain('사본의 식비')
   })
 
   it('다른 사용자의 사본은 쓰지 않는다', async () => {

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Navigate, Outlet, useLocation, type Location } from 'react-router'
 import { sessionUserId } from '../api/session'
 import { ButtonLink } from '../components/Button'
+import { forgetLedgerCopies } from '../device/copies'
 import LoadFailure from '../components/LoadFailure'
 import { parseAccounts } from '../features/accounts/accounts'
 import { parseCategories } from '../features/categories/categories'
@@ -130,15 +131,12 @@ function createSessionQueryClient(): QueryClient {
   return client
 }
 
-/**
- * 장부를 볼 수 없게 됐으면 그 장부의 기기 사본을 지운다(security Q4). 읽은 사본도 캐시에서 버린다.
- * 지우는 코드는 첫 화면 묶음에 넣지 않는다(planner, #251).
- */
+/** 장부를 볼 수 없게 됐으면 그 장부의 기기 사본을 지운다(security Q4). 읽은 사본도 캐시에서 버린다. */
 function forgetLedger(queryClient: QueryClient, ledgerId: string) {
   const user = sessionUserId()
   if (user === undefined) return
   for (const kind of ['accounts', 'categories']) queryClient.removeQueries({ queryKey: deviceKey(user, kind, ledgerId) })
-  void import('../device/ledgerCopies').then(({ forgetLedgerCopies }) => forgetLedgerCopies(user, ledgerId)).catch(() => {})
+  void forgetLedgerCopies(user, ledgerId).catch(() => {})
 }
 
 const endedState = { sessionEnded: true }

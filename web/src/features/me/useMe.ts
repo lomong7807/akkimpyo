@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { currentUserId } from '../../api/session'
+import { keepCopiesOfLedgers } from '../../device/copies'
 import { fetchMe, type Me } from './me'
 import { keepMeCopy } from './meCopy'
 
@@ -17,9 +18,11 @@ async function fetchAndKeepMe(): Promise<Me> {
   const me = await fetchMe()
   if (user !== undefined && currentUserId() === user) {
     keepMeCopy(user, me)
-    // 장부 목록에서 빠진 장부의 사본을 지운다(security Q4). 첫 화면 묶음에 넣지 않는다(planner, #251)
-    const ledgerIds = me.ledgers.map(({ id }) => id)
-    void import('../../device/ledgerCopies').then(({ keepCopiesOfLedgers }) => keepCopiesOfLedgers(user, ledgerIds)).catch(() => {})
+    // 장부 목록에서 빠진 장부의 사본을 지운다(security Q4)
+    void keepCopiesOfLedgers(
+      user,
+      me.ledgers.map(({ id }) => id),
+    ).catch(() => {})
   }
   return me
 }
