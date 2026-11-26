@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, meOf, type Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
+import { passTime, resumeGuardClock, startGuardClock } from './support/guardClock'
 import { readCssRule } from './support/cssRule'
 import { installIntersectionObserver, type Intersection } from './support/intersection'
 import { startMockServer } from './support/mockServer'
@@ -44,9 +45,9 @@ let intersection: Intersection
 const NOW = '2026-11-26T12:30:00+09:00'
 
 beforeEach(() => {
-  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)는 같은 때에 멈춰 둔다
+  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)는 그 묶음에서 같은 때에 멈춘다
   setDeviceClock(NOW)
-  vi.useFakeTimers({ toFake: ['Date'], now: Date.parse(NOW) })
+  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   list = startTransactionList(server, backend)
@@ -56,6 +57,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // 라이브러리의 시계를 멈춘 묶음도 덮개 시계에서 화면을 정리해 빠진 뒤의 덮개를 걷는다
+  resumeGuardClock()
   cleanup()
   resetViewport()
   resetGlobals()
@@ -289,7 +292,7 @@ describe('달 이동(00-common 5.9)', () => {
     list.response = (sent) => (sent.month === '2026-10' ? slow.respond() : undefined)
     const bar = monthHeading().parentElement
     await opened.user.click(monthButton('이전 달')!)
-    await settle(350)
+    await passTime(350)
     expect(screen.getByText(loading)).toBeTruthy()
     expect(monthHeading().parentElement).toBe(bar)
     expect(monthHeading().textContent).toBe('10월')
@@ -724,7 +727,7 @@ describe('이어 불러오기(00-common 5.10)', () => {
     await intersection.show()
     await intersection.hide()
     await intersection.show()
-    await settle(350)
+    await passTime(350)
     expect(pageRequests().filter(({ cursor }) => cursor)).toHaveLength(1)
     const shapes = main().querySelectorAll('div[aria-hidden="true"]')
     expect(shapes).toHaveLength(1)
@@ -785,7 +788,7 @@ describe('첫 불러오기', () => {
     await screen.findByRole('heading', { level: 1 })
     expect(screen.queryByText(loading)).toBeNull()
     expect(main().querySelector('div[aria-hidden="true"]')).toBeNull()
-    await settle(350)
+    await passTime(350)
     expect(screen.getByText(loading)).toBeTruthy()
     const shape = main().querySelector('div[aria-hidden="true"]')!
     const kinds = [...shape.children].map((child) => /_(totals|dayHead|row)_/.exec(child.className)?.[1])
@@ -802,7 +805,7 @@ describe('첫 불러오기', () => {
     list.response = () => slow.respond()
     await openApp('/transactions?month=2026-11')
     await screen.findByRole('heading', { level: 1 })
-    await settle(350)
+    await passTime(350)
     const shape = main().querySelector('div[aria-hidden="true"]')!
     const row = shape.lastElementChild!
     // 시각 칸, 제목과 금액의 첫 줄, 둘째 줄
@@ -894,6 +897,11 @@ describe('거래가 없는 달(4.2)', () => {
 })
 
 describe('받아 둔 목록을 다시 받는 때', () => {
+  // 받은 때부터 센 초를 정확히 맞추도록 라이브러리의 시계(Date)를 멈추고 진짜 시계로 기다린다(덮개 시계를 쓰지 않는다)
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse(NOW) })
+  })
+
   /** 기기의 시계를 `seconds`초 앞으로 보낸다. 캐시가 오래됐는지는 이 시계로 정한다. */
   const advance = (seconds: number) => vi.setSystemTime(Date.now() + seconds * 1000)
 
@@ -965,7 +973,7 @@ describe('상세에서 뒤로 돌아오면', () => {
     await act(() => opened.router.navigate(-1))
     await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-10'))
     expect(allRows()).toHaveLength(51)
-    await settle(400)
+    await passTime(400)
     expect(dom.sawText(loading)).toBe(false)
     expect(dom.sawElement('div[aria-hidden="true"]')).toBe(false)
   })
@@ -1003,7 +1011,7 @@ describe('저장한 뒤 돌아오면', () => {
     expect(pageRequests().length).toBeGreaterThan(requestsBefore)
     expect(allRows().filter((row) => /_highlighted_/.test(row.className))).toHaveLength(1)
     expect(styleOf(savedRow()!).backgroundColor).toBe('var(--color-surface)')
-    await act(() => new Promise((resolve) => setTimeout(resolve, 1100)))
+    await passTime(1100)
     expect(savedRow()!.className).not.toMatch(/_highlighted_/)
   })
 

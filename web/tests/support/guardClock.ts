@@ -50,6 +50,27 @@ export async function passPressGuard() {
 }
 
 /**
+ * 이 시계를 쓰면 `ms`만큼 시간이 지난 것으로 한다. 그 사이에 올 시계는 차례로 온다. 쓰지 않으면 실제로 기다린다.
+ * 앱의 시계(뼈대를 보이기까지의 300ms, 강조 1초)를 기다리는 곳에 쓴다. 응답이 오기를 기다려 "일어나지 않음"을 보는 곳에는
+ * 쓰지 않는다. 앞당기는 동안 실제 시간은 거의 흐르지 않아 그사이 와야 할 응답이 오지 않는다.
+ */
+export async function passTime(ms: number) {
+  if (!usesGuardClock()) return act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  await act(() => vi.advanceTimersByTimeAsync(ms))
+}
+
+/**
+ * 테스트가 다른 가짜 시계를 다시 걸었으면 이 시계로 돌아온다. 그 시계에 남은 것은 버린다(진짜 시계로 돌아갈 때와 같다).
+ * 화면을 정리하기(cleanup) 전에 부른다. 화면에서 빠진 뒤의 덮개가 이 시계에 걸려야 stopGuardClock()이 걷는다.
+ * 다른 시계에서 정리하면 덮개의 진짜 rAF가 다음 테스트의 이 시계에 300ms를 걸고, 그 테스트가 시계를 다시 걸면 덮개가 남는다.
+ */
+export function resumeGuardClock() {
+  if (usesGuardClock()) return
+  stopGuardClock()
+  startGuardClock()
+}
+
+/**
  * 테스트를 끝낸다. 화면에서 빠진 뒤에도 남는 덮개를 걷고 진짜 시계로 돌아간다.
  * 남겨 두면 덮개의 시계가 다음 테스트나 jsdom을 정리한 뒤에 돈다. 진짜 시계로 돌아가면 가짜 시계에 걸린 것은 돌지 않는다.
  */

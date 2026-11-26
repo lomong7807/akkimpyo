@@ -10,6 +10,7 @@ import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
 import { readWebFile } from './support/webFile'
 import { shield, untilOpened, untilUnshielded } from './support/dialog'
+import { resumeGuardClock, startGuardClock, stopGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -44,12 +45,12 @@ let backend: Backend
 let accounts: Accounts
 let categories: Categories
 
-/** 기기의 지금(서울). 라이브러리의 시계(Date)도 이때에 멈춰 둔다. */
+/** 기기의 지금(서울). 시계를 다시 거는 테스트는 라이브러리의 시계(Date)도 이때에 둔다. */
 const NOW = '2026-11-26T12:00:00+09:00'
 
 beforeEach(() => {
   setDeviceClock(NOW)
-  vi.useFakeTimers({ toFake: ['Date'], now: Date.parse(NOW) })
+  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   installMatchMedia(390)
   installLocks(createFakeLocks())
@@ -63,11 +64,13 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // 시계를 다시 건 테스트(불러오는 중, 15초)도 덮개 시계에서 화면을 정리해 빠진 뒤의 덮개를 걷는다
+  resumeGuardClock()
   cleanup()
+  stopGuardClock()
   resetViewport()
   removeLocks()
   vi.restoreAllMocks()
-  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 })
