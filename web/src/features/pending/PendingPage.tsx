@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { sessionUserId } from '../../api/session'
 import Amount from '../../components/Amount'
 import { Button } from '../../components/Button'
 import ConfirmDialog, { type ConfirmFailure } from '../../components/ConfirmDialog'
 import EmptyState from '../../components/EmptyState'
 import ErrorMessage from '../../components/ErrorMessage'
+import { afterModals } from '../../components/openModal'
 import { SubScreen } from '../../components/Screen'
 import StatusChip from '../../components/StatusChip'
 import { useToast } from '../../components/ToastContext'
@@ -62,6 +63,7 @@ function PendingList() {
   const items = usePendingRead()
   const sending = useSendNow()
   const [discarding, setDiscarding] = useState<PendingTransaction>()
+  const discardButtons = useRef(new Map<string, HTMLButtonElement>())
   const waiting = items?.filter(({ state }) => state.kind === 'waiting').length ?? 0
   const { clearProblem } = sending
   // 대기가 0건이 되면 버튼 위 문구도 지운다(designer #236 Q4). 다시 쌓여도 앞의 문구가 되살아나지 않는다
@@ -88,11 +90,30 @@ function PendingList() {
           // Safari는 점을 없앤 목록을 목록으로 알리지 않으므로 role을 적는다
           <ul role="list" className={styles.rows}>
             {items.map((item) => (
-              <PendingRow key={item.id} item={item} busy={sending.busy} onDiscard={() => setDiscarding(item)} />
+              <PendingRow
+                key={item.id}
+                item={item}
+                busy={sending.busy}
+                discardRef={(button) => {
+                  if (button) discardButtons.current.set(item.id, button)
+                  else discardButtons.current.delete(item.id)
+                }}
+                onDiscard={() => setDiscarding(item)}
+              />
             ))}
           </ul>
         ))}
-      <DiscardDialog item={discarding} onClose={() => setDiscarding(undefined)} />
+      <DiscardDialog
+        item={discarding}
+        onClose={() => setDiscarding(undefined)}
+        onDiscarded={(id) => {
+          // 지운 줄의 버리기가 없어지므로 창이 닫힌 뒤 다음 줄(없으면 앞 줄)의 버리기로 초점을 옮긴다
+          const ids = items?.map((item) => item.id) ?? []
+          const index = ids.indexOf(id)
+          const neighbor = ids[index + 1] ?? ids[index - 1]
+          afterModals(() => discardButtons.current.get(neighbor)?.focus())
+        }}
+      />
     </>
   )
 }
@@ -184,6 +205,8 @@ interface PendingRowProps {
   item: PendingTransaction
   /** 지금 보내기 처리 중. 버리기를 누를 수 없다(designer #236 Q5) */
   busy: boolean
+  /** 버리기 버튼. 앞 줄을 버린 뒤 초점을 받는다 */
+  discardRef: (button: HTMLButtonElement | null) => void
   onDiscard: () => void
 }
 
@@ -192,7 +215,7 @@ interface PendingRowProps {
  * 아래 "{보내는 계좌}에서 {받는 계좌}로". 셋째 줄은 상태 칩(4)과 버리기(5), 보낼 수 없음이면 그 아래 거부 이유(6).
  * 1B 동안 줄은 누를 수 없다(대기는 늘, 보낼 수 없음은 #237까지).
  */
-function PendingRow({ item, busy, onDiscard }: PendingRowProps) {
+function PendingRow({ item, busy, discardRef, onDiscard }: PendingRowProps) {
   const id = useId()
   const { names, categories } = useNameBook(item.ledgerId)
   const ledgerName = useLedgerName(item.ledgerId)
@@ -225,6 +248,7 @@ function PendingRow({ item, busy, onDiscard }: PendingRowProps) {
         {rejected ? <StatusChip danger>보낼 수 없음</StatusChip> : <StatusChip>대기</StatusChip>}
         <span className={styles.discard}>
           <Button
+            ref={discardRef}
             kind="text-danger"
             disabled={busy}
             aria-describedby={`${id}-title ${shown ? `${id}-amount ` : ''}${id}-meta`}
@@ -269,7 +293,14 @@ function useLedgerName(ledgerId: string): string | undefined {
 }
 
 /** (5)의 확인 창. 기기 안의 동작이라 연결과 관계없이 열리고 실행된다(F-109, 4.6) */
-function DiscardDialog({ item, onClose }: { item: PendingTransaction | undefined; onClose: () => void }) {
+interface DiscardDialogProps {
+  item: PendingTransaction | undefined
+  onClose: () => void
+  /** 지웠다(그사이 보내져 없던 것도). 줄의 id다 */
+  onDiscarded: (id: string) => void
+}
+
+function DiscardDialog({ item, onClose, onDiscarded }: DiscardDialogProps) {
   const showToast = useToast()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ConfirmFailure>()
@@ -283,6 +314,7 @@ function DiscardDialog({ item, onClose }: { item: PendingTransaction | undefined
     setBusy(true)
     try {
       const outcome = await discardPending(target.userId, target.id)
+      onDiscarded(target.id)
       close()
       showToast(outcome === 'discarded' ? DISCARDED : ALREADY_SENT)
     } catch {

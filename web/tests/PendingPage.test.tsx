@@ -536,6 +536,23 @@ describe('(5) 버리기', () => {
     await untilUnshielded()
   })
 
+  it('버린 뒤 초점은 다음 줄의 버리기로, 마지막 줄이면 앞 줄의 버리기로 간다', async () => {
+    await seedPending(expense({ payee: '첫째' }))
+    await seedPending(expense({ payee: '둘째' }))
+    await seedPending(expense({ payee: '셋째' }))
+    const { user } = await openPending()
+    await user.click(discardIn(rowOf('첫째')))
+    await untilOpened()
+    await user.click(within(dialog()).getByRole('button', { name: '버리기' }))
+    await waitFor(() => expect(document.activeElement).toBe(discardIn(rowOf('둘째'))))
+    await untilUnshielded()
+    await user.click(discardIn(rowOf('셋째')))
+    await untilOpened()
+    await user.click(within(dialog()).getByRole('button', { name: '버리기' }))
+    await waitFor(() => expect(document.activeElement).toBe(discardIn(rowOf('둘째'))))
+    await untilUnshielded()
+  })
+
   it('닫기를 누르면 아무것도 버리지 않는다', async () => {
     await seedPending(expense({ payee: '그대로' }))
     const { user } = await openPending()
