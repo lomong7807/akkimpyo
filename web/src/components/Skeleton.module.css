@@ -28,6 +28,10 @@
   margin-inline-start: auto;
 }
 
+.hero {
+  font: var(--text-hero);
+}
+
 .title {
   font: var(--text-title);
 }
