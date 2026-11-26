@@ -54,8 +54,14 @@ jobs:
   # 테스트가 2코어 러너 한 대에서 5분을 넘어, Vitest --shard로 나눠 러너 여러 대에서 동시에 돌린다.
   # Vitest는 파일 경로의 해시 순으로 파일 수만 고르게 나누므로 shard 사이 시간은 고르지 않다.
   # shard 수를 바꿀 때는 shard 목록과 total을 함께 바꾼다.
+  #
+  # 시간대(TZ): PR에서는 서비스의 시간대(Asia/Seoul)로만 돈다. main push에서는 같은 테스트를 서쪽 시간대
+  # (America/Los_Angeles)로도 돌려 날짜 경계 실수를 알아챈다(#225, #229). PR마다 두 시간대로 돌리면 web 테스트 분이
+  # 두 배가 되므로 push에서만 더한다.
+  # PR에서 빼는 것은 job의 if가 아니라 이벤트로 정한 tz 목록으로 한다. job의 if는 matrix를 볼 수 없어 job을 따로
+  # 둬야 하고, 그러면 PR마다 '건너뜀' job이 하나씩 남는다. 목록으로 정하면 PR에는 서울 job만 생긴다.
   web-test:
-    name: web (test ${{ matrix.shard }}/${{ matrix.total }})
+    name: web (test ${{ matrix.shard }}/${{ matrix.total }}, ${{ matrix.tz }})
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -63,6 +69,9 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
         total: [4]
+        tz: ${{ fromJSON(github.event_name == 'push' && '["Asia/Seoul", "America/Los_Angeles"]' || '["Asia/Seoul"]') }}
+    env:
+      TZ: ${{ matrix.tz }}
     defaults:
       run:
         working-directory: web
@@ -79,6 +88,10 @@ jobs:
 
       - name: Install
         run: npm ci --ignore-scripts
+
+      # Node가 TZ를 따르는지 로그에 남긴다. 따르지 않으면 테스트가 말없이 UTC로 돌므로 실패시킨다.
+      - name: Time zone
+        run: node -e 'const tz = Intl.DateTimeFormat().resolvedOptions().timeZone; console.log("TZ=" + process.env.TZ, "Node:", tz, new Date().toString()); if (tz !== process.env.TZ) process.exit(1)'
 
       - name: Test
         env:
