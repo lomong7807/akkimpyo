@@ -46,7 +46,17 @@ const names: Record<string, string> = Object.fromEntries(
   ),
 )
 
-function Sample({ sections = categories, initial = 'food', error }: { sections?: PickerSection[]; initial?: string; error?: string }) {
+function Sample({
+  sections = categories,
+  initial = 'food',
+  error,
+  startAtFirst,
+}: {
+  sections?: PickerSection[]
+  initial?: string
+  error?: string
+  startAtFirst?: boolean
+}) {
   const [value, setValue] = useState(initial)
   return (
     <form onSubmit={(event) => event.preventDefault()}>
@@ -58,6 +68,7 @@ function Sample({ sections = categories, initial = 'food', error }: { sections?:
             sections={sections}
             value={value}
             focusVisible={focusVisible}
+            startAtFirst={startAtFirst}
             onSelect={(next) => {
               setValue(next)
               close()
@@ -145,6 +156,12 @@ describe('휴대폰 배치의 고르기 시트', () => {
     expect(option('식비').getAttribute('aria-selected')).toBe('false')
     expect(option('식비').querySelector('svg')).toBeNull()
     expect(document.activeElement).toBe(option('외식'))
+  })
+
+  it('지금 값이 맨 아래의 기본 줄이면 첫 줄에서 시작하고 표시는 그대로다', async () => {
+    await open({ initial: '', startAtFirst: true })
+    expect(document.activeElement).toBe(option('식비'))
+    expect(option('미분류').getAttribute('aria-selected')).toBe('true')
   })
 
   it('지금 값이 목록에 없으면 첫 줄로 초점이 간다', async () => {

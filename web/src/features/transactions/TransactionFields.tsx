@@ -46,6 +46,8 @@ export default function TransactionFields({ form, readOnly, moreOpen, onMoreOpen
   const transfer = values.type === 'TRANSFER'
   const foldedId = useId()
   const amount = useRef<HTMLInputElement>(null)
+  // 금액은 열리면 앱이 초점을 준다. 한 번도 쓰지 않은 채 다른 칸으로 가면 벗어난 검사를 하지 않고 저장할 때 검사한다
+  const amountTouched = useRef(false)
 
   // 새 입력은 열리면 금액에 초점을 둔다. 빠른 입력이 누르는 순간 올려 둔 화면 키보드가 이어진다
   useEffect(() => amount.current?.focus(), [])
@@ -95,8 +97,13 @@ export default function TransactionFields({ form, readOnly, moreOpen, onMoreOpen
         label="금액"
         size="title"
         readOnly={readOnly}
-        onChange={(amount) => change({ amount })}
-        onBlur={() => check('amount')}
+        onChange={(amount) => {
+          amountTouched.current = true
+          change({ amount })
+        }}
+        onBlur={() => {
+          if (amountTouched.current) check('amount')
+        }}
         onKeyDown={handleAmountKeyDown}
       />
       {!transfer && (

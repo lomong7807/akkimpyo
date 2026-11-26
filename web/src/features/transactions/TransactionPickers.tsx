@@ -38,6 +38,7 @@ export function CategoryField({ kind, value, onChange, ...field }: PickerProps &
               sections={categorySections(data, kind)}
               value={value}
               focusVisible={focusVisible}
+              startAtFirst={value === ''}
               onSelect={(next) => {
                 onChange(next)
                 close()

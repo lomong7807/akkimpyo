@@ -27,6 +27,11 @@ interface OptionListProps {
   value: string
   /** 열 때 초점 테두리를 보이는지. 연 칸이 알려 준다. */
   focusVisible: boolean
+  /**
+   * 지금 값이 고르지 않은 때의 기본 줄(카테고리의 미분류처럼 맨 아래에 있는 줄)이라 그 줄 대신 첫 줄에서 시작한다.
+   * 지금 값의 표시는 그대로다.
+   */
+  startAtFirst?: boolean
   onSelect: (value: string) => void
 }
 
@@ -35,10 +40,18 @@ export const NO_MATCH = '찾는 이름이 없어요.'
 
 /**
  * 하나를 고르는 목록과 그 위의 이름 찾기 칸(화면설계서 02 0.8). 시트나 판 안에 열 때마다 새로 그린다.
- * 찾기 칸은 맨 위에 남고 목록만 스크롤된다. 초점은 고른 줄(없으면 첫 줄)로 간다.
+ * 찾기 칸은 맨 위에 남고 목록만 스크롤된다. 초점은 고른 줄(없거나 startAtFirst면 첫 줄)로 간다.
  * 위아래 화살표로 줄을 옮기고 엔터나 스페이스로 고른다. 찾기 칸에서 아래 화살표를 누르면 목록으로 들어간다.
  */
-export default function OptionList({ label, searchLabel, sections, value, focusVisible, onSelect }: OptionListProps) {
+export default function OptionList({
+  label,
+  searchLabel,
+  sections,
+  value,
+  focusVisible,
+  startAtFirst = false,
+  onSelect,
+}: OptionListProps) {
   const id = useId()
   const [query, setQuery] = useState('')
   const shown = filterSections(sections, query)
@@ -47,7 +60,8 @@ export default function OptionList({ label, searchLabel, sections, value, focusV
   )
   const [active, setActive] = useState<string>()
   // 찾아서 빠진 줄에는 Tab으로 들어갈 수 없으므로 남은 줄로 옮긴다
-  const tabStop = active !== undefined && values.includes(active) ? active : values.includes(value) ? value : values[0]
+  const start = !startAtFirst && values.includes(value) ? value : values[0]
+  const tabStop = active !== undefined && values.includes(active) ? active : start
   const list = useRef<HTMLDivElement>(null)
   const search = useRef<HTMLInputElement>(null)
 

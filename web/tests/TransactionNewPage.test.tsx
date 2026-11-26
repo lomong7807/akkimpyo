@@ -162,9 +162,18 @@ describe('금액', () => {
     expect(transactions.sent).toEqual([])
   })
 
-  it('칸을 벗어날 때도 검사한다', async () => {
+  it('쓰다가 비우고 칸을 벗어나면 검사한다', async () => {
+    const { user } = await openForm()
+    await user.keyboard('5{Backspace}')
+    await user.click(payee())
+    expect(errorOf(amount())).toBe(outOfRange)
+  })
+
+  it('열릴 때 받은 초점에서 한 번도 쓰지 않고 다른 칸으로 가면 오류를 띄우지 않는다. 저장할 때 검사한다', async () => {
     const { user } = await openForm()
     await user.click(payee())
+    expect(errorOf(amount())).toBeUndefined()
+    await user.click(saveButton())
     expect(errorOf(amount())).toBe(outOfRange)
   })
 
@@ -259,10 +268,19 @@ describe('카테고리', () => {
     expect(await openOptions(user, categoryField())).toEqual(['급여', '상여', '미분류'])
   })
 
-  it('비어 있으면 미분류 줄에 Check가 있다', async () => {
+  it('비어 있으면 미분류 줄에 Check가 있고 판은 첫 줄에서 시작한다', async () => {
     const { user } = await openForm()
     await openOptions(user, categoryField())
     expect(screen.getByRole('option', { name: '미분류' }).getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(screen.getByRole('option', { name: '식비' }))
+  })
+
+  it('고른 카테고리가 있으면 판은 그 줄에서 시작한다', async () => {
+    const { user } = await openForm()
+    await pick(user, categoryField(), '교통')
+    await untilUnshielded()
+    await openOptions(user, categoryField())
+    expect(document.activeElement).toBe(screen.getByRole('option', { name: '교통' }))
   })
 
   it.each([
