@@ -44,7 +44,7 @@ export default function AccountAddPage() {
   // 화면을 떠난 뒤에 온 응답으로는 불리지 않는다
   function finish(account: Account) {
     showToast(`'${account.name}' 계좌를 추가했어요`)
-    guard.leave(() => (isOpenedFromList(state) ? navigate(-1) : navigate(LIST, { replace: true })))
+    guard.leaveAfterSave(() => (isOpenedFromList(state) ? navigate(-1) : navigate(LIST, { replace: true })))
   }
 
   function showFailure(error: Error) {
