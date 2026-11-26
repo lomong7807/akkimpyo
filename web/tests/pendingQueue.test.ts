@@ -87,25 +87,76 @@ describe('쌓기와 읽기', () => {
 })
 
 describe('건수, 보낼 수 없음, 지우기(#235, #236이 쓴다)', () => {
+  const rejection = { status: 400, code: 'VALIDATION_FAILED', fieldErrors: [{ field: 'amount', code: 'OUT_OF_RANGE' }], at: AT }
+
   it('사용자의 대기와 보낼 수 없음을 따로 센다', async () => {
     const { queue } = await openQueue()
     await queue.queueTransaction(item(1))
     await queue.queueTransaction(item(2))
     await queue.queueTransaction(item(3, 'user-2'))
-    await queue.markRejected('user-1', id(2), { status: 400, code: 'VALIDATION_FAILED', fieldErrors: [], at: AT })
+    const [, second] = await queue.pendingOf('user-1')
+    await queue.settlePending(second, { kind: 'rejected', ...rejection })
     expect(await queue.countPending('user-1')).toEqual({ waiting: 1, rejected: 1 })
     expect(await queue.countPending('user-2')).toEqual({ waiting: 1, rejected: 0 })
   })
 
-  it('보낼 수 없음으로 바꾸면 이유를 남긴다', async () => {
+  it('보낼 수 없음으로 바꾸면 이유와 받은 current를 남긴다', async () => {
     const { queue } = await openQueue()
     await queue.queueTransaction(item(1))
-    const rejection = { status: 409, code: 'ID_CONFLICT', fieldErrors: [], current: { id: id(1) }, at: AT }
-    await queue.markRejected('user-1', id(1), rejection)
-    expect((await queue.pendingOf('user-1'))[0].state).toEqual({ kind: 'rejected', ...rejection })
+    const conflict = { status: 409, code: 'ID_CONFLICT', fieldErrors: [], current: { id: id(1), version: 1 }, at: AT }
+    const [seen] = await queue.pendingOf('user-1')
+    expect(await queue.settlePending(seen, { kind: 'rejected', ...conflict })).toBe(true)
+    expect((await queue.pendingOf('user-1'))[0].state).toEqual({ kind: 'rejected', ...conflict })
   })
 
-  it('보내기 성공이나 버리기는 그 항목만 지운다', async () => {
+  it('보내기에 성공하면 그 항목만 지운다', async () => {
+    const { queue } = await openQueue()
+    await queue.queueTransaction(item(1))
+    await queue.queueTransaction(item(2))
+    const [first] = await queue.pendingOf('user-1')
+    expect(await queue.settlePending(first, { kind: 'sent' })).toBe(true)
+    expect((await queue.pendingOf('user-1')).map((row) => row.id)).toEqual([id(2)])
+  })
+
+  it('보낼 때 본 줄과 지금 줄이 다르면(다른 탭이 고쳐 쌓음) 지우지도 바꾸지도 않는다', async () => {
+    const { queue } = await openQueue()
+    await queue.queueTransaction(item(1))
+    const [seen] = await queue.pendingOf('user-1')
+    await queue.queueTransaction({ ...item(1), body: { ...expense(1), amount: 15000 } })
+    expect(await queue.settlePending(seen, { kind: 'sent' })).toBe(false)
+    expect(await queue.settlePending(seen, { kind: 'rejected', ...rejection })).toBe(false)
+    const [now] = await queue.pendingOf('user-1')
+    expect(now.body.amount).toBe(15000)
+    expect(now.state).toEqual({ kind: 'waiting' })
+  })
+
+  it('그사이 다른 탭이 보낼 수 없음으로 바꿨으면 지우지 않는다', async () => {
+    const { queue } = await openQueue()
+    await queue.queueTransaction(item(1))
+    const [seen] = await queue.pendingOf('user-1')
+    await queue.settlePending(seen, { kind: 'rejected', ...rejection })
+    expect(await queue.settlePending(seen, { kind: 'sent' })).toBe(false)
+    expect(await queue.countPending('user-1')).toEqual({ waiting: 0, rejected: 1 })
+  })
+
+  it('그사이 버린 항목은 되살리지 않는다', async () => {
+    const { queue } = await openQueue()
+    await queue.queueTransaction(item(1))
+    const [seen] = await queue.pendingOf('user-1')
+    await queue.removePending('user-1', id(1))
+    expect(await queue.settlePending(seen, { kind: 'rejected', ...rejection })).toBe(false)
+    expect(await queue.pendingOf('user-1')).toEqual([])
+  })
+
+  it('보내기 직전에 그 항목을 다시 읽는다. 없거나 모양이 틀리면 없다', async () => {
+    const { queue } = await openQueue()
+    await queue.queueTransaction(item(1))
+    expect(await queue.readPending('user-1', id(1))).toEqual((await queue.pendingOf('user-1'))[0])
+    expect(await queue.readPending('user-2', id(1))).toBeUndefined()
+    expect(await queue.readPending('user-1', id(2))).toBeUndefined()
+  })
+
+  it('버리기는 그 항목만 지운다', async () => {
     const { queue } = await openQueue()
     await queue.queueTransaction(item(1))
     await queue.queueTransaction(item(2))

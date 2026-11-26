@@ -41,12 +41,18 @@ export class ApiError extends Error {
    * 연결과 무관하므로 연결 없이 앱을 여는 판단에서 지연으로 보지 않는다(security·architect 결정 2026-11-26, #234 Q2).
    */
   readonly lockWait: boolean
+  /**
+   * 429의 Retry-After를 지금부터의 밀리초로 바꾼 값. 헤더가 없거나 읽을 수 없으면 없다. 대기열이 다시 보내기를 미룬다
+   * (ADR 006 결정 6, #235).
+   */
+  readonly retryAfterMs?: number
 
   private constructor(
     kind: ApiErrorKind,
     status?: number,
     problem: Problem = { fieldErrors: [] },
     lockWait = false,
+    retryAfterMs?: number,
   ) {
     super(['API 요청 실패', kind, status, problem.code].filter((part) => part !== undefined).join(' '))
     this.kind = kind
@@ -56,6 +62,7 @@ export class ApiError extends Error {
     this.fieldErrors = problem.fieldErrors
     this.current = problem.current
     this.lockWait = lockWait
+    this.retryAfterMs = retryAfterMs
   }
 
   static connection(): ApiError {
@@ -76,8 +83,8 @@ export class ApiError extends Error {
     return new ApiError('server', status)
   }
 
-  static response(status: number, problem?: Problem): ApiError {
-    return new ApiError(status >= 400 && status < 500 ? 'rejected' : 'server', status, problem)
+  static response(status: number, problem?: Problem, retryAfterMs?: number): ApiError {
+    return new ApiError(status >= 400 && status < 500 ? 'rejected' : 'server', status, problem, false, retryAfterMs)
   }
 }
 
@@ -114,4 +121,15 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function stringOrNone(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
+}
+
+/**
+ * Retry-After(초 또는 HTTP 날짜, RFC 9110 10.2.3)를 `now`부터의 밀리초로 바꾼다. 지난 날짜는 0이다. 읽을 수 없으면 없다.
+ */
+export function retryAfterOf(value: string | null, now: number): number | undefined {
+  if (value === null) return undefined
+  const text = value.trim()
+  if (/^[0-9]+$/.test(text)) return Number(text) * 1000
+  const at = Date.parse(text)
+  return Number.isNaN(at) ? undefined : Math.max(0, at - now)
 }

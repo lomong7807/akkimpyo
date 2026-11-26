@@ -7,6 +7,7 @@ import { seedPending } from './support/device'
 import { startGuardClock } from './support/guardClock'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
+import { problem } from './support/problem'
 import { expenseOf, incomeOf, startTransactionList, type TransactionList } from './support/transactionList'
 import { amount, id, LEDGER, openApp, resetGlobals, saveButton, settle, startServer } from './support/transactionScreen'
 import { resetViewport } from './support/viewport'
@@ -29,7 +30,10 @@ beforeEach(() => {
   setDeviceClock(NOW)
   startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
-  ;({ backend } = startServer(server))
+  const started = startServer(server)
+  backend = started.backend
+  // 이 파일은 쌓인 줄의 모양을 본다. 저절로 보내기(#235)가 줄을 지우지 않게 서버가 받지 않는다
+  started.transactions.response = () => problem(503, 'INTERNAL_ERROR')
   list = startTransactionList(server, backend)
   installIntersectionObserver()
   localStorage.clear()
