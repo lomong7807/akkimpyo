@@ -43,9 +43,7 @@ interface ConflictPanelProps {
   notice?: string
   /** 버튼 바로 위의 실패 문구(00-common 4.3) */
   failure?: PanelFailure
-  /** 처음, 그리고 redraws가 바뀔 때 초점을 둘 버튼. 주 버튼이 없으면 보조 버튼이다 */
-  focus: 'action' | 'close'
-  /** 새 최신 내용으로 다시 그린 횟수. 바뀌면 처음과 같이 초점을 옮긴다 */
+  /** 새 최신 내용으로 다시 그린 횟수. 바뀌면 처음과 같이 초점을 판 제목으로 옮긴다 */
   redraws?: number
 }
 
@@ -58,19 +56,20 @@ export default function ConflictPanel({
   busy = false,
   notice,
   failure,
-  focus,
   redraws = 0,
 }: ConflictPanelProps) {
+  const descriptionText = useRef<HTMLParagraphElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const actionButton = useRef<HTMLButtonElement>(null)
-  const target = focus === 'action' && action ? actionButton : closeButton
 
-  // 처음, 그리고 새 최신 내용으로 다시 그릴 때. 손가락이나 Safari의 마우스로 누른 버튼은 초점을 받지 않으므로 늘 옮긴다.
-  // 판이 길어 스크롤되면 맨 아래 버튼으로 내려가지 않고 제목과 고친 시각부터 보이게 둔다. WebKit은 모달 안에서
-  // preventScroll을 따르지 않고 초점을 준 버튼까지 내린다(Playwright WebKit 2388로 확인, 2026-11-27)
+  // 처음, 그리고 새 최신 내용으로 다시 그릴 때 초점은 판 제목이다(00-common 5.4, designer #239). 화면 읽기는 제목부터 읽고
+  // 키보드는 Tab으로 버튼에 간다. 맨 아래 버튼에 초점을 주면 긴 판이 버튼까지 내려가 무엇이 충돌했는지보다 버튼이 먼저
+  // 보인다(WebKit은 preventScroll을 따르지 않는다). 틀(DialogFrame)에 titleFocusable을 준다
   useEffect(() => {
-    target.current?.focus({ preventScroll: true })
-  }, [target, redraws])
+    const dialog = descriptionText.current?.closest('dialog')
+    const title = dialog && document.getElementById(dialog.getAttribute('aria-labelledby') ?? '')
+    title?.focus()
+  }, [redraws])
 
   // 실패마다 실행 버튼("다시 시도")으로 옮긴다(5.6, designer #239 D1)
   useEffect(() => {
@@ -79,7 +78,9 @@ export default function ConflictPanel({
 
   return (
     <>
-      <p className={styles.description}>{description}</p>
+      <p ref={descriptionText} className={styles.description}>
+        {description}
+      </p>
       {children}
       {notice && <p className={styles.notice}>{notice}</p>}
       {failure && (

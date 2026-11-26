@@ -110,9 +110,10 @@ describe('판이 열린다', () => {
     expect(within(sheet()!).getByText('12:20에 고친 내용이 최신이에요')).toBeTruthy()
   })
 
-  it('처음 초점은 "내 입력 다시 적용"이고, 판을 닫으면 저장을 누르기 전의 칸으로 돌아온다', async () => {
+  it('처음 초점은 판 제목이고(designer #239), 판을 닫으면 저장을 누르기 전의 칸으로 돌아온다', async () => {
     const { user, focused } = await conflictOnSave()
-    expect(document.activeElement).toBe(reapplyButton())
+    expect(document.activeElement).toBe(within(sheet()!).getByRole('heading', { name: title }))
+    expect(document.activeElement!.getAttribute('tabindex')).toBe('-1')
     await user.keyboard('{Escape}')
     await waitFor(() => expect(sheet()).toBeNull())
     expect(document.activeElement).toBe(focused)
@@ -266,6 +267,7 @@ describe('내 입력 다시 적용', () => {
     await untilOpened()
     expect(within(sheet()!).getByText('12:25에 고친 내용이 최신이에요')).toBeTruthy()
     expect(compareRows()).toEqual([['금액', '45,000원', '30,000원']])
+    expect(document.activeElement).toBe(within(sheet()!).getByRole('heading', { name: title }))
     await opened.user.click(reapplyButton()!)
     await waitFor(() => expect(sheet()).toBeNull())
     await opened.user.click(saveButton())
@@ -351,12 +353,13 @@ describe('최신 거래가 휴지통에 있음(같은 계정의 다른 기기가
     return conflictOnSave({ elsewhere: { amount: 25000, ...trashed('2026-11-26T03:20:00.000Z') } })
   }
 
-  it('비교 자리에 "다른 기기에서 이 거래를 삭제했어요"를 보이고 "내 입력 다시 적용"을 숨긴다. 초점은 "최신 내용 보기"다', async () => {
+  it('비교 자리에 "다른 기기에서 이 거래를 삭제했어요"를 보이고 "내 입력 다시 적용"을 숨긴다. 초점은 판 제목이다', async () => {
     await conflictWithTrashed()
     expect(within(sheet()!).getByText(deletedElsewhere)).toBeTruthy()
     expect(sheet()!.querySelector('dl')).toBeNull()
     expect(reapplyButton()).toBeNull()
-    expect(document.activeElement).toBe(latestButton())
+    expect(latestButton()).toBeTruthy()
+    expect(document.activeElement).toBe(within(sheet()!).getByRole('heading', { name: title }))
   })
 
   it('"최신 내용 보기"는 휴지통에서 연 그 거래의 상세(읽기 전용)를 연다', async () => {

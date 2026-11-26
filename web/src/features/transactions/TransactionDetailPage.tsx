@@ -348,6 +348,7 @@ function DeleteAction({ transaction, names }: DeleteActionProps) {
         open={asking}
         title={stale ? conflict : '이 거래를 삭제할까요?'}
         busy={busy}
+        titleFocusable={stale !== undefined}
         onClose={() => setAsking(false)}
       >
         {stale ? (
@@ -359,7 +360,6 @@ function DeleteAction({ transaction, names }: DeleteActionProps) {
             busy={busy}
             notice={againNotice}
             failure={stale.failure}
-            focus="close"
             redraws={stale.redraws}
           >
             <LatestRow transaction={stale.current} names={names} today={stale.today} />

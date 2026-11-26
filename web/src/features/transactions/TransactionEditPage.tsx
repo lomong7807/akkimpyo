@@ -291,7 +291,12 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
         )}
       </FullScreenForm>
       {/* 판 바깥, 끌어내리기, X, Esc로 닫으면 내 입력을 그대로 둔다. 다시 저장하면 다시 충돌한다(N-04) */}
-      <DialogFrame open={conflictOpen} title="다른 기기에서 먼저 고쳤어요" onClose={() => setConflictOpen(false)}>
+      <DialogFrame
+        open={conflictOpen}
+        title="다른 기기에서 먼저 고쳤어요"
+        titleFocusable
+        onClose={() => setConflictOpen(false)}
+      >
         {conflict && lists && (
           <ConflictPanel
             description={updatedTextOf(conflict.current.updatedAt, conflict.today)}
@@ -300,7 +305,6 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
             action={
               conflict.current.deletedAt === null ? { label: '내 입력 다시 적용', kind: 'primary', onClick: reapply } : undefined
             }
-            focus="action"
             redraws={conflict.redraws}
           >
             {conflict.current.deletedAt === null ? (

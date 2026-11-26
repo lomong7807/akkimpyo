@@ -68,6 +68,7 @@ const confirm = () => screen.queryByRole('dialog', { name: '이 거래를 삭제
 /** 판 안의 버튼. "닫기"는 바닥 시트의 X가 아니라 버튼 줄의 것이다. */
 const inBoard = (name: string) => within(board()!).getAllByRole('button', { name }).at(-1)!
 const retryButton = () => inBoard('다시 하기')
+const heading = () => within(board()!).getByRole('heading', { name: title })
 const isDisabled = (button: HTMLElement) => button.getAttribute('aria-disabled') === 'true'
 const toastText = () => document.querySelector('[class*="region"]')?.textContent ?? ''
 const pathOf = ({ router }: Opened) => router.state.location.pathname
@@ -117,11 +118,23 @@ describe('판이 뜬다', () => {
     expect(inBoard('닫기').className).toMatch(/secondary/)
   })
 
-  it('"닫기"가 왼쪽, "다시 하기"가 오른쪽이고 처음 초점은 "닫기"다', async () => {
+  it('"닫기"가 왼쪽, "다시 하기"가 오른쪽이고 처음 초점은 판 제목이다(designer #239)', async () => {
     await conflictOnDelete()
     const buttons = [...board()!.querySelectorAll('[class*="actions"] button')].map((button) => button.textContent)
     expect(buttons).toEqual(['닫기', '다시 하기'])
-    expect(document.activeElement).toBe(inBoard('닫기'))
+    expect(document.activeElement).toBe(heading())
+  })
+
+  it('삭제 확인 창의 제목은 초점을 받지 않는다(짧은 확인 창은 00-common 5.6대로 "닫기")', async () => {
+    const item = lunch()
+    detail.put(item)
+    list.months.set('2026-11', [item])
+    const opened = await openApp(`/transactions/${item.id}`)
+    await waitFor(() => expect(within(main()).queryByText('작성자')).toBeTruthy())
+    await opened.user.click(within(main()).getByRole('button', { name: '삭제' }))
+    await untilOpened()
+    expect(within(confirm()!).getByRole('heading').getAttribute('tabindex')).toBeNull()
+    expect(document.activeElement!.textContent).toBe('닫기')
   })
 
   it('최신 거래 줄의 금액은 금액 색 규칙을 따른다', async () => {
@@ -162,7 +175,7 @@ describe('다시 하기', () => {
     await waitFor(() => expect(within(board()!).queryByText('11월 18일 (수) 12:10 올래국수')).toBeTruthy())
     expect(within(board()!).getByText('12:25에 고친 내용이 최신이에요')).toBeTruthy()
     expect(within(board()!).getByText('35,000원')).toBeTruthy()
-    expect(document.activeElement).toBe(inBoard('닫기'))
+    expect(document.activeElement).toBe(heading())
     await opened.user.click(retryButton())
     await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
     expect(sentVersions()).toEqual(['version=1', 'version=2', 'version=3'])

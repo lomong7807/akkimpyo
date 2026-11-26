@@ -62,6 +62,7 @@ afterEach(() => {
 const board = () => screen.queryByRole('dialog', { name: title })
 const inBoard = (name: string) => within(board()!).queryAllByRole('button', { name }).at(-1)
 const keepButton = () => inBoard('저장된 내용 그대로')!
+const heading = () => within(board()!).getByRole('heading', { name: title })
 const fixButton = () => inBoard('내 입력으로 고치기')
 const saveNewButton = () => inBoard('새 거래로 저장')
 const isDisabled = (button: HTMLElement) => button.getAttribute('aria-disabled') === 'true'
@@ -109,12 +110,12 @@ describe('유형이 같을 때', () => {
     expect(inside.queryByText(/서버/)).toBeNull()
   })
 
-  it('"저장된 내용 그대로"가 왼쪽, "내 입력으로 고치기"가 오른쪽이고 "새 거래로 저장"은 없다. 처음 초점은 "저장된 내용 그대로"다', async () => {
+  it('"저장된 내용 그대로"가 왼쪽, "내 입력으로 고치기"가 오른쪽이고 "새 거래로 저장"은 없다. 처음 초점은 판 제목이다', async () => {
     await conflictOnSave()
     const buttons = [...board()!.querySelectorAll('[class*="actions"] button')].map((button) => button.textContent)
     expect(buttons).toEqual(['저장된 내용 그대로', '내 입력으로 고치기'])
     expect(saveNewButton()).toBeUndefined()
-    expect(document.activeElement).toBe(keepButton())
+    expect(document.activeElement).toBe(heading())
   })
 
   it('넓은 화면은 가운데 창이다', async () => {
@@ -255,7 +256,7 @@ describe('유형이 다를 때', () => {
     expect(saveNewButton()).toBeTruthy()
     const actions = board()!.querySelector('[class*="actions"]')!
     expect(actions.previousElementSibling!.textContent).toBe(keptNotice)
-    expect(document.activeElement).toBe(keepButton())
+    expect(document.activeElement).toBe(heading())
   })
 
   it('"새 거래로 저장"은 새 id로 만들고 이전 화면으로 가 "저장했어요"', async () => {

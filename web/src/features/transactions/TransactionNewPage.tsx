@@ -364,7 +364,13 @@ export default function TransactionNewPage() {
         />
       </FullScreenForm>
       {/* 판 바깥, 끌어내리기, X, Esc로 닫으면 입력 화면으로 돌아가 입력을 둔다. 다시 저장하면 다시 이 판이다 */}
-      <DialogFrame open={choiceOpen} title={CHOICE_TITLE} busy={choiceBusy} onClose={() => setChoiceOpen(false)}>
+      <DialogFrame
+        open={choiceOpen}
+        title={CHOICE_TITLE}
+        busy={choiceBusy}
+        titleFocusable
+        onClose={() => setChoiceOpen(false)}
+      >
         {choice && lists && (
           <ChoiceContent
             choice={choice}
@@ -405,7 +411,7 @@ interface ChoiceContentProps {
 
 /**
  * 선택 판의 버튼(designer #239). 유형이 같으면 주 버튼 "내 입력으로 고치기"(연결이 없는 동안 비활성), 다르면 "새 거래로 저장"과
- * 그 위의 "저장된 거래는 그대로 남아요"다. 보조 버튼은 늘 "저장된 내용 그대로"이고 처음 초점이 간다(되돌리기 어려운 쪽이 주 버튼).
+ * 그 위의 "저장된 거래는 그대로 남아요"다. 보조 버튼은 늘 "저장된 내용 그대로"다. 처음 초점은 판 제목이다(designer #239).
  * 저장된 거래가 그사이 휴지통으로 갔으면 주 버튼을 숨긴다. 실패한 뒤의 주 버튼은 "다시 시도"다.
  */
 function ChoiceContent({ choice, mineType, busy, online, onKeep, onFix, onSaveAsNew, children }: ChoiceContentProps) {
@@ -429,7 +435,6 @@ function ChoiceContent({ choice, mineType, busy, online, onKeep, onFix, onSaveAs
       busy={busy}
       notice={notice}
       failure={failure}
-      focus="close"
       redraws={redraws}
     >
       {children}
