@@ -1,4 +1,4 @@
-import { useRef, type SubmitEvent } from 'react'
+import { useState, type SubmitEvent } from 'react'
 import { Button } from '../../components/Button'
 import { keepFocusInField } from '../../components/keepFocusInField'
 import layout from '../../components/layout.module.css'
@@ -35,10 +35,12 @@ export default function SignupPage({ signUp, onSignedUp, initialEmail }: SignupP
     initialValues: { email: initialEmail, password: '', passwordConfirm: '', displayName: '' },
     validate: validateSignup,
   })
-  const signupButton = useRef<HTMLButtonElement>(null)
+  // 가입 위의 실패 문구. 다시 보내는 동안에도 남기고, 실패마다 올려 새로 그려 다시 읽히게 한다. 없으면 없다
+  const [failures, setFailures] = useState<number>()
+  // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돌고 다른 버튼은 누를 수 없다(00-common 4.5, designer 규칙 #102)
+  const [sender, setSender] = useState<Sender>('signup')
 
   const busy = signup.isPending || signup.isSuccess
-  const failed = signup.isError && !rejectedFields(signup.error)
 
   function leavePassword() {
     check('password')
@@ -46,27 +48,25 @@ export default function SignupPage({ signUp, onSignedUp, initialEmail }: SignupP
     if (values.passwordConfirm !== '') check('passwordConfirm')
   }
 
-  function submit() {
+  function submit(from: Sender = 'signup') {
+    if (busy) return
     if (!checkAll()) {
       signup.reset()
+      setFailures(undefined)
       return
     }
-    signup.mutate(toNewAccount(values), { onSuccess: onSignedUp, onError: showRejected })
+    setSender(from)
+    signup.mutate(toNewAccount(values), { onSuccess: onSignedUp, onError: showFailure })
   }
 
-  function showRejected(error: Error) {
+  function showFailure(error: Error) {
     const rejected = rejectedFields(error)
     if (rejected) reject(rejected)
+    setFailures((last) => (rejected ? undefined : (last ?? 0) + 1))
   }
 
   function handleSubmit(event: SubmitEvent) {
     event.preventDefault()
-    submit()
-  }
-
-  function retry() {
-    // 다시 보내는 동안 이 버튼은 사라지므로 초점을 잃지 않게 옮긴다
-    signupButton.current?.focus()
     submit()
   }
 
@@ -114,12 +114,24 @@ export default function SignupPage({ signUp, onSignedUp, initialEmail }: SignupP
             />
           </div>
           <div className={`${layout.contentWidth} ${styles.bottom}`}>
-            {failed && (
-              <RetryMessage onRetry={retry} autoFocus>
+            {/* 실패할 때마다 초점을 "다시 시도"로 옮겨 화면 키보드를 내린다 */}
+            {failures !== undefined && (
+              <RetryMessage
+                failures={failures}
+                onRetry={() => submit('retry')}
+                busy={busy && sender === 'retry'}
+                disabled={busy && sender === 'signup'}
+                autoFocus
+              >
                 문제가 생겨 가입하지 못했어요. 잠시 후 다시 시도해 주세요.
               </RetryMessage>
             )}
-            <Button ref={signupButton} kind="primary" type="submit" busy={busy}>
+            <Button
+              kind="primary"
+              type="submit"
+              busy={busy && sender === 'signup'}
+              disabled={busy && sender === 'retry'}
+            >
               가입
             </Button>
             <AuthLink question="이미 계정이 있나요?" to="/login" email={values.email}>
@@ -131,3 +143,6 @@ export default function SignupPage({ signUp, onSignedUp, initialEmail }: SignupP
     </div>
   )
 }
+
+/** 가입 버튼, 또는 실패 문구의 "다시 시도" */
+type Sender = 'signup' | 'retry'

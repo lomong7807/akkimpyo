@@ -19,7 +19,7 @@ interface FirstAccountStepProps {
 
 /** 둘째 장: 첫 계좌 만들기(C-02 (7)~(13)) */
 export default function FirstAccountStep({ heading, account }: FirstAccountStepProps) {
-  const { form, busy, pressed, failed, create, skip, retry, createButton, skipButton } = account
+  const { form, busy, sender, failures, create, skip, retry } = account
   const skipNoteId = useId()
   return (
     <WelcomeStep
@@ -29,20 +29,25 @@ export default function FirstAccountStep({ heading, account }: FirstAccountStepP
       onSubmit={create}
       bottom={
         <>
-          {/* 이 영역은 화면 키보드 위로 올라가지 않으므로 초점을 "다시 시도"로 옮겨 키보드를 내린다(가입 A-03과 같다, designer 결정 #102) */}
-          {failed && (
-            <RetryMessage onRetry={retry} autoFocus>
+          {/* 이 영역은 화면 키보드 위로 올라가지 않으므로 실패할 때마다 초점을 "다시 시도"로 옮겨 키보드를 내린다(가입 A-03과 같다, designer 결정 #102) */}
+          {failures !== undefined && (
+            <RetryMessage
+              failures={failures}
+              onRetry={retry}
+              busy={busy && sender === 'retry'}
+              disabled={busy && sender !== 'retry'}
+              autoFocus
+            >
               문제가 생겨 계좌를 만들지 못했어요. 잠시 후 다시 시도해 주세요.
             </RetryMessage>
           )}
-          <Button ref={createButton} kind="primary" type="submit" busy={busy && pressed === 'create'} disabled={busy}>
+          <Button kind="primary" type="submit" busy={busy && sender === 'create'} disabled={busy}>
             계좌 만들기
           </Button>
           <div className={styles.skip}>
             <Button
-              ref={skipButton}
               kind="text"
-              busy={busy && pressed === 'skip'}
+              busy={busy && sender === 'skip'}
               disabled={busy}
               aria-describedby={skipNoteId}
               onClick={skip}

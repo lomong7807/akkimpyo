@@ -1,11 +1,11 @@
-import type { MouseEvent } from 'react'
+import { useEffect, useRef, type MouseEvent } from 'react'
 import { Button, ButtonLink } from './Button'
 import ErrorMessage from './ErrorMessage'
 import styles from './RetryMessage.module.css'
 
 type RetryMessageProps = {
   children: string
-  /** 나타날 때 버튼에 초점을 둔다 */
+  /** 나타날 때, 그리고 문구를 둔 채 다시 보낸 것이 또 실패해 failures가 바뀔 때 버튼에 초점을 둔다 */
   autoFocus?: boolean
   /**
    * 실패한 횟수. 바뀌면 문구만 새로 그려 같은 문구여도 다시 읽히게 한다. 버튼은 그대로 두어 초점을 잃지 않는다.
@@ -50,6 +50,11 @@ export default function RetryMessage({
   autoFocus,
   failures,
 }: RetryMessageProps) {
+  const button = useRef<HTMLButtonElement>(null)
+  // 다시 보내는 동안 문구가 남아 다시 나타나지 않으므로, 실패할 때마다 나타날 때처럼 초점을 옮긴다
+  useEffect(() => {
+    if (autoFocus) button.current?.focus()
+  }, [autoFocus, failures])
   return (
     <div className={styles.message}>
       <ErrorMessage key={failures} role="alert">
@@ -57,7 +62,7 @@ export default function RetryMessage({
       </ErrorMessage>
       <div className={styles.retry}>
         {to === undefined ? (
-          <Button kind="text" onClick={onRetry} autoFocus={autoFocus} busy={busy} disabled={disabled}>
+          <Button ref={button} kind="text" onClick={onRetry} autoFocus={autoFocus} busy={busy} disabled={disabled}>
             {actionLabel}
           </Button>
         ) : (

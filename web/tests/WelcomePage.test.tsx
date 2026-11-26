@@ -855,8 +855,10 @@ describe('서버 오류와 지연', () => {
     await waitFor(() => expect(document.activeElement).toBe(retryButton()))
   })
 
-  it('"계좌 만들기"의 "다시 시도"는 지금 화면의 값으로 다시 만들고 초점을 잃지 않는다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), delayed().respond]
+  /* 다시 보내는 동안 문구를 남기고 누른 버튼만 도는 표시다(designer 규칙 #102, 계좌 추가·거래 입력과 같다) */
+  it('"계좌 만들기"의 "다시 시도"는 지금 화면의 값으로 다시 만든다. 그동안 문구를 둔 채 "다시 시도"만 돌고, 만들면 /home으로 간다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
     accounts.addResponse = () => answers.shift()!()
     const { user } = await openSecond()
     await fill(user)
@@ -864,24 +866,72 @@ describe('서버 오류와 지연', () => {
     await screen.findByRole('alert')
     await user.type(name(), '2')
     await user.click(retryButton())
-    await waitFor(() => expect(accounts.added).toHaveLength(2))
+    await answer.arrived
     expect(created()[1].name).toBe('국민은행 통장2')
-    expect(screen.queryByRole('alert')).toBeNull()
-    expect(document.activeElement).toBe(createButton())
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect([createButton(), skipButton()].map((button) => button.hasAttribute('aria-busy'))).toEqual([false, false])
+    expect([createButton(), skipButton()].map((button) => button.getAttribute('aria-disabled'))).toEqual(['true', 'true'])
+    // 마우스로 누르면 쓰던 칸에 초점이 남는다
+    expect(document.activeElement).toBe(name())
+
+    answer.answer(HttpResponse.json(accountOf('국민은행 통장2', 'BANK', 350000), { status: 201 }))
+    await home()
+    await waitFor(() => expect(toast()).toBe('계좌를 만들었어요'))
   })
 
-  it('"건너뛰기"의 "다시 시도"는 다시 건너뛰고 초점을 잃지 않는다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), delayed().respond]
+  it('"건너뛰기"의 "다시 시도"는 다시 건너뛴다. 그동안 문구를 둔 채 "다시 시도"만 돌고 초점이 남는다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
     accounts.addResponse = () => answers.shift()!()
     const { user } = await openSecond()
     await fill(user)
     await user.click(skipButton())
     await screen.findByRole('alert')
     await user.click(retryButton())
-    await waitFor(() => expect(accounts.added).toHaveLength(2))
+    await answer.arrived
     expect(created()[1]).toEqual({ name: '현금', type: 'CASH', openingBalance: 0, openingDate: '2026-11-26' })
-    expect(document.activeElement).toBe(skipButton())
-    expect(skipButton().getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect(skipButton().hasAttribute('aria-busy')).toBe(false)
+    expect(skipButton().getAttribute('aria-disabled')).toBe('true')
+    expect(document.activeElement).toBe(retryButton())
+  })
+
+  it.each([
+    ['계좌 만들기', createButton, skipButton],
+    ['건너뛰기', skipButton, createButton],
+  ])('실패 뒤 "%s"를 누르면 문구를 둔 채 그 버튼만 돌고 "다시 시도"와 다른 버튼은 누를 수 없다', async (_, pressed, other) => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await openSecond()
+    await fill(user)
+    await user.click(createButton())
+    await screen.findByRole('alert')
+    await user.click(pressed())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(pressed().getAttribute('aria-busy')).toBe('true')
+    expect([retryButton(), other()].map((button) => button.hasAttribute('aria-busy'))).toEqual([false, false])
+    expect([retryButton(), other()].map((button) => button.getAttribute('aria-disabled'))).toEqual(['true', 'true'])
+    await user.click(retryButton())
+    expect(accounts.added).toHaveLength(2)
+  })
+
+  it('칸을 고치다 "다시 시도"를 눌러 또 실패하면 문구를 새로 그려 다시 읽히게 하고 초점이 "다시 시도"로 간다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await openSecond()
+    await fill(user)
+    await user.click(createButton())
+    const first = await screen.findByRole('alert')
+    await user.type(name(), '2')
+    await user.click(retryButton())
+    await waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(accounts.added).toHaveLength(2)
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(document.activeElement).toBe(retryButton())
   })
 
   it('다시 시도할 때 칸이 틀렸으면 보내지 않고 문구를 지운 뒤 칸의 오류를 보인다', async () => {
