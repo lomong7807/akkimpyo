@@ -27,6 +27,11 @@
   font: var(--text-secondary);
 }
 
+/* 지금 화면(B-05)이면 다른 사이드바 줄처럼 색만 바꾼다. 보낼 수 없음 줄은 위험색 그대로다 */
+.counts[aria-current] .count:not(.rejected) {
+  color: var(--color-accent);
+}
+
 .rejected {
   color: var(--color-danger);
 }

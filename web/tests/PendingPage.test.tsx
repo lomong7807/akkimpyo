@@ -204,6 +204,23 @@ describe('주소와 들어오는 길', () => {
     expect(within(tabs).getByRole('link', { name: '홈' }).hasAttribute('aria-current')).toBe(false)
   })
 
+  it('이 화면의 상단 바에는 B-04를 두지 않는다(자기 자신을 가리키고 좁은 화면에서 제목을 자른다, designer #236)', async () => {
+    await seedPending(expense())
+    await openPending()
+    expect(screen.getByRole('banner').querySelector('[class*="_syncStatus_"]')).toBeNull()
+    expect(screen.queryByRole('link', { name: /목록 보기$/ })).toBeNull()
+  })
+
+  it('넓은 화면 사이드바 건수 줄(2-4)은 이 화면에서 지금 화면 표시(aria-current, 색만)다', async () => {
+    await seedPending(expense())
+    await seedRejected(expense())
+    await openPending({ width: 1280 })
+    const line = screen.getByRole('link', { name: '보내지 않은 입력 2건, 그중 보낼 수 없음 1건, 목록 보기' })
+    expect(line.getAttribute('aria-current')).toBe('page')
+    expect(getComputedStyle(within(line).getByText('보내지 않은 입력 2건')).color).toBe('var(--color-accent)')
+    expect(getComputedStyle(within(line).getByText('그중 보낼 수 없음 1건')).color).toBe('var(--color-danger)')
+  })
+
   it('상단 바의 동기화 상태 표시(B-04)를 누르면 열린다. 홈에서 들어왔으면 6.2대로 홈을 강조한다', async () => {
     await seedPending(expense({ payee: '점심' }))
     const opened = await openApp('/home')
@@ -550,6 +567,17 @@ describe('(5) 버리기', () => {
     await untilOpened()
     await user.click(within(dialog()).getByRole('button', { name: '버리기' }))
     await waitFor(() => expect(document.activeElement).toBe(discardIn(rowOf('둘째'))))
+    await untilUnshielded()
+  })
+
+  it('마지막 줄을 버려 데이터 없음이 되면 초점은 화면 제목으로 간다(designer #236)', async () => {
+    await seedPending(expense({ payee: '하나뿐' }))
+    const { user } = await openPending()
+    await user.click(discardIn(rowOf('하나뿐')))
+    await untilOpened()
+    await user.click(within(dialog()).getByRole('button', { name: '버리기' }))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: '보내지 않은 입력' })))
+    await screen.findByText(NOTHING_LEFT)
     await untilUnshielded()
   })
 

@@ -8,6 +8,7 @@ import EmptyState from '../../components/EmptyState'
 import ErrorMessage from '../../components/ErrorMessage'
 import { afterModals } from '../../components/openModal'
 import { SubScreen } from '../../components/Screen'
+import { focusScreenTitle } from '../../components/screenTitle'
 import StatusChip from '../../components/StatusChip'
 import { useToast } from '../../components/ToastContext'
 import type { PendingTransaction } from '../../device/pendingQueue'
@@ -107,11 +108,16 @@ function PendingList() {
         item={discarding}
         onClose={() => setDiscarding(undefined)}
         onDiscarded={(id) => {
-          // 지운 줄의 버리기가 없어지므로 창이 닫힌 뒤 다음 줄(없으면 앞 줄)의 버리기로 초점을 옮긴다
+          // 지운 줄의 버리기가 없어지므로 창이 닫힌 뒤 다음 줄(없으면 앞 줄)의 버리기로, 마지막 줄이었으면 화면 제목으로
+          // 초점을 옮긴다(designer #236)
           const ids = items?.map((item) => item.id) ?? []
           const index = ids.indexOf(id)
           const neighbor = ids[index + 1] ?? ids[index - 1]
-          afterModals(() => discardButtons.current.get(neighbor)?.focus())
+          afterModals(() => {
+            const button = neighbor === undefined ? undefined : discardButtons.current.get(neighbor)
+            if (button) button.focus()
+            else focusScreenTitle()
+          })
         }}
       />
     </>

@@ -2,6 +2,7 @@ import { use, type ReactNode } from 'react'
 import { Button } from './Button'
 import layout from './layout.module.css'
 import { LedgerNameContext } from './LedgerNameContext'
+import { SCREEN_TITLE_ID } from './screenTitle'
 import { ShellContext } from './ShellContext'
 import { useGoBack } from './useGoBack'
 import styles from './Screen.module.css'
@@ -57,7 +58,10 @@ export function TitleBar({ title, parent, action }: TitleBarProps) {
         <div className={styles.back}>
           <Button kind="icon" icon="CaretLeft" aria-label="뒤로" onClick={goBack} />
         </div>
-        <h1 className={styles.title}>{title}</h1>
+        {/* 화면이 내용을 바꿔 초점이 갈 곳을 잃으면 제목으로 옮긴다(focusScreenTitle). 탭 순서에는 들지 않는다 */}
+        <h1 id={SCREEN_TITLE_ID} tabIndex={-1} className={styles.title}>
+          {title}
+        </h1>
         {/* 화면별 버튼의 왼쪽(6.1). 넓은 화면에서는 사이드바에 있다 */}
         {syncStatus && <div className={`${styles.sync} ${styles.subSync}`}>{syncStatus}</div>}
         {action && <div className={styles.action}>{action}</div>}
