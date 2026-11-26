@@ -546,15 +546,21 @@ describe('지금 보내기와 탭 사이 잠금(#236)', () => {
     await one.pending.queueTransaction(item(1))
     await one.pending.queueTransaction(item(2))
     const first = delayed()
-    transactions.response = (sent) => (sent.body.id === id(1) ? first.respond() : HttpResponse.json(savedOf(sent.body), { status: 201 }))
+    let secondTries = 0
+    transactions.response = (sent) => {
+      if (sent.body.id === id(1)) return first.respond()
+      secondTries += 1
+      // 다른 탭이 보낼 때는 서버 오류로 대기에 남고, 이 탭이 기다렸다가 다시 보내면 받는다
+      return secondTries === 1 ? problem(503, 'INTERNAL_ERROR') : HttpResponse.json(savedOf(sent.body), { status: 201 })
+    }
     const auto = two.sendQueue()
     await first.arrived
     const now = one.sendQueue({ byUser: true })
     first.answer(HttpResponse.json(savedOf(expense(1)), { status: 201 }))
     await auto
-    // 다른 탭이 둘 다 보냈으므로 이 탭은 보낼 것이 없다
-    expect(await now).toEqual({ noticed: 0, sent: 0, rejected: 0, unsent: 0 })
-    expect(sentIds()).toEqual([id(1), id(2)])
+    expect(await now).toEqual({ noticed: 0, sent: 1, rejected: 0, unsent: 0 })
+    expect(sentIds()).toEqual([id(1), id(2), id(2)])
+    expect(await states(one)).toEqual([])
   })
 
   it('다른 탭이 잠금을 쥔 채 15초 안에 놓지 않으면 보내지 않고 trouble로 끝난다', async () => {

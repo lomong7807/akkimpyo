@@ -72,18 +72,21 @@
   text-align: end;
 }
 
-/* 셋째 줄: 왼쪽 상태 칩, 오른쪽 끝 버리기(누르는 영역 44px) */
+/*
+ * 셋째 줄: 왼쪽 상태 칩, 오른쪽 끝 버리기(누르는 영역 44px). 좁은 화면에서 글자를 키워 한 줄에 들지 않으면 버리기가 다음 줄
+ * 오른쪽 끝으로 내려간다(320px 글자 200%)
+ */
 .status {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-12);
+  column-gap: var(--space-12);
   min-height: var(--size-touch);
 }
 
 /* 글자 버튼의 안쪽 여백만큼 당겨 글자를 내용의 오른쪽 선에 맞춘다 */
 .discard {
-  margin-inline-end: calc(-1 * var(--space-8));
+  margin-inline: auto calc(-1 * var(--space-8));
 }
 
 /* (6) 거부 이유: 칩 아래 왼쪽 */
