@@ -1,7 +1,7 @@
 import type { FieldErrors } from '../../components/useFormFields'
 import { today } from '../../lib/calendarDate'
 import { currentTime, isValidTime, normalizeTime } from '../../lib/timeText'
-import { hasUnusableCharacter, lengthOf, trimWhiteSpace } from '../../lib/visibleText'
+import { hasUnusableCharacter, lengthOf, trimSpaces } from '../../lib/visibleText'
 import type { NewTransaction, TransactionType } from './transactions'
 
 /** 칸의 값. 오류를 보이는 칸은 화면 위쪽부터 transactionFields의 순서다. */
@@ -72,12 +72,20 @@ export function newTransactionValues(): TransactionValues {
 
 /** 서버가 검사하고 저장하는 가맹점/내용. 앞뒤 공백류를 지우고 조합형으로 맞춘다(P-214). */
 export function normalizePayee(payee: string): string {
-  return trimWhiteSpace(payee).normalize('NFC')
+  return trimSpaces(payee).normalize('NFC')
 }
 
 /** 서버와 같이 조합형으로 맞춘 코드포인트를 센다. 메모는 공백을 지우지 않는다(P-214). */
 export function memoLength(memo: string): number {
-  return lengthOf(memo.normalize('NFC'))
+  return lengthOf(unifyLineBreaks(memo).normalize('NFC'))
+}
+
+/**
+ * 서버가 메모를 검사하기 전에 하듯 `\r\n`과 `\r`을 `\n`으로 바꾼다(P-214). 검사에만 쓰고 보내는 값은 바꾸지 않는다(서버가
+ * 바꾼다). 여러 줄 칸의 값에는 `\r`이 없어 화면에서는 바뀌는 것이 없다.
+ */
+function unifyLineBreaks(memo: string): string {
+  return memo.replace(/\r\n?/g, '\n')
 }
 
 export function payeeLength(payee: string): number {
@@ -97,14 +105,20 @@ export function validateTransaction(values: TransactionValues): FieldErrors<Tran
     toAccountId: transfer ? toAccountError(values) : undefined,
     occurredOn: values.occurredOn === '' ? dateRequired : undefined,
     occurredTime: values.occurredTime === '' || isValidTime(normalizeTime(values.occurredTime)) ? undefined : timeInvalid,
-    memo: memoLength(values.memo) > MEMO_MAX ? memoTooLong : undefined,
+    memo: memoError(values.memo),
   }
 }
 
+// 보이지 않는 글자도 글자 수에 들어가므로 쓸 수 없는 글자의 문구를 먼저 보인다(00-common 4.4)
 function payeeError(payee: string): string | undefined {
-  // 보이지 않는 글자도 글자 수에 들어가므로 이 문구를 먼저 보인다(00-common 4.4)
-  if (hasUnusableCharacter(normalizePayee(payee))) return unusableCharacter
+  if (hasUnusableCharacter(payee)) return unusableCharacter
   if (payeeLength(payee) > PAYEE_MAX) return payeeTooLong
+}
+
+/** 메모는 줄바꿈(U+000A)을 더 받는다(P-214). 같은 문구를 미리 보인다(00-common 4.4, frontend 결정 #220). */
+function memoError(memo: string): string | undefined {
+  if (hasUnusableCharacter(unifyLineBreaks(memo), { allowLineFeed: true })) return unusableCharacter
+  if (memoLength(memo) > MEMO_MAX) return memoTooLong
 }
 
 function toAccountError({ accountId, toAccountId }: TransactionValues): string | undefined {

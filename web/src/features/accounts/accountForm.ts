@@ -80,6 +80,6 @@ export function toNewAccount({ name, type, openingBalance, negative, openingDate
 function nameError(value: string, messages: AccountMessages): string | undefined {
   const name = normalizeName(value)
   if (name === '') return messages.nameRequired
-  if (hasUnusableCharacter(name)) return messages.nameUnusable
+  if (hasUnusableCharacter(value)) return messages.nameUnusable
   if (accountNameLength(value) > ACCOUNT_NAME_MAX) return messages.nameTooLong
 }

@@ -359,6 +359,9 @@ describe('표시 이름 검사', () => {
     ['보이지 않는 글자뿐', '\u{3164}', nameUnusable],
     ['가운데의 보이지 않는 글자', '이\u{200B}서연', nameUnusable],
     ['가운데의 탭', '이\t서연', nameUnusable],
+    // 서버는 앞뒤의 공백류(Zs)만 지우고 탭과 U+0085는 거부한다(#220)
+    ['앞뒤의 탭', '\t이서연\t', nameUnusable],
+    ['끝의 U+0085', '이서연\u{85}', nameUnusable],
     ['홀로 선 U+FE0F', '이서연\u{FE0F}', nameUnusable],
     ['21자', '가'.repeat(21), nameTooLong],
     ['21자가 넘는 분해형', '가'.normalize('NFD').repeat(21), nameTooLong],

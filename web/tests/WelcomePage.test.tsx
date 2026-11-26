@@ -601,6 +601,8 @@ describe('계좌 만들기 전의 검사', () => {
     ['공백류뿐', ' \u{A0}\u{3000}', nameRequired],
     ['51자', '가'.repeat(51), nameTooLong],
     ['보이지 않는 글자', '통장\u{200B}', nameUnusable],
+    // 서버는 앞뒤의 공백류(Zs)만 지우고 탭은 거부한다(#220)
+    ['앞뒤의 탭', '\t통장\t', nameUnusable],
   ])('이름이 %s이면 칸을 벗어날 때 알린다', async (_, value, message) => {
     const { user } = await openSecond()
     await user.click(name())
