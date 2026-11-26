@@ -8,6 +8,10 @@
 // 정적 import는 <dist>/.vite/manifest.json이 있으면 그것으로, 없으면 빌드 결과 JS를 V8로 파싱해 찾는다.
 // 파싱에 쓰는 vm.SourceTextModule은 --experimental-vm-modules를 줘야 있다. 코드를 실행하지는 않는다.
 //
+// gzip 크기는 Node가 쓰는 zlib에 따라 조금 다르다. CI(setup-node)의 공식 Node는 자기 zlib를 넣어 만든 것이고,
+// Homebrew Node는 macOS의 zlib를 쓴다. main 90597bc에서 각각 147,297, 147,203바이트였다(PR #263).
+// CI와 같은 값을 보려면 공식 Node(nodejs.org 배포본)로 돌린다. 로그 첫 줄에 zlib 버전이 나온다.
+//
 // 종료 코드: 0 기준값 이하, 1 기준값 넘음, 2 잴 수 없음(파일 없음, 잘못된 기준값 등)
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -183,7 +187,7 @@ export function formatLog(result, budget, budgetName) {
   const widths = rows[0].map((_, i) => Math.max(...rows.map((row) => width(row[i]))));
   const line = (row) => row.map((cell, i) => pad(cell, widths[i], i >= 2)).join('  ').trimEnd();
   return [
-    `첫 화면 JS (파일마다 gzip level ${GZIP_LEVEL}, 정적 import: ${result.method})`,
+    `첫 화면 JS (파일마다 gzip level ${GZIP_LEVEL}, zlib ${process.versions.zlib}, 정적 import: ${result.method})`,
     ...rows.map(line),
     `합계 ${result.files.length}개: 원래 ${n(result.raw)}, gzip ${n(result.gzip)}바이트`,
     `기준값 ${n(budget)}바이트(${budgetName}) → ${verdict(result, budget)}`,
@@ -197,7 +201,7 @@ export function formatSummary(result, budget, budgetName) {
     '',
     `**${verdict(result, budget)}** — gzip ${n(result.gzip)}바이트 / 기준값 ${n(budget)}바이트(\`${budgetName}\`)`,
     '',
-    `파일마다 gzip level ${GZIP_LEVEL}로 압축한 크기. 정적 import를 찾은 방법: ${result.method}. 동적 import는 넣지 않는다.`,
+    `파일마다 gzip level ${GZIP_LEVEL}(zlib ${process.versions.zlib})로 압축한 크기. 정적 import를 찾은 방법: ${result.method}. 동적 import는 넣지 않는다.`,
     '',
     '| 파일 | 어디서 | 원래 | gzip |',
     '|---|---|---:|---:|',
