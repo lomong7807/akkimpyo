@@ -14,6 +14,13 @@ export interface Session {
   id: number
   /** 쓰던 로그인이 끝난 까닭. 로그인하지 않은 동안에만 뜻이 있다. */
   end?: 'ended' | 'logged-out'
+  /** 로그인이 풀릴 때 열린 입력 화면의 쓰던 값을 이 기기에 남겼다(#234 C2). end가 ended일 때만 뜻이 있다 */
+  draftKept?: boolean
+  /**
+   * 로그인이 풀려 쓰던 값을 남기는 중이다(#234 C2). 값은 이미 꺼냈으므로 입력 화면을 바로 내리고, 남긴 뒤 로그인 화면으로 간다.
+   * 그 사이 토큰이 없는 화면이 남아 401로 끝난 저장의 실패 문구를 보이거나 다시 누르지 않게 한다(architect C2 검토)
+   */
+  ending?: boolean
   /** 로그인을 보냈다. 그 뒤에 오는 확인 결과로는 화면을 옮기지 않는다. */
   loginSubmitted: boolean
   /** 이 로그인 동안 화면이 보관됐다가 되살아난 횟수 */
@@ -32,12 +39,15 @@ export type SessionEvent =
   | 'check-failed'
   | 'check-late'
   | { type: 'unconfirmed'; user: string }
+  // 로그인이 풀렸고 쓰던 값을 남기려 했다(남겼는지)
+  | { type: 'ended'; draftKept: boolean }
   // 사용자가 한 것
   | 'retried'
   | 'login-submitted'
   | 'signed-in'
   // 세션 계층이 알린 것
   | SessionEnd
+  | 'ending'
   | 'confirmed'
   // 브라우저가 알린 것
   | 'resumed'
@@ -46,12 +56,17 @@ export const initialSession: Session = { status: 'checking', id: 0, loginSubmitt
 
 export function nextSession(session: Session, event: SessionEvent): Session {
   const anew = { ...initialSession, id: session.id + 1 }
+  if (typeof event === 'object' && event.type === 'ended') {
+    return { ...anew, status: 'signed-out', end: 'ended', draftKept: event.draftKept }
+  }
   if (typeof event === 'object') {
     // 확인하는 사이에 로그인했으면 늦게 온 결과는 쓰지 않는다
     if (session.status === 'signed-in' || session.status === 'signed-out') return session
     return { ...session, status: 'unconfirmed', deviceUser: event.user }
   }
   switch (event) {
+    case 'ending':
+      return session.status === 'signed-in' || session.status === 'unconfirmed' ? { ...session, ending: true } : session
     case 'confirmed':
       return session.status === 'unconfirmed' ? { ...session, status: 'signed-in' } : session
     case 'signed-in':
