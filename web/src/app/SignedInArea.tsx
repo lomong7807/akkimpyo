@@ -1,9 +1,10 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Navigate, Outlet, useLocation, type Location } from 'react-router'
 import { ButtonLink } from '../components/Button'
 import LoadFailure from '../components/LoadFailure'
 import { CurrentLedgerContext } from '../features/me/CurrentLedgerContext'
+import { useMeCopy } from '../features/me/meCopy'
 import { useMe } from '../features/me/useMe'
 import ListMemoryProvider from './ListMemoryProvider'
 import Loading from './Loading'
@@ -34,7 +35,7 @@ export default function SignedInArea() {
  * 지금 캐시에 들어올 길이 없다.
  */
 function SessionData({ children }: { children: ReactNode }) {
-  const { resumed } = useSession().session
+  const { resumed, status } = useSession().session
   const [queryClient] = useState(createQueryClient)
   // 비우면 진행 중인 요청의 결과도 버린다
   useEffect(() => () => queryClient.clear(), [queryClient])
@@ -42,6 +43,15 @@ function SessionData({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (resumed > 0) void queryClient.refetchQueries({ type: 'active' }, { cancelRefetch: false })
   }, [resumed, queryClient])
+  // 확인하지 못한 로그인이 같은 사용자로 확인되면 연결 없이 실패한 조회를 서버에서 다시 받는다(화면은 그대로 둔다)
+  const unconfirmed = useRef(status === 'unconfirmed')
+  useEffect(() => {
+    if (status === 'unconfirmed') unconfirmed.current = true
+    else if (status === 'signed-in' && unconfirmed.current) {
+      unconfirmed.current = false
+      void queryClient.refetchQueries({ type: 'active' }, { cancelRefetch: false })
+    }
+  }, [status, queryClient])
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 }
 
@@ -50,8 +60,11 @@ function Gate() {
   const location = useLocation()
   const signedIn = session.status === 'signed-in'
   const me = useMe({ enabled: signedIn })
+  // 확인하지 못한 로그인은 그 사용자의 내 정보 사본으로 공통 틀을 그린다. 확인된 뒤에도 서버의 값이 올 때까지 이어 쓴다(#234)
+  const meCopy = useMeCopy(session.deviceUser)
   // 1단계에는 장부가 하나다
-  const ledger = me.data?.ledgers[0]
+  const ledger = (me.data ?? meCopy.data ?? undefined)?.ledgers[0]
+  const copyMissing = session.status === 'unconfirmed' && (meCopy.isError || meCopy.data === null)
   const entry = useWelcomeEntry(ledger)
 
   // 로그인한 화면이 열렸으면 돌아갈 주소는 쓸 일이 없다
@@ -61,7 +74,7 @@ function Gate() {
 
   if (session.status === 'signed-out') return <LoginRedirect session={session} />
 
-  if (session.status === 'unknown' || session.status === 'retrying') {
+  if (session.status === 'unknown' || session.status === 'retrying' || (copyMissing && !ledger)) {
     return (
       <PlainLayout>
         <LoadFailure onRetry={retry} busy={session.status === 'retrying'}>

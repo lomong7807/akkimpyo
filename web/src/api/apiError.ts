@@ -36,8 +36,18 @@ export class ApiError extends Error {
   readonly requestId?: string
   readonly fieldErrors: FieldError[]
   readonly current?: unknown
+  /**
+   * 다른 탭이 탭 사이 잠금을 쥐고 있어 기다리다 보내지 못했거나, 다른 탭의 로그인·로그아웃이 잠금을 빼앗았다(kind는 timeout).
+   * 연결과 무관하므로 연결 없이 앱을 여는 판단에서 지연으로 보지 않는다(security·architect 결정 2026-11-26, #234 Q2).
+   */
+  readonly lockWait: boolean
 
-  private constructor(kind: ApiErrorKind, status?: number, problem: Problem = { fieldErrors: [] }) {
+  private constructor(
+    kind: ApiErrorKind,
+    status?: number,
+    problem: Problem = { fieldErrors: [] },
+    lockWait = false,
+  ) {
     super(['API 요청 실패', kind, status, problem.code].filter((part) => part !== undefined).join(' '))
     this.kind = kind
     this.status = status
@@ -45,6 +55,7 @@ export class ApiError extends Error {
     this.requestId = problem.requestId
     this.fieldErrors = problem.fieldErrors
     this.current = problem.current
+    this.lockWait = lockWait
   }
 
   static connection(): ApiError {
@@ -53,6 +64,11 @@ export class ApiError extends Error {
 
   static timeout(): ApiError {
     return new ApiError('timeout')
+  }
+
+  /** 탭 사이 잠금 때문에 보내지 못했다(lockWait). 화면에는 지연과 같다 */
+  static lockTimeout(): ApiError {
+    return new ApiError('timeout', undefined, undefined, true)
   }
 
   /** 성공 상태인데 본문이 약속과 다르다 */

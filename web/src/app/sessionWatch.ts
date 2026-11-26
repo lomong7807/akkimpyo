@@ -1,8 +1,9 @@
-import { noticeLogout, resendLogout, resumeSession, suspendSession } from '../api/session'
+import { noticeLogout, recheckUnconfirmed, resendLogout, resumeSession, suspendSession } from '../api/session'
 
 /**
  * 다른 탭의 로그아웃과 브라우저가 보관했다 되살린 화면(bfcache), 다시 된 연결을 세션 계층에 알린다.
  * 저장소 신호는 잠든 탭에 오지 않을 수 있으므로 화면이 다시 보일 때와 열릴 때도 본다. 요청 직전에는 세션 계층이 스스로 본다.
+ * 확인하지 못한 로그인(#234)은 다른 탭의 401을 표시로 알 수 없으므로 화면이 다시 보일 때 기기의 기록도 다시 본다.
  *
  * 보관될 때 화면을 미리 가린다. 되살아난 화면은 스크립트보다 먼저 그려진다.
  * `onResumed`를 받은 쪽이 확인 결과를 그린 뒤 `uncoverPage`로 연다.
@@ -15,7 +16,9 @@ export function watchSession(onResumed: () => void): () => void {
   document.addEventListener(
     'visibilitychange',
     () => {
-      if (document.visibilityState === 'visible') noticeLogout()
+      if (document.visibilityState !== 'visible') return
+      noticeLogout()
+      void recheckUnconfirmed()
     },
     { signal },
   )
@@ -33,9 +36,14 @@ export function watchSession(onResumed: () => void): () => void {
     'pageshow',
     ({ persisted }) => {
       if (!persisted) return noticeLogout()
-      resumeSession()
-      stored = false
-      onResumed()
+      // 확인하지 못한 로그인은 기록을 다시 읽는 동안 가린 채로 둔다
+      const checking = resumeSession()
+      const resumed = () => {
+        stored = false
+        onResumed()
+      }
+      if (checking) void checking.then(resumed)
+      else resumed()
     },
     { signal },
   )

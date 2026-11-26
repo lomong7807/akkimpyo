@@ -1,6 +1,5 @@
 import { ApiError } from '../../api/apiError'
 import { request, requestForResponse } from '../../api/request'
-import { currentUserId } from '../../api/session'
 import { isDate, monthOf } from '../../lib/calendarDate'
 import { deviceValueOf } from '../../lib/deviceValue'
 import { isValidTime } from '../../lib/timeText'
@@ -89,9 +88,9 @@ export interface CreateResult {
 const DEVICE_HEADER = 'X-Akkimpyo-Device'
 
 /**
- * 거래 하나를 만든다. 요청은 하나다. `startedBy`는 저장을 시작한 때의 사용자이고, 보내는 순간의 사용자가 그와 다르면
- * 보내지 않는다(security #79 권고 A). 그사이 같은 탭에서 다른 계정으로 로그인했으면 앞 사용자의 입력이 새 사용자의
- * 이름으로 나가지 않게 한다. 토큰을 갱신해 다시 보낼 때의 같은 검사는 세션 계층이 한다.
+ * 거래 하나를 만든다. 요청은 하나다. `startedBy`는 저장을 시작한 때의 사용자이고, 보내는 순간의 사용자(토큰의 sub)가
+ * 그와 다르면 보내지 않고 지연 오류로 끝낸다(security #79 권고 A). 그사이 같은 탭에서 다른 계정으로 로그인했으면 앞 사용자의
+ * 입력이 새 사용자의 이름으로 나가지 않게 한다. 검사는 요청 계층이 보내기 직전마다(갱신해 다시 보낼 때 포함) 한다.
  * 실패하면 ApiError를 던진다.
  */
 export async function createTransaction(
@@ -100,22 +99,13 @@ export async function createTransaction(
   startedBy: string | undefined,
 ): Promise<CreateResult> {
   const path = ledgerPath(ledgerId, 'transactions')
-  checkSender(startedBy)
-  const { status, body } = await requestForResponse<unknown>(path, {
-    method: 'POST',
-    body: transaction,
-    headers: deviceHeaders(),
-  })
+  const { status, body } = await requestForResponse<unknown>(
+    path,
+    { method: 'POST', body: transaction, headers: deviceHeaders() },
+    { startedBy },
+  )
   if ((status !== 200 && status !== 201) || !isSavedTransaction(body)) throw ApiError.unreadable(status)
   return { created: status === 201, transaction: body }
-}
-
-/**
- * 보내는 순간의 사용자가 `startedBy`(저장이나 동작을 시작한 때의 사용자)와 다르면 보내지 않고 지연 오류로 끝낸다
- * (security #79 권고 A). 거래를 바꾸는 요청은 모두 보내기 전에 이것을 부른다.
- */
-function checkSender(startedBy: string | undefined): void {
-  if (startedBy === undefined || currentUserId() !== startedBy) throw ApiError.timeout()
 }
 
 /** 쓰기 요청의 기기 값. user agent 원문은 보내지 않는다. 목록의 값 하나로 줄인다 */
@@ -342,8 +332,7 @@ export async function deleteTransaction(
   startedBy: string | undefined,
 ): Promise<SavedTransaction> {
   const path = `${transactionPath(ledgerId, id)}?${new URLSearchParams({ version: String(version) })}` as const
-  checkSender(startedBy)
-  const body = await request<unknown>(path, { method: 'DELETE', headers: deviceHeaders() })
+  const body = await request<unknown>(path, { method: 'DELETE', headers: deviceHeaders() }, { startedBy })
   if (!isSavedTransaction(body) || !isSameId(body.id, id) || body.deletedAt === null) throw ApiError.unreadable()
   return body
 }
@@ -361,8 +350,7 @@ export async function updateTransaction(
   startedBy: string | undefined,
 ): Promise<TransactionDetail> {
   const path = transactionPath(ledgerId, id)
-  checkSender(startedBy)
-  const body = await request<unknown>(path, { method: 'PUT', body: update, headers: deviceHeaders() })
+  const body = await request<unknown>(path, { method: 'PUT', body: update, headers: deviceHeaders() }, { startedBy })
   if (!isTransactionDetail(body) || !isSameId(body.id, id) || body.deletedAt !== null) throw ApiError.unreadable()
   return body
 }
@@ -375,8 +363,7 @@ export async function restoreTransaction(
   startedBy: string | undefined,
 ): Promise<SavedTransaction> {
   const path = `${transactionPath(ledgerId, id)}/restore` as const
-  checkSender(startedBy)
-  const body = await request<unknown>(path, { method: 'POST', body: { version }, headers: deviceHeaders() })
+  const body = await request<unknown>(path, { method: 'POST', body: { version }, headers: deviceHeaders() }, { startedBy })
   if (!isSavedTransaction(body) || !isSameId(body.id, id) || body.deletedAt !== null) throw ApiError.unreadable()
   return body
 }
