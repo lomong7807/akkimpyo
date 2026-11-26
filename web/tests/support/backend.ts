@@ -11,12 +11,18 @@ export function ledgerNameOf(user: string): string {
   return `${user}의 장부`
 }
 
+/** 사용자마다 다른 장부 id. 서버처럼 UUID다. 앞자리로 어느 사용자의 장부인지 알아본다. */
+export function ledgerIdOf(user: string): string {
+  const hex = [...new TextEncoder().encode(user)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `1ed9e700-0000-4000-8000-${hex.padStart(12, '0').slice(-12)}`
+}
+
 export function meOf(user: string) {
   return {
     id: user,
     email: `${user}@example.com`,
     displayName: `${user}의 이름`,
-    ledgers: [{ id: `${user}-ledger`, name: ledgerNameOf(user), role: 'OWNER' }],
+    ledgers: [{ id: ledgerIdOf(user), name: ledgerNameOf(user), role: 'OWNER' }],
   }
 }
 

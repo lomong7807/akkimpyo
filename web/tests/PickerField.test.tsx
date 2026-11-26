@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import OptionList, { type PickerSection } from '../src/components/OptionList'
 import PickerField from '../src/components/PickerField'
 import { readCssRule } from './support/cssRule'
+import { readWebFile } from './support/webFile'
 import { untilOpened } from './support/dialog'
 import { installMatchMedia } from './support/viewport'
 
@@ -51,11 +52,13 @@ function Sample({
   initial = 'food',
   error,
   startAtFirst,
+  searchable = true,
 }: {
   sections?: PickerSection[]
   initial?: string
   error?: string
   startAtFirst?: boolean
+  searchable?: boolean
 }) {
   const [value, setValue] = useState(initial)
   return (
@@ -69,6 +72,7 @@ function Sample({
             value={value}
             focusVisible={focusVisible}
             startAtFirst={startAtFirst}
+            searchable={searchable}
             onSelect={(next) => {
               setValue(next)
               close()
@@ -298,6 +302,25 @@ describe('이름 찾기', () => {
   })
 })
 
+describe('찾기 칸이 없는 목록', () => {
+  it('찾기 칸 없이 목록만 있고 지금 값에 초점이 간다', async () => {
+    await open({ sections: accounts, initial: 'shinhan', searchable: false })
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(document.activeElement).toBe(within(listbox()).getByRole('option', { name: '신한카드' }))
+  })
+
+  it('첫 줄에서 위 화살표를 눌러도 첫 줄에 남는다', async () => {
+    const user = await open({ sections: accounts, initial: 'salary', searchable: false })
+    await user.keyboard('{ArrowUp}')
+    expect(document.activeElement).toBe(within(listbox()).getByRole('option', { name: '국민은행 급여통장' }))
+  })
+
+  it('맨 위 줄은 시트 머리 아래 4px(시트의 안쪽 여백)에서 시작하고 찾기 칸 자리가 없다', async () => {
+    await open({ sections: accounts, initial: 'salary', searchable: false })
+    expect(listbox().parentElement!.querySelector('[class*="search"]')).toBeNull()
+  })
+})
+
 describe('계좌 묶음', () => {
   it('은행, 카드, 현금 머리 아래 이름만 있는 줄이다', async () => {
     await open({ sections: accounts, initial: 'salary' })
@@ -368,15 +391,16 @@ describe('넓은 화면의 펼친 판', () => {
     expect(css).toContain('left: min(var(--field-left), 100% - var(--list-width))')
   })
 
-  it('최대 높이는 360px이고 남은 자리보다 크지 않다', () => {
+  it('최대 높이는 360px 토큰이고 남은 자리보다 크지 않다', () => {
     const css = (selector: string) => readCssRule('src/components/FieldPanel.module.css', selector)
-    expect(css('.list')).toContain('--list-max-height: calc(var(--width-field-panel) + var(--space-40))')
+    expect(css(".list[data-side='measure']")).toContain('max-height: var(--height-field-panel)')
     expect(css(".list[data-side='below']")).toContain(
-      'max-height: min(var(--list-max-height), 100% - var(--field-bottom) - 2 * var(--space-4))',
+      'max-height: min(var(--height-field-panel), 100% - var(--field-bottom) - 2 * var(--space-4))',
     )
     expect(css(".list[data-side='above']")).toContain(
-      'max-height: min(var(--list-max-height), var(--field-top) - 2 * var(--space-4))',
+      'max-height: min(var(--height-field-panel), var(--field-top) - 2 * var(--space-4))',
     )
+    expect(readWebFile('src/components/FieldPanel.module.css')).not.toContain('--list-max-height')
   })
 
   it('배치가 바뀌면 닫는다', async () => {

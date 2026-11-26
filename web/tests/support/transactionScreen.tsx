@@ -6,7 +6,7 @@ import { createBrowserRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { expect, vi } from 'vitest'
 import { accountOf, startAccounts } from './accounts'
-import { startBackend } from './backend'
+import { ledgerIdOf, startBackend } from './backend'
 import { categoryWithChildren, startCategories } from './categories'
 import { untilOpened } from './dialog'
 import { startTransactions } from './transactions'
@@ -49,7 +49,7 @@ export const categoryItems = [
   categoryWithChildren(id.incomeNone, 'INCOME', '미분류', [], true),
 ]
 
-export const LEDGER = 'user-1-ledger'
+export const LEDGER = ledgerIdOf('user-1')
 export const LAST_ACCOUNT_KEY = 'akkimpyo-last-account'
 
 /** 로그인한 user-1의 장부에 계좌, 카테고리, 거래 만들기가 되는 가짜 서버 */

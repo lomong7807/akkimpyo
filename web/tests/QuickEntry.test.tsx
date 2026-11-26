@@ -223,6 +223,8 @@ describe('키보드 올려 두기', () => {
     expect(input.inputMode).toBe('numeric')
     expect(input.tabIndex).toBe(-1)
     expect(input.getAttribute('aria-hidden')).toBe('true')
+    // 브라우저가 이 칸에 저장된 값이나 자동 완성을 띄우지 않게 한다
+    expect(input.getAttribute('autocomplete')).toBe('off')
     const rule = readCssRule('src/components/keyboardBridge.module.css', '.bridge')
     expect(rule).toContain('opacity: 0')
     expect(rule).toContain('pointer-events: none')

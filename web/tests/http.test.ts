@@ -105,6 +105,24 @@ describe('요청', () => {
     expect(requests[0].headers.get('X-Akkimpyo-Device')).toBe('mac.safari')
   })
 
+  it('access token이 없으면 부르는 쪽이 넘긴 Authorization도 보내지 않는다', async () => {
+    const requests = captureRequest()
+    await send('/ledgers', { method: 'POST', body: {}, headers: { Authorization: 'Bearer stolen', authorization: 'x' } })
+    expect(requests[0].headers.has('Authorization')).toBe(false)
+  })
+
+  it('본문이 없으면 부르는 쪽이 넘긴 Content-Type도 보내지 않는다', async () => {
+    const requests = captureRequest()
+    await send('/ledgers', { method: 'POST', headers: { 'Content-Type': 'text/plain' } })
+    expect(requests[0].headers.has('Content-Type')).toBe(false)
+  })
+
+  it('전용 헤더가 붙지 않는 경로에 부르는 쪽이 넘긴 X-Akkimpyo-Client는 보내지 않는다', async () => {
+    const requests = captureRequest()
+    await send('/me', { headers: { 'X-Akkimpyo-Client': 'web' } })
+    expect(requests[0].headers.has('X-Akkimpyo-Client')).toBe(false)
+  })
+
   it('정한 헤더로 Authorization, Content-Type, 전용 헤더를 덮어쓸 수 없다', async () => {
     const requests = captureRequest()
     const headers = { Authorization: 'Bearer other', 'content-type': 'text/plain', 'X-Akkimpyo-Client': 'app' }

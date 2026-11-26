@@ -72,7 +72,8 @@ export function AccountField({ label, value, onChange, ...field }: AccountFieldP
             ) : (
               <OptionList
                 label={label}
-                searchLabel="계좌 이름 찾기"
+                // 0.8에서 이름 찾기 칸은 카테고리 판에만 있다(designer 검토)
+                searchable={false}
                 sections={accountSections(data)}
                 value={value}
                 focusVisible={focusVisible}

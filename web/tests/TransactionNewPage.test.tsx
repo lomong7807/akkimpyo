@@ -1,7 +1,7 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Accounts } from './support/accounts'
-import type { Backend } from './support/backend'
+import { ledgerIdOf, type Backend } from './support/backend'
 import { untilOpened, untilUnshielded } from './support/dialog'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
@@ -336,6 +336,15 @@ describe('카테고리', () => {
 })
 
 describe('계좌', () => {
+  it('계좌 판에는 찾기 칸이 없고 열면 지금 값에 초점이 간다(0.8)', async () => {
+    const { user } = await openForm()
+    await pick(user, accountField(), '지갑')
+    await untilUnshielded()
+    await openOptions(user, accountField())
+    expect(screen.queryByRole('textbox', { name: '계좌 이름 찾기' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('option', { name: '지갑' }))
+  })
+
   it('은행, 카드, 현금 묶음에 이름만 나온다(잔액 없음)', async () => {
     const { user } = await openForm()
     await openOptions(user, accountField())
@@ -384,7 +393,7 @@ describe('계좌', () => {
 
     it.each([
       ['다른 사용자', { userId: 'user-2', ledgerId: LEDGER, accountId: id.wallet }],
-      ['다른 장부', { userId: 'user-1', ledgerId: 'user-2-ledger', accountId: id.wallet }],
+      ['다른 장부', { userId: 'user-1', ledgerId: ledgerIdOf('user-2'), accountId: id.wallet }],
       ['UUID 모양이 아닌 계좌', { userId: 'user-1', ledgerId: LEDGER, accountId: '../me' }],
       ['목록에 없는 계좌', { userId: 'user-1', ledgerId: LEDGER, accountId: '55555555-5555-4555-8555-555555555555' }],
       ['사용자가 없는 값', { ledgerId: LEDGER, accountId: id.wallet }],
@@ -459,7 +468,7 @@ describe('계좌', () => {
     })
 
     it('다른 사용자로 열면 앞 사용자의 계좌를 쓰지 않는다', async () => {
-      store({ userId: 'user-1', ledgerId: 'user-2-ledger', accountId: id.wallet })
+      store({ userId: 'user-1', ledgerId: ledgerIdOf('user-2'), accountId: id.wallet })
       backend.cookieUser = 'user-2'
       await openForm()
       expect(accountField().textContent).toBe('급여통장')

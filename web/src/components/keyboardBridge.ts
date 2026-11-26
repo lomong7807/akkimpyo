@@ -15,6 +15,7 @@ export function holdKeyboard(event: MouseEvent): void {
   const bridge = document.createElement('input')
   bridge.type = 'text'
   bridge.inputMode = 'numeric'
+  bridge.autocomplete = 'off'
   bridge.tabIndex = -1
   bridge.className = styles.bridge
   bridge.setAttribute('aria-hidden', 'true')

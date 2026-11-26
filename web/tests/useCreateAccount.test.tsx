@@ -10,6 +10,9 @@ import { CurrentLedgerContext } from '../src/features/me/CurrentLedgerContext'
 import { accountOf, accountsBody } from './support/accounts'
 import { startMockServer } from './support/mockServer'
 
+/** 장부 경로는 UUID 모양의 장부 id만 받는다 */
+const LEDGER = '0d0d0d0d-0000-4000-8000-000000000001'
+
 const server = startMockServer()
 
 afterEach(cleanup)
@@ -32,17 +35,17 @@ it('추가하면 보고 있는 목록에 바로 더하고 서버에서 다시 �
   const lists = [accountsBody(accountOf('통장', 'BANK', 1)), accountsBody(accountOf('통장', 'BANK', 1), accountOf('맞춘 지갑', 'CASH', 0))]
   let requested = 0
   server.use(
-    http.get('/api/v1/ledgers/ledger-1/accounts', () => {
+    http.get(`/api/v1/ledgers/${LEDGER}/accounts`, () => {
       requested += 1
       return lists.shift()
     }),
-    http.post('/api/v1/ledgers/ledger-1/accounts', () =>
+    http.post(`/api/v1/ledgers/${LEDGER}/accounts`, () =>
       HttpResponse.json(accountOf('지갑', 'CASH', 0), { status: 201 }),
     ),
   )
   render(
     <QueryClientProvider client={createQueryClient()}>
-      <CurrentLedgerContext value={{ id: 'ledger-1', name: '내 가계부', role: 'OWNER' }}>
+      <CurrentLedgerContext value={{ id: LEDGER, name: '내 가계부', role: 'OWNER' }}>
         <Screen />
       </CurrentLedgerContext>
     </QueryClientProvider>,

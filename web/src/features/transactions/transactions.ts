@@ -3,6 +3,7 @@ import { requestForResponse } from '../../api/request'
 import { currentUserId } from '../../api/session'
 import { deviceValueOf } from '../../lib/deviceValue'
 import { isUuid } from '../../lib/uuid'
+import { ledgerPath } from '../me/ledgerPath'
 
 /* 거래 만들기의 경로, 헤더, 필드 이름(#14의 요청과 응답 계약)은 이 파일에만 있다. */
 
@@ -81,8 +82,9 @@ export async function createTransaction(
   transaction: NewTransaction,
   startedBy: string | undefined,
 ): Promise<CreateResult> {
+  const path = ledgerPath(ledgerId, 'transactions')
   if (startedBy === undefined || currentUserId() !== startedBy) throw ApiError.timeout()
-  const { status, body } = await requestForResponse<unknown>(`/ledgers/${ledgerId}/transactions`, {
+  const { status, body } = await requestForResponse<unknown>(path, {
     method: 'POST',
     body: transaction,
     // user agent 원문은 보내지 않는다. 목록의 값 하나로 줄인다

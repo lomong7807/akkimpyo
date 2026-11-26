@@ -20,8 +20,10 @@ export interface PickerSection {
 interface OptionListProps {
   /** 목록의 이름. 연 칸의 이름이다. */
   label: string
-  /** 찾기 칸의 이름이자 흐린 글자 */
-  searchLabel: string
+  /** 맨 위에 이름 찾기 칸을 둔다. 0.8에서 찾기 칸은 카테고리 판에만 있다. */
+  searchable?: boolean
+  /** 찾기 칸의 이름이자 흐린 글자. 없으면 "{목록 이름} 이름 찾기"다. */
+  searchLabel?: string
   sections: readonly PickerSection[]
   /** 지금 고른 값 */
   value: string
@@ -39,13 +41,14 @@ interface OptionListProps {
 export const NO_MATCH = '찾는 이름이 없어요.'
 
 /**
- * 하나를 고르는 목록과 그 위의 이름 찾기 칸(화면설계서 02 0.8). 시트나 판 안에 열 때마다 새로 그린다.
+ * 하나를 고르는 목록과 그 위의 이름 찾기 칸(화면설계서 02 0.8, 찾기 칸은 켜고 끌 수 있다). 시트나 판 안에 열 때마다 새로 그린다.
  * 찾기 칸은 맨 위에 남고 목록만 스크롤된다. 초점은 고른 줄(없거나 startAtFirst면 첫 줄)로 간다.
  * 위아래 화살표로 줄을 옮기고 엔터나 스페이스로 고른다. 찾기 칸에서 아래 화살표를 누르면 목록으로 들어간다.
  */
 export default function OptionList({
   label,
-  searchLabel,
+  searchable = true,
+  searchLabel = `${label} 이름 찾기`,
   sections,
   value,
   focusVisible,
@@ -88,6 +91,7 @@ export default function OptionList({
     if (index < 0) return
     const moves: Partial<Record<string, () => void>> = {
       ArrowDown: () => focusOption(all[Math.min(index + 1, all.length - 1)]),
+      // 첫 줄에서는 찾기 칸으로 간다. 찾기 칸이 없으면 첫 줄에 남는다
       ArrowUp: () => (index === 0 ? search.current?.focus() : focusOption(all[index - 1])),
       Home: () => focusOption(all[0]),
       End: () => focusOption(all.at(-1)),
@@ -134,25 +138,27 @@ export default function OptionList({
 
   return (
     <div>
-      <div className={styles.search}>
-        <input
-          ref={search}
-          type="text"
-          className={`${fieldStyles.control} ${styles.searchInput}`}
-          aria-label={searchLabel}
-          placeholder={searchLabel}
-          enterKeyHint="search"
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={handleSearchKeyDown}
-        />
-        <span className={styles.searchIcon}>
-          <Icon name="MagnifyingGlass" size={20} />
-        </span>
-      </div>
+      {searchable && (
+        <div className={styles.search}>
+          <input
+            ref={search}
+            type="text"
+            className={`${fieldStyles.control} ${styles.searchInput}`}
+            aria-label={searchLabel}
+            placeholder={searchLabel}
+            enterKeyHint="search"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={handleSearchKeyDown}
+          />
+          <span className={styles.searchIcon}>
+            <Icon name="MagnifyingGlass" size={20} />
+          </span>
+        </div>
+      )}
       {values.length > 0 && (
         <div ref={list} role="listbox" aria-label={label} className={styles.list} onKeyDown={handleListKeyDown}>
           {shown.map((section, sectionIndex) => {

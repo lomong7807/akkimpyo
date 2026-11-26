@@ -1,7 +1,7 @@
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NewTransaction } from '../src/features/transactions/transactions'
-import { startBackend, type Backend } from './support/backend'
+import { ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { credentials, errorOf } from './support/sessionTab'
@@ -14,7 +14,7 @@ let transactions: Transactions
 const iphoneSafari =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
 
-const ledgerId = 'user-1-ledger'
+const ledgerId = ledgerIdOf('user-1')
 const expense: NewTransaction = {
   id: '019a5f2e-8a7d-7b60-9c11-0b9f6c1e3d52',
   type: 'EXPENSE',
