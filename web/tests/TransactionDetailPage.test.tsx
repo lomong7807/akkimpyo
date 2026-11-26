@@ -688,9 +688,9 @@ describe('되돌리기(F-230)', () => {
     await screen.findByRole('link', { name: /^김밥천국/ })
   })
 
+  /* 되돌리지 못한 결과를 나눈다(architect 결정 2026-11-26, #102) */
   it.each([
-    ['서버 오류', () => problem(500, 'INTERNAL_ERROR')],
-    ['충돌', () => problem(409, 'STALE_VERSION', { current: lunch() })],
+    ['서버 오류(5xx)', () => problem(500, 'INTERNAL_ERROR')],
     ['연결 실패', () => HttpResponse.error()],
   ])('%s면 "되돌리지 못했어요"와 "다시 시도"를 보이고, 누르면 같은 복원을 다시 보낸다', async (_, respond) => {
     const answers = [respond]
@@ -703,6 +703,34 @@ describe('되돌리기(F-230)', () => {
     await waitFor(() => expect(toastRegion().textContent).toBe('되돌렸어요'))
     expect(detail.requests.restore.map(({ body }) => body)).toEqual([{ version: 2 }, { version: 2 }])
     await screen.findByRole('link', { name: /^김밥천국/ })
+  })
+
+  it('다른 기기가 이미 되돌렸으면(409에 휴지통이 아닌 current) 되돌린 것으로 보고 "되돌렸어요"이며 목록을 다시 받는다', async () => {
+    const item = lunch()
+    detail.restoreResponse = () => {
+      Object.assign(item, { version: 3, deletedAt: null, purgeAt: null })
+      return problem(409, 'STALE_VERSION', { current: { ...item } })
+    }
+    const opened = await deleteFromList(item)
+    await opened.user.click(undo())
+    await waitFor(() => expect(toastRegion().textContent).toBe('되돌렸어요'))
+    await screen.findByRole('link', { name: /^김밥천국/ })
+    expect(detail.requests.restore).toHaveLength(1)
+  })
+
+  it.each([
+    ['충돌인데 current가 아직 휴지통에 있음', () => problem(409, 'STALE_VERSION', { current: lunch({ version: 4, ...trashed('2026-11-26T03:30:00.000Z') }) })],
+    ['상태가 맞지 않음(INVALID_STATE)', () => problem(409, 'INVALID_STATE')],
+    ['없는 거래(404)', () => problem(404, 'NOT_FOUND')],
+  ])('%s: "되돌리지 못했어요"만 보이고 "다시 시도"가 없다', async (_, respond) => {
+    detail.restoreResponse = respond
+    const item = lunch()
+    const opened = await deleteFromList(item)
+    await opened.user.click(undo())
+    await waitFor(() => expect(toastRegion().textContent).toBe('되돌리지 못했어요'))
+    expect(within(toastRegion() as HTMLElement).queryByRole('button')).toBeNull()
+    await settle()
+    expect(detail.requests.restore).toHaveLength(1)
   })
 })
 

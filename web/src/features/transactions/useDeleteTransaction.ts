@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
+import { ApiError } from '../../api/apiError'
 import { currentUserId } from '../../api/session'
 import { useToast } from '../../components/ToastContext'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
@@ -52,9 +53,12 @@ export function useDeleteTransaction(id: string) {
 
 /**
  * 삭제한 거래의 토스트 "휴지통으로 옮겼어요"와 "되돌리기"(F-227, 00-common 5.7)를 보이는 함수.
- * 되돌리기는 삭제 응답의 version으로 복원한다(F-230). 성공하면 "되돌렸어요", 실패하면 "되돌리지 못했어요"와 같은 복원을
- * 다시 보내는 "다시 시도"다. 토스트는 상세를 떠난 뒤에도 남으므로 화면의 상태를 쓰지 않는다. 로그인이 끝나면 토스트와 캐시가
- * 함께 버려지고, 그 뒤에 온 응답은 쓰지 않는다.
+ * 되돌리기는 삭제 응답의 version으로 복원한다(F-230). 결과는 셋으로 나눈다(architect 결정 2026-11-26, #102).
+ * - 성공, 또는 409의 최신 거래(current)가 휴지통에 없음(다른 기기가 이미 되돌림): "되돌렸어요"와 장부 무효화
+ * - 연결 문제, 지연, 서버 오류(5xx): "되돌리지 못했어요"와 같은 복원을 다시 보내는 "다시 시도"
+ * - 그 밖의 거부(아직 휴지통에 있는 충돌, INVALID_STATE, 404 등): 다시 보내도 같으므로 "되돌리지 못했어요"만
+ * 토스트는 상세를 떠난 뒤에도 남으므로 화면의 상태를 쓰지 않는다. 로그인이 끝나면 토스트와 캐시가 함께 버려지고,
+ * 그 뒤에 온 응답은 쓰지 않는다.
  */
 export function useOfferUndo() {
   const ledger = useCurrentLedger()
@@ -66,16 +70,21 @@ export function useOfferUndo() {
       function restore() {
         if (sending) return
         sending = true
+        function restored() {
+          void queryClient.invalidateQueries({ queryKey: ledgerScope(ledger.id) })
+          showToast('되돌렸어요')
+        }
         restoreTransaction(ledger.id, deleted.id, deleted.version, user).then(
           () => {
-            if (currentUserId() !== user) return
-            void queryClient.invalidateQueries({ queryKey: ledgerScope(ledger.id) })
-            showToast('되돌렸어요')
+            if (currentUserId() === user) restored()
           },
-          () => {
+          (error: unknown) => {
             sending = false
             if (currentUserId() !== user) return
-            showToast(UNDO_FAILED, { label: '다시 시도', onAction: restore })
+            const current = staleVersionOf(error, deleted.id)?.current
+            if (current && current.deletedAt === null) restored()
+            else if (isTemporary(error)) showToast(UNDO_FAILED, { label: '다시 시도', onAction: restore })
+            else showToast(UNDO_FAILED)
           },
         )
       }
@@ -83,4 +92,10 @@ export function useOfferUndo() {
     },
     [ledger.id, queryClient, showToast],
   )
+}
+
+/** 다시 보내면 될 수 있는 실패: 연결 문제, 지연, 서버 오류(5xx) */
+function isTemporary(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false
+  return error.kind === 'connection' || error.kind === 'timeout' || (error.status ?? 0) >= 500
 }
