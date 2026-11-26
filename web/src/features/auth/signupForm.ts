@@ -65,7 +65,7 @@ function passwordConfirmError(password: string, passwordConfirm: string): string
 function displayNameError(displayName: string): string | undefined {
   const name = normalizeName(displayName)
   if (name === '') return nameRequired
-  if (hasUnusableCharacter(name)) return nameUnusable
+  if (hasUnusableCharacter(displayName)) return nameUnusable
   if (displayNameLength(displayName) > DISPLAY_NAME_MAX) return nameTooLong
 }
 

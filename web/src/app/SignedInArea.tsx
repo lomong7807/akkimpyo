@@ -1,10 +1,21 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { useEffect, useState, type ReactNode } from 'react'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Navigate, Outlet, useLocation, type Location } from 'react-router'
+import { sessionUserId } from '../api/session'
 import { ButtonLink } from '../components/Button'
+import { forgetLedgerCopies } from '../device/copies'
+import { onPendingChanged } from '../device/pendingQueue'
 import LoadFailure from '../components/LoadFailure'
+import { parseAccounts } from '../features/accounts/accounts'
+import { parseCategories } from '../features/categories/categories'
 import { CurrentLedgerContext } from '../features/me/CurrentLedgerContext'
+import { deviceKey } from '../features/me/deviceKey'
+import { useLedgerCopy } from '../features/me/ledgerCopy'
+import { useMeCopy } from '../features/me/meCopy'
+import { pendingKey } from '../features/transactions/pendingTransactions'
+import { now } from '../lib/clock'
 import { useMe } from '../features/me/useMe'
+import ListMemoryProvider from './ListMemoryProvider'
 import Loading from './Loading'
 import PlainLayout from './PlainLayout'
 import { createQueryClient } from './queryClient'
@@ -33,14 +44,28 @@ export default function SignedInArea() {
  * 지금 캐시에 들어올 길이 없다.
  */
 function SessionData({ children }: { children: ReactNode }) {
-  const { resumed } = useSession().session
-  const [queryClient] = useState(createQueryClient)
+  const { resumed, status } = useSession().session
+  const [queryClient] = useState(createSessionQueryClient)
   // 비우면 진행 중인 요청의 결과도 버린다
   useEffect(() => () => queryClient.clear(), [queryClient])
+  // 대기열이 바뀌면(이 탭, 다른 탭) 읽어 둔 대기 항목을 버린다. 그 화면이 내려가 있어도 다시 그릴 때 새로 읽는다
+  useEffect(
+    () => onPendingChanged(() => void queryClient.invalidateQueries({ queryKey: pendingKey(sessionUserId()) })),
+    [queryClient],
+  )
   // 되살아난 화면을 그대로 열었으면 조회를 다시 보내, 그사이 서버가 로그인을 끝냈으면 바로 안다
   useEffect(() => {
     if (resumed > 0) void queryClient.refetchQueries({ type: 'active' }, { cancelRefetch: false })
   }, [resumed, queryClient])
+  // 확인하지 못한 로그인이 같은 사용자로 확인되면 연결 없이 실패한 조회를 서버에서 다시 받는다(화면은 그대로 둔다)
+  const unconfirmed = useRef(status === 'unconfirmed')
+  useEffect(() => {
+    if (status === 'unconfirmed') unconfirmed.current = true
+    else if (status === 'signed-in' && unconfirmed.current) {
+      unconfirmed.current = false
+      void queryClient.refetchQueries({ type: 'active' }, { cancelRefetch: false })
+    }
+  }, [status, queryClient])
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 }
 
@@ -49,8 +74,15 @@ function Gate() {
   const location = useLocation()
   const signedIn = session.status === 'signed-in'
   const me = useMe({ enabled: signedIn })
+  // 확인하지 못한 로그인은 그 사용자의 내 정보 사본으로 공통 틀을 그린다. 확인된 뒤에도 서버의 값이 올 때까지 이어 쓴다(#234)
+  const meCopy = useMeCopy(session.deviceUser)
   // 1단계에는 장부가 하나다
-  const ledger = me.data?.ledgers[0]
+  const ledger = (me.data ?? meCopy.data ?? undefined)?.ledgers[0]
+  const copyMissing = session.status === 'unconfirmed' && (meCopy.isError || meCopy.data === null)
+  // 새 거래 입력이 쓸 계좌·카테고리 사본을 미리 읽는다. 확인하지 못한 로그인은 읽을 때까지 기다려 입력이 뼈대 없이 열린다
+  const accountsCopy = useLedgerCopy(ledger?.id, 'accounts', parseAccounts)
+  const categoriesCopy = useLedgerCopy(ledger?.id, 'categories', parseCategories)
+  const copiesPending = session.status === 'unconfirmed' && (accountsCopy.isPending || categoriesCopy.isPending)
   const entry = useWelcomeEntry(ledger)
 
   // 로그인한 화면이 열렸으면 돌아갈 주소는 쓸 일이 없다
@@ -60,7 +92,7 @@ function Gate() {
 
   if (session.status === 'signed-out') return <LoginRedirect session={session} />
 
-  if (session.status === 'unknown' || session.status === 'retrying') {
+  if (session.status === 'unknown' || session.status === 'retrying' || (copyMissing && !ledger)) {
     return (
       <PlainLayout>
         <LoadFailure onRetry={retry} busy={session.status === 'retrying'}>
@@ -72,11 +104,13 @@ function Gate() {
     )
   }
 
-  if (ledger && entry !== 'deciding') {
+  if (ledger && entry !== 'deciding' && !copiesPending) {
     return (
       <CurrentLedgerContext value={ledger}>
         <ToastProvider>
-          {entry === 'stay' ? <Outlet /> : <Navigate to={entry === 'welcome' ? WELCOME : '/home'} replace />}
+          <ListMemoryProvider>
+            {entry === 'stay' ? <Outlet /> : <Navigate to={entry === 'welcome' ? WELCOME : '/home'} replace />}
+          </ListMemoryProvider>
         </ToastProvider>
       </CurrentLedgerContext>
     )
@@ -97,6 +131,20 @@ function Gate() {
       <Loading />
     </PlainLayout>
   )
+}
+
+/** 로그인 한 번 동안의 캐시. 장부를 볼 수 없게 된 조회가 오면 그 장부의 사본을 지운다. */
+function createSessionQueryClient(): QueryClient {
+  const client = createQueryClient({ onLedgerGone: (ledgerId) => forgetLedger(client, ledgerId) })
+  return client
+}
+
+/** 장부를 볼 수 없게 됐으면 그 장부의 기기 사본을 지운다(security Q4). 읽은 사본도 캐시에서 버린다. */
+function forgetLedger(queryClient: QueryClient, ledgerId: string) {
+  const user = sessionUserId()
+  if (user === undefined) return
+  for (const kind of ['accounts', 'categories']) queryClient.removeQueries({ queryKey: deviceKey(user, kind, ledgerId) })
+  void forgetLedgerCopies(user, ledgerId, now()).catch(() => {})
 }
 
 const endedState = { sessionEnded: true }

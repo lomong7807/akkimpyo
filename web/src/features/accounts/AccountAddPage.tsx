@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { Button } from '../../components/Button'
 import FullScreenForm from '../../components/FullScreenForm'
@@ -22,35 +22,35 @@ export default function AccountAddPage() {
   const showToast = useToast()
   const creation = useCreateAccount()
   const form = useAccountForm()
-  const saveButton = useRef<HTMLButtonElement>(null)
+  // 저장 위의 실패 문구. 다시 보내는 동안에도 남기고, 실패마다 올려 새로 그려 다시 읽히게 한다. 없으면 없다
+  const [failures, setFailures] = useState<number>()
+  // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돌고 다른 버튼은 누를 수 없다(00-common 4.5, designer 검토 2026-11-26)
+  const [sender, setSender] = useState<'save' | 'retry'>('save')
 
   const busy = creation.isPending || creation.isSuccess
-  const failed = creation.isError && !rejectedFields(creation.error)
   const guard = useLeaveGuard({ parent: LIST, changed: form.changed, busy })
 
-  function submit() {
+  function submit(from: 'save' | 'retry' = 'save') {
+    if (busy) return
     if (!form.checkAll()) {
       creation.reset()
+      setFailures(undefined)
       return
     }
-    creation.mutate(toNewAccount(form.values), { onSuccess: finish, onError: showRejected })
+    setSender(from)
+    creation.mutate(toNewAccount(form.values), { onSuccess: finish, onError: showFailure })
   }
 
   // 화면을 떠난 뒤에 온 응답으로는 불리지 않는다
   function finish(account: Account) {
-    showToast(`'${account.name}' 계좌를 추가했어요.`)
-    guard.leave(() => (isOpenedFromList(state) ? navigate(-1) : navigate(LIST, { replace: true })))
+    showToast(`'${account.name}' 계좌를 추가했어요`)
+    guard.leaveAfterSave(() => (isOpenedFromList(state) ? navigate(-1) : navigate(LIST, { replace: true })))
   }
 
-  function showRejected(error: Error) {
+  function showFailure(error: Error) {
     const rejected = rejectedFields(error)
     if (rejected) form.reject(rejected)
-  }
-
-  function retry() {
-    // 다시 보내는 동안 이 버튼은 사라지므로 초점을 잃지 않게 옮긴다
-    saveButton.current?.focus()
-    submit()
+    setFailures((last) => (rejected ? undefined : (last ?? 0) + 1))
   }
 
   return (
@@ -61,12 +61,17 @@ export default function AccountAddPage() {
       bottom={
         <>
           {/* 초점은 옮기지 않는다. 문구는 role="alert"로 읽힌다 */}
-          {failed && (
-            <RetryMessage onRetry={retry}>
+          {failures !== undefined && (
+            <RetryMessage
+              failures={failures}
+              onRetry={() => submit('retry')}
+              busy={busy && sender === 'retry'}
+              disabled={busy && sender === 'save'}
+            >
               문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.
             </RetryMessage>
           )}
-          <Button ref={saveButton} kind="primary" type="submit" busy={busy}>
+          <Button kind="primary" type="submit" busy={busy && sender === 'save'} disabled={busy && sender === 'retry'}>
             저장
           </Button>
         </>

@@ -1,4 +1,13 @@
-import { useId, useRef, useState, type ChangeEvent, type ClipboardEvent, type CompositionEvent, type Ref } from 'react'
+import {
+  useId,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type CompositionEvent,
+  type KeyboardEvent,
+  type Ref,
+} from 'react'
 import { digitsOf, formatAmount, joinDigits, pastedDigits, positionAfterDigits } from '../lib/amountText'
 import { Button } from './Button'
 import Field, { type FieldLabels } from './Field'
@@ -15,7 +24,10 @@ interface AmountFieldProps extends FieldLabels {
   sign?: { negative: boolean; onChange: (negative: boolean) => void }
   /** 값과 부호를 바꿀 수 없다. 모양은 그대로다. */
   readOnly?: boolean
+  /** 금액이 화면의 중심인 곳(D-04)은 값의 글자를 text-title로 키운다. "원"은 그대로다. */
+  size?: 'body' | 'title'
   onBlur?: () => void
+  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void
   ref?: Ref<HTMLInputElement>
 }
 
@@ -25,7 +37,9 @@ export default function AmountField({
   onChange,
   sign,
   readOnly = false,
+  size = 'body',
   onBlur,
+  onKeyDown,
   ref,
   error,
   ...labels
@@ -123,7 +137,7 @@ export default function AmountField({
               type="text"
               inputMode="numeric"
               autoComplete="off"
-              className={`${control.className} ${styles.input} tabular-nums`}
+              className={`${control.className} ${styles.input} ${size === 'title' ? styles.title : ''} tabular-nums`}
               aria-labelledby={`${labelId} ${unitId}`}
               aria-invalid={shownError ? true : undefined}
               value={composed ?? text}
@@ -131,6 +145,7 @@ export default function AmountField({
               onChange={handleChange}
               onCompositionEnd={handleCompositionEnd}
               onPaste={handlePaste}
+              onKeyDown={onKeyDown}
               // 눌러서 초점을 받으면 브라우저가 누른 자리에 커서를 놓으므로 다 누른 뒤에 고른다.
               // WebKit은 미리 고른 것 위에서 누르면 다 누른 뒤에 선택을 푼다
               onMouseDown={(event) => {

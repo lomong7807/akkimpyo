@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ConfirmDialog from '../src/components/ConfirmDialog'
 import { readCssRule } from './support/cssRule'
 import { untilOpened } from './support/dialog'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { installMatchMedia } from './support/viewport'
 
 const CSS = 'src/components/ConfirmDialog.module.css'
@@ -13,11 +14,13 @@ const CENTER_CSS = 'src/components/CenterDialog.module.css'
 let viewport: ReturnType<typeof installMatchMedia>
 
 beforeEach(() => {
+  startGuardClock()
   viewport = installMatchMedia(390)
 })
 
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -35,7 +38,7 @@ function Sample() {
       <ConfirmDialog
         open={open}
         title="쓰던 내용을 버릴까요?"
-        description="저장하지 않은 내용은 사라져요."
+        description="저장하지 않은 내용은 사라져요"
         closeLabel="계속 쓰기"
         actionLabel="버리기"
         onClose={() => setOpen(false)}
@@ -69,7 +72,7 @@ describe.each(layouts)('확인 창: %s', (_, width) => {
     await ask(width)
     expect(screen.getByRole('dialog', { name: '쓰던 내용을 버릴까요?' })).toBe(dialog())
     expect(screen.getByRole('heading', { level: 2, name: '쓰던 내용을 버릴까요?' })).toBeTruthy()
-    expect(screen.getByText('저장하지 않은 내용은 사라져요.')).toBeTruthy()
+    expect(screen.getByText('저장하지 않은 내용은 사라져요')).toBeTruthy()
     expect(keep().compareDocumentPosition(discard())).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
@@ -128,7 +131,7 @@ describe.each(layouts)('확인 창: %s', (_, width) => {
 
   it('설명은 본문 크기의 보조 글자색이다', async () => {
     await ask(width)
-    const description = styleOf(screen.getByText('저장하지 않은 내용은 사라져요.'))
+    const description = styleOf(screen.getByText('저장하지 않은 내용은 사라져요'))
     expect(description.font).toBe('var(--text-body)')
     expect(description.color).toBe('var(--color-text-secondary)')
     expect(description.margin).toBe('0px')
@@ -147,7 +150,7 @@ describe('휴대폰 배치의 확인 창', () => {
 
   it('좌우 16px이고 버튼 아래는 시트의 8px에 4px을 더한 12px과 안전 영역이다', async () => {
     await ask()
-    const body = screen.getByText('저장하지 않은 내용은 사라져요.').parentElement!
+    const body = screen.getByText('저장하지 않은 내용은 사라져요').parentElement!
     expect(styleOf(body).getPropertyValue('padding-inline')).toBe('var(--space-16)')
     expect(styleOf(body).paddingBottom).toBe('var(--space-4)')
     expect(readCssRule('src/components/BottomSheet.module.css', '.content')).toContain(
@@ -205,7 +208,7 @@ describe('넓은 화면의 확인 창', () => {
 
   it('시트의 여백은 걸리지 않는다', async () => {
     await ask(1280)
-    const body = screen.getByText('저장하지 않은 내용은 사라져요.').parentElement!
+    const body = screen.getByText('저장하지 않은 내용은 사라져요').parentElement!
     expect(styleOf(body).getPropertyValue('padding-inline')).not.toBe('var(--space-16)')
     expect(readCssRule(CSS, '.actions')).not.toContain('border')
   })
@@ -231,7 +234,7 @@ describe('열린 채로', () => {
       <ConfirmDialog
         open={open}
         title="쓰던 내용을 버릴까요?"
-        description="저장하지 않은 내용은 사라져요."
+        description="저장하지 않은 내용은 사라져요"
         closeLabel="계속 쓰기"
         actionLabel="버리기"
         onClose={() => {}}
@@ -248,5 +251,129 @@ describe('열린 채로', () => {
     expect(document.activeElement).toBe(keep())
     await act(async () => motion.resolve())
     expect(dialog()?.open).toBe(true)
+  })
+})
+
+/* 처리 중과 실패(00-common 5.6, 4.3). 실행을 누르면 그 버튼에 처리 중 표시를 두고 닫히지 않는다. 실패하면 창이 남고 버튼
+ * 바로 위에 문구를 보이며 실행 버튼 글자를 바꾼다(글자는 화면이 정한다). */
+describe.each(layouts)('처리 중과 실패: %s', (_, width) => {
+  const onClose = vi.fn()
+  afterEach(() => onClose.mockClear())
+
+  type Failure = { message: string; focus: 'action' | 'close' }
+
+  function Working({ busy = false, failure }: { busy?: boolean; failure?: Failure }) {
+    return (
+      <ConfirmDialog
+        open
+        title="이 거래를 삭제할까요?"
+        description="휴지통으로 옮겨요. 30일 안에 복원할 수 있어요."
+        closeLabel="닫기"
+        actionLabel={failure ? '다시 시도' : '삭제'}
+        busy={busy}
+        failure={failure}
+        onClose={onClose}
+        onAction={onAction}
+      />
+    )
+  }
+
+  function open(props: { busy?: boolean; failure?: Failure } = {}) {
+    viewport.resizeTo(width)
+    const user = userEvent.setup()
+    const rendered = render(<Working {...props} />)
+    return { user, rerender: (next: typeof props) => rendered.rerender(<Working {...next} />) }
+  }
+
+  const closeButtons = () => within(dialog()!).getAllByRole('button', { name: '닫기' })
+  const action = (name = '삭제') => within(dialog()!).getByRole('button', { name })
+  const alert = () => within(dialog()!).queryByRole('alert')
+
+  it('처리 중에는 실행 버튼만 도는 표시를 두고, 모든 버튼을 누를 수 없다', async () => {
+    const { user } = open({ busy: true })
+    await untilOpened()
+    expect(action().getAttribute('aria-busy')).toBe('true')
+    for (const button of closeButtons()) {
+      expect(button.getAttribute('aria-busy')).toBeNull()
+      expect(button.getAttribute('aria-disabled')).toBe('true')
+      await user.click(button)
+    }
+    await user.click(action())
+    expect(onClose).not.toHaveBeenCalled()
+    expect(onAction).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['Esc', (user) => user.keyboard('{Escape}')],
+    ['가림막', (user) => user.click(dialog()!)],
+  ] as [string, (user: ReturnType<typeof userEvent.setup>) => Promise<unknown>][])(
+    '처리 중에는 %s로 닫히지 않는다',
+    async (__, close) => {
+      const { user } = open({ busy: true })
+      await untilOpened()
+      await close(user)
+      await act(async () => {})
+      expect(onClose).not.toHaveBeenCalled()
+      expect(dialog()?.open).toBe(true)
+    },
+  )
+
+  it('브라우저가 강제로 닫아도 처리 중이면 다시 연다', async () => {
+    open({ busy: true })
+    await untilOpened()
+    await act(async () => dialog()!.close())
+    expect(onClose).not.toHaveBeenCalled()
+    expect(dialog()?.open).toBe(true)
+  })
+
+  it('실패하면 버튼 바로 위에 경고 아이콘과 위험색 문구를 보인다', async () => {
+    open({ failure: { message: '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.', focus: 'action' } })
+    const message = alert()!
+    expect(message.textContent).toBe('문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.')
+    expect(message.querySelector('svg')).toBeTruthy()
+    expect(styleOf(message).color).toBe('var(--color-danger)')
+    expect(styleOf(message).font).toBe('var(--text-secondary)')
+    const slot = message.parentElement!
+    expect(styleOf(slot).marginTop).toBe('var(--space-24)')
+    const row = action('다시 시도').parentElement!.parentElement!
+    expect(slot.nextElementSibling).toBe(row)
+    expect(styleOf(row).marginTop).toBe('var(--space-8)')
+    expect(screen.getByText('휴지통으로 옮겨요. 30일 안에 복원할 수 있어요.').nextElementSibling).toBe(slot)
+  })
+
+  it('실패가 없으면 문구 자리가 없고 버튼은 설명 아래 24px이다', async () => {
+    open()
+    expect(alert()).toBeNull()
+    expect(styleOf(action().parentElement!.parentElement!).marginTop).toBe('var(--space-24)')
+  })
+
+  it('실패의 초점이 실행이면 바뀐 실행 버튼("다시 시도")으로 옮긴다', async () => {
+    const { rerender } = open({ busy: true })
+    act(() => closeButtons().at(-1)!.focus())
+    rerender({ failure: { message: '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.', focus: 'action' } })
+    await act(async () => {})
+    expect(document.activeElement).toBe(action('다시 시도'))
+  })
+
+  it('실패의 초점이 닫기면 "닫기"로 옮기고, 같은 문구로 또 실패해도 다시 옮긴다', async () => {
+    const conflict = () => ({ message: '다른 기기에서 먼저 고쳤어요', focus: 'close' as const })
+    const { rerender } = open({ busy: true })
+    rerender({ failure: conflict() })
+    await act(async () => {})
+    const close = closeButtons().at(-1)!
+    expect(document.activeElement).toBe(close)
+    act(() => action('다시 시도').focus())
+    rerender({ busy: true })
+    rerender({ failure: conflict() })
+    await act(async () => {})
+    expect(document.activeElement).toBe(close)
+  })
+
+  it('다시 누르면 문구를 둔 채 처리 중이 된다', async () => {
+    const failure = { message: '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.', focus: 'action' as const }
+    const { rerender } = open({ failure })
+    rerender({ busy: true, failure })
+    expect(alert()).toBeTruthy()
+    expect(action('다시 시도').getAttribute('aria-busy')).toBe('true')
   })
 })

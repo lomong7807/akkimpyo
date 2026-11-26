@@ -25,6 +25,7 @@ import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -647,8 +648,130 @@ class SchemaTest {
                 "update change_log set format_version = null where transaction_id = ?", mine.transaction()));
     }
 
+    // 열거형 컬럼의 값 목록(#63). 목록 자체가 Java enum과 같은지는 SchemaValueMatchTest가 본다.
+    // 대소문자와 앞뒤 공백도 그대로 비교한다. 빈 문자열도 목록 밖이다.
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ADMIN", "owner", "OWNER ", ""})
+    void ledgerMemberRoleOutsideEnumIsRejectedByDatabase(String role) {
+        assertThatThrownBy(() -> insertLedgerMember(role))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_ledger_member_role_values");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SAVINGS", "bank", ""})
+    void accountTypeOutsideEnumIsRejectedByDatabase(String type) {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, type, "KRW", "2026-11-01"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_type_values");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"TRANSFER", "expense", ""}) // TRANSFER는 거래 유형에만 있다.
+    void categoryKindOutsideEnumIsRejectedByDatabase(String kind) {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertCategory(UUID.randomUUID(), ledger, kind, "식비", null, false))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_category_kind_values");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"REFUND", "expense", ""})
+    void transactionTypeOutsideEnumIsRejectedByDatabase(String type) {
+        assertThatThrownBy(() -> insertTransaction(type, "POSTED", "2026-11-18"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_type_values");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CONFIRMED", "posted", ""})
+    void transactionStatusOutsideEnumIsRejectedByDatabase(String status) {
+        assertThatThrownBy(() -> insertTransaction("EXPENSE", status, "2026-11-18"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_status_values");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"HARD_DELETE", "create", ""})
+    void changeLogActionOutsideEnumIsRejectedByDatabase(String action) {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertChangeLogAction(ledger, action))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_change_log_action_values");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"USD", "krw", "KRW ", ""})
+    void currencyOtherThanKrwIsRejectedByDatabase(String currency) {
+        // char(3)였을 때는 'KRW '가 'KRW'로 저장됐다. text라서 다른 값이다.
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, "CASH", currency, "2026-11-01"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_currency_values");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "ledger_member, role", "account, type", "account, currency", "category, kind",
+            "transaction, type", "transaction, status", "change_log, action"})
+    void enumAndCurrencyColumnsAreText(String table, String column) {
+        // varchar(20)이면 20자를 넘는 enum 값을 CHECK와 따로 막는다(schema-standards 1절: 열거형은 text + CHECK).
+        assertThat(jdbc.queryForObject("""
+                select format_type(a.atttypid, a.atttypmod)
+                  from pg_attribute a
+                  join pg_class t on t.oid = a.attrelid
+                 where t.relname = ? and a.attname = ? and not a.attisdropped
+                """, String.class, table, column)).isEqualTo("text");
+    }
+
+    @Test
+    void currencyDefaultsToKrwAndAccountEntityStoresKrw() {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+        insertAccount(ledger, "생활비", 0L); // currency를 적지 않는다.
+        accountRepository.saveAndFlush(Account.of(ledger, "현금", AccountType.CASH, 0, LocalDate.of(2026, 11, 1)));
+
+        assertThat(jdbc.queryForList("select currency from account where ledger_id = ?", String.class, ledger))
+                .containsExactly("KRW", "KRW");
+        assertThat(jdbc.queryForObject("""
+                select column_default from information_schema.columns
+                 where table_schema = 'public' and table_name = 'account' and column_name = 'currency'
+                """, String.class)).isEqualTo("'KRW'::text");
+    }
+
+    // 하한 CHECK(V5, V9)는 'infinity'를 통과시킨다. 그런 계좌는 잔액 조회가 실패한다(#165).
+    // '-infinity'는 하한도 어기지만 PostgreSQL은 한 테이블의 CHECK를 이름 순으로 검사해서 _finite가 먼저 걸린다.
+
+    @ParameterizedTest
+    @ValueSource(strings = {"infinity", "-infinity"})
+    void infiniteOpeningDateIsRejectedByDatabase(String openingDate) {
+        UUID ledger = ledgerRepository.saveAndFlush(Ledger.personal()).getId();
+
+        assertThatThrownBy(() -> insertAccount(ledger, "CASH", "KRW", openingDate))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_account_opening_date_finite");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"infinity", "-infinity"})
+    void infiniteOccurredOnIsRejectedByDatabase(String occurredOn) {
+        assertThatThrownBy(() -> insertTransaction("EXPENSE", "POSTED", occurredOn))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_transaction_occurred_on_finite");
+    }
+
     /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 장부와 사용자를 새로 만들고 거래 id를 돌려준다. */
     private UUID insertTransaction(LocalDate occurredOn) {
+        return insertTransaction("EXPENSE", "POSTED", occurredOn.toString());
+    }
+
+    /** 위와 같다. 날짜는 'infinity'처럼 LocalDate로 나타낼 수 없는 값도 넣을 수 있게 문자열로 받는다. */
+    private UUID insertTransaction(String type, String status, String occurredOn) {
         UUID user = UUID.randomUUID();
         UUID ledger = UUID.randomUUID();
         UUID tx = UUID.randomUUID();
@@ -660,9 +783,34 @@ class SchemaTest {
         jdbc.update("""
                 insert into transaction (id, ledger_id, type, occurred_on, status, created_by, version,
                                          created_at, updated_at)
-                values (?, ?, 'EXPENSE', ?, 'POSTED', ?, 1, now(), now())
-                """, tx, ledger, occurredOn, user);
+                values (?, ?, ?, cast(? as date), ?, ?, 1, now(), now())
+                """, tx, ledger, type, occurredOn, status, user);
         return tx;
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 장부와 사용자는 새로 만든 거래의 것을 쓴다. */
+    private void insertLedgerMember(String role) {
+        UUID tx = insertTransaction(LocalDate.of(2026, 11, 18));
+        jdbc.update("""
+                insert into ledger_member (id, ledger_id, user_id, role, created_at)
+                select ?, ledger_id, created_by, ?, now() from transaction where id = ?
+                """, UUID.randomUUID(), role, tx);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 거래가 있는지는 보지 않는다(transaction_id는 FK가 아니다). */
+    private void insertChangeLogAction(UUID ledgerId, String action) {
+        jdbc.update("""
+                insert into change_log (id, transaction_id, ledger_id, version, action, created_at)
+                values (?, ?, ?, 1, ?, now())
+                """, UUID.randomUUID(), UUID.randomUUID(), ledgerId, action);
+    }
+
+    /** 앱 검사와 엔터티를 거치지 않고 DB에 바로 넣는다. 기준일은 'infinity'도 넣을 수 있게 문자열로 받는다. */
+    private void insertAccount(UUID ledgerId, String type, String currency, String openingDate) {
+        jdbc.update("""
+                insert into account (id, ledger_id, name, type, opening_date, currency, created_at)
+                values (?, ?, '현금', ?, cast(? as date), ?, now())
+                """, UUID.randomUUID(), ledgerId, type, openingDate, currency);
     }
 
     /**

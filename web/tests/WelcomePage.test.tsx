@@ -4,11 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Button } from '../src/components/Button'
 import StatusChip from '../src/components/StatusChip'
 import { accountOf, startAccounts, type Accounts } from './support/accounts'
-import { delayed, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { categoryOf, defaultExpenses, defaultIncomes, startCategories, type Categories } from './support/categories'
+import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
 import { readWebFile } from './support/webFile'
 import { shield, untilOpened, untilUnshielded } from './support/dialog'
+import { resumeGuardClock, startGuardClock, stopGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -19,9 +21,9 @@ import { createFakeLocks, installLocks, removeLocks } from './support/webLocks'
 const CSS = 'src/features/welcome/Welcome.module.css'
 const firstTitle = '기본 카테고리를 넣어 두었어요'
 const secondTitle = '첫 계좌를 만들어 주세요'
-const note = '카테고리는 나중에 카테고리 관리에서 고칠 수 있어요.'
+const note = '카테고리는 나중에 카테고리 관리에서 고칠 수 있어요'
 const description = '자주 쓰는 통장이나 카드 하나면 돼요. 나머지는 나중에 더할 수 있어요.'
-const skipNote = '"현금" 계좌를 만들고 시작해요.'
+const skipNote = '"현금" 계좌를 만들고 시작해요'
 const loading = '불러오고 있어요.'
 const loadFailed = '불러오지 못했어요.'
 const failed = '문제가 생겨 계좌를 만들지 못했어요. 잠시 후 다시 시도해 주세요.'
@@ -43,8 +45,12 @@ let backend: Backend
 let accounts: Accounts
 let categories: Categories
 
+/** 기기의 지금(서울). 시계를 다시 거는 테스트는 라이브러리의 시계(Date)도 이때에 둔다. */
+const NOW = '2026-11-26T12:00:00+09:00'
+
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12) })
+  setDeviceClock(NOW)
+  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   installMatchMedia(390)
   installLocks(createFakeLocks())
@@ -58,11 +64,13 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // 시계를 다시 건 테스트(불러오는 중, 15초)도 덮개 시계에서 화면을 정리해 빠진 뒤의 덮개를 걷는다
+  resumeGuardClock()
   cleanup()
+  stopGuardClock()
   resetViewport()
   removeLocks()
   vi.restoreAllMocks()
-  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 })
@@ -89,7 +97,7 @@ const chipsOf = (kind: string) =>
     .map((item) => item.textContent)
 const settle = (ms = 50) => act(() => new Promise((resolve) => setTimeout(resolve, ms)))
 const path = ({ router }: Opened) => router.state.location.pathname + router.state.location.search
-const home = () => screen.findByRole('heading', { level: 1, name: '찾을 수 없어요.' })
+const home = () => screen.findByRole('heading', { level: 1, name: '홈' })
 const toast = () => screen.getAllByRole('status').find((region) => region.textContent !== '')?.textContent
 
 /** 칸 아래에 이어진 오류 문구. 없으면 없다. */
@@ -228,7 +236,7 @@ describe('첫 장(1/2)', () => {
     const opened = await openFirst()
     await opened.user.click(nextButton())
     await secondHeading()
-    expect(categories.requests).toEqual(['user-1-ledger'])
+    expect(categories.requests).toEqual([ledgerIdOf('user-1')])
   })
 })
 
@@ -251,7 +259,7 @@ describe('첫 장을 불러오는 중', () => {
     categories.response = answer.respond
     const opened = await openApp('/welcome?step=2')
     await secondHeading()
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: new Date(2026, 10, 26, 12) })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: Date.parse(NOW) })
     await act(() => opened.router.navigate('/welcome'))
     return { ...opened, answer }
   }
@@ -451,7 +459,7 @@ describe('둘째 장(2/2)의 요소와 처음 값', () => {
     await openSecond()
     expect(balance().value).toBe('0')
     expect(sign().getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByText('마이너스 통장이면 -로 바꿔 적어요.')).toBeTruthy()
+    expect(screen.getByText('마이너스 통장이면 -로 바꿔 적어요')).toBeTruthy()
   })
 
   it('카드를 고르면 갚을 금액을 묻고 부호 버튼이 없으며, 금액의 뜻이 바뀌었다고 알린다', async () => {
@@ -460,7 +468,7 @@ describe('둘째 장(2/2)의 요소와 처음 값', () => {
     await user.keyboard('350000')
     await user.click(type('카드'))
     expect(owed().value).toBe('350,000')
-    expect(screen.getByText('카드는 지금 갚을 금액을 적어요.')).toBeTruthy()
+    expect(screen.getByText('카드는 지금 갚을 금액을 적어요')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '마이너스' })).toBeNull()
     expect(screen.getByText(typeNotice)).toBeTruthy()
   })
@@ -471,10 +479,10 @@ describe('둘째 장(2/2)의 요소와 처음 값', () => {
     expect(screen.queryByText(typeNotice)).toBeNull()
   })
 
-  it('기준일은 기기의 오늘이고 도움말은 C-02의 문구다', async () => {
+  it('기준일은 기기의 오늘이고 도움말은 계좌 추가(G-02)와 같다', async () => {
     const { user } = await openSecond()
     expect(date().textContent).toBe('11월 26일 (목)')
-    expect(screen.getByText('이날부터의 거래가 잔액에 반영돼요.')).toBeTruthy()
+    expect(screen.getByText('이날부터의 거래가 잔액에 들어가요')).toBeTruthy()
     await user.click(date())
     await untilOpened()
     await user.click(screen.getByRole('gridcell', { name: '2026년 11월 3일 화요일' }))
@@ -514,7 +522,7 @@ describe('계좌 만들기', () => {
     expect(toast()).toBe('계좌를 만들었어요')
     expect(accounts.added).toEqual([
       {
-        ledgerId: 'user-1-ledger',
+        ledgerId: ledgerIdOf('user-1'),
         body: { name: '국민은행 통장', type: 'BANK', openingBalance: 350000, openingDate: '2026-11-03' },
       },
     ])
@@ -601,6 +609,8 @@ describe('계좌 만들기 전의 검사', () => {
     ['공백류뿐', ' \u{A0}\u{3000}', nameRequired],
     ['51자', '가'.repeat(51), nameTooLong],
     ['보이지 않는 글자', '통장\u{200B}', nameUnusable],
+    // 서버는 앞뒤의 공백류(Zs)만 지우고 탭은 거부한다(#220)
+    ['앞뒤의 탭', '\t통장\t', nameUnusable],
   ])('이름이 %s이면 칸을 벗어날 때 알린다', async (_, value, message) => {
     const { user } = await openSecond()
     await user.click(name())
@@ -703,7 +713,8 @@ describe('건너뛰기', () => {
     expect(path(opened)).toBe('/home')
     expect(screen.queryByRole('alert')).toBeNull()
     expect(toast()).toBeUndefined()
-    await waitFor(() => expect(accounts.requests.length).toBe(before + 1))
+    // 안내가 다시 받는다. 도착한 홈의 계좌 잔액도 같은 목록을 받으므로 한 번 이상이다
+    await waitFor(() => expect(accounts.requests.length).toBeGreaterThan(before))
     await act(() => opened.router.navigate(-1))
     await waitFor(() => expect(path(opened)).toBe('/home'))
   })
@@ -727,12 +738,13 @@ describe('건너뛰기', () => {
     ['UTC', '2026-11-26T00:00:00.000Z', '2026-11-26', '11월 26일 (목)'],
     ['America/Los_Angeles', '2026-11-26T07:59:59.999Z', '2026-11-25', '11월 25일 (수)'],
     ['America/Los_Angeles', '2026-11-26T08:00:00.000Z', '2026-11-26', '11월 26일 (목)'],
+    ['Pacific/Kiritimati', '2026-11-25T09:59:59.999Z', '2026-11-25', '11월 25일 (수)'],
+    ['Pacific/Kiritimati', '2026-11-25T10:00:00.000Z', '2026-11-26', '11월 26일 (목)'],
+    ['Pacific/Pago_Pago', '2026-11-26T10:59:59.999Z', '2026-11-25', '11월 25일 (수)'],
+    ['Pacific/Pago_Pago', '2026-11-26T11:00:00.000Z', '2026-11-26', '11월 26일 (목)'],
     ['Asia/Seoul', '2026-12-31T15:00:00.000Z', '2027-01-01', '1월 1일 (금)'],
   ])('기기의 시간대가 %s이고 지금이 %s이면', (timeZone, instant, today, shown) => {
-    beforeEach(() => {
-      vi.stubEnv('TZ', timeZone)
-      vi.setSystemTime(new Date(instant))
-    })
+    beforeEach(() => setDeviceClock(instant, timeZone))
 
     it(`기준일의 처음 값과 건너뛰기의 기준일은 기기의 오늘 ${today}이다`, async () => {
       const { user } = await openSecond()
@@ -816,22 +828,47 @@ describe('서버 오류와 지연', () => {
     expect(path(opened)).toBe('/welcome?step=2')
   })
 
+  // 아래 고정 영역을 화면 키보드 위로 올리지 않으므로 가입(A-03)과 같이 "다시 시도"로 옮긴다(designer 결정 #102)
   it.each([
-    ['계좌 만들기', createButton],
-    ['건너뛰기', skipButton],
-  ])('"%s"가 실패해도 초점을 옮기지 않는다', async (_, press) => {
-    accounts.addResponse = () => problem(500, 'INTERNAL_ERROR')
+    ['서버 오류', '계좌 만들기', () => problem(500, 'INTERNAL_ERROR'), createButton],
+    ['연결 오류', '계좌 만들기', () => HttpResponse.error(), createButton],
+    ['서버 오류', '건너뛰기', () => problem(500, 'INTERNAL_ERROR'), skipButton],
+    ['연결 오류', '건너뛰기', () => HttpResponse.error(), skipButton],
+  ])('%s로 "%s"가 실패하면 초점이 "다시 시도"로 간다', async (_, __, respond, press) => {
+    accounts.addResponse = respond
     const { user } = await openSecond()
     await fill(user)
     press().focus()
     await user.keyboard('{Enter}')
     await screen.findByRole('alert')
-    await settle()
-    expect(document.activeElement).toBe(press())
+    expect(document.activeElement).toBe(retryButton())
   })
 
-  it('"계좌 만들기"의 "다시 시도"는 지금 화면의 값으로 다시 만들고 초점을 잃지 않는다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), delayed().respond]
+  it('칸에서 엔터로 만들다 실패하면 초점이 "다시 시도"로 가서 화면 키보드가 내려간다', async () => {
+    accounts.addResponse = () => problem(500, 'INTERNAL_ERROR')
+    const { user } = await openSecond()
+    await fill(user)
+    await user.type(name(), '{Enter}')
+    await screen.findByRole('alert')
+    expect(document.activeElement).toBe(retryButton())
+  })
+
+  it('다시 실패해도 초점이 "다시 시도"로 간다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await openSecond()
+    await fill(user)
+    await user.click(createButton())
+    await screen.findByRole('alert')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(accounts.added).toHaveLength(2))
+    await waitFor(() => expect(document.activeElement).toBe(retryButton()))
+  })
+
+  /* 다시 보내는 동안 문구를 남기고 누른 버튼만 도는 표시다(designer 규칙 #102, 계좌 추가·거래 입력과 같다) */
+  it('"계좌 만들기"의 "다시 시도"는 지금 화면의 값으로 다시 만든다. 그동안 문구를 둔 채 "다시 시도"만 돌고, 만들면 /home으로 간다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
     accounts.addResponse = () => answers.shift()!()
     const { user } = await openSecond()
     await fill(user)
@@ -839,24 +876,72 @@ describe('서버 오류와 지연', () => {
     await screen.findByRole('alert')
     await user.type(name(), '2')
     await user.click(retryButton())
-    await waitFor(() => expect(accounts.added).toHaveLength(2))
+    await answer.arrived
     expect(created()[1].name).toBe('국민은행 통장2')
-    expect(screen.queryByRole('alert')).toBeNull()
-    expect(document.activeElement).toBe(createButton())
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect([createButton(), skipButton()].map((button) => button.hasAttribute('aria-busy'))).toEqual([false, false])
+    expect([createButton(), skipButton()].map((button) => button.getAttribute('aria-disabled'))).toEqual(['true', 'true'])
+    // 마우스로 누르면 쓰던 칸에 초점이 남는다
+    expect(document.activeElement).toBe(name())
+
+    answer.answer(HttpResponse.json(accountOf('국민은행 통장2', 'BANK', 350000), { status: 201 }))
+    await home()
+    await waitFor(() => expect(toast()).toBe('계좌를 만들었어요'))
   })
 
-  it('"건너뛰기"의 "다시 시도"는 다시 건너뛰고 초점을 잃지 않는다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), delayed().respond]
+  it('"건너뛰기"의 "다시 시도"는 다시 건너뛴다. 그동안 문구를 둔 채 "다시 시도"만 돌고 초점이 남는다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
     accounts.addResponse = () => answers.shift()!()
     const { user } = await openSecond()
     await fill(user)
     await user.click(skipButton())
     await screen.findByRole('alert')
     await user.click(retryButton())
-    await waitFor(() => expect(accounts.added).toHaveLength(2))
+    await answer.arrived
     expect(created()[1]).toEqual({ name: '현금', type: 'CASH', openingBalance: 0, openingDate: '2026-11-26' })
-    expect(document.activeElement).toBe(skipButton())
-    expect(skipButton().getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect(skipButton().hasAttribute('aria-busy')).toBe(false)
+    expect(skipButton().getAttribute('aria-disabled')).toBe('true')
+    expect(document.activeElement).toBe(retryButton())
+  })
+
+  it.each([
+    ['계좌 만들기', createButton, skipButton],
+    ['건너뛰기', skipButton, createButton],
+  ])('실패 뒤 "%s"를 누르면 문구를 둔 채 그 버튼만 돌고 "다시 시도"와 다른 버튼은 누를 수 없다', async (_, pressed, other) => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await openSecond()
+    await fill(user)
+    await user.click(createButton())
+    await screen.findByRole('alert')
+    await user.click(pressed())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(pressed().getAttribute('aria-busy')).toBe('true')
+    expect([retryButton(), other()].map((button) => button.hasAttribute('aria-busy'))).toEqual([false, false])
+    expect([retryButton(), other()].map((button) => button.getAttribute('aria-disabled'))).toEqual(['true', 'true'])
+    await user.click(retryButton())
+    expect(accounts.added).toHaveLength(2)
+  })
+
+  it('칸을 고치다 "다시 시도"를 눌러 또 실패하면 문구를 새로 그려 다시 읽히게 하고 초점이 "다시 시도"로 간다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await openSecond()
+    await fill(user)
+    await user.click(createButton())
+    const first = await screen.findByRole('alert')
+    await user.type(name(), '2')
+    await user.click(retryButton())
+    await waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(accounts.added).toHaveLength(2)
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(document.activeElement).toBe(retryButton())
   })
 
   it('다시 시도할 때 칸이 틀렸으면 보내지 않고 문구를 지운 뒤 칸의 오류를 보인다', async () => {
@@ -872,16 +957,17 @@ describe('서버 오류와 지연', () => {
     expect(accounts.added).toHaveLength(1)
   })
 
-  it('15초 동안 응답이 없으면 같은 문구를 보인다', async () => {
+  it('15초 동안 응답이 없으면 같은 문구를 보이고 초점이 "다시 시도"로 간다', async () => {
     accounts.addResponse = delayed().respond
     const { user } = await openSecond()
     await fill(user)
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: new Date(2026, 10, 26, 12) })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: Date.parse(NOW) })
     fireEvent.click(createButton())
     await act(() => vi.advanceTimersByTimeAsync(14_900))
     expect(screen.queryByRole('alert')).toBeNull()
     await act(() => vi.advanceTimersByTimeAsync(200))
     expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(document.activeElement).toBe(retryButton())
   })
 
   it('저절로 다시 보내지 않는다', async () => {

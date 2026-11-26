@@ -1,16 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { ApiError } from '../src/api/apiError'
 import { accountAddMessages } from '../src/features/accounts/accountForm'
 import { isDuplicateName, rejectedFields } from '../src/features/accounts/accountRejection'
+import { setDeviceClock } from './support/clock'
 
 const rejected = (...fieldErrors: [field: string, code: string][]) =>
   ApiError.response(400, {
     code: 'VALIDATION_FAILED',
     fieldErrors: fieldErrors.map(([field, code]) => ({ field, code })),
   })
-
-beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'] }))
-afterEach(() => void vi.useRealTimers())
 
 describe('거부된 칸의 문구', () => {
   it.each([
@@ -30,13 +28,13 @@ describe('거부된 칸의 문구', () => {
   })
 
   it.each([
-    ['보통 날', new Date(2026, 10, 20, 12), '2027년 11월 20일'],
-    ['자정 직전', new Date(2026, 10, 20, 23, 59, 59), '2027년 11월 20일'],
-    ['자정', new Date(2026, 10, 21, 0, 0, 0), '2027년 11월 21일'],
-    ['말일', new Date(2026, 11, 31, 23, 59, 59), '2027년 12월 31일'],
-    ['윤일', new Date(2028, 1, 29, 12), '2029년 2월 28일'],
+    ['보통 날', '2026-11-20T12:00:00+09:00', '2027년 11월 20일'],
+    ['자정 직전', '2026-11-20T23:59:59+09:00', '2027년 11월 20일'],
+    ['자정', '2026-11-21T00:00:00+09:00', '2027년 11월 21일'],
+    ['말일', '2026-12-31T23:59:59+09:00', '2027년 12월 31일'],
+    ['윤일', '2028-02-29T12:00:00+09:00', '2029년 2월 28일'],
   ])('기준일이 범위 밖이면 기기의 오늘로부터 1년 뒤까지를 알린다: %s', (_, now, last) => {
-    vi.setSystemTime(now)
+    setDeviceClock(now)
     expect(rejectedFields(rejected(['openingDate', 'OUT_OF_RANGE']))).toEqual({
       openingDate: `2000년 1월 1일부터 ${last}까지 고를 수 있어요`,
     })
@@ -85,7 +83,7 @@ describe('화면이 정한 문구', () => {
   })
 
   it('기준일이 범위 밖이면 계좌 추가와 같은 형식이다', () => {
-    vi.setSystemTime(new Date(2026, 10, 26, 12))
+    setDeviceClock('2026-11-26T12:00:00+09:00')
     expect(rejectedFields(rejected(['openingDate', 'OUT_OF_RANGE']), messages)).toEqual({
       openingDate: '2000년 1월 1일부터 2027년 11월 26일까지 고를 수 있어요',
     })

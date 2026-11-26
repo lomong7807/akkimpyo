@@ -9,8 +9,8 @@ type AmountProps =
       canceled?: boolean
     }
   | {
-      /** 잔액과 합계 */
-      kind: 'balance'
+      /** 잔액과 합계, 차액(수입 − 지출) */
+      kind: 'balance' | 'difference'
       value: number
       canceled?: never
     }
@@ -20,6 +20,7 @@ const kindClasses = {
   income: styles.income,
   transfer: styles.transfer,
   balance: styles.balance,
+  difference: styles.balance,
 }
 
 const digits = new Intl.NumberFormat('ko-KR')
@@ -34,8 +35,12 @@ export default function Amount({ kind, value, canceled = false }: AmountProps) {
   )
 }
 
-/** 거래의 부호는 유형이 정한다. 값의 부호를 보이는 것은 잔액과 합계뿐이다. */
+/**
+ * 거래의 부호는 유형이 정한다. 값의 부호를 보이는 것은 잔액과 합계, 차액뿐이다.
+ * 차액은 양수에도 "+"를 붙인다(화면설계서 01 작성자 판단 37). 0원은 부호가 없다.
+ */
 function signOf(kind: AmountProps['kind'], value: number): string {
   if (kind === 'income') return '+'
-  return kind === 'balance' && value < 0 ? '-' : ''
+  if (kind === 'difference' && value > 0) return '+'
+  return (kind === 'balance' || kind === 'difference') && value < 0 ? '-' : ''
 }

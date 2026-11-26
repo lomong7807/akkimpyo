@@ -2,8 +2,10 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountOf, accountsBody, startAccounts, type Accounts } from './support/accounts'
-import { delayed, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { untilOpened, untilUnshielded } from './support/dialog'
+import { setDeviceClock } from './support/clock'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -28,7 +30,8 @@ let backend: Backend
 let accounts: Accounts
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12) })
+  setDeviceClock('2026-11-26T12:00:00+09:00')
+  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   installMatchMedia(390)
   installLocks(createFakeLocks())
@@ -43,10 +46,10 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   resetViewport()
   removeLocks()
   vi.restoreAllMocks()
-  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
@@ -81,8 +84,14 @@ const errors = () => controls().map(errorOf)
 
 async function open(path = '/accounts/new') {
   const opened = await openApp(path)
-  await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+  await untilForm()
   return opened
+}
+
+/** 계좌 추가의 칸이 나올 때까지 기다린다. 화면 코드를 받는 동안의 틀(#251)에도 같은 제목이 있다. */
+async function untilForm() {
+  await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+  await screen.findByLabelText('이름')
 }
 
 /** 계좌 목록에서 "추가"를 눌러 연다. */
@@ -90,7 +99,7 @@ async function openFromList() {
   const opened = await openApp('/accounts')
   await screen.findByText('자산 합계')
   await opened.user.click(screen.getByRole('link', { name: '추가' }))
-  await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+  await untilForm()
   return opened
 }
 
@@ -172,13 +181,13 @@ describe('요소와 처음 값', () => {
     await open()
     expect(balance().value).toBe('0')
     expect(sign().getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByText('마이너스 통장이면 -로 바꿔 적어요.')).toBeTruthy()
+    expect(screen.getByText('마이너스 통장이면 -로 바꿔 적어요')).toBeTruthy()
   })
 
   it('기준일은 기기의 오늘이다', async () => {
     await open()
     expect(date().textContent).toBe('11월 26일 (목)')
-    expect(screen.getByText('이날부터의 거래가 잔액에 들어가요.')).toBeTruthy()
+    expect(screen.getByText('이날부터의 거래가 잔액에 들어가요')).toBeTruthy()
   })
 
   it('여는 때 초점을 두지 않고 오류와 알림이 없다', async () => {
@@ -198,6 +207,9 @@ describe('이름', () => {
     ['공백류뿐', ' \u{A0}\u{3000}', nameRequired],
     ['51자', '가'.repeat(51), nameTooLong],
     ['보이지 않는 글자', '급여\u{200B}통장', nameUnusable],
+    // 서버는 앞뒤의 공백류(Zs)만 지우고 탭과 U+0085는 거부한다(#220)
+    ['끝의 탭', '급여통장\t', nameUnusable],
+    ['앞의 U+0085', '\u{85}급여통장', nameUnusable],
   ])('%s이면 칸을 벗어날 때 알린다', async (_, value, message) => {
     const { user } = await open()
     await user.click(name())
@@ -235,8 +247,8 @@ describe('종류', () => {
     await user.click(type('카드'))
     expect(screen.queryByLabelText('시작 잔액')).toBeNull()
     expect(owed().value).toBe('350,000')
-    expect(screen.getByText('카드는 지금 갚을 금액을 적어요.')).toBeTruthy()
-    expect(screen.queryByText('마이너스 통장이면 -로 바꿔 적어요.')).toBeNull()
+    expect(screen.getByText('카드는 지금 갚을 금액을 적어요')).toBeTruthy()
+    expect(screen.queryByText('마이너스 통장이면 -로 바꿔 적어요')).toBeNull()
     expect(screen.queryByRole('button', { name: '마이너스' })).toBeNull()
   })
 
@@ -336,11 +348,11 @@ describe('저장', () => {
       '급여통장350,000원',
     ])
     expect(screen.getByText('자산 합계').parentElement!.textContent).toBe('자산 합계1,350,000원')
-    expect(screen.getByRole('status').textContent).toBe("'급여통장' 계좌를 추가했어요.")
+    expect(screen.getByRole('status').textContent).toBe("'급여통장' 계좌를 추가했어요")
     expect(path(opened)).toBe('/accounts')
     expect(accounts.added).toEqual([
       {
-        ledgerId: 'user-1-ledger',
+        ledgerId: ledgerIdOf('user-1'),
         body: { name: '급여통장', type: 'BANK', openingBalance: 350000, openingDate: '2026-11-03' },
       },
     ])
@@ -389,7 +401,7 @@ describe('저장', () => {
     const { user } = await openApp('/accounts')
     await before.arrived
     await user.click(screen.getByRole('link', { name: '추가' }))
-    await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+    await untilForm()
     accounts.response = undefined
     await fillAndSave(user)
     expect(await screen.findByText('급여통장')).toBeTruthy()
@@ -412,7 +424,7 @@ describe('저장', () => {
     accounts.addResponse = () => HttpResponse.json(accountOf('맞춘 이름', 'BANK', 1), { status: 201 })
     const { user } = await openFromList()
     await fillAndSave(user)
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe("'맞춘 이름' 계좌를 추가했어요."))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe("'맞춘 이름' 계좌를 추가했어요"))
   })
 
   it.each([
@@ -454,11 +466,11 @@ describe('저장', () => {
   it('토스트가 보이는 동안 다시 "추가"를 열면 토스트가 저장 버튼을 덮지 않게 걷는다', async () => {
     const { user } = await openFromList()
     await fillAndSave(user)
-    await waitFor(() => expect(screen.getByText("'급여통장' 계좌를 추가했어요.")).toBeTruthy())
+    await waitFor(() => expect(screen.getByText("'급여통장' 계좌를 추가했어요")).toBeTruthy())
     await untilUnshielded()
     await user.click(screen.getByRole('link', { name: '추가' }))
     await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
-    expect(screen.queryByText("'급여통장' 계좌를 추가했어요.")).toBeNull()
+    expect(screen.queryByText("'급여통장' 계좌를 추가했어요")).toBeNull()
   })
 
   it('두 번 누르거나 엔터를 눌러도 한 번만 보낸다', async () => {
@@ -712,30 +724,54 @@ describe('서버 오류와 지연', () => {
     expect(document.activeElement).toBe(stays())
   })
 
-  it('다시 시도한 것이 또 실패하면 초점이 저장에 남는다', async () => {
+  it('다시 시도한 것이 또 실패하면 문구를 새로 그려 다시 읽히게 하고 초점은 "다시 시도"에 남는다', async () => {
     const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
     accounts.addResponse = () => answers.shift()!()
     const { user } = await open()
     await fillAndSave(user)
-    await screen.findByRole('alert')
-    await user.click(retryButton())
+    const first = await screen.findByRole('alert')
+    // 키보드로 누른 버튼은 사라지지 않으므로 초점이 그대로 남는다
+    retryButton().focus()
+    await user.keyboard('{Enter}')
     await waitFor(() => expect(accounts.added).toHaveLength(2))
-    await screen.findByRole('alert')
-    expect(document.activeElement).toBe(saveButton())
+    await waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(document.activeElement).toBe(retryButton())
   })
 
-  it('"다시 시도"는 지금 화면의 값으로 다시 보내고 초점을 잃지 않는다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), delayed().respond]
+  /* 다시 보내는 동안 문구를 남기고 누른 버튼만 도는 표시다(designer 검토 2026-11-26, 확인 창과 같다) */
+  it('"다시 시도"는 지금 화면의 값으로 다시 보낸다. 그동안 문구를 둔 채 "다시 시도"만 돌고 저장은 누를 수 없으며 초점이 남는다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
     accounts.addResponse = () => answers.shift()!()
     const { user } = await open()
     await fillAndSave(user)
     await screen.findByRole('alert')
     await user.type(name(), '2')
     await user.click(retryButton())
-    await waitFor(() => expect(accounts.added).toHaveLength(2))
+    await answer.arrived
     expect(accounts.added[1].body.name).toBe('급여통장2')
-    expect(screen.queryByRole('alert')).toBeNull()
-    expect(document.activeElement).toBe(saveButton())
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect(saveButton().getAttribute('aria-busy')).toBeNull()
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true')
+    // 마우스로 누르면 쓰던 칸에 초점이 남는다(전체 화면 입력이 화면 키보드를 내리지 않게 한다)
+    expect(document.activeElement).toBe(name())
+  })
+
+  it('저장을 다시 누르면 문구를 둔 채 저장만 도는 표시이고 "다시 시도"는 누를 수 없다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await open()
+    await fillAndSave(user)
+    await screen.findByRole('alert')
+    await user.click(saveButton())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(saveButton().getAttribute('aria-busy')).toBe('true')
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    await user.click(retryButton())
+    expect(accounts.added).toHaveLength(2)
   })
 
   it('다시 시도할 때 칸이 틀렸으면 보내지 않고 문구를 지운 뒤 칸의 오류를 보인다', async () => {

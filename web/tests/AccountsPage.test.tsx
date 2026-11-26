@@ -5,9 +5,10 @@ import { useState, type ReactElement } from 'react'
 import { Link, type RouteObject } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountOf, accountsBody, startAccounts, type Accounts } from './support/accounts'
-import { delayed, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
 import { startMockServer } from './support/mockServer'
+import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/useTransactionList'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
@@ -20,6 +21,7 @@ const loading = '불러오고 있어요.'
 const failed = '불러오지 못했어요.'
 
 const server = startMockServer()
+const OTHER_LEDGER = '0e0e0e0e-0000-4000-8000-000000000002'
 let backend: Backend
 let accounts: Accounts
 
@@ -111,7 +113,7 @@ describe('계좌 목록(G-01)', () => {
   it('현재 장부의 계좌를 한 번 받는다', async () => {
     await open()
     await settle()
-    expect(accounts.requests).toEqual(['user-1-ledger'])
+    expect(accounts.requests).toEqual([ledgerIdOf('user-1')])
   })
 
   it('맨 위에 자산 합계가 있고 값은 계좌별 잔액의 합이다', async () => {
@@ -481,12 +483,37 @@ describe('불러오지 못하면', () => {
 })
 
 describe('이미 불러온 뒤', () => {
-  /** 탭으로 돌아온 것을 알린다. 쓰던 값을 다시 받는다. */
+  /** 탭으로 돌아온 것을 알린다. 받은 지 30초가 지났으면 쓰던 값을 다시 받는다. */
   const refocus = () => act(() => window.dispatchEvent(new Event('visibilitychange')))
+  /**
+   * 받은 목록을 새것으로 보는 30초(perf 권고 #90)가 지난 것으로 한다. 라이브러리가 재는 시계(Date)만 앞으로 보낸다.
+   * 진짜 시계로는 afterEach가 돌아간다.
+   */
+  function passStaleTime() {
+    const later = Date.now() + TRANSACTION_LIST_STALE_MS + 1
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(later)
+  }
 
-  it('다시 불러오기가 실패하면 있던 내용을 그대로 보인다', async () => {
+  it('30초 안에는 탭에 돌아오거나 다른 화면에 다녀와도 다시 받지 않는다', async () => {
+    accounts.items = everyType
+    const { router } = await openApp(
+      '/accounts',
+      addScreens([{ path: '/other', element: <Link to="/accounts">계좌로</Link> }]),
+    )
+    await screen.findByText('자산 합계')
+    await refocus()
+    await act(() => router.navigate('/other'))
+    await act(() => router.navigate('/accounts'))
+    await settle()
+    expect(totalRow().textContent).toBe('자산 합계3,682,600원')
+    expect(accounts.requests).toHaveLength(1)
+  })
+
+  it('30초가 지나 다시 불러오기가 실패하면 있던 내용을 그대로 보인다', async () => {
     await open()
     accounts.response = () => problem(500, 'INTERNAL_ERROR')
+    passStaleTime()
     await refocus()
     await waitFor(() => expect(accounts.requests).toHaveLength(2))
     await settle()
@@ -495,19 +522,21 @@ describe('이미 불러온 뒤', () => {
     expect(content().queryByRole('button')).toBeNull()
   })
 
-  it('다시 불러온 것이 약속과 달라도 있던 내용을 그대로 보인다', async () => {
+  it('30초가 지나 다시 불러온 것이 약속과 달라도 있던 내용을 그대로 보인다', async () => {
     await open()
     accounts.response = () => accountsBody(accountOf('대출', 'LOAN', -1))
+    passStaleTime()
     await refocus()
     await waitFor(() => expect(accounts.requests).toHaveLength(2))
     await settle()
     expect(totalRow().textContent).toBe('자산 합계3,682,600원')
   })
 
-  it('다시 불러오는 동안 뼈대로 바꾸지 않고, 받으면 합계를 다시 계산한다', async () => {
+  it('30초가 지나 다시 불러오는 동안 뼈대로 바꾸지 않고, 받으면 합계를 다시 계산한다', async () => {
     await open()
     const answer = delayed()
     accounts.response = answer.respond
+    passStaleTime()
     await refocus()
     await answer.arrived
     await act(() => new Promise((resolve) => setTimeout(resolve, 350)))
@@ -518,7 +547,7 @@ describe('이미 불러온 뒤', () => {
     expect(groupNames()).toEqual(['현금'])
   })
 
-  it('다른 화면에 다녀오면 받아 둔 목록을 바로 보이고 다시 받는다', async () => {
+  it('30초가 지나 다른 화면에 다녀오면 받아 둔 목록을 바로 보이고 다시 받는다', async () => {
     accounts.items = everyType
     const { router } = await openApp(
       '/accounts',
@@ -526,6 +555,7 @@ describe('이미 불러온 뒤', () => {
     )
     await screen.findByText('자산 합계')
     await act(() => router.navigate('/other'))
+    passStaleTime()
     const answer = delayed()
     accounts.response = answer.respond
     await act(() => router.navigate('/accounts'))
@@ -540,7 +570,7 @@ describe('이미 불러온 뒤', () => {
       const { accountsKey } = await import('../src/features/accounts/useAccounts')
       function WithSave() {
         const queryClient = useQueryClient()
-        const save = () => void queryClient.invalidateQueries({ queryKey: accountsKey('user-1-ledger') })
+        const save = () => void queryClient.invalidateQueries({ queryKey: accountsKey(ledgerIdOf('user-1')) })
         return (
           <>
             {page}
@@ -563,7 +593,7 @@ describe('이미 불러온 뒤', () => {
     accounts.items = [salary]
     const { user } = await openWrapped(async (page) => {
       const { CurrentLedgerContext, useCurrentLedger } = await import('../src/features/me/CurrentLedgerContext')
-      const other = { id: 'other-ledger', name: '다른 장부', role: 'OWNER' }
+      const other = { id: OTHER_LEDGER, name: '다른 장부', role: 'OWNER' }
       function WithLedgers() {
         const first = useCurrentLedger()
         const [ledger, setLedger] = useState(first)
@@ -585,6 +615,6 @@ describe('이미 불러온 뒤', () => {
     expect(screen.queryByText('급여통장')).toBeNull()
     answer.answer(accountsBody(wallet))
     await screen.findByText('지갑')
-    expect(accounts.requests).toEqual(['user-1-ledger', 'other-ledger'])
+    expect(accounts.requests).toEqual([ledgerIdOf('user-1'), OTHER_LEDGER])
   })
 })

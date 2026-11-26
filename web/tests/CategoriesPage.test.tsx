@@ -1,7 +1,7 @@
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { delayed, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
@@ -11,7 +11,7 @@ import { installMatchMedia, resetViewport, setViewportWidth } from './support/vi
 import { readWebFile } from './support/webFile'
 
 const CSS = 'src/features/categories/Categories.module.css'
-const empty = '아직 만든 카테고리가 없어요.'
+const empty = '아직 만든 카테고리가 없어요'
 const loading = '불러오고 있어요.'
 const failed = '불러오지 못했어요.'
 
@@ -99,7 +99,8 @@ const retry = () => screen.getByRole('button', { name: '다시 시도' })
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 30)))
 
 /** 최상위 목록 */
-const list = () => content().findAllByRole('list').then(([first]) => first)
+// 화면 코드를 받는 동안의 틀(#251)에서 화면으로 바뀌면 main이 바뀌므로 매번 다시 찾는다
+const list = () => waitFor(() => content().getAllByRole('list')[0])
 const itemsIn = (element: Element) => [...element.children] as HTMLElement[]
 /** 최상위 줄과 그 하위의 이름. 미분류 줄은 글자를 모두 잇는다. */
 const tree = async () =>
@@ -117,7 +118,7 @@ const uncategorizedRow = '미분류이름을 바꾸거나 지울 수 없어요�
 describe('카테고리(H-01)에 들어가는 길', () => {
   it('더보기의 "카테고리" 줄을 누르면 들어간다', async () => {
     const { router, user } = await open('/more')
-    await user.click(content().getByRole('link', { name: '카테고리' }))
+    await user.click(await waitFor(() => content().getByRole('link', { name: '카테고리' })))
     await title()
     expect(router.state.location.pathname).toBe('/categories')
   })
@@ -164,7 +165,7 @@ describe('카테고리(H-01)에 들어가는 길', () => {
 describe('카테고리 목록', () => {
   it('로그인한 사용자의 현재 장부 것을 한 번 받는다', async () => {
     await openList()
-    expect(api.requests).toEqual(['user-1 user-1-ledger'])
+    expect(api.requests).toEqual([`user-1 ${ledgerIdOf('user-1')}`])
   })
 
   it('최상위 줄 아래에 하위를 겹친 목록으로 두고, 순서는 받은 그대로다', async () => {
@@ -331,7 +332,7 @@ describe('고른 구분에 미분류만 있으면', () => {
   })
 })
 
-it('만든 카테고리가 있는 구분에는 "아직 만든 카테고리가 없어요."가 없다', async () => {
+it('만든 카테고리가 있는 구분에는 "아직 만든 카테고리가 없어요"가 없다', async () => {
   const { user } = await openList()
   expect(content().queryByText(empty)).toBeNull()
   await user.click(option('수입'))
@@ -369,7 +370,7 @@ describe('지출과 수입', () => {
 
   it('뒤로 갔다 다시 와도 지출이 골라져 있다', async () => {
     const { router, user } = await open('/more')
-    await user.click(content().getByRole('link', { name: '카테고리' }))
+    await user.click(await waitFor(() => content().getByRole('link', { name: '카테고리' })))
     await list()
     await user.click(option('수입'))
     await act(() => router.navigate(-1))

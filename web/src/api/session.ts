@@ -1,3 +1,6 @@
+import { confirmLogin, forgetLoginRecord, forgetLoginRecordOf, readLoginRecord } from '../device/loginRecord'
+import { forgetUserData } from '../device/userData'
+import { now } from '../lib/clock'
 import { ApiError } from './apiError'
 import {
   requestLogin,
@@ -17,7 +20,8 @@ import {
   recordLogout,
   settleLogout,
 } from './sessionMarks'
-import { isSameUser } from './tokenUser'
+import { isSameUser, userOf } from './tokenUser'
+import { unconfirmedUserOf } from './unconfirmedLogin'
 
 const UNAUTHENTICATED = 'UNAUTHENTICATED'
 
@@ -32,6 +36,12 @@ interface SeenMarks {
 
 /** access token을 준 로그인이나 되찾기의 것 */
 let seenMarks: SeenMarks = { logout: undefined, login: undefined }
+
+/**
+ * 서버에 확인하지 못한 채 연 로그인(architect·security 결정 2026-11-26, #234). 연결 없이 앱을 열 때 기기의 마지막 로그인
+ * 기록으로 연다. 토큰이 없으므로 요청은 먼저 갱신해야 보낸다. `seen`은 연 때의 표시이고 기록의 표시와 같다.
+ */
+let unconfirmed: { userId: string; seen: SeenMarks } | undefined
 
 /** 화면이 브라우저에 보관돼 있거나 되살아나 아직 확인하지 않았다. */
 let suspended = false
@@ -52,6 +62,7 @@ let resending: Promise<void> | undefined
 export type SessionEnd = 'ended' | 'logged-out' | 'replaced' | 'replaced-after-logout'
 
 const endedListeners = new Set<(end: SessionEnd) => void>()
+const confirmedListeners = new Set<() => void>()
 
 /** 실패하면 ApiError를 던진다. */
 export function login(credentials: Credentials): Promise<void> {
@@ -75,16 +86,24 @@ async function startSession(requestToken: (lost: AbortSignal) => Promise<string>
     if (loggedOutSince(seen)) return
     accessToken = token
     seenMarks = seen
+    unconfirmed = undefined
     accepted = true
+    keepConfirmedLogin(token, seen, true)
   })
   // 잠금을 놓고 여기에 오기까지 사이에 로그아웃했으면 토큰이 없다
   if (!accepted || accessToken === undefined) throw ApiError.timeout()
 }
 
-/** 이 기기에서 로그아웃한다. 서버의 답을 기다리지 않는다. */
+/**
+ * 이 기기에서 로그아웃한다. 서버의 답을 기다리지 않는다.
+ * 마지막으로 확인한 로그인 기록을 가장 먼저 지우고, 그 사용자의 기기 데이터(사본, 보내지 않은 입력, 쓰던 값)를 지운다(F-016).
+ */
 export function logout(): void {
+  const user = sessionUserId()
+  void forgetLoginRecord().catch(ignore)
   const value = recordLogout()
   endSession('logged-out')
+  if (user !== undefined) void forgetUserData(user).catch(ignore)
   void sendLogout(value, 'pressed')
 }
 
@@ -133,6 +152,37 @@ export async function restoreSession(): Promise<boolean> {
   return (await renew(undefined)) !== undefined
 }
 
+/**
+ * 앱을 열 때 갱신이 `error`로 실패했다. '연결 없음과 같은 실패'이고 기기의 마지막 로그인 기록이 조건을 모두 만족하며
+ * 그 사용자의 계정별 저장을 쓸 수 있으면(`usable`) '확인하지 못한 로그인'으로 열고 그 사용자를 준다. 아니면 없다.
+ */
+export async function openUnconfirmed(
+  error: unknown,
+  usable: (userId: string) => Promise<boolean>,
+): Promise<string | undefined> {
+  if (!isLikeNoConnection(error) || accessToken !== undefined) return undefined
+  const seen = { logout: logoutValue(), login: loginValue() }
+  const userId = await deviceUser()
+  if (userId === undefined || !(await usable(userId))) return undefined
+  // 확인하는 사이에 로그인했거나 표시가 바뀌었으면 열지 않는다
+  if (accessToken !== undefined || logoutValue() !== seen.logout || loginValue() !== seen.login) return undefined
+  unconfirmed = { userId, seen }
+  return userId
+}
+
+/** 확인하지 못한 로그인이면 연결이 돌아왔을 때 부른다. 기록을 다시 보고 갱신한다. 실패하면 ApiError를 던진다. */
+export async function confirmSession(): Promise<void> {
+  if (unconfirmed === undefined || accessToken !== undefined) return
+  if (!(await stillUnconfirmed())) return
+  await renew(undefined)
+}
+
+/** 확인하지 못한 로그인이면 기록이 아직 있고 조건을 만족하는지 다시 본다. 아니면 로그인이 풀린 것으로 끝낸다. */
+export async function recheckUnconfirmed(): Promise<void> {
+  if (unconfirmed === undefined || accessToken !== undefined) return
+  await stillUnconfirmed()
+}
+
 /** 다른 탭에서 로그아웃했으면 이 탭의 로그인도 끝낸다. 저장소를 모두 지운 것도 로그아웃으로 본다. */
 export function noticeLogout({ storageCleared = false } = {}): void {
   if (storageCleared) endSession('logged-out')
@@ -144,10 +194,30 @@ export function suspendSession(): void {
   suspended = true
 }
 
-/** 화면이 되살아났다. 그사이 로그아웃하거나 로그인했으면 쓰던 로그인을 버린다. */
-export function resumeSession(): void {
+/**
+ * 화면이 되살아났다. 그사이 로그아웃하거나 로그인했으면 쓰던 로그인을 버린다.
+ * 확인하지 못한 로그인은 기록을 다시 읽어야 하므로 다 볼 때까지 기다릴 것을 준다. 그 밖에는 바로 끝난다.
+ */
+export function resumeSession(): Promise<void> | undefined {
   endIfOver()
   suspended = false
+  return unconfirmed === undefined ? undefined : recheckUnconfirmed()
+}
+
+/**
+ * 지금 로그인한 사용자의 id(access token의 sub). 로그인하지 않았거나 읽지 못하면 없다. 확인하지 못한 로그인에서도 없다.
+ * 서명을 확인하지 않은 값이라 권한 판단에 쓰지 않는다. 보내는 사용자가 같은지 볼 때 쓴다.
+ */
+export function currentUserId(): string | undefined {
+  return accessToken === undefined ? undefined : userOf(accessToken)
+}
+
+/**
+ * 이 탭의 기기 데이터(사본, 보내지 않은 입력, 쓰던 값)의 주인. 토큰의 sub이고, 확인하지 못한 로그인이면 기록의 사용자다.
+ * 기기 데이터를 고르는 데만 쓰고 요청의 사용자로 쓰지 않는다(security 2026-11-26, #234). 요청은 currentUserId로 본다.
+ */
+export function sessionUserId(): string | undefined {
+  return currentUserId() ?? unconfirmed?.userId
 }
 
 /** 이 탭에서 쓰던 로그인이 끝나면 부른다. 돌려받은 함수로 끊는다. */
@@ -158,6 +228,19 @@ export function onSessionEnded(listener: (end: SessionEnd) => void): () => void 
   }
 }
 
+/** 확인하지 못한 로그인이 같은 사용자로 확인되면 부른다. 돌려받은 함수로 끊는다. */
+export function onSessionConfirmed(listener: () => void): () => void {
+  confirmedListeners.add(listener)
+  return () => {
+    confirmedListeners.delete(listener)
+  }
+}
+
+/** 보내기 직전에 쓸 토큰의 사용자가 이 사용자와 같아야 보낸다. 저장이나 동작을 시작한 때의 사용자다. */
+export interface SenderCheck {
+  startedBy: string | undefined
+}
+
 /**
  * 지금 access token으로 보내고, 만료됐으면 갱신을 한 번 한 뒤 같은 요청을 다시 보낸다(ADR 001 결정 6).
  *
@@ -165,17 +248,91 @@ export function onSessionEnded(listener: (end: SessionEnd) => void): () => void 
  * 앞 사용자의 요청을 다른 사용자로 보내지 않도록, 토큰의 사용자가 같을 때만 다시 보낸다.
  * 토큰 없이 보낸 요청은 누구의 것인지 알 수 없으므로 갱신하지 않는다.
  * 다른 탭에서 로그아웃했으면 보내지 않고 로그인이 필요하다는 오류로 끝낸다.
+ * 확인하지 못한 로그인이면 다른 요청보다 먼저 기록을 다시 보고 갱신한다. 같은 사용자로 확인돼야 보낸다.
+ * `sender`가 있으면 보낼 때마다(다시 보낼 때 포함) 토큰의 sub가 `startedBy`와 같아야 보낸다. 아니면 지연 오류로 끝낸다.
  */
-export async function withAccessToken<T>(sendWith: (accessToken: string | undefined) => Promise<T>): Promise<T> {
-  if (endIfOver()) throw ApiError.response(401, { code: UNAUTHENTICATED, fieldErrors: [] })
+export async function withAccessToken<T>(
+  sendWith: (accessToken: string | undefined) => Promise<T>,
+  sender?: SenderCheck,
+): Promise<T> {
+  if (endIfOver()) throw unauthenticated()
+  if (accessToken === undefined && unconfirmed !== undefined) await confirmBeforeRequest()
   const used = accessToken
+  checkSender(used, sender)
   try {
     return await sendWith(used)
   } catch (error) {
     if (used === undefined || !isUnauthenticated(error)) throw error
     const renewed = await renew(used)
     if (endIfOver() || renewed === undefined || !isSameUser(used, renewed)) throw error
+    checkSender(renewed, sender)
     return sendWith(renewed)
+  }
+}
+
+/**
+ * 확인하지 못한 로그인의 요청 앞에서 갱신한다. 확인되지 않으면 갱신의 오류나 로그인이 필요하다는 오류를 던진다.
+ * 다른 사용자로 갱신됐으면 앞 사용자의 화면이 시작한 요청이므로 보내지 않고 지연 오류로 끝낸다.
+ */
+async function confirmBeforeRequest(): Promise<void> {
+  const opened = unconfirmed
+  if (!(await stillUnconfirmed())) throw unauthenticated()
+  await renew(undefined)
+  if (accessToken === undefined) throw unauthenticated()
+  if (userOf(accessToken) !== opened?.userId) throw ApiError.timeout()
+}
+
+function checkSender(token: string | undefined, sender: SenderCheck | undefined) {
+  if (sender === undefined) return
+  if (sender.startedBy === undefined || token === undefined || userOf(token) !== sender.startedBy) {
+    throw ApiError.timeout()
+  }
+}
+
+/**
+ * 확인하지 못한 로그인을 아직 쓸 수 있는지 기기의 기록으로 다시 본다(다른 탭이 401로 지웠거나 기한이 지났을 수 있다).
+ * 쓸 수 없으면 로그인이 풀린 것으로 끝내고 false다.
+ */
+async function stillUnconfirmed(): Promise<boolean> {
+  const opened = unconfirmed
+  if (opened === undefined) return false
+  const userId = await deviceUser()
+  if (unconfirmed !== opened) return accessToken !== undefined
+  if (userId === opened.userId && !loggedOutSince(opened.seen) && loginValue() === opened.seen.login) return true
+  endSession('ended')
+  return false
+}
+
+/** 기기의 마지막 로그인 기록으로 열 수 있는 사용자(api/unconfirmedLogin). 기록을 읽지 못하면 없다. */
+async function deviceUser(): Promise<string | undefined> {
+  try {
+    const record = await readLoginRecord()
+    const marks = {
+      login: loginValue(),
+      logout: logoutValue(),
+      pendingLogout: pendingLogout() !== undefined,
+      shared: marksShared(),
+    }
+    return unconfirmedUserOf(record, marks, now())
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * '연결 없음과 같은 실패'(결정 댓글): 연결 오류, 지연, 5xx, 429, 우리 모양이 아닌 응답(읽을 수 없는 본문, problem+json이 아닌
+ * 4xx)뿐이다. 우리 서버가 problem+json으로 거절한 4xx와 탭 사이 잠금 때문에 보내지 못한 것은 아니다.
+ */
+function isLikeNoConnection(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false
+  switch (error.kind) {
+    case 'connection':
+    case 'server':
+      return true
+    case 'timeout':
+      return !error.lockWait
+    case 'rejected':
+      return error.status === 429 || error.code === undefined
   }
 }
 
@@ -219,7 +376,10 @@ async function refresh(stale: string | undefined, seen: SeenMarks, lost: AbortSi
   } catch (error) {
     // 연결 문제와 서버 오류는 로그인 풀림이 아니다
     if (!(error instanceof ApiError && error.status === 401)) throw error
-    if (isCurrent()) endSession('ended')
+    if (!isCurrent()) return
+    // 이 표시로 확인한 기록만 지운다. 그사이 다른 탭의 로그인이 쓴 기록은 남긴다
+    void forgetLoginRecordOf({ loginValue: seen.login ?? null, logoutValue: seen.logout ?? null }).catch(ignore)
+    endSession('ended')
   }
 }
 
@@ -236,14 +396,38 @@ async function requestRefreshTwice(lost: AbortSignal, seen: SeenMarks): Promise<
   }
 }
 
-/** 쓰던 토큰과 사용자가 다르면 이 탭의 로그인은 끝난 것이다. 새 토큰을 두지 않는다. */
+/**
+ * 쓰던 토큰과 사용자가 다르면 이 탭의 로그인은 끝난 것이다. 새 토큰을 두지 않는다.
+ * 확인하지 못한 로그인은 기록의 사용자와 같으면 로그인 상태가 되고, 다르면 다시 확인하게 끝낸다.
+ */
 function acceptRenewed(renewed: string, seen: SeenMarks) {
   if (accessToken !== undefined && !isSameUser(accessToken, renewed)) {
     endSession('ended')
     return
   }
+  const confirming = accessToken === undefined ? unconfirmed : undefined
   accessToken = renewed
   seenMarks = seen
+  unconfirmed = undefined
+  keepConfirmedLogin(renewed, seen, false)
+  if (!confirming) return
+  // 다른 사용자면 앞 사용자의 화면을 끝내고 다시 확인하게 한다. 새 토큰은 두므로 다시 확인하면 그 사용자로 열린다.
+  // 앞 사용자의 사본은 새 기록을 쓸 때 지워지고, 앞 사용자가 시작한 요청은 이 토큰으로 보내지 않는다(confirmBeforeRequest)
+  if (userOf(renewed) !== confirming.userId) endedListeners.forEach((notify) => notify('replaced'))
+  else confirmedListeners.forEach((notify) => notify())
+}
+
+/** 받아들인 로그인을 기기의 마지막 로그인 기록으로 남긴다. 기다리지 않고, 실패해도 로그인은 그대로다. */
+function keepConfirmedLogin(token: string, seen: SeenMarks, fresh: boolean) {
+  const userId = userOf(token)
+  if (userId === undefined) return
+  void confirmLogin({
+    userId,
+    at: now(),
+    loginValue: seen.login ?? null,
+    logoutValue: seen.logout ?? null,
+    fresh,
+  }).catch(ignore)
 }
 
 /** 이 탭의 로그인을 더 쓰면 안 되면 끝내고 true를 준다. */
@@ -257,11 +441,17 @@ function endIfOver(): boolean {
 }
 
 function overAs(): SessionEnd | undefined {
-  if (accessToken === undefined) return undefined
+  if (accessToken === undefined) return unconfirmed === undefined ? undefined : unconfirmedOverAs(unconfirmed.seen)
   const loggedOut = loggedOutSince(seenMarks)
   if (!suspended) return loggedOut ? 'logged-out' : undefined
   if (loggedOut) return 'replaced-after-logout'
   return isSameLogin(seenMarks) ? undefined : 'replaced'
+}
+
+/** 확인하지 못한 로그인은 연 뒤로 로그아웃이 있었거나 다른 로그인이 있었으면(있었을 수 있으면) 쓰지 않는다. */
+function unconfirmedOverAs(seen: SeenMarks): SessionEnd | undefined {
+  if (loggedOutSince(seen)) return 'logged-out'
+  return isSameLogin(seen) ? undefined : 'replaced'
 }
 
 /** `seen` 뒤로 로그아웃이 있었거나, 서버에 닿지 않았을 수 있는 로그아웃이 있다. */
@@ -275,11 +465,20 @@ function isSameLogin(seen: SeenMarks): boolean {
 }
 
 function endSession(end: SessionEnd) {
-  const wasSignedIn = accessToken !== undefined
+  const wasSignedIn = accessToken !== undefined || unconfirmed !== undefined
   accessToken = undefined
+  unconfirmed = undefined
   if (wasSignedIn) endedListeners.forEach((notify) => notify(end))
+}
+
+function unauthenticated(): ApiError {
+  return ApiError.response(401, { code: UNAUTHENTICATED, fieldErrors: [] })
 }
 
 function isUnauthenticated(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401 && error.code === UNAUTHENTICATED
+}
+
+function ignore() {
+  // 기기 저장소를 쓰지 못해도 로그인과 로그아웃은 그대로 된다
 }

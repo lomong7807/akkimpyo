@@ -36,7 +36,7 @@ export default function CategoriesStep({ heading, onNext }: CategoriesStepProps)
       }
     >
       <CategoryGroups />
-      <p className={styles.note}>카테고리는 나중에 카테고리 관리에서 고칠 수 있어요.</p>
+      <p className={styles.note}>카테고리는 나중에 카테고리 관리에서 고칠 수 있어요</p>
     </WelcomeStep>
   )
 }

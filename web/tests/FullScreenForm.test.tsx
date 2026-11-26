@@ -10,6 +10,7 @@ import { TextField } from '../src/components/TextField'
 import { useLeaveGuard } from '../src/components/useLeaveGuard'
 import { readCssRule } from './support/cssRule'
 import { shield, untilOpened, untilUnshielded } from './support/dialog'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { recordDom } from './support/recordDom'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
@@ -65,12 +66,14 @@ const routes: RouteObject[] = [
 let router: ReturnType<typeof createBrowserRouter>
 
 beforeEach(() => {
+  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   installMatchMedia(390)
 })
 
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   router?.dispose()
   resetViewport()
   onSubmit.mockClear()
@@ -149,6 +152,40 @@ describe('전체 화면 입력의 틀', () => {
     await openFromList()
     expect(document.activeElement).toBe(document.body)
   })
+
+  it('저장 자리를 주지 않으면(받는 동안) 그 자리를 숨기고, 주면 같은 화면에 나타난다', () => {
+    function Waiting({ ready }: { ready: boolean }) {
+      const guard = useLeaveGuard({ parent: '/list', changed: false, busy: false })
+      return (
+        <FullScreenForm title="거래 수정" guard={guard} onSubmit={onSubmit} bottom={ready ? <button>저장</button> : undefined}>
+          <p>칸</p>
+        </FullScreenForm>
+      )
+    }
+    function Screen() {
+      const [ready, setReady] = useState(false)
+      return (
+        <>
+          <Waiting ready={ready} />
+          <button type="button" onClick={() => setReady(true)}>
+            받음
+          </button>
+        </>
+      )
+    }
+    window.history.replaceState(null, '', '/edit')
+    router = createBrowserRouter([{ path: '/edit', element: <Screen /> }])
+    render(<RouterProvider router={router} />)
+    const frame = screen.getByRole('main').parentElement!
+    const bottom = screen.getByText('칸').closest('form')!.lastElementChild as HTMLElement
+    expect(bottom.hidden).toBe(true)
+    expect(getComputedStyle(bottom).display).toBe('none')
+    fireEvent.click(screen.getByRole('button', { name: '받음' }))
+    expect(screen.getByRole('main').parentElement).toBe(frame)
+    expect(bottom.hidden).toBe(false)
+    expect(getComputedStyle(bottom).display).toBe('flex')
+    expect(bottom.contains(screen.getByRole('button', { name: '저장' }))).toBe(true)
+  })
 })
 
 describe('바꾼 값이 없으면', () => {
@@ -187,7 +224,7 @@ describe('바꾼 값이 있으면', () => {
     await user.type(name(), '급여통장')
     await close(user)
     expect(await screen.findByRole('dialog', { name: question })).toBeTruthy()
-    expect(screen.getByText('저장하지 않은 내용은 사라져요.')).toBeTruthy()
+    expect(screen.getByText('저장하지 않은 내용은 사라져요')).toBeTruthy()
     expect(document.activeElement).toBe(screen.getByRole('button', { name: '계속 쓰기' }))
     expect(path()).toBe('/new')
     // 뒤로는 브라우저가 옮긴 주소를 되돌린다
@@ -501,6 +538,93 @@ describe('화면 키보드', () => {
     vi.stubGlobal('visualViewport', null)
     openAt('/new')
     expect(area()).toEqual(['', ''])
+  })
+})
+
+/* 되돌리기가 있는 토스트는 이 화면을 열어도 남아 저장 자리 위 16px에 놓인다(00-common 5.7, designer 결정 #102) */
+describe('남은 토스트의 자리', () => {
+  const resized: (() => void)[] = []
+  const observed: Element[] = []
+  let bottomHeight = 72
+
+  beforeEach(() => {
+    resized.length = 0
+    observed.length = 0
+    bottomHeight = 72
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          resized.push(callback)
+        }
+        observe(element: Element) {
+          observed.push(element)
+        }
+        disconnect() {
+          resized.length = 0
+        }
+      },
+    )
+    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(844)
+    // 저장 자리는 양식의 마지막 칸이다
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.parentElement?.tagName === 'FORM' && this.parentElement.lastElementChild === this ? bottomHeight : 0
+    })
+  })
+
+  function installVisualViewport(height: number) {
+    const viewport = Object.assign(new EventTarget(), { height, offsetTop: 0, scale: 1 })
+    vi.stubGlobal('visualViewport', viewport)
+    return (next: Partial<{ height: number; offsetTop: number; scale: number }>, type = 'resize') => {
+      Object.assign(viewport, next)
+      act(() => void viewport.dispatchEvent(new Event(type)))
+    }
+  }
+
+  const offset = () => document.documentElement.style.getPropertyValue('--toast-above-form')
+  const bottomArea = () => screen.getByRole('button', { name: '저장' }).parentElement!
+
+  it('저장 자리의 높이를 알린다. 화면이 올라오는 움직임과 상관없다', () => {
+    vi.stubGlobal('visualViewport', null)
+    openAt('/new')
+    expect(offset()).toBe('72px')
+  })
+
+  it('화면 키보드가 올라오면 보이는 영역 아래의 틈을 더한다', () => {
+    const change = installVisualViewport(844)
+    openAt('/new')
+    expect(offset()).toBe('72px')
+    change({ height: 508 })
+    expect(offset()).toBe(`${72 + 844 - 508}px`)
+    change({ offsetTop: 120 }, 'scroll')
+    expect(offset()).toBe(`${72 + 844 - 508 - 120}px`)
+    change({ height: 844, offsetTop: 0 })
+    expect(offset()).toBe('72px')
+  })
+
+  it('두 손가락으로 확대해 보는 동안에는 틈을 더하지 않는다', () => {
+    const change = installVisualViewport(844)
+    openAt('/new')
+    change({ height: 422, scale: 2 })
+    expect(offset()).toBe('72px')
+  })
+
+  it('저장 자리의 크기가 바뀌면(오류 문구, 글자 크기) 다시 잰다', () => {
+    vi.stubGlobal('visualViewport', null)
+    openAt('/new')
+    expect(observed).toEqual([bottomArea()])
+    bottomHeight = 120
+    act(() => resized.forEach((callback) => callback()))
+    expect(offset()).toBe('120px')
+  })
+
+  it('화면을 떠나면 지우고 더 재지 않는다', async () => {
+    const user = await openFromList()
+    expect(offset()).not.toBe('')
+    await user.keyboard('{Escape}')
+    await screen.findByText('목록')
+    expect(offset()).toBe('')
+    expect(resized).toEqual([])
   })
 })
 

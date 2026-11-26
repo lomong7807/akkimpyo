@@ -26,7 +26,7 @@ afterEach(() => {
 
 const RETURN_ADDRESS = 'akkimpyo-return-address'
 const secret = '로그인한 사람만 보는 내용'
-const loading = '불러오고 있어요.'
+const loading = '불러오고 있어요'
 const failed = '불러오지 못했어요.'
 const ended = '로그인이 풀렸어요. 다시 로그인해 주세요.'
 

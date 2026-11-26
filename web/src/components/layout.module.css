@@ -29,3 +29,10 @@
     --content-width: var(--width-full-screen-form);
   }
 }
+
+/* 두 칸 화면(홈)의 넓은 화면 폭. 가운데 720px로 모으지 않고 내용 영역 전체를 쓴다(00-common 2.5). .contentWidth에 더해 건다 */
+@media (width >= 1024px) {
+  .fullWidth {
+    --content-width: 100%;
+  }
+}

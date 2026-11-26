@@ -4,8 +4,10 @@ import { useState, type ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DateField from '../src/components/DateField'
 import { TextField } from '../src/components/TextField'
+import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
 import { shield, untilOpened, untilUnshielded } from './support/dialog'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { installMatchMedia } from './support/viewport'
 
 const PHONE = 390
@@ -14,15 +16,16 @@ const WIDE = 1280
 let viewport: ReturnType<typeof installMatchMedia>
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12) })
+  setDeviceClock('2026-11-26T12:00:00+09:00')
+  startGuardClock()
   viewport = installMatchMedia(PHONE)
 })
 
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
-  vi.useRealTimers()
 })
 
 type Props = Partial<ComponentProps<typeof DateField>>
@@ -248,9 +251,9 @@ describe('고르기', () => {
 
     it('여는 순간의 오늘을 다시 읽는다', async () => {
       const user = userEvent.setup()
-      vi.setSystemTime(new Date(2026, 10, 26, 23, 59))
+      setDeviceClock('2026-11-26T23:59:00+09:00')
       render(<Sample value="" />)
-      vi.setSystemTime(new Date(2026, 10, 27, 0, 0))
+      setDeviceClock('2026-11-27T00:00:00+09:00')
       await user.click(field())
       expect(day('2026년 11월 27일').getAttribute('aria-current')).toBe('date')
       expect(document.activeElement).toBe(day('2026년 11월 27일'))
@@ -415,7 +418,7 @@ describe('모양', () => {
   })
 
   it('값은 왼쪽, 아이콘은 오른쪽 끝이다', () => {
-    expect(readCssRule('src/components/DateField.module.css', '.button')).toContain('justify-content: space-between')
-    expect(readCssRule('src/components/DateField.module.css', '.button')).toContain('text-align: start')
+    expect(readCssRule('src/components/FieldButton.module.css', '.button')).toContain('justify-content: space-between')
+    expect(readCssRule('src/components/FieldButton.module.css', '.button')).toContain('text-align: start')
   })
 })

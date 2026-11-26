@@ -57,6 +57,18 @@ function errorOf(input: HTMLInputElement): string | undefined {
 
 const errors = () => fields().map(errorOf)
 
+/** 화면 읽기에 드러난 버튼의 접근성 이름. role로 찾을 때 testing-library가 계산한 이름을 그대로 모은다. */
+function buttonNames(): string[] {
+  const names = new Map<Element, string>()
+  const buttons = screen.getAllByRole('button', {
+    name: (name, element) => {
+      names.set(element, name)
+      return true
+    },
+  })
+  return buttons.map((button) => names.get(button)!)
+}
+
 const signUp = vi.fn(signup)
 
 /** 가입한 뒤 어디로 갈지는 앱이 정한다(SignupRoute). 여기서는 /welcome으로 보낸다. */
@@ -152,10 +164,27 @@ describe('가입(A-03)의 요소', () => {
       expect(input.type).toBe('password')
       expect(input.autocomplete).toBe('new-password')
     }
-    const [showPassword] = screen.getAllByRole('button', { name: '비밀번호 보기' })
-    await user.click(showPassword)
+    await user.click(screen.getByRole('button', { name: '비밀번호 보기' }))
     expect(password().type).toBe('text')
     expect(confirm().type).toBe('password')
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 확인 보기' }))
+    expect(confirm().type).toBe('text')
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 숨기기' }))
+    expect(password().type).toBe('password')
+    expect(confirm().type).toBe('text')
+  })
+
+  it('두 칸의 보기 버튼은 칸 이름이 붙어 이름이 서로 다르고, 화면에 같은 이름의 버튼이 둘 없다', async () => {
+    const { user } = openSignup()
+    expect(buttonNames()).toEqual(expect.arrayContaining(['비밀번호 보기', '비밀번호 확인 보기']))
+    expect(buttonNames()).toEqual([...new Set(buttonNames())])
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 보기' }))
+    await user.click(screen.getByRole('button', { name: '비밀번호 확인 보기' }))
+    expect(buttonNames()).toEqual(expect.arrayContaining(['비밀번호 숨기기', '비밀번호 확인 숨기기']))
+    expect(buttonNames()).toEqual([...new Set(buttonNames())])
   })
 
   it('표시 이름은 자동 고침과 맞춤법 검사만 끄고 자동 완성을 정하지 않는다', () => {
@@ -173,7 +202,7 @@ describe('가입(A-03)의 요소', () => {
       const id = input.getAttribute('aria-describedby')
       return id && document.getElementById(id)!.textContent
     })
-    expect(helps).toEqual([null, passwordRule, null, '장부를 함께 쓰는 사람에게 보여요.'])
+    expect(helps).toEqual([null, passwordRule, null, '장부를 함께 쓰는 사람에게 보여요'])
   })
 
   it('1단계에 없는 요소를 두지 않는다', () => {
@@ -330,6 +359,9 @@ describe('표시 이름 검사', () => {
     ['보이지 않는 글자뿐', '\u{3164}', nameUnusable],
     ['가운데의 보이지 않는 글자', '이\u{200B}서연', nameUnusable],
     ['가운데의 탭', '이\t서연', nameUnusable],
+    // 서버는 앞뒤의 공백류(Zs)만 지우고 탭과 U+0085는 거부한다(#220)
+    ['앞뒤의 탭', '\t이서연\t', nameUnusable],
+    ['끝의 U+0085', '이서연\u{85}', nameUnusable],
     ['홀로 선 U+FE0F', '이서연\u{FE0F}', nameUnusable],
     ['21자', '가'.repeat(21), nameTooLong],
     ['21자가 넘는 분해형', '가'.normalize('NFD').repeat(21), nameTooLong],
@@ -406,7 +438,7 @@ describe('표시 이름의 글자 수', () => {
       .getAttribute('aria-describedby')!
       .split(' ')
       .map((id) => document.getElementById(id)!.textContent)
-    expect(described).toEqual(['장부를 함께 쓰는 사람에게 보여요.', '17/20'])
+    expect(described).toEqual(['장부를 함께 쓰는 사람에게 보여요', '17/20'])
   })
 
   it('이메일과 비밀번호에는 없다', async () => {
@@ -437,7 +469,8 @@ describe('검사하는 때', () => {
     ['가입', signupButton],
     ['로그인', loginLink],
     ['뒤로', () => screen.getByRole('button', { name: '뒤로' })],
-    ['비밀번호 보기', () => screen.getAllByRole('button', { name: '비밀번호 보기' })[0]],
+    ['비밀번호 보기', () => screen.getByRole('button', { name: '비밀번호 보기' })],
+    ['비밀번호 확인 보기', () => screen.getByRole('button', { name: '비밀번호 확인 보기' })],
   ])('"%s"를 누르는 사이에 오류 문구가 나와 버튼이 밀리지 않는다', async (_, target) => {
     const { user } = openSignup()
     await user.pointer({ keys: '[MouseLeft>]', target: target() })
@@ -792,15 +825,66 @@ describe('서버 오류와 지연', () => {
     await vi.waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })
 
-  it('"다시 시도"가 사라진 동안 초점이 가입 버튼에 남는다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), delayed().respond]
-    respondToSignup(() => answers.shift()!())
+  /* 다시 보내는 동안 문구를 남기고 누른 버튼만 도는 표시다(designer 규칙 #102, 계좌 추가·거래 입력과 같다) */
+  it('"다시 시도"로 다시 보내는 동안 문구를 둔 채 "다시 시도"만 돌고 가입은 누를 수 없으며 초점이 남는다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
+    const bodies = respondToSignup(() => answers.shift()!())
     const { user } = openSignup()
     await fillAndSubmit(user)
     await screen.findByRole('alert')
     await user.keyboard('{Enter}')
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull())
-    expect(document.activeElement).toBe(signupButton())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect(signupButton().hasAttribute('aria-busy')).toBe(false)
+    expect(signupButton().getAttribute('aria-disabled')).toBe('true')
+    expect(document.activeElement).toBe(retryButton())
+    await user.click(signupButton())
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('가입을 다시 누르면 문구를 둔 채 가입만 도는 표시이고 "다시 시도"는 누를 수 없다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
+    const bodies = respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    await screen.findByRole('alert')
+    await user.click(signupButton())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(signupButton().getAttribute('aria-busy')).toBe('true')
+    expect(retryButton().hasAttribute('aria-busy')).toBe(false)
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    await user.click(retryButton())
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('칸을 고치다 "다시 시도"를 눌러 또 실패하면 문구를 새로 그려 다시 읽히게 하고 초점이 "다시 시도"로 간다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    const first = await screen.findByRole('alert')
+    await user.type(displayName(), ' 둘')
+    // 마우스로 누르면 쓰던 칸에 초점이 남는다
+    await user.click(retryButton())
+    await vi.waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(document.activeElement).toBe(retryButton())
+  })
+
+  it('칸에서 엔터로 다시 보낸 것이 또 실패해도 초점이 "다시 시도"로 간다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    const bodies = respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    const first = await screen.findByRole('alert')
+    await user.type(displayName(), '{Enter}')
+    await vi.waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(bodies).toHaveLength(2)
+    expect(document.activeElement).toBe(retryButton())
   })
 
   it('거부된 뒤 다시 보낸 것이 서버 오류면 거부 문구를 지우고 실패를 알린다', async () => {

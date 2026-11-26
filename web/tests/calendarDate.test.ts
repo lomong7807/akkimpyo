@@ -7,23 +7,24 @@ import {
   formatDate,
   formatMonth,
   fullDate,
+  isDate,
+  isMonth,
   monthOf,
+  moveMonth,
+  selectableMonths,
   selectableRange,
   startOfWeek,
   today,
   weeksOf,
 } from '../src/lib/calendarDate'
+import { setDeviceClock } from './support/clock'
 
 afterEach(() => {
-  vi.useRealTimers()
   vi.unstubAllEnvs()
 })
 
-function deviceTime(instant: string) {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(instant) })
-}
-
 // 날짜 값에는 시간대가 없다. 기기가 어느 시간대에 있어도 같은 값이 나와야 한다.
+// 이 계산은 기기의 시간대를 읽지 않아야 하므로 Date의 지역 시각이 쓰는 시간대(TZ)를 바꿔 본다. 결과는 바깥의 TZ와 상관없다.
 describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles', 'Pacific/Kiritimati'])('기기의 시간대가 %s일 때', (timeZone) => {
   beforeEach(() => vi.stubEnv('TZ', timeZone))
 
@@ -139,6 +140,49 @@ describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles', 'Pacific/Kiritimati']
   })
 
   it.each([
+    ['2026-11', 1, '2026-12'],
+    ['2026-12', 1, '2027-01'],
+    ['2027-01', -1, '2026-12'],
+    ['2000-01', -1, '1999-12'],
+    ['2026-11', 12, '2027-11'],
+    ['2028-02', 1, '2028-03'],
+  ])('%s에서 %d달 옮기면 %s이다', (month, months, expected) => {
+    expect(moveMonth(month, months)).toBe(expected)
+  })
+
+  it.each([
+    ['2026-11-26', '2027-11'],
+    ['2026-11-01', '2027-11'],
+    ['2026-12-31', '2027-12'],
+    ['2027-01-01', '2028-01'],
+    ['2028-02-29', '2029-02'],
+  ])('오늘이 %s이면 2000-01부터 %s까지 고를 수 있다', (day, last) => {
+    expect(selectableMonths(day)).toEqual({ first: '2000-01', last })
+  })
+
+  it.each(['2026-11', '2000-01', '2026-01', '2026-12', '9999-12'])('%s은 달이다', (text) => {
+    expect(isMonth(text)).toBe(true)
+  })
+
+  it.each(['2026-13', '2026-00', '2026-1', '26-11', '2026-11-01', '2026/11', ' 2026-11', '2026-11 ', '', '２０２６-11'])(
+    '"%s"은 달이 아니다',
+    (text) => {
+      expect(isMonth(text)).toBe(false)
+    },
+  )
+
+  it.each(['2026-11-26', '2028-02-29', '2026-12-31', '2000-01-01'])('%s은 있는 날짜다', (text) => {
+    expect(isDate(text)).toBe(true)
+  })
+
+  it.each(['2026-02-29', '2026-11-31', '2026-13-01', '2026-11-00', '2026-11-1', '2026-11', '2026-11-26T00:00', ''])(
+    '"%s"은 날짜가 아니다',
+    (text) => {
+      expect(isDate(text)).toBe(false)
+    },
+  )
+
+  it.each([
     ['2026-11-26', '11월 26일 (목)'],
     ['2026-11-01', '11월 1일 (일)'],
     ['2026-01-01', '1월 1일 (목)'],
@@ -177,11 +221,14 @@ describe('기기의 오늘', () => {
     ['UTC', '2026-11-26T00:00:00.000Z', '2026-11-26'],
     ['America/Los_Angeles', '2026-11-26T07:59:59.999Z', '2026-11-25'],
     ['America/Los_Angeles', '2026-11-26T08:00:00.000Z', '2026-11-26'],
+    ['Pacific/Kiritimati', '2026-11-25T09:59:59.999Z', '2026-11-25'],
+    ['Pacific/Kiritimati', '2026-11-25T10:00:00.000Z', '2026-11-26'],
+    ['Pacific/Pago_Pago', '2026-11-26T10:59:59.999Z', '2026-11-25'],
+    ['Pacific/Pago_Pago', '2026-11-26T11:00:00.000Z', '2026-11-26'],
     ['Asia/Seoul', '2026-12-31T15:00:00.000Z', '2027-01-01'],
     ['Asia/Seoul', '2028-02-28T15:00:00.000Z', '2028-02-29'],
   ])('%s에서 %s이면 %s이다', (timeZone, instant, expected) => {
-    vi.stubEnv('TZ', timeZone)
-    deviceTime(instant)
+    setDeviceClock(instant, timeZone)
     expect(today()).toBe(expected)
   })
 })

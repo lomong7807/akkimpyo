@@ -2,7 +2,7 @@ import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse } from 'msw'
 import type { RouteObject } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { delayed, ledgerNameOf, meOf, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, ledgerNameOf, meOf, startBackend, type Backend } from './support/backend'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -44,7 +44,7 @@ async function meScreen(): Promise<RouteObject> {
 }
 
 const open = () => openApp('/me-screen', async (routes) => addScreens([await meScreen()])(routes))
-const content = () => screen.findByText('user-1의 이름 / user-1-ledger / OWNER')
+const content = () => screen.findByText(`user-1의 이름 / ${ledgerIdOf('user-1')} / OWNER`)
 const retryButton = () => screen.getByRole('button', { name: '다시 시도' })
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
@@ -80,7 +80,7 @@ describe('내 정보', () => {
   it('장부 이름은 글자로만 그린다', async () => {
     const name = '<img src=x onerror=alert(1)>'
     backend.meResponse = () =>
-      HttpResponse.json({ ...meOf('user-1'), ledgers: [{ id: 'user-1-ledger', name, role: 'OWNER' }] })
+      HttpResponse.json({ ...meOf('user-1'), ledgers: [{ id: ledgerIdOf('user-1'), name, role: 'OWNER' }] })
     await open()
     await content()
     expect(within(screen.getByRole('banner')).getByText(name)).toBeTruthy()
