@@ -23,11 +23,13 @@ describe('ESLint', () => {
   })
 })
 
-describe('의존 방향: app → features → components, api', () => {
+describe('의존 방향: app → features → components, api와 lib', () => {
   const feature = 'src/features/sample/sample.ts'
   const component = 'src/components/sample.ts'
   const nestedComponent = 'src/components/sample/sample.ts'
   const api = 'src/api/sample.ts'
+  const lib = 'src/lib/sample.ts'
+  const nestedLib = 'src/lib/sample/sample.ts'
 
   const value = (from: string) => `import { a } from '${from}'\nexport const b = a`
   const type = (from: string) => `import type { A } from '${from}'\nexport type B = A`
@@ -70,6 +72,24 @@ describe('의존 방향: app → features → components, api', () => {
     ['components에서 msw', component, value('msw')],
     ['app에서 msw', 'src/app/sample.ts', value('msw/node')],
     ['main에서 msw', 'src/main.ts', value('msw/browser')],
+    ['lib에서 app', lib, value('../app/routes')],
+    ['lib에서 app의 타입', lib, type('../app/navigation')],
+    ['lib에서 features', lib, value('../features/accounts/accountForm')],
+    ['lib에서 features 다시 내보내기', lib, reExport('../features/accounts/accountForm')],
+    ['lib에서 components', lib, value('../components/Button')],
+    ['lib에서 components의 타입', lib, type('../components/useFormFields')],
+    ['lib에서 api', lib, value('../api/request')],
+    ['lib에서 api의 타입', lib, type('../api/apiError')],
+    ['lib 안쪽 폴더에서 components', nestedLib, value('../../components/Button')],
+    ['lib 안쪽 폴더에서 api', nestedLib, reExport('../../api/request')],
+    ['lib에서 React', lib, value('react')],
+    ['lib에서 React의 타입', lib, type('react')],
+    ['lib에서 React의 JSX 런타임', lib, value('react/jsx-runtime')],
+    ['lib에서 React DOM', lib, value('react-dom/client')],
+    ['lib에서 라우터', lib, value('react-router')],
+    ['lib에서 TanStack Query', lib, value('@tanstack/react-query')],
+    ['lib에서 다른 TanStack 패키지', lib, value('@tanstack/query-core')],
+    ['lib에서 msw', lib, value('msw')],
   ])('막는다: %s', async (_, path, code) => {
     expect(await ruleIdsFor(code, path)).toEqual(['no-restricted-imports'])
   })
@@ -95,6 +115,14 @@ describe('의존 방향: app → features → components, api', () => {
     ['테스트에서 api', 'tests/sample.test.ts', value('../src/api/session')],
     ['테스트에서 msw', 'tests/sample.test.ts', value('msw/node')],
     ['테스트에서 app', 'tests/sample.test.ts', value('../src/app/routes')],
+    ['lib에서 lib', lib, value('./trimEnds')],
+    ['lib 안쪽 폴더에서 lib', nestedLib, value('../trimEnds')],
+    ['app에서 lib', 'src/app/sample.ts', value('../lib/calendarDate')],
+    ['features에서 lib', feature, value('../../lib/calendarDate')],
+    ['features 안쪽 폴더에서 lib', 'src/features/sample/deep/sample.ts', value('../../../lib/visibleText')],
+    ['components에서 lib', component, value('../lib/amountText')],
+    ['components 안쪽 폴더에서 lib', nestedComponent, type('../../lib/calendarDate')],
+    ['테스트에서 lib', 'tests/sample.test.ts', value('../src/lib/calendarDate')],
   ])('막지 않는다: %s', async (_, path, code) => {
     expect(await ruleIdsFor(code, path)).toEqual([])
   })
