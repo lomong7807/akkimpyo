@@ -22,3 +22,29 @@
   bottom: calc(100% - var(--field-top) + var(--space-4));
   max-height: calc(var(--field-top) - 2 * var(--space-4));
 }
+
+/*
+ * 고르기 목록의 판. 폭은 칸 폭과 320px 중 큰 값이고 최대 높이는 360px이다(화면설계서 00-common 5.4).
+ * 360px의 토큰이 따로 없어 판 폭 320px과 간격 40px으로 만든다.
+ */
+.list {
+  --list-width: max(var(--field-width), var(--width-field-panel));
+  --list-max-height: calc(var(--width-field-panel) + var(--space-40));
+
+  left: min(var(--field-left), 100% - var(--list-width));
+  width: var(--list-width);
+}
+
+/* 남은 자리와 상관없이 보여야 할 높이를 잰다. 그리기 전에 다시 놓으므로 보이지 않는다 */
+.list[data-side='measure'] {
+  top: 0;
+  max-height: var(--list-max-height);
+}
+
+.list[data-side='below'] {
+  max-height: min(var(--list-max-height), 100% - var(--field-bottom) - 2 * var(--space-4));
+}
+
+.list[data-side='above'] {
+  max-height: min(var(--list-max-height), var(--field-top) - 2 * var(--space-4));
+}
