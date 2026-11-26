@@ -30,8 +30,8 @@ const libPackages = {
 }
 
 const apiInternals = {
-  regex: '^\\.\\.?/(.*/)?api(/(?!(request|session|apiError)(\\.ts)?$)|$)',
-  message: '화면은 api의 request, session, apiError만 쓴다. 나머지는 api 안의 구현이다.',
+  regex: '^\\.\\.?/(.*/)?api(/(?!(request|session|apiError|connection)(\\.ts)?$)|$)',
+  message: '화면은 api의 request, session, apiError, connection만 쓴다. 나머지는 api 안의 구현이다.',
 }
 
 const deviceInternals = {

@@ -83,6 +83,20 @@ export async function ledgerCopy(userId: string, ledgerId: string, kind: 'accoun
   return copies.readCopy(userId, ledgerId, kind)
 }
 
+/** 그 사용자의 대기열(오래된 것부터) */
+export async function queueOf(userId = 'user-1') {
+  vi.resetModules()
+  const { pendingOf } = await import('../../src/device/pendingQueue')
+  return pendingOf(userId)
+}
+
+/** 대기열에 둔다. */
+export async function seedPending(item: { userId: string; ledgerId: string; body: { id: string; type: 'EXPENSE' | 'INCOME' | 'TRANSFER' } & Record<string, unknown>; queuedAt: number }) {
+  vi.resetModules()
+  const { queueTransaction } = await import('../../src/device/pendingQueue')
+  await queueTransaction(item)
+}
+
 /** 내 정보 사본 */
 export async function meCopy(userId = 'user-1') {
   const { copies } = await device()

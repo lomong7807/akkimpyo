@@ -127,6 +127,7 @@ describe('의존 방향: app → features → components, api → device, 그리
     ['features에서 api의 session', feature, value('../../api/session')],
     ['features에서 api의 apiError', feature, value('../../api/apiError')],
     ['features에서 api의 apiError의 타입', feature, type('../../api/apiError')],
+    ['features에서 api의 connection', feature, value('../../api/connection')],
     ['features에서 확장자를 적은 api의 request', feature, value('../../api/request.ts')],
     ['features 안쪽 폴더에서 api의 session', 'src/features/sample/deep/sample.ts', value('../../../api/session')],
     ['app에서 api', 'src/app/sample.ts', value('../api/session')],
