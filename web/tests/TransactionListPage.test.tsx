@@ -143,7 +143,8 @@ describe('주소와 고른 달', () => {
     const opened = await openApp('/transactions')
     await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-11'))
     expect(opened.router.state.historyAction).toBe('REPLACE')
-    expect(monthHeading().textContent).toBe('11월')
+    // 라우터의 주소가 바뀐 뒤 화면이 그려질 때까지 기다린다
+    expect(await screen.findByRole('heading', { level: 1, name: '11월' })).toBeTruthy()
   })
 
   it.each(['2026-13', '2026-1', 'abc', '1999-12', '2027-12'])(
@@ -245,7 +246,7 @@ describe('달 이동(00-common 5.9)', () => {
     await opened.user.click(monthButton('다음 달')!)
     await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-12'))
     expect(opened.router.state.historyAction).toBe('REPLACE')
-    expect(monthHeading().textContent).toBe('12월')
+    await waitFor(() => expect(monthHeading().textContent).toBe('12월'))
     await waitFor(() => expect(pageRequests().at(-1)?.month).toBe('2026-12'))
   })
 
