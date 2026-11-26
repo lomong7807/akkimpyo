@@ -150,7 +150,8 @@ export async function pick(user: User, field: HTMLElement, name: string) {
 
 /** 금액을 넣고 저장한다. */
 export async function saveAmount(user: User, typed = '12000') {
-  await user.click(amount())
+  // 화면 코드를 받는 동안의 틀(#251)에는 칸이 없다
+  await user.click(await waitFor(amount))
   if (typed !== '') await user.keyboard(typed)
   await user.click(saveButton())
 }

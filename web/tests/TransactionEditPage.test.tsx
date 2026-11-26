@@ -142,6 +142,8 @@ describe('여는 길', () => {
     detail.getResponse = answer.respond
     await openApp(editPath(item))
     await screen.findByRole('heading', { level: 1, name: '거래 수정' })
+    // 화면 코드를 받는 동안의 틀(#251)이 아니라 거래를 받는 수정 화면을 본다
+    await answer.arrived
     expect(await screen.findByText('불러오고 있어요.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '저장' })).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()

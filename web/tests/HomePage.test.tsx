@@ -535,7 +535,8 @@ describe('계좌 잔액(F-112, P-220)', () => {
     expect(accounts.requests).toEqual([LEDGER, LEDGER])
     await opened.user.click(within(accountsRegion()).getByRole('link'))
     await screen.findByRole('heading', { level: 1, name: '계좌' })
-    expect(within(main()).getByText('1,488,000원')).toBeTruthy()
+    // 계좌 화면의 코드가 오면(#251) 다시 받지 않고 바뀐 잔액을 그린다
+    expect(await waitFor(() => within(main()).getByText('1,488,000원'))).toBeTruthy()
     expect(accounts.requests).toEqual([LEDGER, LEDGER])
   })
 
@@ -545,7 +546,8 @@ describe('계좌 잔액(F-112, P-220)', () => {
     accounts.response = answer.respond
     await opened.user.click(within(accountsRegion()).getByRole('link'))
     await screen.findByRole('heading', { level: 1, name: '계좌' })
-    expect(within(main()).getByText('자산 합계')).toBeTruthy()
+    // 계좌 화면의 코드가 오면(#251) 답을 기다리지 않고 받아 둔 목록을 그린다
+    expect(await waitFor(() => within(main()).getByText('자산 합계'))).toBeTruthy()
     answer.answer(HttpResponse.json({ items: accounts.items }))
   })
 })
