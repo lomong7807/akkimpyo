@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
+import { usePressShield } from '../../components/pressGuard'
 import CategoriesStep from './CategoriesStep'
 import FirstAccountStep from './FirstAccountStep'
 import { useFirstAccount } from './useFirstAccount'
@@ -15,6 +16,10 @@ export default function WelcomePage() {
   const step = searchParams.get('step') === '2' ? 2 : 1
   const account = useFirstAccount()
   const heading = useStepHeading(step)
+  // 버튼은 다음 화면의 같은 자리에 다른 것이 있다(안내를 떠나면 하단 탭, 첫 장의 "다음" 뒤에는 "계좌 만들기").
+  // 안내를 떠날 때와 첫 장을 넘길 때 이어서 두드린 것이 거기 닿지 않게 잠깐 덮는다
+  usePressShield(true)
+  usePressShield(step === 1)
   return (
     <main className={styles.page}>
       {step === 1 ? (

@@ -8,7 +8,7 @@ import { delayed, startBackend, type Backend } from './support/backend'
 import { categoryOf, defaultExpenses, defaultIncomes, startCategories, type Categories } from './support/categories'
 import { readCssRule } from './support/cssRule'
 import { readWebFile } from './support/webFile'
-import { untilOpened } from './support/dialog'
+import { shield, untilOpened, untilUnshielded } from './support/dialog'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -901,6 +901,43 @@ function wideRule(selector: string): string {
   const start = wide.indexOf(`${selector} {`)
   return wide.slice(start, wide.indexOf('}', start)).replace(/\s+/g, ' ')
 }
+
+describe('이어서 두드린 것을 막는 덮개(G-02의 저장과 같다)', () => {
+  it.each([
+    ['계좌 만들기', async (user: User) => {
+      await fill(user)
+      await user.click(createButton())
+    }],
+    ['건너뛰기', (user: User) => user.click(skipButton())],
+  ])('"%s"로 안내를 떠나면 둘째 두드림이 다음 화면(하단 탭)에 닿지 않게 잠깐 덮는다', async (_, leave) => {
+    const { user } = await openSecond()
+    await untilUnshielded()
+    await leave(user)
+    await home()
+    expect(fireEvent.mouseDown(shield()!)).toBe(false)
+    expect(fireEvent.touchStart(shield()!)).toBe(false)
+    await untilUnshielded()
+  })
+
+  it('"다음"으로 장을 넘기면 둘째 두드림이 같은 자리의 "계좌 만들기"에 닿지 않게 잠깐 덮는다', async () => {
+    const { user } = await openFirst()
+    expect(shield()).toBeNull()
+    await user.click(nextButton())
+    await secondHeading()
+    expect(fireEvent.mouseDown(shield()!)).toBe(false)
+    expect(fireEvent.touchStart(shield()!)).toBe(false)
+    await untilUnshielded()
+  })
+
+  it('안내에 머무는 실패에는 덮지 않는다', async () => {
+    accounts.addResponse = () => problem(500, 'INTERNAL_ERROR')
+    const { user } = await openSecond()
+    await untilUnshielded()
+    await user.click(skipButton())
+    await screen.findByRole('alert')
+    expect(shield()).toBeNull()
+  })
+})
 
 describe('배치', () => {
   const bottomOf = (button: HTMLElement) => button.closest('[class*="bottom"]')!
