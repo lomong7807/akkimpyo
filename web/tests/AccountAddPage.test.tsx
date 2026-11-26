@@ -172,13 +172,13 @@ describe('요소와 처음 값', () => {
     await open()
     expect(balance().value).toBe('0')
     expect(sign().getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByText('마이너스 통장이면 -로 바꿔 적어요.')).toBeTruthy()
+    expect(screen.getByText('마이너스 통장이면 -로 바꿔 적어요')).toBeTruthy()
   })
 
   it('기준일은 기기의 오늘이다', async () => {
     await open()
     expect(date().textContent).toBe('11월 26일 (목)')
-    expect(screen.getByText('이날부터의 거래가 잔액에 들어가요.')).toBeTruthy()
+    expect(screen.getByText('이날부터의 거래가 잔액에 들어가요')).toBeTruthy()
   })
 
   it('여는 때 초점을 두지 않고 오류와 알림이 없다', async () => {
@@ -235,8 +235,8 @@ describe('종류', () => {
     await user.click(type('카드'))
     expect(screen.queryByLabelText('시작 잔액')).toBeNull()
     expect(owed().value).toBe('350,000')
-    expect(screen.getByText('카드는 지금 갚을 금액을 적어요.')).toBeTruthy()
-    expect(screen.queryByText('마이너스 통장이면 -로 바꿔 적어요.')).toBeNull()
+    expect(screen.getByText('카드는 지금 갚을 금액을 적어요')).toBeTruthy()
+    expect(screen.queryByText('마이너스 통장이면 -로 바꿔 적어요')).toBeNull()
     expect(screen.queryByRole('button', { name: '마이너스' })).toBeNull()
   })
 
@@ -336,7 +336,7 @@ describe('저장', () => {
       '급여통장350,000원',
     ])
     expect(screen.getByText('자산 합계').parentElement!.textContent).toBe('자산 합계1,350,000원')
-    expect(screen.getByRole('status').textContent).toBe("'급여통장' 계좌를 추가했어요.")
+    expect(screen.getByRole('status').textContent).toBe("'급여통장' 계좌를 추가했어요")
     expect(path(opened)).toBe('/accounts')
     expect(accounts.added).toEqual([
       {
@@ -412,7 +412,7 @@ describe('저장', () => {
     accounts.addResponse = () => HttpResponse.json(accountOf('맞춘 이름', 'BANK', 1), { status: 201 })
     const { user } = await openFromList()
     await fillAndSave(user)
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe("'맞춘 이름' 계좌를 추가했어요."))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe("'맞춘 이름' 계좌를 추가했어요"))
   })
 
   it.each([
@@ -454,11 +454,11 @@ describe('저장', () => {
   it('토스트가 보이는 동안 다시 "추가"를 열면 토스트가 저장 버튼을 덮지 않게 걷는다', async () => {
     const { user } = await openFromList()
     await fillAndSave(user)
-    await waitFor(() => expect(screen.getByText("'급여통장' 계좌를 추가했어요.")).toBeTruthy())
+    await waitFor(() => expect(screen.getByText("'급여통장' 계좌를 추가했어요")).toBeTruthy())
     await untilUnshielded()
     await user.click(screen.getByRole('link', { name: '추가' }))
     await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
-    expect(screen.queryByText("'급여통장' 계좌를 추가했어요.")).toBeNull()
+    expect(screen.queryByText("'급여통장' 계좌를 추가했어요")).toBeNull()
   })
 
   it('두 번 누르거나 엔터를 눌러도 한 번만 보낸다', async () => {

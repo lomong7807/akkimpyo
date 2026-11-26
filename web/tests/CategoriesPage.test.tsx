@@ -11,7 +11,7 @@ import { installMatchMedia, resetViewport, setViewportWidth } from './support/vi
 import { readWebFile } from './support/webFile'
 
 const CSS = 'src/features/categories/Categories.module.css'
-const empty = '아직 만든 카테고리가 없어요.'
+const empty = '아직 만든 카테고리가 없어요'
 const loading = '불러오고 있어요.'
 const failed = '불러오지 못했어요.'
 
@@ -331,7 +331,7 @@ describe('고른 구분에 미분류만 있으면', () => {
   })
 })
 
-it('만든 카테고리가 있는 구분에는 "아직 만든 카테고리가 없어요."가 없다', async () => {
+it('만든 카테고리가 있는 구분에는 "아직 만든 카테고리가 없어요"가 없다', async () => {
   const { user } = await openList()
   expect(content().queryByText(empty)).toBeNull()
   await user.click(option('수입'))

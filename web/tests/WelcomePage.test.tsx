@@ -19,9 +19,9 @@ import { createFakeLocks, installLocks, removeLocks } from './support/webLocks'
 const CSS = 'src/features/welcome/Welcome.module.css'
 const firstTitle = '기본 카테고리를 넣어 두었어요'
 const secondTitle = '첫 계좌를 만들어 주세요'
-const note = '카테고리는 나중에 카테고리 관리에서 고칠 수 있어요.'
+const note = '카테고리는 나중에 카테고리 관리에서 고칠 수 있어요'
 const description = '자주 쓰는 통장이나 카드 하나면 돼요. 나머지는 나중에 더할 수 있어요.'
-const skipNote = '"현금" 계좌를 만들고 시작해요.'
+const skipNote = '"현금" 계좌를 만들고 시작해요'
 const loading = '불러오고 있어요.'
 const loadFailed = '불러오지 못했어요.'
 const failed = '문제가 생겨 계좌를 만들지 못했어요. 잠시 후 다시 시도해 주세요.'
@@ -451,7 +451,7 @@ describe('둘째 장(2/2)의 요소와 처음 값', () => {
     await openSecond()
     expect(balance().value).toBe('0')
     expect(sign().getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByText('마이너스 통장이면 -로 바꿔 적어요.')).toBeTruthy()
+    expect(screen.getByText('마이너스 통장이면 -로 바꿔 적어요')).toBeTruthy()
   })
 
   it('카드를 고르면 갚을 금액을 묻고 부호 버튼이 없으며, 금액의 뜻이 바뀌었다고 알린다', async () => {
@@ -460,7 +460,7 @@ describe('둘째 장(2/2)의 요소와 처음 값', () => {
     await user.keyboard('350000')
     await user.click(type('카드'))
     expect(owed().value).toBe('350,000')
-    expect(screen.getByText('카드는 지금 갚을 금액을 적어요.')).toBeTruthy()
+    expect(screen.getByText('카드는 지금 갚을 금액을 적어요')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '마이너스' })).toBeNull()
     expect(screen.getByText(typeNotice)).toBeTruthy()
   })
@@ -471,10 +471,10 @@ describe('둘째 장(2/2)의 요소와 처음 값', () => {
     expect(screen.queryByText(typeNotice)).toBeNull()
   })
 
-  it('기준일은 기기의 오늘이고 도움말은 C-02의 문구다', async () => {
+  it('기준일은 기기의 오늘이고 도움말은 계좌 추가(G-02)와 같다', async () => {
     const { user } = await openSecond()
     expect(date().textContent).toBe('11월 26일 (목)')
-    expect(screen.getByText('이날부터의 거래가 잔액에 반영돼요.')).toBeTruthy()
+    expect(screen.getByText('이날부터의 거래가 잔액에 들어가요')).toBeTruthy()
     await user.click(date())
     await untilOpened()
     await user.click(screen.getByRole('gridcell', { name: '2026년 11월 3일 화요일' }))
