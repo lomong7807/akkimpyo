@@ -76,6 +76,10 @@
   background-color: var(--color-surface);
 }
 
+.bottom[hidden] {
+  display: none;
+}
+
 /* 넓은 화면에는 사이드바가 그대로 있고 내용 영역에 놓인다. 위아래 안전 영역은 공통 틀이 띄운다 */
 @media (width >= 1024px) {
   .screen {
