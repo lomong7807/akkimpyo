@@ -12,9 +12,11 @@ import { forgetReturnAddress, rememberReturnAddress } from './returnAddress'
 import { useSession } from './SessionContext'
 import type { Session } from './sessionState'
 import ToastProvider from './ToastProvider'
+import { useWelcomeEntry, WELCOME } from './welcomeEntry'
 
 /**
  * 로그인이 필요한 주소의 문. 로그인을 확인하고 내 정보를 받기 전에는 안쪽 화면과 공통 틀을 그리지 않는다.
+ * 들어올 때 홈 대신 첫 실행 안내를 띄울지도 여기서 정한다(welcomeEntry).
  * 로그인할 때와 로그인이 끝날 때마다 안쪽을 처음부터 다시 만들어, 앞 사용자의 값이 그려지지 않게 한다.
  */
 export default function SignedInArea() {
@@ -47,6 +49,9 @@ function Gate() {
   const location = useLocation()
   const signedIn = session.status === 'signed-in'
   const me = useMe({ enabled: signedIn })
+  // 1단계에는 장부가 하나다
+  const ledger = me.data?.ledgers[0]
+  const entry = useWelcomeEntry(ledger)
 
   // 로그인한 화면이 열렸으면 돌아갈 주소는 쓸 일이 없다
   useEffect(() => {
@@ -67,19 +72,18 @@ function Gate() {
     )
   }
 
-  if (me.data) {
-    // 1단계에는 장부가 하나다
+  if (ledger && entry !== 'deciding') {
     return (
-      <CurrentLedgerContext value={me.data.ledgers[0]}>
+      <CurrentLedgerContext value={ledger}>
         <ToastProvider>
-          <Outlet />
+          {entry === 'stay' ? <Outlet /> : <Navigate to={entry === 'welcome' ? WELCOME : '/home'} replace />}
         </ToastProvider>
       </CurrentLedgerContext>
     )
   }
 
   // 다시 받는 동안에는 isError가 풀리므로 실패한 적이 있는지로 본다
-  if (me.errorUpdateCount > 0) {
+  if (!me.data && me.errorUpdateCount > 0) {
     return (
       <PlainLayout>
         <LoadFailure onRetry={() => void me.refetch()} busy={me.isFetching} />
@@ -87,6 +91,7 @@ function Gate() {
     )
   }
 
+  // 내 정보를 기다리는 동안과 안내를 띄울지 정하는 동안은 같은 글이 이어진다
   return (
     <PlainLayout>
       <Loading />

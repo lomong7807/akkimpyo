@@ -120,13 +120,14 @@ describe('가입하면', () => {
     await waitFor(() => expect(sessionStorage.length).toBe(0))
   })
 
-  it('"뒤로" 가도 가입 화면으로 돌아가지 않는다', async () => {
+  it('"뒤로" 가도 가입 화면으로 돌아가지 않는다. 계좌가 아직 없으므로 홈 대신 다시 안내다', async () => {
     const { router, user } = await open('/login')
     await toSignup(user)
     await signUp(user)
     await welcome()
     await router.navigate(-1)
-    await waitFor(() => expect(router.state.location.pathname).toBe('/home'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/welcome'))
+    expect(await welcome()).toBeTruthy()
   })
 
   it('앞 사용자의 로그인이 풀린 자리에서 가입하면 앞 사용자의 값이 보이지 않는다', async () => {

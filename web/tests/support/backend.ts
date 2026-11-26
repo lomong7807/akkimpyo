@@ -20,7 +20,11 @@ export function meOf(user: string) {
   }
 }
 
-/** 로그인, 가입, 갱신, 로그아웃, 내 정보가 되는 가짜 서버. 로그인하지 않은 기기에서 시작한다. */
+/**
+ * 로그인, 가입, 갱신, 로그아웃, 내 정보가 되는 가짜 서버. 로그인하지 않은 기기에서 시작한다.
+ * 사용자는 이미 계좌가 있어, 들어올 때 계좌 목록을 받아도 첫 실행 안내(C-02)로 가지 않는다.
+ * 계좌를 다루는 테스트는 startAccounts가 이 계좌 목록을 덮는다.
+ */
 export function startBackend(server: SetupServer) {
   const tokens = new Map<string, string>()
   let issued = 0
@@ -44,6 +48,8 @@ export function startBackend(server: SetupServer) {
       signup: [] as Request[],
       logout: [] as Request[],
       me: [] as string[],
+      /** 계좌 목록을 요청한 사용자. 토큰이 없거나 만료됐으면 '만료'다. */
+      accounts: [] as string[],
     },
     /** access token을 모두 만료시킨다. */
     expireTokens: () => tokens.clear(),
@@ -86,6 +92,12 @@ export function startBackend(server: SetupServer) {
       backend.requests.me.push(user ?? '만료')
       if (!user) return problem(401, 'UNAUTHENTICATED')
       return backend.meResponse ? backend.meResponse() : HttpResponse.json(meOf(user))
+    }),
+    http.get('/api/v1/ledgers/:ledgerId/accounts', ({ request }) => {
+      const user = backend.userOf(request)
+      backend.requests.accounts.push(user ?? '만료')
+      if (!user) return problem(401, 'UNAUTHENTICATED')
+      return HttpResponse.json({ items: [{ id: `${user}-account`, name: '통장', type: 'BANK', balance: 0 }] })
     }),
   )
   return backend

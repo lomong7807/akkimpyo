@@ -1,6 +1,6 @@
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { startAccounts, type Accounts } from './support/accounts'
+import { accountOf, startAccounts, type Accounts } from './support/accounts'
 import { ledgerNameOf, startBackend, type Backend } from './support/backend'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
@@ -15,6 +15,8 @@ beforeEach(() => {
   vi.stubGlobal('scrollTo', vi.fn())
   backend = startBackend(server)
   accounts = startAccounts(server, backend)
+  // 이미 계좌가 있는 사용자다. 들어올 때 첫 실행 안내로 가지 않는다(WelcomeEntry.test)
+  accounts.items = [accountOf('통장', 'BANK', 0)]
   backend.cookieUser = 'user-1'
   localStorage.clear()
   sessionStorage.clear()
