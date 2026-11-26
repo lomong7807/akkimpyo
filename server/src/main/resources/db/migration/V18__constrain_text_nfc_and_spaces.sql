@@ -18,7 +18,7 @@
 ALTER TABLE account
     DROP CONSTRAINT ck_account_name_trimmed,
     ADD CONSTRAINT ck_account_name_trimmed CHECK (name = btrim(name,
-        U&'\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\202F\205F')),
+        U&'\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\202F\205F\3000')),
     ADD CONSTRAINT ck_account_name_nfc CHECK (name IS NFC NORMALIZED),
     ADD CONSTRAINT ck_account_name_no_control CHECK ((name COLLATE "C") !~ '[\x01-\x1F\x7F-\x9F]');
 
@@ -27,7 +27,7 @@ ALTER TABLE category
     ADD CONSTRAINT ck_category_name_trimmed CHECK (name = btrim(name,
         U&'\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\202F\205F\3000')),
     ADD CONSTRAINT ck_category_name_nfc CHECK (name IS NFC NORMALIZED),
-    ADD CONSTRAINT ck_category_name_no_control CHECK ((name COLLATE "C") !~ '[\x01-\x1F\x7F]');
+    ADD CONSTRAINT ck_category_name_no_control CHECK ((name COLLATE "C") !~ '[\x01-\x1F\x7F-\x9F]');
 
 ALTER TABLE users
     DROP CONSTRAINT ck_users_display_name_trimmed,

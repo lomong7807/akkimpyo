@@ -441,7 +441,7 @@ public class TransactionService {
          */
         static Content of(Transaction tx) {
             return new Content(tx.getId(), tx.getType(), tx.getOccurredOn(), tx.getOccurredTime(),
-                    tx.getPayee(), tx.getMemo(), tx.getPaidBy(),
+                    UserText.comparablePayee(tx.getPayee()), UserText.comparableMemo(tx.getMemo()), tx.getPaidBy(),
                     tx.getLines().stream().map(Line::of).toList());
         }
 

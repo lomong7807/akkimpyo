@@ -10,6 +10,9 @@ UPDATE account
    SET name = normalize(name, NFC)
  WHERE name IS NOT NFC NORMALIZED;
 
+UPDATE category
+   SET name = normalize(name, NFC)
+ WHERE name IS NOT NFC NORMALIZED;
 
 UPDATE users
    SET display_name = normalize(display_name, NFC)
