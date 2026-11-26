@@ -590,47 +590,19 @@ describe('삭제(F-227)', () => {
   })
 })
 
-describe('충돌(1A 임시)', () => {
-  it('다른 기기가 먼저 고쳤으면 창 안에 "다른 기기에서 먼저 고쳤어요", 실행 버튼 "다시 하기", 초점은 "닫기"이고 화면을 최신 내용으로 그린다', async () => {
+/* 최신 거래(current)가 온 충돌은 N-04의 다른 동작 판이다(#239, DeleteConflict.test.tsx) */
+describe('충돌', () => {
+  it('최신 거래가 오지 않았으면 판을 그릴 수 없어 창 안에 "다른 기기에서 먼저 고쳤어요"와 "다시 하기", 초점은 "닫기"다(1A와 같다)', async () => {
     const item = lunch()
     put(item)
+    detail.deleteResponse = () => problem(409, 'STALE_VERSION')
     const opened = await openDetail(item)
-    Object.assign(item, { version: 2, amount: 30000, payee: '고기국수집' })
     await askToDelete(opened)
     await opened.user.click(inDialog('삭제'))
     const alert = await within(dialog()!).findByRole('alert')
     expect(alert.textContent).toBe(conflict)
     expect(inDialog('다시 하기')).toBeTruthy()
     expect(document.activeElement).toBe(inDialog('닫기'))
-    expect(within(main()).getByText('30,000원')).toBeTruthy()
-    expect(within(main()).getByText('고기국수집')).toBeTruthy()
-  })
-
-  it('"다시 하기"는 최신 version으로 삭제한다', async () => {
-    const item = lunch()
-    put(item)
-    const opened = await openDetail(item)
-    Object.assign(item, { version: 2 })
-    await askToDelete(opened)
-    await opened.user.click(inDialog('삭제'))
-    await within(dialog()!).findByRole('alert')
-    await opened.user.click(inDialog('다시 하기'))
-    await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
-    expect(detail.requests.delete.map(({ query }) => query)).toEqual(['version=1', 'version=2'])
-    await waitFor(() => expect(toastRegion().textContent).toBe('휴지통으로 옮겼어요되돌리기'))
-  })
-
-  it('"닫기"를 누르면 창을 닫고 최신 내용을 둔다', async () => {
-    const item = lunch()
-    put(item)
-    const opened = await openDetail(item)
-    Object.assign(item, { version: 2, amount: 30000 })
-    await askToDelete(opened)
-    await opened.user.click(inDialog('삭제'))
-    await within(dialog()!).findByRole('alert')
-    await opened.user.click(inDialog('닫기'))
-    await waitFor(() => expect(dialog()).toBeNull())
-    expect(within(main()).getByText('30,000원')).toBeTruthy()
   })
 
   it('다른 기기가 이미 지웠으면 창을 닫고 삭제한 거래 화면으로 그린다', async () => {

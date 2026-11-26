@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import BottomSheet from './BottomSheet'
 import { Button } from './Button'
-import CenterDialog from './CenterDialog'
+import DialogFrame from './DialogFrame'
 import ErrorMessage from './ErrorMessage'
-import { useWideScreen } from './wideScreen'
 import styles from './ConfirmDialog.module.css'
 
 /** 실행하지 못한 까닭. 실패할 때마다 새 객체로 준다. 같은 문구여도 다시 알리고 초점을 다시 옮긴다. */
@@ -33,26 +31,14 @@ interface ConfirmDialogProps {
 
 /** 확인 창(화면설계서 00-common 5.6). 휴대폰 배치는 바닥 시트, 넓은 화면은 가운데 창이다. */
 export default function ConfirmDialog({ open, title, onClose, busy = false, ...question }: ConfirmDialogProps) {
-  const wide = useWideScreen()
   const openings = useOpenings(open)
-  // 처리 중에는 X, 가림막, Esc, 끌어내리기, 브라우저가 강제로 닫은 것을 모두 무시한다. 강제로 닫혔으면 Overlay가 다시 연다
-  const close = busy ? ignore : onClose
-  const content = <Question key={openings} {...question} busy={busy} onClose={close} />
-  if (wide) {
-    return (
-      <CenterDialog open={open} title={title} onClose={close}>
-        {content}
-      </CenterDialog>
-    )
-  }
+  // 처리 중에는 닫는 길을 모두 무시한다(DialogFrame)
   return (
-    <BottomSheet open={open} title={title} closeDisabled={busy} onClose={close}>
-      <div className={styles.inSheet}>{content}</div>
-    </BottomSheet>
+    <DialogFrame open={open} title={title} busy={busy} onClose={onClose}>
+      <ConfirmQuestion key={openings} {...question} busy={busy} onClose={onClose} />
+    </DialogFrame>
   )
 }
-
-function ignore() {}
 
 /** 연 횟수. 코드가 여는 창이라 닫히는 움직임 중에 다시 열릴 수 있다. 그때도 내용을 새로 시작한다. */
 function useOpenings(open: boolean): number {
@@ -63,7 +49,11 @@ function useOpenings(open: boolean): number {
   return openings
 }
 
-function Question({
+/**
+ * 확인 창의 내용: 설명, 실패 문구, "닫기"와 실행 버튼. 열 때마다 새로 그린다(key). 처음 초점은 "닫기"다.
+ * 틀(DialogFrame)을 따로 두는 화면이 쓴다(삭제 확인이 그 자리에서 충돌 판으로 바뀌는 거래 상세).
+ */
+export function ConfirmQuestion({
   description,
   closeLabel,
   actionLabel,
@@ -71,7 +61,7 @@ function Question({
   failure,
   onClose,
   onAction,
-}: Omit<ConfirmDialogProps, 'open' | 'title'>) {
+}: Omit<ConfirmDialogProps, 'open' | 'title'> & { busy: boolean }) {
   const closeButton = useRef<HTMLButtonElement>(null)
   const actionButton = useRef<HTMLButtonElement>(null)
   const failures = useChanges(failure)

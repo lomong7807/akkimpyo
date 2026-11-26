@@ -26,6 +26,8 @@ interface FullScreenFormProps {
   onSubmit: () => void
   /** 맨 아래에 고정하는 저장 버튼과 그 위의 문구. 없으면 저장 자리를 숨긴다(수정할 거래를 받는 동안, D-04 상태). */
   bottom?: ReactNode
+  /** 화면 이름 아래의 안내 한 줄(D-04 상태의 "열린 경로별 안내", 보조 글자색). 칸 맨 위에 둔다 */
+  notice?: string
   /** Ctrl+엔터(Mac은 Cmd+엔터)를 어느 칸에서나 저장으로 받는다(D-04 (16)). 한글을 조합하는 중과 판이 열린 동안은 받지 않는다. */
   submitShortcut?: boolean
   children: ReactNode
@@ -40,6 +42,7 @@ export default function FullScreenForm({
   guard,
   onSubmit,
   bottom,
+  notice,
   submitShortcut = false,
   children,
 }: FullScreenFormProps) {
@@ -78,7 +81,15 @@ export default function FullScreenForm({
       </header>
       <main className={styles.main}>
         <form className={styles.form} noValidate onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
-          <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>{children}</div>
+          <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>
+            {/* 초점은 옮기지 않는다. 비어 있을 때 자리를 차지하지 않게 있을 때만 그린다 */}
+            {notice && (
+              <p role="status" className={styles.notice}>
+                {notice}
+              </p>
+            )}
+            {children}
+          </div>
           {/* 숨겨도 남겨 둔다. 저장 자리의 높이를 재는 곳이 이 요소를 지켜본다 */}
           <div
             ref={bottomArea}

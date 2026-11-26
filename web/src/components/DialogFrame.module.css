@@ -1,0 +1,5 @@
+/* 시트의 아래 여백 8px과 더해 버튼 아래가 12px이다 */
+.inSheet {
+  padding-inline: var(--space-16);
+  padding-bottom: var(--space-4);
+}
