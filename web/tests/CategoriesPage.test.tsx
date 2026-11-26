@@ -1,7 +1,7 @@
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { delayed, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
@@ -164,7 +164,7 @@ describe('카테고리(H-01)에 들어가는 길', () => {
 describe('카테고리 목록', () => {
   it('로그인한 사용자의 현재 장부 것을 한 번 받는다', async () => {
     await openList()
-    expect(api.requests).toEqual(['user-1 user-1-ledger'])
+    expect(api.requests).toEqual([`user-1 ${ledgerIdOf('user-1')}`])
   })
 
   it('최상위 줄 아래에 하위를 겹친 목록으로 두고, 순서는 받은 그대로다', async () => {

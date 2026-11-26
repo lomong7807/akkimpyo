@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountOf, accountsBody, startAccounts, type Accounts } from './support/accounts'
-import { delayed, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { untilOpened, untilUnshielded } from './support/dialog'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
@@ -340,7 +340,7 @@ describe('저장', () => {
     expect(path(opened)).toBe('/accounts')
     expect(accounts.added).toEqual([
       {
-        ledgerId: 'user-1-ledger',
+        ledgerId: ledgerIdOf('user-1'),
         body: { name: '급여통장', type: 'BANK', openingBalance: 350000, openingDate: '2026-11-03' },
       },
     ])

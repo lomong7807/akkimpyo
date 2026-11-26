@@ -1,11 +1,14 @@
 import calendarBlank from '../assets/icons/phosphor/calendar-blank.svg?raw'
+import caretDown from '../assets/icons/phosphor/caret-down.svg?raw'
 import caretLeft from '../assets/icons/phosphor/caret-left.svg?raw'
 import caretRight from '../assets/icons/phosphor/caret-right.svg?raw'
+import caretUp from '../assets/icons/phosphor/caret-up.svg?raw'
 import check from '../assets/icons/phosphor/check.svg?raw'
 import dotsThree from '../assets/icons/phosphor/dots-three.svg?raw'
 import eyeSlash from '../assets/icons/phosphor/eye-slash.svg?raw'
 import eye from '../assets/icons/phosphor/eye.svg?raw'
 import info from '../assets/icons/phosphor/info.svg?raw'
+import magnifyingGlass from '../assets/icons/phosphor/magnifying-glass.svg?raw'
 import plus from '../assets/icons/phosphor/plus.svg?raw'
 import signOut from '../assets/icons/phosphor/sign-out.svg?raw'
 import tag from '../assets/icons/phosphor/tag.svg?raw'
@@ -17,13 +20,16 @@ import styles from './Icon.module.css'
 // Phosphor Icons Regular (phosphor-icons/core v2.0.8, MIT). 라이선스: ../assets/icons/phosphor/LICENSE
 const svgs = {
   CalendarBlank: calendarBlank,
+  CaretDown: caretDown,
   CaretLeft: caretLeft,
   CaretRight: caretRight,
+  CaretUp: caretUp,
   Check: check,
   DotsThree: dotsThree,
   Eye: eye,
   EyeSlash: eyeSlash,
   Info: info,
+  MagnifyingGlass: magnifyingGlass,
   Plus: plus,
   SignOut: signOut,
   Tag: tag,

@@ -1,0 +1,30 @@
+/* 글자 버튼의 안쪽 8px만큼 당겨 글자를 칸의 왼쪽 선에 맞춘다 */
+.more {
+  display: flex;
+  margin-inline-start: calc(-1 * var(--space-8));
+}
+
+.moreLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* 접힌 동안에도 칸은 남아 값을 지킨다. 칸 사이는 다른 칸과 같은 16px이다 */
+.folded {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+.folded[hidden] {
+  display: none;
+}
+
+/* 고르기 판 안의 불러오는 중과 계좌 없음 */
+.pickerMessage {
+  margin: 0;
+  padding: var(--space-16);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}

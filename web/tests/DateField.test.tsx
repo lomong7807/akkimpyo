@@ -415,7 +415,7 @@ describe('모양', () => {
   })
 
   it('값은 왼쪽, 아이콘은 오른쪽 끝이다', () => {
-    expect(readCssRule('src/components/DateField.module.css', '.button')).toContain('justify-content: space-between')
-    expect(readCssRule('src/components/DateField.module.css', '.button')).toContain('text-align: start')
+    expect(readCssRule('src/components/FieldButton.module.css', '.button')).toContain('justify-content: space-between')
+    expect(readCssRule('src/components/FieldButton.module.css', '.button')).toContain('text-align: start')
   })
 })

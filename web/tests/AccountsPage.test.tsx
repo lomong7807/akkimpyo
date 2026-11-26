@@ -5,7 +5,7 @@ import { useState, type ReactElement } from 'react'
 import { Link, type RouteObject } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountOf, accountsBody, startAccounts, type Accounts } from './support/accounts'
-import { delayed, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
@@ -20,6 +20,7 @@ const loading = '불러오고 있어요.'
 const failed = '불러오지 못했어요.'
 
 const server = startMockServer()
+const OTHER_LEDGER = '0e0e0e0e-0000-4000-8000-000000000002'
 let backend: Backend
 let accounts: Accounts
 
@@ -111,7 +112,7 @@ describe('계좌 목록(G-01)', () => {
   it('현재 장부의 계좌를 한 번 받는다', async () => {
     await open()
     await settle()
-    expect(accounts.requests).toEqual(['user-1-ledger'])
+    expect(accounts.requests).toEqual([ledgerIdOf('user-1')])
   })
 
   it('맨 위에 자산 합계가 있고 값은 계좌별 잔액의 합이다', async () => {
@@ -540,7 +541,7 @@ describe('이미 불러온 뒤', () => {
       const { accountsKey } = await import('../src/features/accounts/useAccounts')
       function WithSave() {
         const queryClient = useQueryClient()
-        const save = () => void queryClient.invalidateQueries({ queryKey: accountsKey('user-1-ledger') })
+        const save = () => void queryClient.invalidateQueries({ queryKey: accountsKey(ledgerIdOf('user-1')) })
         return (
           <>
             {page}
@@ -563,7 +564,7 @@ describe('이미 불러온 뒤', () => {
     accounts.items = [salary]
     const { user } = await openWrapped(async (page) => {
       const { CurrentLedgerContext, useCurrentLedger } = await import('../src/features/me/CurrentLedgerContext')
-      const other = { id: 'other-ledger', name: '다른 장부', role: 'OWNER' }
+      const other = { id: OTHER_LEDGER, name: '다른 장부', role: 'OWNER' }
       function WithLedgers() {
         const first = useCurrentLedger()
         const [ledger, setLedger] = useState(first)
@@ -585,6 +586,6 @@ describe('이미 불러온 뒤', () => {
     expect(screen.queryByText('급여통장')).toBeNull()
     answer.answer(accountsBody(wallet))
     await screen.findByText('지갑')
-    expect(accounts.requests).toEqual(['user-1-ledger', 'other-ledger'])
+    expect(accounts.requests).toEqual([ledgerIdOf('user-1'), OTHER_LEDGER])
   })
 })

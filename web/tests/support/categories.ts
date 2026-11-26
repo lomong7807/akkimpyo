@@ -10,6 +10,17 @@ export function categoryOf(kind: Kind, name: string, system = false) {
   return { id: `${kind}-${name}`, kind, name, system, children: [] }
 }
 
+/** id와 하위 카테고리를 정해 둔 최상위 카테고리 하나 */
+export function categoryWithChildren(
+  id: string,
+  kind: Kind,
+  name: string,
+  children: [id: string, name: string][] = [],
+  system = false,
+) {
+  return { id, kind, name, system, children: children.map(([childId, childName]) => ({ id: childId, name: childName })) }
+}
+
 /** 가입할 때 서버가 넣는 기본 카테고리(P-223). 서버가 주는 순서다. */
 export const defaultExpenses = [
   '식비',
