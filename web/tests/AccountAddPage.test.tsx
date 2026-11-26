@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountOf, accountsBody, startAccounts, type Accounts } from './support/accounts'
 import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { untilOpened, untilUnshielded } from './support/dialog'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -28,7 +29,7 @@ let backend: Backend
 let accounts: Accounts
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12) })
+  startGuardClock(new Date(2026, 10, 26, 12))
   vi.stubGlobal('scrollTo', vi.fn())
   installMatchMedia(390)
   installLocks(createFakeLocks())
@@ -43,10 +44,10 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   resetViewport()
   removeLocks()
   vi.restoreAllMocks()
-  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 

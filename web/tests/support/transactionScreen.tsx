@@ -9,6 +9,7 @@ import { accountOf, startAccounts } from './accounts'
 import { ledgerIdOf, startBackend } from './backend'
 import { categoryWithChildren, startCategories } from './categories'
 import { untilOpened } from './dialog'
+import { stopGuardClock } from './guardClock'
 import { startTransactions } from './transactions'
 import { installLocks, createFakeLocks } from './webLocks'
 import { installMatchMedia } from './viewport'
@@ -114,8 +115,7 @@ export function errorOf(control: HTMLElement): string | undefined {
 /** 주소로 바로 연다. 계좌 목록을 받아 기본 계좌가 들어갈 때까지 기다린다. */
 export async function openForm(path = '/transactions/new') {
   const opened = await openApp(path)
-  await screen.findByRole('heading', { level: 1, name: '거래 입력' })
-  await waitFor(() => expect(accountField().textContent).not.toBe(''))
+  await untilDefaultAccount()
   return opened
 }
 
@@ -124,9 +124,20 @@ export async function openFromMore() {
   const opened = await openApp('/more')
   await screen.findByRole('main')
   await act(() => opened.router.navigate('/transactions/new'))
-  await screen.findByRole('heading', { level: 1, name: '거래 입력' })
-  await waitFor(() => expect(accountField().textContent).not.toBe(''))
+  await untilDefaultAccount()
   return opened
+}
+
+/**
+ * 거래 입력이 열리고 기본 계좌가 들어갈 때까지 기다린다.
+ * 칸은 한 번만 찾아 그 글자를 지켜본다. 바뀔 때마다 역할로 다시 찾으면 화면 전체의 이름을 매번 다시 계산한다.
+ */
+async function untilDefaultAccount() {
+  await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+  const field = accountField()
+  await waitFor(() => expect(field.textContent).not.toBe(''))
+  // 지켜본 칸이 바뀌지 않고 화면에 그대로 있다
+  expect(field.isConnected).toBe(true)
 }
 
 /** 고르기 판을 열어 이름이 `name`인 줄을 고른다. */
@@ -144,10 +155,10 @@ export async function saveAmount(user: User, typed = '12000') {
   await user.click(saveButton())
 }
 
-/** 화면을 다 쓴 뒤 저장소와 가짜 시계를 되돌린다. */
+/** 화면을 다 쓴 뒤 저장소와 가짜 시계를 되돌린다. 화면에서 빠진 뒤의 덮개도 걷는다. */
 export function resetGlobals() {
   vi.restoreAllMocks()
-  vi.useRealTimers()
+  stopGuardClock()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 }

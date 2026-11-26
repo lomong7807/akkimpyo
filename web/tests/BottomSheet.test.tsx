@@ -1,10 +1,11 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { StrictMode, useState } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import BottomSheet from '../src/components/BottomSheet'
 import { readCssRule } from './support/cssRule'
 import { untilOpened } from './support/dialog'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 
 const overlayRule = (selector: string) => readCssRule('src/components/Overlay.module.css', selector)
 const rule = (selector: string) => readCssRule('src/components/BottomSheet.module.css', selector)
@@ -36,8 +37,13 @@ async function openSheet() {
   return user
 }
 
+beforeEach(() => {
+  startGuardClock()
+})
+
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   vi.restoreAllMocks()
 })
 

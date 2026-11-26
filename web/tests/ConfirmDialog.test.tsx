@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ConfirmDialog from '../src/components/ConfirmDialog'
 import { readCssRule } from './support/cssRule'
 import { untilOpened } from './support/dialog'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { installMatchMedia } from './support/viewport'
 
 const CSS = 'src/components/ConfirmDialog.module.css'
@@ -13,11 +14,13 @@ const CENTER_CSS = 'src/components/CenterDialog.module.css'
 let viewport: ReturnType<typeof installMatchMedia>
 
 beforeEach(() => {
+  startGuardClock()
   viewport = installMatchMedia(390)
 })
 
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })

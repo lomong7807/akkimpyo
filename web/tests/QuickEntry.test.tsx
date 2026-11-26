@@ -5,6 +5,7 @@ import { holdKeyboard } from '../src/components/keyboardBridge'
 import { canEdit } from '../src/features/me/me'
 import { meOf, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
+import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { readWebFile } from './support/webFile'
 import {
@@ -25,7 +26,7 @@ let backend: Backend
 let transactions: Transactions
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12, 30) })
+  startGuardClock(new Date(2026, 10, 26, 12, 30))
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   localStorage.clear()

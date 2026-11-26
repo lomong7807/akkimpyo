@@ -7,6 +7,7 @@ import PickerField from '../src/components/PickerField'
 import { readCssRule } from './support/cssRule'
 import { readWebFile } from './support/webFile'
 import { untilOpened } from './support/dialog'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { installMatchMedia } from './support/viewport'
 
 const PHONE = 390
@@ -15,11 +16,13 @@ const WIDE = 1280
 let viewport: ReturnType<typeof installMatchMedia>
 
 beforeEach(() => {
+  startGuardClock()
   viewport = installMatchMedia(PHONE)
 })
 
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
