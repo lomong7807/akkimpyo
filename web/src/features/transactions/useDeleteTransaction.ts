@@ -55,7 +55,7 @@ export function useDeleteTransaction(id: string) {
  * 삭제한 거래의 토스트 "휴지통으로 옮겼어요"와 "되돌리기"(F-227, 00-common 5.7)를 보이는 함수.
  * 되돌리기는 삭제 응답의 version으로 복원한다(F-230). 결과는 셋으로 나눈다(architect 결정 2026-11-26, #102).
  * - 성공, 또는 409의 최신 거래(current)가 휴지통에 없음(다른 기기가 이미 되돌림): "되돌렸어요"와 장부 무효화
- * - 연결 문제, 지연, 서버 오류(5xx): "되돌리지 못했어요"와 같은 복원을 다시 보내는 "다시 시도"
+ * - 연결 문제, 지연, 서버 오류(5xx), 읽을 수 없는 응답: "되돌리지 못했어요"와 같은 복원을 다시 보내는 "다시 시도"
  * - 그 밖의 거부(아직 휴지통에 있는 충돌, INVALID_STATE, 404 등): 다시 보내도 같으므로 "되돌리지 못했어요"만
  * 토스트는 상세를 떠난 뒤에도 남으므로 화면의 상태를 쓰지 않는다. 로그인이 끝나면 토스트와 캐시가 함께 버려지고,
  * 그 뒤에 온 응답은 쓰지 않는다.
@@ -94,8 +94,12 @@ export function useOfferUndo() {
   )
 }
 
-/** 다시 보내면 될 수 있는 실패: 연결 문제, 지연, 서버 오류(5xx) */
+/**
+ * 다시 보내면 될 수 있는 실패: 연결 문제, 지연, 서버 오류(5xx), 읽을 수 없는 응답(200인데 본문이 약속과 다름).
+ * 읽을 수 없는 응답은 서버에서 되돌려졌을 수 있다. 다시 보내면 409의 current로 돌아와 "되돌렸어요"로 맞춰진다
+ * (architect 권고 #88).
+ */
 function isTemporary(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false
-  return error.kind === 'connection' || error.kind === 'timeout' || (error.status ?? 0) >= 500
+  return error.kind === 'connection' || error.kind === 'timeout' || error.kind === 'server'
 }

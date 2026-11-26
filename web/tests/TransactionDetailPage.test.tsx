@@ -716,6 +716,25 @@ describe('되돌리기(F-230)', () => {
     await screen.findByRole('link', { name: /^김밥천국/ })
   })
 
+  /* 서버에서는 되돌려졌을 수 있으므로 다시 시도하게 하고, 다시 보낸 것이 409로 돌아오면 되돌린 것으로 맞춘다(architect 권고 #88) */
+  it('복원이 200인데 본문을 읽을 수 없으면 "다시 시도"를 보이고, 다시 보낸 것이 409(휴지통이 아닌 current)면 "되돌렸어요"다', async () => {
+    const item = lunch()
+    const answers = [
+      () => {
+        Object.assign(item, { version: item.version + 1, deletedAt: null, purgeAt: null })
+        return new HttpResponse('<html>', { status: 200 })
+      },
+    ]
+    detail.restoreResponse = () => answers.shift()?.()
+    const opened = await deleteFromList(item)
+    await opened.user.click(undo())
+    await waitFor(() => expect(toastRegion().textContent).toBe('되돌리지 못했어요다시 시도'))
+    await opened.user.click(within(toastRegion() as HTMLElement).getByRole('button', { name: '다시 시도' }))
+    await waitFor(() => expect(toastRegion().textContent).toBe('되돌렸어요'))
+    expect(detail.requests.restore.map(({ body }) => body)).toEqual([{ version: 2 }, { version: 2 }])
+    await screen.findByRole('link', { name: /^김밥천국/ })
+  })
+
   it('다른 기기가 이미 되돌렸으면(409에 휴지통이 아닌 current) 되돌린 것으로 보고 "되돌렸어요"이며 목록을 다시 받는다', async () => {
     const item = lunch()
     detail.restoreResponse = () => {
