@@ -56,7 +56,7 @@ export default function FullScreenForm({ title, guard, onSubmit, bottom, childre
       <ConfirmDialog
         open={guard.asking}
         title="쓰던 내용을 버릴까요?"
-        description="저장하지 않은 내용은 사라져요."
+        description="저장하지 않은 내용은 사라져요"
         closeLabel="계속 쓰기"
         actionLabel="버리기"
         onClose={guard.keep}
