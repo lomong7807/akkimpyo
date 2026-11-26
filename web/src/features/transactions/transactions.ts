@@ -127,12 +127,18 @@ export function needsResendNotice({ created, transaction }: CreateResult): boole
 /**
  * 그 id로 만들 수 없다는 거부(409 ID_CONFLICT). 아니면 없다.
  * 앞서 같은 id로 저장한 내 거래가 있으면(current) 그 id를 준다. 주소에 넣으므로 UUID 모양일 때만 준다.
+ * current가 약속대로의 거래이고 보낸 거래 id(`id`)의 것이면 그 거래도 준다. 선택 판(ADR 006 결정 3)이 쓴다.
  */
-export function idConflictOf(error: unknown): { savedId?: string } | undefined {
+export function idConflictOf(
+  error: unknown,
+  id?: string,
+): { savedId?: string; current?: TransactionDetail } | undefined {
   if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'ID_CONFLICT') return undefined
   const current: unknown = error.current
   const savedId = typeof current === 'object' && current !== null && 'id' in current ? current.id : undefined
-  return isUuid(savedId) ? { savedId: savedId.toLowerCase() } : {}
+  if (!isUuid(savedId)) return {}
+  const conflict = { savedId: savedId.toLowerCase() }
+  return id !== undefined && isTransactionDetail(current) && isSameId(current.id, id) ? { ...conflict, current } : conflict
 }
 
 function isSavedTransaction(value: unknown): value is SavedTransaction {
@@ -312,6 +318,8 @@ export type TransactionDetail = ListedTransaction & {
   createdBy: Person | null
   /** 휴지통에서 영구 삭제될 시각(ISO 8601 UTC). 휴지통에 없으면 null이다. 화면은 날 수를 따로 세지 않고 이것을 쓴다. */
   purgeAt: string | null
+  /** 마지막으로 고친 시각(ISO 8601 UTC, ADR 002 2절). 수정 충돌 안내(N-04)가 보인다. */
+  updatedAt: string
 }
 
 /** 장부의 거래 하나. 휴지통에 있으면 deletedAt이 차서 온다. 없거나 다른 장부의 것이면 404 거부다. 실패하면 ApiError를 던진다. */
@@ -414,6 +422,7 @@ function isTransactionDetail(value: unknown): value is TransactionDetail {
   return (
     (body.memo === null || typeof body.memo === 'string') &&
     (body.createdBy === null || isPerson(body.createdBy)) &&
+    isInstant(body.updatedAt) &&
     // 휴지통에 있을 때만 영구 삭제 예정 시각이 있다
     (body.deletedAt === null ? body.purgeAt === null : isInstant(body.purgeAt))
   )

@@ -197,7 +197,10 @@ describe('거래 수정', () => {
     Object.assign(opened.item, { amount: 40000, version: 2 })
     await changeAmount(opened.user)
     await opened.user.click(saveButton())
-    await opened.user.click(await screen.findByRole('link', { name: '최신 내용 보기' }))
+    // 수정 충돌 안내(N-04)의 "최신 내용 보기"
+    const latest = await screen.findByRole('button', { name: '최신 내용 보기' })
+    await untilOpened()
+    await opened.user.click(latest)
     await untilDetail()
     expect(scrolled).toBe(READ_DOWN)
   })

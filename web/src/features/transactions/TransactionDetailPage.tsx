@@ -4,7 +4,8 @@ import { ApiError } from '../../api/apiError'
 import { sessionUserId } from '../../api/session'
 import Amount from '../../components/Amount'
 import { Button, ButtonLink } from '../../components/Button'
-import ConfirmDialog, { type ConfirmFailure } from '../../components/ConfirmDialog'
+import { ConfirmQuestion, type ConfirmFailure } from '../../components/ConfirmDialog'
+import DialogFrame from '../../components/DialogFrame'
 import LoadFailure from '../../components/LoadFailure'
 import Notice from '../../components/Notice'
 import { SubScreen } from '../../components/Screen'
@@ -17,11 +18,15 @@ import { isUuid } from '../../lib/uuid'
 import { useAccounts } from '../accounts/useAccounts'
 import { useCategories } from '../categories/useCategories'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
+import { useConnection } from '../connection/useConnection'
 import { canEdit } from '../me/me'
 import NotFoundPage from '../not-found/NotFoundPage'
+import ConflictPanel, { AgainQuestion, LatestRow, type PanelFailure } from './ConflictPanel'
+import { updatedTextOf } from './conflictValues'
 import { nameBookOf, titleOf, type NameBook } from './listedText'
 import { DetailSkeleton, FieldsSkeleton } from './TransactionDetailSkeleton'
 import { purgeNoticeOf } from './purgeNotice'
+import { isConnectionLoss } from './pendingTransactions'
 import { isInvalidState, staleVersionOf, type ListedTransaction, type TransactionDetail } from './transactions'
 import { useDeleteTransaction, useOfferUndo } from './useDeleteTransaction'
 import { useListedTransaction, useTransactionDetail } from './useTransactionDetail'
@@ -129,7 +134,7 @@ function DetailContent({ transaction, names, today }: DetailContentProps) {
           <Fields transaction={transaction} names={names} today={today} />
         </dl>
         {/* 휴지통에서 연 거래(1A는 주소로 연 것)에는 버튼이 없다. 복원과 완전히 지우기는 1C다 */}
-        {!deleted && canEdit(ledger) && <DeleteAction transaction={transaction} />}
+        {!deleted && canEdit(ledger) && <DeleteAction transaction={transaction} names={names} />}
       </div>
     </>
   )
@@ -223,8 +228,13 @@ function ListedSkeleton({ listed, names, today }: { listed: ListedTransaction; n
 }
 
 const failedToDelete = '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.'
-/** 1A 임시: 충돌 판(N-04)은 1B다. 그 제목을 확인 창의 오류 자리에 쓴다 */
+/** 최신 거래가 오지 않은 충돌(1A와 같다). 판(N-04)을 그릴 수 없어 확인 창의 오류 자리에 제목을 쓴다 */
 const conflict = '다른 기기에서 먼저 고쳤어요'
+
+/** N-04 다른 동작 판의 문구(01 화면설계서 N-04 예외 처리) */
+const againOffline = '연결되면 다시 할 수 있어요'
+const againLost = '연결이 끊겨 다시 하지 못했어요. 연결되면 다시 시도해 주세요.'
+const againFailed = '문제가 생겨 다시 하지 못했어요. 잠시 후 다시 시도해 주세요.'
 
 /** 실패와 그때의 실행 버튼 글자. 실패마다 새로 만들어 같은 문구여도 다시 알린다. */
 interface DeleteFailure {
@@ -232,22 +242,42 @@ interface DeleteFailure {
   actionLabel: string
 }
 
+/** 다른 동작 판(N-04 (5)~(8))에 보이는 최신 거래와 그 판의 실패 */
+interface DeleteConflict {
+  current: TransactionDetail
+  /** 판을 연 때의 기기의 오늘 */
+  today: string
+  /** 새 최신 내용으로 다시 그린 횟수 */
+  redraws: number
+  failure?: PanelFailure
+}
+
+interface DeleteActionProps {
+  transaction: TransactionDetail
+  names: NameBook
+}
+
 /**
  * (21) 삭제. 편집 이상에게만 보인다. 누르면 확인 창을 열고, 실행하면 이 화면이 본 version으로 한 번 보낸다.
  * 성공하면 앞 화면(없으면 내역)으로 돌아가 "휴지통으로 옮겼어요"와 "되돌리기"를 보인다. 창이 닫힌 뒤에 알린다.
  * 실패하면 창이 남고 버튼 위에 문구, 실행 버튼은 "다시 시도"다(00-common 5.6, 4.3).
- * 다른 기기가 먼저 고쳤으면(1A 임시) 같은 자리에 "다른 기기에서 먼저 고쳤어요"와 "다시 하기"를 보이고 화면을 최신으로 그린다.
+ * 다른 기기가 먼저 고쳤으면(최신 거래가 온 409 STALE_VERSION) 확인 창이 그 자리에서 N-04의 다른 동작 판으로 바뀌고,
+ * 화면은 최신 내용으로 그린다. 최신 거래가 오지 않았으면 1A처럼 창 안에 "다른 기기에서 먼저 고쳤어요"와 "다시 하기"다.
  * 다른 기기가 이미 지웠거나 상태가 맞지 않으면 창을 닫고 최신 상태(휴지통의 거래)로 그린다.
  */
-function DeleteAction({ transaction }: { transaction: TransactionDetail }) {
+function DeleteAction({ transaction, names }: DeleteActionProps) {
   const deletion = useDeleteTransaction(transaction.id)
   const offerUndo = useOfferUndo()
   const goBack = useGoBack(PARENT)
+  const online = useConnection() === 'online'
   // 이 화면을 연 사용자(동작의 주인). 보내는 순간의 사용자(토큰의 sub)와 같은지 요청 계층이 본다(거래 입력과 같다).
   // 확인하지 못한 로그인이면 기록의 사용자이고, 같은 사용자로 확인돼야 보낸다(#234)
   const [user] = useState(sessionUserId)
   const [asking, setAsking] = useState(false)
+  // 연 횟수. 열 때마다 확인 창의 내용을 새로 그린다
+  const [openings, setOpenings] = useState(0)
   const [failed, setFailed] = useState<DeleteFailure>()
+  const [stale, setStale] = useState<DeleteConflict>()
   // 상태가 바뀌어 그려지기 전에 또 눌러도 요청은 하나다
   const sending = useRef(false)
   const busy = deletion.isPending || deletion.isSuccess
@@ -255,14 +285,17 @@ function DeleteAction({ transaction }: { transaction: TransactionDetail }) {
   function ask() {
     deletion.reset()
     setFailed(undefined)
+    setStale(undefined)
+    setOpenings((count) => count + 1)
     setAsking(true)
   }
 
-  function submit() {
+  /** `version`으로 삭제를 보낸다. 확인 창의 실행과 판의 "다시 하기"가 같이 쓴다 */
+  function send(version: number) {
     if (sending.current) return
     sending.current = true
     deletion.mutate(
-      { version: transaction.version, user },
+      { version, user },
       {
         // 화면을 떠난 뒤에 온 응답으로는 불리지 않는다
         onSuccess: (deleted) => {
@@ -271,15 +304,38 @@ function DeleteAction({ transaction }: { transaction: TransactionDetail }) {
         },
         onError: (error) => {
           sending.current = false
-          const stale = staleVersionOf(error, transaction.id)
-          const goneElsewhere = stale?.current !== undefined && stale.current.deletedAt !== null
-          if (goneElsewhere || isInvalidState(error)) setAsking(false)
-          else if (stale) setFailed({ failure: { message: conflict, focus: 'close' }, actionLabel: '다시 하기' })
-          else setFailed({ failure: { message: failedToDelete, focus: 'action' }, actionLabel: '다시 시도' })
+          showFailure(error)
         },
       },
     )
   }
+
+  function showFailure(error: Error) {
+    const latest = staleVersionOf(error, transaction.id)
+    const current = latest?.current
+    // 다른 기기가 이미 지웠거나 상태가 맞지 않다. 화면은 최신 상태(휴지통의 거래)로 그린다
+    if ((current && current.deletedAt !== null) || isInvalidState(error)) return setAsking(false)
+    if (current) {
+      setStale((last) => ({ current, today: todayOfDevice(), redraws: (last?.redraws ?? 0) + 1 }))
+      return
+    }
+    // 판에서 다시 한 것이 최신 거래 없이 충돌했다. 화면이 최신을 다시 받으므로 판을 닫는다
+    if (latest && stale) return setAsking(false)
+    if (latest) {
+      setFailed({ failure: { message: conflict, focus: 'close' }, actionLabel: '다시 하기' })
+      return
+    }
+    if (stale) {
+      const message = isConnectionLoss(error) ? againLost : againFailed
+      setStale({ ...stale, failure: { message, count: (stale.failure?.count ?? 0) + 1 } })
+      return
+    }
+    setFailed({ failure: { message: failedToDelete, focus: 'action' }, actionLabel: '다시 시도' })
+  }
+
+  // 판의 (7). 실패한 뒤에는 "다시 시도"이고 연결이 없는 동안은 누를 수 없다
+  const againLabel = stale?.failure ? '다시 시도' : '다시 하기'
+  const againNotice = !online && !stale?.failure ? againOffline : undefined
 
   return (
     <>
@@ -288,17 +344,40 @@ function DeleteAction({ transaction }: { transaction: TransactionDetail }) {
           삭제
         </Button>
       </div>
-      <ConfirmDialog
+      <DialogFrame
         open={asking}
-        title="이 거래를 삭제할까요?"
-        description="휴지통으로 옮겨요. 30일 안에 복원할 수 있어요."
-        closeLabel="닫기"
-        actionLabel={failed?.actionLabel ?? '삭제'}
+        title={stale ? conflict : '이 거래를 삭제할까요?'}
         busy={busy}
-        failure={failed?.failure}
         onClose={() => setAsking(false)}
-        onAction={submit}
-      />
+      >
+        {stale ? (
+          <ConflictPanel
+            description={updatedTextOf(stale.current.updatedAt, stale.today)}
+            closeLabel="닫기"
+            onCloseAction={() => setAsking(false)}
+            action={{ label: againLabel, kind: 'danger', onClick: () => send(stale.current.version), disabled: !online }}
+            busy={busy}
+            notice={againNotice}
+            failure={stale.failure}
+            focus="close"
+            redraws={stale.redraws}
+          >
+            <LatestRow transaction={stale.current} names={names} today={stale.today} />
+            <AgainQuestion>그래도 삭제할까요?</AgainQuestion>
+          </ConflictPanel>
+        ) : (
+          <ConfirmQuestion
+            key={openings}
+            description="휴지통으로 옮겨요. 30일 안에 복원할 수 있어요."
+            closeLabel="닫기"
+            actionLabel={failed?.actionLabel ?? '삭제'}
+            busy={busy}
+            failure={failed?.failure}
+            onClose={() => setAsking(false)}
+            onAction={() => send(transaction.version)}
+          />
+        )}
+      </DialogFrame>
     </>
   )
 }

@@ -434,27 +434,25 @@ describe('저장하지 못함', () => {
   })
 })
 
-describe('다른 기기가 먼저 고침(409 STALE_VERSION, 1A 임시)', () => {
+/*
+ * 최신 거래(current)가 온 충돌은 수정 충돌 안내(N-04) 판이다(EditConflict.test.tsx). 최신 거래가 오지 않았으면 판을 그릴 수 없어
+ * 1A처럼 저장 위에 안내와 "최신 내용 보기"만 보인다(planner #239 P3).
+ */
+describe('다른 기기가 먼저 고침(409 STALE_VERSION), 최신 거래 없음', () => {
   /** 다른 기기가 금액을 40,000원으로 고쳐 서버의 version이 2가 된 거래 */
   function changedElsewhere(item: Item) {
     Object.assign(item, { amount: 40000, version: 2 })
   }
 
-  async function conflictOnSave() {
+  it('저장 바로 위에 "다른 기기에서 먼저 고쳤어요"와 "최신 내용 보기" 하나만 보이고 초점을 옮기지 않는다', async () => {
     const item = lunch()
     put(item)
+    detail.updateResponse = () => problem(409, 'STALE_VERSION')
     const opened = await openFromDetail(item)
-    changedElsewhere(item)
     await changeAmount(opened.user)
-    // 저장을 눌러도 초점은 쓰던 칸에 남는다(FullScreenForm)
     const focused = document.activeElement
     await opened.user.click(saveButton())
     await waitFor(() => expect(screen.queryByText(conflict)).toBeTruthy())
-    return { ...opened, item, focused }
-  }
-
-  it('저장 바로 위에 "다른 기기에서 먼저 고쳤어요"와 "최신 내용 보기" 하나만 보이고 초점을 옮기지 않는다', async () => {
-    const { focused } = await conflictOnSave()
     await settle()
     const alert = screen.getByRole('alert')
     expect(alert.textContent).toBe(conflict)
@@ -464,29 +462,6 @@ describe('다른 기기가 먼저 고침(409 STALE_VERSION, 1A 임시)', () => {
     expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull()
     expect(document.activeElement).toBe(focused)
     expect(amount().value).toBe('30,000')
-  })
-
-  it('"최신 내용 보기"는 묻지 않고 입력을 버려 최신 내용의 상세로 간다. 수정 화면은 방문 기록에 남지 않는다', async () => {
-    const opened = await conflictOnSave()
-    detail.getResponse = delayed().respond
-    await opened.user.click(latestLink()!)
-    await untilDetail()
-    expect(discardQuestion()).toBeNull()
-    expect(pathOf(opened)).toBe(detailPath(opened.item))
-    expect(within(screen.getByRole('main')).getByText('40,000원')).toBeTruthy()
-    expect(detail.requests.update).toHaveLength(1)
-    detail.getResponse = undefined
-    await opened.user.click(backButton())
-    await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
-  })
-
-  it('다시 저장해도 연 때의 version으로 보내 덮어쓰지 않고 같은 안내를 보인다', async () => {
-    const opened = await conflictOnSave()
-    await opened.user.click(saveButton())
-    await waitFor(() => expect(detail.requests.update).toHaveLength(2))
-    expect(sentBodies().map((body) => (body as { version: number }).version)).toEqual([1, 1])
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(conflict))
-    expect(opened.item.amount).toBe(40000)
   })
 
   it('최신 거래(current)가 오지 않아도 같은 안내이고, 상세는 최신을 다시 받는다', async () => {
@@ -503,10 +478,12 @@ describe('다른 기기가 먼저 고침(409 STALE_VERSION, 1A 임시)', () => {
   })
 })
 
+/*
+ * 다른 기기가 휴지통으로 옮겨 최신 거래가 휴지통에 있는 충돌(STALE_VERSION의 current)은 N-04 판이다(EditConflict.test.tsx).
+ * version은 맞는데 휴지통인 거부(INVALID_STATE, current 없음)는 1A 그대로다(planner #239 P3).
+ */
 describe('그사이 휴지통으로 간 거래(planner·designer #102)', () => {
-  /** 다른 기기가 휴지통으로 옮기는 두 길 */
   const trashedElsewhere: [string, (item: Item) => void][] = [
-    ['STALE_VERSION의 current가 휴지통', (item) => Object.assign(item, { version: 2, ...trashed('2026-11-26T03:15:00.123Z') })],
     ['version은 맞는데 휴지통(INVALID_STATE)', (item) => Object.assign(item, trashed('2026-11-26T03:15:00.123Z'))],
   ]
 

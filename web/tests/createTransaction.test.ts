@@ -244,6 +244,21 @@ describe('같은 id로 만들 수 없음(409 ID_CONFLICT)', () => {
     })
   })
 
+  it('보낸 거래 id를 주면, current가 약속대로의 그 거래일 때 거래도 준다(선택 판, ADR 006 결정 3)', async () => {
+    transactions.response = ({ body, user }) => problem(409, 'ID_CONFLICT', { current: savedOf(body, user) })
+    const tab = await openSignedInTab()
+    const error = await errorOf(tab.createTransaction(ledgerId, expense, 'user-1'))
+    expect(tab.idConflictOf(error, savedId)).toMatchObject({ savedId, current: { id: savedId, version: 1 } })
+    expect(tab.idConflictOf(error, '019a5f2e-8a7d-7b60-9c11-0b9f6c1e3d53')).toEqual({ savedId })
+  })
+
+  it('current가 약속과 다른 모양이면 거래는 주지 않는다', async () => {
+    transactions.response = () => problem(409, 'ID_CONFLICT', { current: { id: savedId, version: 1 } })
+    const tab = await openSignedInTab()
+    const error = await errorOf(tab.createTransaction(ledgerId, expense, 'user-1'))
+    expect(tab.idConflictOf(error, savedId)).toEqual({ savedId })
+  })
+
   it('대문자 id는 소문자로 준다', async () => {
     const current = savedOf(expense as never, 'user-1', { id: savedId.toUpperCase() })
     expect(await conflictFor(() => problem(409, 'ID_CONFLICT', { current }))).toEqual({ savedId })
