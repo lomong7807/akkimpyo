@@ -116,6 +116,14 @@ describe('로그인(A-02)의 요소', () => {
     expect(password().autocomplete).toBe('current-password')
   })
 
+  it('비밀번호 칸의 보기 버튼 이름은 "비밀번호 보기"이고, 누르면 "비밀번호 숨기기"다', async () => {
+    const { user } = openLogin()
+    await user.click(screen.getByRole('button', { name: '비밀번호 보기' }))
+    expect(password().type).toBe('text')
+    await user.click(screen.getByRole('button', { name: '비밀번호 숨기기' }))
+    expect(password().type).toBe('password')
+  })
+
   it('화면을 열면 이메일 칸에 초점을 둔다', () => {
     openLogin()
     expect(document.activeElement).toBe(email())

@@ -57,6 +57,18 @@ function errorOf(input: HTMLInputElement): string | undefined {
 
 const errors = () => fields().map(errorOf)
 
+/** 화면 읽기에 드러난 버튼의 접근성 이름. role로 찾을 때 testing-library가 계산한 이름을 그대로 모은다. */
+function buttonNames(): string[] {
+  const names = new Map<Element, string>()
+  const buttons = screen.getAllByRole('button', {
+    name: (name, element) => {
+      names.set(element, name)
+      return true
+    },
+  })
+  return buttons.map((button) => names.get(button)!)
+}
+
 const signUp = vi.fn(signup)
 
 /** 가입한 뒤 어디로 갈지는 앱이 정한다(SignupRoute). 여기서는 /welcome으로 보낸다. */
@@ -152,10 +164,27 @@ describe('가입(A-03)의 요소', () => {
       expect(input.type).toBe('password')
       expect(input.autocomplete).toBe('new-password')
     }
-    const [showPassword] = screen.getAllByRole('button', { name: '비밀번호 보기' })
-    await user.click(showPassword)
+    await user.click(screen.getByRole('button', { name: '비밀번호 보기' }))
     expect(password().type).toBe('text')
     expect(confirm().type).toBe('password')
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 확인 보기' }))
+    expect(confirm().type).toBe('text')
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 숨기기' }))
+    expect(password().type).toBe('password')
+    expect(confirm().type).toBe('text')
+  })
+
+  it('두 칸의 보기 버튼은 칸 이름이 붙어 이름이 서로 다르고, 화면에 같은 이름의 버튼이 둘 없다', async () => {
+    const { user } = openSignup()
+    expect(buttonNames()).toEqual(expect.arrayContaining(['비밀번호 보기', '비밀번호 확인 보기']))
+    expect(buttonNames()).toEqual([...new Set(buttonNames())])
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 보기' }))
+    await user.click(screen.getByRole('button', { name: '비밀번호 확인 보기' }))
+    expect(buttonNames()).toEqual(expect.arrayContaining(['비밀번호 숨기기', '비밀번호 확인 숨기기']))
+    expect(buttonNames()).toEqual([...new Set(buttonNames())])
   })
 
   it('표시 이름은 자동 고침과 맞춤법 검사만 끄고 자동 완성을 정하지 않는다', () => {
@@ -437,7 +466,8 @@ describe('검사하는 때', () => {
     ['가입', signupButton],
     ['로그인', loginLink],
     ['뒤로', () => screen.getByRole('button', { name: '뒤로' })],
-    ['비밀번호 보기', () => screen.getAllByRole('button', { name: '비밀번호 보기' })[0]],
+    ['비밀번호 보기', () => screen.getByRole('button', { name: '비밀번호 보기' })],
+    ['비밀번호 확인 보기', () => screen.getByRole('button', { name: '비밀번호 확인 보기' })],
   ])('"%s"를 누르는 사이에 오류 문구가 나와 버튼이 밀리지 않는다', async (_, target) => {
     const { user } = openSignup()
     await user.pointer({ keys: '[MouseLeft>]', target: target() })
