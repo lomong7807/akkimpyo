@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, type Backend } from './support/backend'
+import { setDeviceClock } from './support/clock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
@@ -28,6 +29,7 @@ import {
   accountField,
   amount,
   closeButton,
+  dateField,
   discardQuestion,
   errorOf,
   id,
@@ -48,6 +50,8 @@ import { resetViewport } from './support/viewport'
 
 const failed = '문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
 const conflict = '다른 기기에서 먼저 고쳤어요'
+/** planner 확정(#89, 2026-11-26) */
+const deletedMeanwhile = '그사이 삭제된 거래라 저장하지 못했어요'
 
 const server = startMockServer()
 let backend: Backend
@@ -72,6 +76,7 @@ afterEach(() => {
 const sentBodies = () => detail.requests.update.map(({ body }) => body)
 const retryButton = () => screen.getByRole('button', { name: '다시 시도' })
 const latestLink = () => screen.queryByRole('link', { name: '최신 내용 보기' })
+const deletedLink = () => screen.queryByRole('link', { name: '삭제된 거래 보기' })
 const backButton = () => screen.getByRole('button', { name: '뒤로' })
 const notFound = () => screen.findByRole('heading', { level: 1, name: '찾을 수 없어요.' })
 
@@ -498,22 +503,93 @@ describe('다른 기기가 먼저 고침(409 STALE_VERSION, 1A 임시)', () => {
   })
 })
 
-describe('그사이 지워진 거래(N-01)', () => {
-  it.each([
-    ['다른 기기가 휴지통으로 옮김(STALE_VERSION의 current가 휴지통)', (item: Item) => {
-      Object.assign(item, { version: 2, ...trashed('2026-11-26T03:15:00.123Z') })
-    }],
-    ['version은 맞는데 휴지통(INVALID_STATE)', (item: Item) => {
-      Object.assign(item, trashed('2026-11-26T03:15:00.123Z'))
-    }],
-    ['완전히 지움(404)', (item: Item) => {
-      detail.items.delete(String(item.id))
-    }],
-  ])('%s이면 "찾을 수 없어요."를 보인다', async (_, goneElsewhere) => {
+describe('그사이 휴지통으로 간 거래(planner·designer #102)', () => {
+  /** 다른 기기가 휴지통으로 옮기는 두 길 */
+  const trashedElsewhere: [string, (item: Item) => void][] = [
+    ['STALE_VERSION의 current가 휴지통', (item) => Object.assign(item, { version: 2, ...trashed('2026-11-26T03:15:00.123Z') })],
+    ['version은 맞는데 휴지통(INVALID_STATE)', (item) => Object.assign(item, trashed('2026-11-26T03:15:00.123Z'))],
+  ]
+
+  async function saveAfterTrashed(trash: (item: Item) => void) {
     const item = lunch()
     put(item)
     const opened = await openFromDetail(item)
-    goneElsewhere(item)
+    trash(item)
+    await changeAmount(opened.user)
+    // 저장을 눌러도 초점은 쓰던 칸에 남는다(FullScreenForm)
+    const focused = document.activeElement
+    await opened.user.click(saveButton())
+    await waitFor(() => expect(screen.queryByText(deletedMeanwhile)).toBeTruthy())
+    return { ...opened, item, focused }
+  }
+
+  it.each(trashedElsewhere)(
+    '%s: 수정 화면에 남아 저장 바로 위에 위험색 문구와 "삭제된 거래 보기" 하나만 보이고 초점을 옮기지 않는다',
+    async (_, trash) => {
+      const { focused, item } = await saveAfterTrashed(trash)
+      await settle()
+      const alert = screen.getByRole('alert')
+      expect(alert.textContent).toBe(deletedMeanwhile)
+      const notice = saveButton().previousElementSibling as HTMLElement
+      expect(notice.contains(alert)).toBe(true)
+      expect(notice.contains(deletedLink())).toBe(true)
+      expect(deletedLink()!.getAttribute('href')).toBe(detailPath(item))
+      expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull()
+      expect(latestLink()).toBeNull()
+      expect(document.activeElement).toBe(focused)
+      expect(amount().value).toBe('30,000')
+      expect(toastText()).toBe('')
+    },
+  )
+
+  it('문구는 충돌과 같은 위험색 오류 모양이다', async () => {
+    await saveAfterTrashed(trashedElsewhere[0][1])
+    const message = screen.getByRole('alert')
+    expect(getComputedStyle(message).color).toBe('var(--color-danger)')
+  })
+
+  it.each(trashedElsewhere)(
+    '%s: "삭제된 거래 보기"는 묻지 않고 입력을 버려 휴지통에서 연 그 거래의 상세로 간다. 수정 화면은 방문 기록에 남지 않는다',
+    async (_, trash) => {
+      const opened = await saveAfterTrashed(trash)
+      await opened.user.click(deletedLink()!)
+      await waitFor(() => expect(screen.queryByText(/^삭제한 거래예요\./)).toBeTruthy())
+      expect(discardQuestion()).toBeNull()
+      expect(pathOf(opened)).toBe(detailPath(opened.item))
+      expect(detail.requests.update).toHaveLength(1)
+      await opened.user.click(backButton())
+      await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
+    },
+  )
+
+  it('주소로 바로 열었으면 "삭제된 거래 보기"는 방문 기록을 그 거래의 상세로 바꾼다', async () => {
+    const item = lunch()
+    put(item)
+    const opened = await openEdit(item)
+    Object.assign(item, trashed('2026-11-26T03:15:00.123Z'))
+    await changeAndSave(opened.user)
+    await opened.user.click(await waitFor(() => deletedLink()!))
+    await waitFor(() => expect(pathOf(opened)).toBe(detailPath(item)))
+    expect(opened.router.state.historyAction).toBe('REPLACE')
+  })
+
+  it('다시 저장해도 연 때의 version으로 보내 같은 문구를 보인다', async () => {
+    const opened = await saveAfterTrashed(trashedElsewhere[0][1])
+    const first = screen.getByRole('alert')
+    await opened.user.click(saveButton())
+    await waitFor(() => expect(detail.requests.update).toHaveLength(2))
+    expect(sentBodies().map((body) => (body as { version: number }).version)).toEqual([1, 1])
+    await waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(screen.getByRole('alert').textContent).toBe(deletedMeanwhile)
+  })
+})
+
+describe('그사이 완전히 지운 거래(404)', () => {
+  it('"찾을 수 없어요."를 보이고 저장 버튼이 없다', async () => {
+    const item = lunch()
+    put(item)
+    const opened = await openFromDetail(item)
+    detail.items.delete(String(item.id))
     await changeAndSave(opened.user)
     expect(await notFound()).toBeTruthy()
     expect(screen.queryByRole('button', { name: '저장' })).toBeNull()
@@ -530,6 +606,37 @@ describe('그사이 지워진 거래(N-01)', () => {
     await opened.user.click(screen.getByRole('link', { name: '홈으로' }))
     await waitFor(() => expect(pathOf(opened)).toBe('/home'))
     expect(discardQuestion()).toBeNull()
+  })
+})
+
+// 시간대마다 그 시간대의 2027-01-01 00:30을 오프셋으로 적는다(1월이라 로스앤젤레스는 겨울 시간 −08:00).
+// 키리티마티(+14)의 그때는 UTC로 아직 2026-12-31이라, 기기의 시간대를 읽지 않으면 연도를 붙이지 않게 되어 잡힌다
+describe.each([
+  ['Asia/Seoul', '+09:00'],
+  ['UTC', 'Z'],
+  ['America/Los_Angeles', '-08:00'],
+  ['Pacific/Kiritimati', '+14:00'],
+  ['Pacific/Pago_Pago', '-11:00'],
+])('기기의 시간대가 %s일 때 해의 경계', (timeZone, offset) => {
+  beforeEach(() => setDeviceClock(`2027-01-01T00:30:00${offset}`, timeZone))
+
+  it('저장된 날짜와 시각을 시간대 변환 없이 채우고(지난해는 연도를 붙인다) 그대로 보낸다', async () => {
+    const item = lunch({ occurredOn: '2026-12-31', occurredTime: '23:50' })
+    put(item)
+    const { user } = await openEdit(item)
+    expect(dateField().textContent).toBe('2026년 12월 31일')
+    expect(time().value).toBe('23:50')
+    await changeAmount(user)
+    await user.click(saveButton())
+    await waitFor(() => expect(detail.requests.update).toHaveLength(1))
+    expect(sentBodies()[0]).toMatchObject({ occurredOn: '2026-12-31', occurredTime: '23:50' })
+  })
+
+  it('기기의 오늘(새해 첫날)인 거래는 연도 없이 요일을 붙인다', async () => {
+    const item = lunch({ occurredOn: '2027-01-01', occurredTime: '00:10' })
+    put(item)
+    await openEdit(item)
+    expect(dateField().textContent).toBe('1월 1일 (금)')
   })
 })
 

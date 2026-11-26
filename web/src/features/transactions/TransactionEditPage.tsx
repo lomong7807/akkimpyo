@@ -33,6 +33,7 @@ import styles from './TransactionEdit.module.css'
  * D-04 거래 수정(1A). 거래 상세(D-06)의 "수정"이 연다. 주소의 id가 UUID 모양이 아니면 요청하지 않고 찾을 수 없음(N-01)이다.
  * 칸과 검사는 새 입력(TransactionFields)과 같고, 유형은 바꿀 수 없으며(P-213) "더 보기"는 펼친 채 연다.
  * 1A 임시: 다른 기기가 먼저 고쳤으면 충돌 판(N-04, F-909, 1B) 대신 저장 위에 안내와 "최신 내용 보기"만 보인다.
+ * 그사이 휴지통으로 갔으면 같은 자리에 문구와 "삭제된 거래 보기"만 보인다(planner·designer #102).
  * 연결 없음의 비활성 저장과 그 안내(1B), 숨긴 계좌의 도움말(1C), 결제한 사람(2단계)은 없다.
  */
 export default function TransactionEditPage() {
@@ -50,7 +51,8 @@ interface Opened {
 
 /**
  * 고칠 거래, 계좌, 카테고리를 함께 기다린다. 상세에서 받아 둔 거래가 있으면 다시 받지 않는다.
- * 없는 거래(404)와 휴지통의 거래는 찾을 수 없음이다(1A는 휴지통의 거래를 고치지 않는다). 저장하다 그사이 지워진 것을 알아도 같다.
+ * 없는 거래(404)와 휴지통의 거래는 찾을 수 없음이다(1A는 휴지통의 거래를 고치지 않는다). 저장하다 그사이 완전히 지워진 것(404)을
+ * 알아도 같다. 저장하다 그사이 휴지통으로 간 것을 알면 화면에 남는다(EditForm).
  */
 function EditScreen({ id }: { id: string }) {
   const transaction = useTransactionToEdit(id)
@@ -86,7 +88,7 @@ interface EditFormProps {
   opened: Opened | undefined
   /** 받는 동안 칸 자리에 보이는 것 */
   waiting: ReactNode
-  /** 저장하다 그사이 지워진 것을 알았다 */
+  /** 저장하다 그사이 완전히 지워진 것(404)을 알았다 */
   onGone: () => void
 }
 
@@ -144,7 +146,8 @@ function EditForm({ id, opened, waiting, onGone }: EditFormProps) {
   }
 
   function showFailure(error: Error) {
-    if (isGone(error, id)) return onGone()
+    // 완전히 지웠거나 다른 장부의 거래(404)다. 고칠 거래가 없다
+    if (isNotFound(error)) return onGone()
     const rejected = rejectedFields(error)
     if (rejected) {
       unfoldFor(rejected)
@@ -155,10 +158,10 @@ function EditForm({ id, opened, waiting, onGone }: EditFormProps) {
   }
 
   /**
-   * 최신 내용을 보러 간다. 확인 창 없이 쓰던 입력을 버린다. 상세는 충돌 응답의 최신 거래로 그린다(useUpdateTransaction).
-   * 새 탭이나 창으로 여는 누름은 브라우저에 맡긴다. 이 화면의 입력은 그대로 남는다.
+   * 그 거래의 상세(최신 내용, 휴지통의 거래)를 보러 간다. 확인 창 없이 쓰던 입력을 버린다. 상세는 충돌 응답의 최신 거래로
+   * 그린다(useUpdateTransaction). 새 탭이나 창으로 여는 누름은 브라우저에 맡긴다. 이 화면의 입력은 그대로 남는다.
    */
-  function viewLatest(event: MouseEvent<HTMLAnchorElement>) {
+  function viewDetail(event: MouseEvent<HTMLAnchorElement>) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     event.preventDefault()
     // 저장을 다시 보내는 중에는 떠나지 않는다. 요청이 어디까지 갔는지 모른다
@@ -190,8 +193,13 @@ function EditForm({ id, opened, waiting, onGone }: EditFormProps) {
               </RetryMessage>
             )}
             {failure === 'conflict' && (
-              <RetryMessage failures={shown?.count} to={detailPath} actionLabel="최신 내용 보기" onClick={viewLatest}>
+              <RetryMessage failures={shown?.count} to={detailPath} actionLabel="최신 내용 보기" onClick={viewDetail}>
                 다른 기기에서 먼저 고쳤어요
+              </RetryMessage>
+            )}
+            {failure === 'deleted' && (
+              <RetryMessage failures={shown?.count} to={detailPath} actionLabel="삭제된 거래 보기" onClick={viewDetail}>
+                {DELETED_MEANWHILE}
               </RetryMessage>
             )}
             <Button kind="primary" type="submit" busy={saveBusy} disabled={messageBusy}>
@@ -218,20 +226,22 @@ type Failure =
   | 'retry'
   /** 다른 기기가 먼저 고쳤다(409 STALE_VERSION, 1A 임시). 다시 보내도 같으므로 최신 내용을 보러 가게만 한다 */
   | 'conflict'
+  /** 그사이 휴지통으로 갔다(planner·designer #102). 휴지통의 거래는 고칠 수 없어 그 거래를 보러 가게만 한다 */
+  | 'deleted'
 
-/** 저장 위에 보일 실패. 칸에 보인 거부면 없다. */
-function failureOf(error: Error, id: string): Failure | undefined {
-  if (rejectedFields(error)) return undefined
-  return staleVersionOf(error, id) ? 'conflict' : 'retry'
-}
+/** 그사이 휴지통으로 간 거래의 문구(planner 확정 #89) */
+const DELETED_MEANWHILE = '그사이 삭제된 거래라 저장하지 못했어요'
 
 /**
- * 그사이 지워져 고칠 수 없다: 다른 기기가 휴지통으로 옮겨 최신 거래가 휴지통에 있거나(409 STALE_VERSION의 current),
- * version은 맞는데 휴지통에 있거나(409 INVALID_STATE), 완전히 지웠다(404). 1A는 찾을 수 없음(N-01)을 보인다.
+ * 저장 위에 보일 실패. 칸에 보인 거부면 없다. 그사이 휴지통으로 간 것은 다른 기기가 휴지통으로 옮겨 최신 거래가 휴지통에 있거나
+ * (409 STALE_VERSION의 current), version은 맞는데 휴지통에 있는 것(409 INVALID_STATE)이다.
  */
-function isGone(error: Error, id: string): boolean {
-  const current = staleVersionOf(error, id)?.current
-  return (current !== undefined && current.deletedAt !== null) || isInvalidState(error) || isNotFound(error)
+function failureOf(error: Error, id: string): Failure | undefined {
+  if (rejectedFields(error)) return undefined
+  const stale = staleVersionOf(error, id)
+  const trashed = (stale?.current !== undefined && stale.current.deletedAt !== null) || isInvalidState(error)
+  if (trashed) return 'deleted'
+  return stale ? 'conflict' : 'retry'
 }
 
 interface Query {
