@@ -33,7 +33,7 @@ import { useTransactionToEdit } from './useTransactionDetail'
 import { useMoreFold, useTransactionForm } from './useTransactionForm'
 import { useKeepDraft } from '../drafts/keepDraft'
 import { useRestoredDraft } from '../drafts/restoreDraft'
-import { editTransactionDraftOf } from './transactionDraft'
+import { editTransactionDraftOf, type EditTransactionDraft } from './transactionDraft'
 import { useUpdateTransaction } from './useUpdateTransaction'
 
 /**
@@ -153,19 +153,25 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
     form.reset(opened.values)
   }
   const { moreOpen, setMoreOpen, unfoldFor } = useMoreFold(true)
-  // 로그인이 풀리면 쓰던 값과 연 때의 version을 이 기기에 남기고, 같은 계정으로 이 주소에 돌아오면 채운다(00-common 4.1, #234 C2).
-  // 채웠으면 그 version으로 보내, 그사이 서버의 거래가 바뀌었으면 충돌(N-04)이 뜬다
-  const [draftVersion, setDraftVersion] = useState<number>()
-  const baseVersion = draftVersion ?? opened?.transaction.version
+  // 로그인이 풀리면 쓰던 값과 고치기 시작한 바탕(연 때의 version과 값)을 이 기기에 남기고, 같은 계정으로 이 주소에 돌아오면
+  // 채운다(00-common 4.1, #234 C2). 채웠으면 그 version으로 보내, 그사이 서버의 거래가 바뀌었으면 충돌(N-04)이 뜬다.
+  // "내 입력 다시 적용"은 내가 바꾼 칸을 남긴 연 때의 값과 비교한다. 다시 연 때 받은 값과 비교하면 그사이 다른 기기가 고친 칸도
+  // 내가 바꾼 칸으로 보여 되돌린다(#266). 남긴 것에 연 때의 값이 없으면(#266 전에 남긴 것) 다시 연 때 받은 값을 쓴다.
+  // 채운 화면에서 다시 로그인이 풀리면 이 바탕을 그대로 이어 남긴다
+  const [restored, setRestored] = useState<Pick<EditTransactionDraft, 'version' | 'openedValues'>>()
+  const baseVersion = restored?.version ?? opened?.transaction.version
+  const baseValues = restored?.openedValues ?? opened?.values
   useKeepDraft('transaction-edit', () =>
-    baseVersion !== undefined && form.changed ? { version: baseVersion, values: form.values } : undefined,
+    baseVersion !== undefined && baseValues !== undefined && form.changed
+      ? { version: baseVersion, values: form.values, openedValues: baseValues }
+      : undefined,
   )
   useRestoredDraft(
     'transaction-edit',
     (saved) => {
       const draft = editTransactionDraftOf(saved)
       if (!draft) return
-      setDraftVersion(draft.version)
+      setRestored(draft)
       form.change(draft.values)
     },
     filled,
@@ -238,10 +244,10 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
   function reapply() {
     if (!conflict || !opened || !lists) return
     const latest = lists.valuesOf(conflict.current)
-    const merged = reapplyMine(opened.values, form.effective, latest)
+    const merged = reapplyMine(baseValues ?? opened.values, form.effective, latest)
     onRebase({ transaction: conflict.current, values: latest })
-    // 이 기기에 남겼다 채운 입력의 version(#234 C2)이 아니라 최신 version으로 보낸다
-    setDraftVersion(undefined)
+    // 이 기기에 남겼다 채운 입력의 바탕(#234 C2, #266)을 버린다. 최신 거래가 바탕이 되어 그 version으로 보낸다
+    setRestored(undefined)
     form.reset(latest, merged)
     setReapplied(true)
     setConflictOpen(false)

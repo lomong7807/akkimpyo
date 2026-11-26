@@ -1,11 +1,13 @@
-import { act, cleanup, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Backend } from './support/backend'
 import { nowOnDevice } from './support/clock'
+import { untilOpened } from './support/dialog'
 import { startMockServer } from './support/mockServer'
 import { recordDom } from './support/recordDom'
 import {
   amount,
+  id,
   openApp,
   openForm,
   path,
@@ -234,6 +236,72 @@ describe('거래 수정(D-04 수정)', () => {
     await waitFor(() => expect(started.detail.requests.update.filter((sent) => sent.user === 'user-1')).toHaveLength(1))
     const sent = started.detail.requests.update.filter((each) => each.user === 'user-1')[0]
     expect(sent.body).toMatchObject({ version: openedVersion, payee: '저녁' })
+  })
+
+  /** 수정 충돌 안내(N-04) 판 */
+  const conflictSheet = () => screen.queryByRole('dialog', { name: '다른 기기에서 먼저 고쳤어요' })
+
+  it('연 때의 값도 남기고, 다시 로그인해 충돌하면 "내 입력 다시 적용"이 그사이 다른 기기가 고친 칸을 되돌리지 않는다(#266)', async () => {
+    // 연 때 {금액 25,000, 가맹점 김밥천국}(version 1)
+    const item = lunch()
+    started.put(item)
+    const { user } = await openApp(editPath(item))
+    await waitFor(() => expect(payee().value).toBe('김밥천국'))
+    // 금액을 30,000으로 고치는 중에 로그인이 풀렸다
+    await user.clear(amount())
+    await user.keyboard('30000')
+    revoke()
+    await user.click(saveButton())
+    expect(await loginNotice()).toBe(ENDED + KEPT)
+    expect(await draftOf('user-1', 'transaction-edit')).toMatchObject({
+      values: {
+        version: item.version,
+        values: { amount: 30000, payee: '김밥천국' },
+        openedValues: { amount: 25000, payee: '김밥천국' },
+      },
+    })
+    // 그사이 다른 기기가 가맹점을 고쳤다(version 2)
+    Object.assign(started.detail.items.get(String(item.id))!, { payee: '김밥나라', version: Number(item.version) + 1 })
+    backend.cookieUser = undefined
+    await logIn(user)
+    await waitFor(() => expect(amount().value).toBe('30,000'))
+    await user.click(saveButton())
+    await waitFor(() => expect(conflictSheet()).toBeTruthy())
+    await untilOpened()
+    await user.click(within(conflictSheet()!).getByRole('button', { name: '내 입력 다시 적용' }))
+    await waitFor(() => expect(conflictSheet()).toBeNull())
+    expect(amount().value).toBe('30,000')
+    expect(payee().value).toBe('김밥나라')
+  })
+
+  it('채운 쓰던 값에서 다시 로그인이 풀리면 남긴 version과 연 때의 값을 그대로 이어 남긴다(#266)', async () => {
+    // 남긴 뒤 다른 기기가 가맹점을 고쳤다(version 2). 다시 연 때 받은 값은 남긴 연 때의 값과 다르다
+    const item = lunch({ version: 2, payee: '김밥나라' })
+    started.put(item)
+    vi.resetModules()
+    const { keepDrafts } = await import('../src/device/drafts')
+    const openedValues = {
+      type: 'EXPENSE',
+      amount: 25000,
+      payee: '김밥천국',
+      categoryId: id.dining,
+      accountId: id.wallet,
+      toAccountId: '',
+      occurredOn: '2026-11-25',
+      occurredTime: '13:05',
+      memo: '팀 점심\n영수증은 사진첩에',
+    }
+    const values = { ...openedValues, amount: 30000 }
+    await keepDrafts('user-1', [
+      { form: 'transaction-edit', path: editPath(item), values: { version: 1, values, openedValues }, savedAt: nowOnDevice() },
+    ])
+    const { user } = await openApp(editPath(item))
+    await waitFor(() => expect(amount().value).toBe('30,000'))
+    await waitFor(async () => expect(await draftOf('user-1', 'transaction-edit')).toBeUndefined())
+    revoke()
+    await user.click(saveButton())
+    expect(await loginNotice()).toBe(ENDED + KEPT)
+    expect((await draftOf('user-1', 'transaction-edit'))?.values).toEqual({ version: 1, values, openedValues })
   })
 })
 
