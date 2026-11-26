@@ -2,14 +2,16 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Calendar from '../src/components/Calendar'
+import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
 import { readWebFile } from './support/webFile'
 
 const rule = (selector: string) => readCssRule('src/components/Calendar.module.css', selector)
 
-/** 기기의 오늘이 되는 순간을 정한다. 시각은 기기의 시간대다. */
+/** 기기의 오늘이 되는 순간을 정한다. 시각은 기기의 시간대(서울)다. */
 function deviceToday(year: number, month: number, day: number, hour = 12, minute = 0) {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(year, month - 1, day, hour, minute) })
+  const pad = (value: number) => String(value).padStart(2, '0')
+  setDeviceClock(`${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00+09:00`)
 }
 
 function open(value: string) {
@@ -29,7 +31,6 @@ beforeEach(() => deviceToday(2026, 11, 26))
 
 afterEach(() => {
   cleanup()
-  vi.useRealTimers()
 })
 
 describe('한 달', () => {
@@ -263,7 +264,7 @@ describe('고르기', () => {
   it('열어 둔 채 자정을 넘기면 "오늘"은 새 날짜를 고른다', async () => {
     deviceToday(2026, 11, 26, 23, 59)
     const { user, onSelect } = open('2026-11-20')
-    vi.setSystemTime(new Date(2026, 10, 27, 0, 0))
+    deviceToday(2026, 11, 27, 0, 0)
     await user.click(screen.getByRole('button', { name: '오늘' }))
     expect(onSelect.mock.calls).toEqual([['2026-11-27']])
   })
@@ -273,7 +274,7 @@ describe('고르기', () => {
     open('2026-11-20')
     expect(day('2026년 11월 26일').getAttribute('aria-current')).toBe('date')
     cleanup()
-    vi.setSystemTime(new Date(2026, 10, 27, 0, 0))
+    deviceToday(2026, 11, 27, 0, 0)
     open('2026-11-20')
     expect(day('2026년 11월 26일').hasAttribute('aria-current')).toBe(false)
     expect(day('2026년 11월 27일').getAttribute('aria-current')).toBe('date')

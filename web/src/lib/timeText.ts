@@ -1,5 +1,7 @@
 /* 시각 칸의 글자(화면설계서 00-common 5.8). 24시간제 `HH:mm`이고 1분 단위다. 시간대는 없다. */
 
+import { wallTimeNow } from './clock'
+
 function digitsOf(text: string): string {
   return text.replace(/[^0-9]/g, '')
 }
@@ -39,6 +41,5 @@ export function isValidTime(text: string): boolean {
 
 /** 기기의 지금 시각(분 단위) */
 export function currentTime(): string {
-  const now = new Date()
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  return wallTimeNow().time
 }

@@ -5,6 +5,7 @@ import { holdKeyboard } from '../src/components/keyboardBridge'
 import { canEdit } from '../src/features/me/me'
 import { meOf, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
+import { setDeviceClock } from './support/clock'
 import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { readWebFile } from './support/webFile'
@@ -26,7 +27,8 @@ let backend: Backend
 let transactions: Transactions
 
 beforeEach(() => {
-  startGuardClock(new Date(2026, 10, 26, 12, 30))
+  setDeviceClock('2026-11-26T12:30:00+09:00')
+  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   localStorage.clear()

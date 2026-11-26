@@ -17,17 +17,14 @@ import {
   today,
   weeksOf,
 } from '../src/lib/calendarDate'
+import { setDeviceClock } from './support/clock'
 
 afterEach(() => {
-  vi.useRealTimers()
   vi.unstubAllEnvs()
 })
 
-function deviceTime(instant: string) {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(instant) })
-}
-
 // 날짜 값에는 시간대가 없다. 기기가 어느 시간대에 있어도 같은 값이 나와야 한다.
+// 이 계산은 기기의 시간대를 읽지 않아야 하므로 Date의 지역 시각이 쓰는 시간대(TZ)를 바꿔 본다. 결과는 바깥의 TZ와 상관없다.
 describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles', 'Pacific/Kiritimati'])('기기의 시간대가 %s일 때', (timeZone) => {
   beforeEach(() => vi.stubEnv('TZ', timeZone))
 
@@ -224,11 +221,14 @@ describe('기기의 오늘', () => {
     ['UTC', '2026-11-26T00:00:00.000Z', '2026-11-26'],
     ['America/Los_Angeles', '2026-11-26T07:59:59.999Z', '2026-11-25'],
     ['America/Los_Angeles', '2026-11-26T08:00:00.000Z', '2026-11-26'],
+    ['Pacific/Kiritimati', '2026-11-25T09:59:59.999Z', '2026-11-25'],
+    ['Pacific/Kiritimati', '2026-11-25T10:00:00.000Z', '2026-11-26'],
+    ['Pacific/Pago_Pago', '2026-11-26T10:59:59.999Z', '2026-11-25'],
+    ['Pacific/Pago_Pago', '2026-11-26T11:00:00.000Z', '2026-11-26'],
     ['Asia/Seoul', '2026-12-31T15:00:00.000Z', '2027-01-01'],
     ['Asia/Seoul', '2028-02-28T15:00:00.000Z', '2028-02-29'],
   ])('%s에서 %s이면 %s이다', (timeZone, instant, expected) => {
-    vi.stubEnv('TZ', timeZone)
-    deviceTime(instant)
+    setDeviceClock(instant, timeZone)
     expect(today()).toBe(expected)
   })
 })

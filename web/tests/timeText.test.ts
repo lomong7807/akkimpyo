@@ -1,10 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { currentTime, formatTimeText, isValidTime, normalizeTime, positionAfterTimeDigits } from '../src/lib/timeText'
-
-afterEach(() => {
-  vi.useRealTimers()
-  vi.unstubAllEnvs()
-})
+import { setDeviceClock } from './support/clock'
 
 describe('칸에 보일 글자', () => {
   it.each([
@@ -66,18 +62,23 @@ describe('형식', () => {
   })
 })
 
-describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles'])('기기의 시간대가 %s일 때 지금 시각', (timeZone) => {
-  beforeEach(() => vi.stubEnv('TZ', timeZone))
-
+// 시간대마다 그 시간대의 시각을 오프셋으로 적는다(11월이라 로스앤젤레스는 겨울 시간 −08:00)
+describe.each([
+  ['Asia/Seoul', '+09:00'],
+  ['UTC', 'Z'],
+  ['America/Los_Angeles', '-08:00'],
+  ['Pacific/Kiritimati', '+14:00'],
+  ['Pacific/Pago_Pago', '-11:00'],
+])('기기의 시간대가 %s일 때 지금 시각', (timeZone, offset) => {
   it('기기 시계의 시와 분을 그대로 쓴다', () => {
-    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 9, 5, 59) })
+    setDeviceClock(`2026-11-26T09:05:59${offset}`, timeZone)
     expect(currentTime()).toBe('09:05')
   })
 
   it('자정 직전과 직후', () => {
-    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 23, 59, 59, 999) })
+    setDeviceClock(`2026-11-26T23:59:59.999${offset}`, timeZone)
     expect(currentTime()).toBe('23:59')
-    vi.setSystemTime(new Date(2026, 10, 27, 0, 0, 0))
+    setDeviceClock(`2026-11-27T00:00:00${offset}`, timeZone)
     expect(currentTime()).toBe('00:00')
   })
 })

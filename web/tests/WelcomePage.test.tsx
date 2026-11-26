@@ -6,6 +6,7 @@ import StatusChip from '../src/components/StatusChip'
 import { accountOf, startAccounts, type Accounts } from './support/accounts'
 import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { categoryOf, defaultExpenses, defaultIncomes, startCategories, type Categories } from './support/categories'
+import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
 import { readWebFile } from './support/webFile'
 import { shield, untilOpened, untilUnshielded } from './support/dialog'
@@ -43,8 +44,12 @@ let backend: Backend
 let accounts: Accounts
 let categories: Categories
 
+/** 기기의 지금(서울). 라이브러리의 시계(Date)도 이때에 멈춰 둔다. */
+const NOW = '2026-11-26T12:00:00+09:00'
+
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12) })
+  setDeviceClock(NOW)
+  vi.useFakeTimers({ toFake: ['Date'], now: Date.parse(NOW) })
   vi.stubGlobal('scrollTo', vi.fn())
   installMatchMedia(390)
   installLocks(createFakeLocks())
@@ -251,7 +256,7 @@ describe('첫 장을 불러오는 중', () => {
     categories.response = answer.respond
     const opened = await openApp('/welcome?step=2')
     await secondHeading()
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: new Date(2026, 10, 26, 12) })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: Date.parse(NOW) })
     await act(() => opened.router.navigate('/welcome'))
     return { ...opened, answer }
   }
@@ -729,12 +734,13 @@ describe('건너뛰기', () => {
     ['UTC', '2026-11-26T00:00:00.000Z', '2026-11-26', '11월 26일 (목)'],
     ['America/Los_Angeles', '2026-11-26T07:59:59.999Z', '2026-11-25', '11월 25일 (수)'],
     ['America/Los_Angeles', '2026-11-26T08:00:00.000Z', '2026-11-26', '11월 26일 (목)'],
+    ['Pacific/Kiritimati', '2026-11-25T09:59:59.999Z', '2026-11-25', '11월 25일 (수)'],
+    ['Pacific/Kiritimati', '2026-11-25T10:00:00.000Z', '2026-11-26', '11월 26일 (목)'],
+    ['Pacific/Pago_Pago', '2026-11-26T10:59:59.999Z', '2026-11-25', '11월 25일 (수)'],
+    ['Pacific/Pago_Pago', '2026-11-26T11:00:00.000Z', '2026-11-26', '11월 26일 (목)'],
     ['Asia/Seoul', '2026-12-31T15:00:00.000Z', '2027-01-01', '1월 1일 (금)'],
   ])('기기의 시간대가 %s이고 지금이 %s이면', (timeZone, instant, today, shown) => {
-    beforeEach(() => {
-      vi.stubEnv('TZ', timeZone)
-      vi.setSystemTime(new Date(instant))
-    })
+    beforeEach(() => setDeviceClock(instant, timeZone))
 
     it(`기준일의 처음 값과 건너뛰기의 기준일은 기기의 오늘 ${today}이다`, async () => {
       const { user } = await openSecond()
@@ -951,7 +957,7 @@ describe('서버 오류와 지연', () => {
     accounts.addResponse = delayed().respond
     const { user } = await openSecond()
     await fill(user)
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: new Date(2026, 10, 26, 12) })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: Date.parse(NOW) })
     fireEvent.click(createButton())
     await act(() => vi.advanceTimersByTimeAsync(14_900))
     expect(screen.queryByRole('alert')).toBeNull()

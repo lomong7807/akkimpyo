@@ -1,5 +1,13 @@
-import { afterAll } from 'vitest'
+import { afterAll, beforeEach, vi } from 'vitest'
+import { DEFAULT_NOW, setDeviceClock } from './clock'
 import { installDialog, untilUnshielded } from './dialog'
+
+// 앱을 새로 여는 테스트는 vi.resetModules()로 앱 모듈을 다시 읽는다. 시계 모듈까지 다시 읽으면 테스트가 정한 시계가 새 앱에
+// 닿지 않는다. 그대로 돌려주는 mock으로 두면 resetModules가 다시 읽지 않아 한 파일 안에서 하나를 나눠 쓴다.
+vi.mock(import('../../src/lib/clock'), (importOriginal) => importOriginal())
+
+// 테스트마다 기기의 지금과 시간대를 정해 둔다. 테스트를 돌리는 기기의 시계와 시간대(TZ)를 보지 않는다(#225)
+beforeEach(() => setDeviceClock(DEFAULT_NOW))
 
 // jsdom에는 없다. 배치를 계산하지 않고 움직임이 없으므로 아무것도 하지 않는다
 if (typeof Element !== 'undefined') {

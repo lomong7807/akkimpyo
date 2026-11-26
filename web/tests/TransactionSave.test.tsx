@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Accounts } from './support/accounts'
 import { delayed, type Backend } from './support/backend'
 import { untilOpened } from './support/dialog'
+import { setDeviceClock } from './support/clock'
 import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
@@ -51,7 +52,8 @@ let accounts: Accounts
 let transactions: Transactions
 
 beforeEach(() => {
-  startGuardClock(new Date(2026, 10, 26, 12, 30))
+  setDeviceClock('2026-11-26T12:30:00+09:00')
+  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts, transactions } = startServer(server))
   localStorage.clear()
