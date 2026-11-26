@@ -5,6 +5,8 @@
  * 나머지 62비트(rand_b)는 늘 새 무작위 값이다. id는 추측할 수 없는 값이어야 한다(ADR 006 결정 3).
  */
 
+import { now } from './clock'
+
 const MAX_COUNTER = 0xfff
 
 interface Source {
@@ -15,7 +17,7 @@ interface Source {
 }
 
 const browserSource: Source = {
-  now: () => Date.now(),
+  now,
   fillRandom: (bytes) => void crypto.getRandomValues(bytes),
 }
 

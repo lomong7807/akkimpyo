@@ -12,6 +12,7 @@ import Skeleton, { LoadingStatus, SkeletonBar, SkeletonSpace } from '../../compo
 import { useGoBack } from '../../components/useGoBack'
 import { useLoadingMessage } from '../../components/useLoadingMessage'
 import { formatDate, today as todayOfDevice } from '../../lib/calendarDate'
+import { now } from '../../lib/clock'
 import { isUuid } from '../../lib/uuid'
 import { useAccounts } from '../accounts/useAccounts'
 import { useCategories } from '../categories/useCategories'
@@ -108,7 +109,7 @@ interface DetailContentProps {
 function DetailContent({ transaction, names, today }: DetailContentProps) {
   const ledger = useCurrentLedger()
   // 안내 띠의 남은 날은 화면을 연 때로 센다
-  const [openedAt] = useState(Date.now)
+  const [openedAt] = useState(now)
   const deleted = transaction.deletedAt !== null
   return (
     <>
