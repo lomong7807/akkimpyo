@@ -17,6 +17,7 @@ import {
   saveButton,
   startServer,
   typeRadio,
+  untilDefaultAccount,
   type Opened,
 } from './support/transactionScreen'
 import type { Transactions } from './support/transactions'
@@ -56,7 +57,7 @@ async function openAt(address: string, width = 390) {
 }
 
 async function untilForm(opened: Opened) {
-  await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+  await untilDefaultAccount()
   expect(path(opened)).toBe('/transactions/new')
 }
 

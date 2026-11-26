@@ -81,6 +81,12 @@ async function seedOtherLedger({ stillMember = true } = {}) {
   if (stillMember) backend.meResponse = () => HttpResponse.json({ ...me, ledgers: [...me.ledgers, other] })
 }
 
+/**
+ * 따로 싣는 화면(#251)의 코드가 와서 그 화면이 그려질 때까지 기다린다. 기기 저장소를 읽는 도구(support/device)는 모듈을 다시
+ * 불러오므로, 화면의 코드가 오기 전에 읽으면 화면이 앱과 다른 모듈(로그인하지 않은 api)을 받는다.
+ */
+const untilScreen = () => screen.findAllByText(/자산 합계|불러오지 못했어요|찾을 수 없어요|없는 거래/)
+
 /** 연결 없음과 같은 실패로 연다(확인하지 못한 로그인). */
 async function openOffline(path: string) {
   backend.refreshResponse = () => HttpResponse.error()
@@ -109,6 +115,7 @@ async function openPicker(user: User, field: HTMLElement) {
 describe('사본을 남기는 때', () => {
   it('로그인한 상태로 계좌 목록과 카테고리를 받으면 그 사용자·장부의 사본으로 통째로 남기고 받은 시각을 적는다', async () => {
     await openApp('/transactions/new')
+    await waitFor(accountField)
     await waitFor(async () => expect(await ledgerCopy('user-1', LEDGER, 'accounts')).toBeDefined())
     await waitFor(async () => expect(await ledgerCopy('user-1', LEDGER, 'categories')).toBeDefined())
     expect(await ledgerCopy('user-1', LEDGER, 'accounts')).toEqual({ data: accountItems, receivedAt: now })
@@ -119,6 +126,7 @@ describe('사본을 남기는 때', () => {
     await seedDevice()
     accounts.items = [accountItems[1]]
     await openApp('/accounts')
+    await untilScreen()
     await waitFor(async () => expect((await ledgerCopy('user-1', LEDGER, 'accounts'))?.data).toEqual([accountItems[1]]))
   })
 
@@ -144,6 +152,7 @@ describe('장부 단위로 지우는 때(security Q4)', () => {
     backend.cookieUser = 'user-1'
     fail()
     await openApp(path)
+    await untilScreen()
     await waitFor(async () => expect(await ledgerKinds(LEDGER)).toEqual([]))
     // 같이 보낸 다른 조회의 응답이 뒤에 와도 지운 사본이 다시 생기지 않는다(#251 worker가 찾은 경쟁)
     await settle(600)
@@ -181,6 +190,7 @@ describe('장부 단위로 지우는 때(security Q4)', () => {
     backend.cookieUser = 'user-1'
     accounts.response = () => problem(404, 'NOT_FOUND')
     await openApp('/accounts')
+    await untilScreen()
     await waitFor(async () => expect(await ledgerKinds(LEDGER)).toEqual([]))
   })
 
@@ -222,8 +232,8 @@ describe('새 거래 입력은 사본을 먼저 쓴다', () => {
     await seedDevice()
     const { user } = await openOffline('/transactions/new')
     await screen.findByRole('heading', { level: 1, name: '거래 입력' })
-    // 뼈대 없이 처음 그릴 때부터 사본의 기본 계좌다
-    expect(accountField().textContent).toContain('사본의 통장')
+    // 뼈대 없이 처음 그릴 때부터 사본의 기본 계좌다. 그 전의 화면 코드를 받는 동안의 틀(#251)에는 칸이 없다
+    expect((await waitFor(accountField)).textContent).toContain('사본의 통장')
     await openPicker(user, accountField())
     expect(optionNames()).toEqual(['사본의 통장'])
     await user.keyboard('{Escape}')
@@ -267,6 +277,7 @@ describe('새 거래 입력은 사본을 먼저 쓴다', () => {
     await seedLedgerCopy('user-2', LEDGER, 'accounts', copiedAccounts, now - DAY)
     await openOffline('/transactions/new')
     await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+    await waitFor(accountField)
     await settle(100)
     expect(accountField().textContent).not.toContain('사본의 통장')
   })

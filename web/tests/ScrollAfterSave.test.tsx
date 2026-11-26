@@ -15,7 +15,6 @@ import {
   type Item,
 } from './support/transactionEdit'
 import {
-  accountField,
   amount,
   closeButton,
   discardQuestion,
@@ -23,6 +22,7 @@ import {
   resetGlobals,
   saveAmount,
   saveButton,
+  untilDefaultAccount,
   type Opened,
   type User,
 } from './support/transactionScreen'
@@ -80,9 +80,7 @@ async function readListDown(): Promise<Opened & { item: Item }> {
 /** 지금 화면에서 거래 입력을 연다(빠른 입력, 사이드바의 "거래 입력"과 같은 쌓기). */
 async function openNew({ router }: Opened) {
   await act(() => router.navigate('/transactions/new'))
-  await screen.findByRole('heading', { level: 1, name: '거래 입력' })
-  const field = accountField()
-  await waitFor(() => expect(field.textContent).not.toBe(''))
+  await untilDefaultAccount()
 }
 
 /** 내역 → 상세로 가서 아래로 내려 읽고 "수정"을 연다. */
@@ -212,6 +210,8 @@ describe('계좌 추가', () => {
     window.scrollTo(0, READ_DOWN)
     await opened.user.click(screen.getByRole('link', { name: '추가' }))
     await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+    // 화면 코드를 받는 동안의 틀에도 같은 제목이 있다(#251)
+    await screen.findByLabelText('이름')
     return opened
   }
 

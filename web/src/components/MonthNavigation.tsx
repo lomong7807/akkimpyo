@@ -44,3 +44,8 @@ export default function MonthNavigation({ month, label, first, last, onMove }: M
     </div>
   )
 }
+
+/** 달 이동을 그리기 전의 자리(#251). 같은 높이를 비워 두어 달 이동이 나타날 때 아래 내용이 밀리지 않는다. */
+export function MonthNavigationSpace() {
+  return <div aria-hidden="true" className={styles.navigation} />
+}

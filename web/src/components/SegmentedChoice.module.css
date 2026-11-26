@@ -52,3 +52,8 @@
 .option:focus-visible {
   outline-color: transparent;
 }
+
+/* 그리기 전의 자리. 상자와 같은 높이를 차지하고 보이지 않는다 */
+.space {
+  visibility: hidden;
+}

@@ -84,8 +84,14 @@ const errors = () => controls().map(errorOf)
 
 async function open(path = '/accounts/new') {
   const opened = await openApp(path)
-  await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+  await untilForm()
   return opened
+}
+
+/** 계좌 추가의 칸이 나올 때까지 기다린다. 화면 코드를 받는 동안의 틀(#251)에도 같은 제목이 있다. */
+async function untilForm() {
+  await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+  await screen.findByLabelText('이름')
 }
 
 /** 계좌 목록에서 "추가"를 눌러 연다. */
@@ -93,7 +99,7 @@ async function openFromList() {
   const opened = await openApp('/accounts')
   await screen.findByText('자산 합계')
   await opened.user.click(screen.getByRole('link', { name: '추가' }))
-  await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+  await untilForm()
   return opened
 }
 
@@ -395,7 +401,7 @@ describe('저장', () => {
     const { user } = await openApp('/accounts')
     await before.arrived
     await user.click(screen.getByRole('link', { name: '추가' }))
-    await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
+    await untilForm()
     accounts.response = undefined
     await fillAndSave(user)
     expect(await screen.findByText('급여통장')).toBeTruthy()

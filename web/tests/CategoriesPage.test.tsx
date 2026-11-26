@@ -99,7 +99,8 @@ const retry = () => screen.getByRole('button', { name: '다시 시도' })
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 30)))
 
 /** 최상위 목록 */
-const list = () => content().findAllByRole('list').then(([first]) => first)
+// 화면 코드를 받는 동안의 틀(#251)에서 화면으로 바뀌면 main이 바뀌므로 매번 다시 찾는다
+const list = () => waitFor(() => content().getAllByRole('list')[0])
 const itemsIn = (element: Element) => [...element.children] as HTMLElement[]
 /** 최상위 줄과 그 하위의 이름. 미분류 줄은 글자를 모두 잇는다. */
 const tree = async () =>
@@ -117,7 +118,7 @@ const uncategorizedRow = '미분류이름을 바꾸거나 지울 수 없어요�
 describe('카테고리(H-01)에 들어가는 길', () => {
   it('더보기의 "카테고리" 줄을 누르면 들어간다', async () => {
     const { router, user } = await open('/more')
-    await user.click(content().getByRole('link', { name: '카테고리' }))
+    await user.click(await waitFor(() => content().getByRole('link', { name: '카테고리' })))
     await title()
     expect(router.state.location.pathname).toBe('/categories')
   })
@@ -369,7 +370,7 @@ describe('지출과 수입', () => {
 
   it('뒤로 갔다 다시 와도 지출이 골라져 있다', async () => {
     const { router, user } = await open('/more')
-    await user.click(content().getByRole('link', { name: '카테고리' }))
+    await user.click(await waitFor(() => content().getByRole('link', { name: '카테고리' })))
     await list()
     await user.click(option('수입'))
     await act(() => router.navigate(-1))

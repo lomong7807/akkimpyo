@@ -8,7 +8,7 @@ import ConfirmDialog, { type ConfirmFailure } from '../../components/ConfirmDial
 import LoadFailure from '../../components/LoadFailure'
 import Notice from '../../components/Notice'
 import { SubScreen } from '../../components/Screen'
-import Skeleton, { LoadingStatus, SkeletonBar, SkeletonSpace } from '../../components/Skeleton'
+import { LoadingStatus, SkeletonSpace } from '../../components/Skeleton'
 import { useGoBack } from '../../components/useGoBack'
 import { useLoadingMessage } from '../../components/useLoadingMessage'
 import { formatDate, today as todayOfDevice } from '../../lib/calendarDate'
@@ -20,6 +20,7 @@ import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { canEdit } from '../me/me'
 import NotFoundPage from '../not-found/NotFoundPage'
 import { nameBookOf, titleOf, type NameBook } from './listedText'
+import { DetailSkeleton, FieldsSkeleton } from './TransactionDetailSkeleton'
 import { purgeNoticeOf } from './purgeNotice'
 import { isInvalidState, staleVersionOf, type ListedTransaction, type TransactionDetail } from './transactions'
 import { useDeleteTransaction, useOfferUndo } from './useDeleteTransaction'
@@ -202,28 +203,6 @@ function dateTimeOf({ occurredOn, occurredTime }: ListedTransaction, today: stri
   return `${formatDate(occurredOn, today)}${occurredTime === null ? ' · 시각 없음' : ` ${occurredTime}`}`
 }
 
-/** 주소로 바로 연 때의 뼈대: (2)~(10) 자리. 유형·금액, 가맹점, 항목 5줄이다. */
-function DetailSkeleton() {
-  return (
-    <Skeleton>
-      <div className={styles.detail}>
-        <div className={styles.summary}>
-          <div className={styles.head}>
-            <SkeletonBar kind="name" text="body" />
-            <SkeletonBar kind="amount" text="title" />
-          </div>
-          <div className={`${styles.payee} ${styles.lineSkeleton}`}>
-            <SkeletonBar kind="name" text="body" />
-          </div>
-        </div>
-        <div className={styles.list}>
-          <FieldsSkeleton count={5} />
-        </div>
-      </div>
-    </Skeleton>
-  )
-}
-
 /** 목록에서 들어온 때: 목록에 있던 유형, 금액, 가맹점, 날짜를 먼저 보이고 나머지 항목만 뼈대다. */
 function ListedSkeleton({ listed, names, today }: { listed: ListedTransaction; names: NameBook | undefined; today: string }) {
   const message = useLoadingMessage()
@@ -241,15 +220,6 @@ function ListedSkeleton({ listed, names, today }: { listed: ListedTransaction; n
       </div>
     </>
   )
-}
-
-function FieldsSkeleton({ count }: { count: number }) {
-  return Array.from({ length: count }, (_, index) => (
-    <div key={index} className={styles.item}>
-      <SkeletonBar kind="name" text="body" />
-      <SkeletonBar kind="amount" text="body" />
-    </div>
-  ))
 }
 
 const failedToDelete = '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.'
