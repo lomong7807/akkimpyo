@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type ChangeEvent, type ClipboardEvent, type CompositionEvent, type Ref } from 'react'
-import { digitsOf, formatAmount, joinDigits, pastedDigits, positionAfterDigits } from './amountText'
+import { digitsOf, formatAmount, joinDigits, pastedDigits, positionAfterDigits } from '../lib/amountText'
 import { Button } from './Button'
 import Field, { type FieldLabels } from './Field'
 import styles from './AmountField.module.css'

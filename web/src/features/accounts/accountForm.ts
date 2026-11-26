@@ -1,6 +1,6 @@
-import { today } from '../../components/calendarDate'
 import type { FieldErrors } from '../../components/useFormFields'
-import { hasUnusableCharacter, lengthOf, normalizeName } from '../../components/visibleText'
+import { today } from '../../lib/calendarDate'
+import { hasUnusableCharacter, lengthOf, normalizeName } from '../../lib/visibleText'
 import type { AccountType, NewAccount } from './accounts'
 
 /** 칸의 값. 오류를 보이는 칸의 이름은 보내는 값(NewAccount)과 같다. */

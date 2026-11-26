@@ -1,5 +1,5 @@
 import type { FieldErrors } from '../../components/useFormFields'
-import { hasUnusableCharacter, lengthOf, normalizeName } from '../../components/visibleText'
+import { hasUnusableCharacter, lengthOf, normalizeName } from '../../lib/visibleText'
 import { emailError, invalidEmail, trimEmail } from './email'
 
 export interface SignupValues {
