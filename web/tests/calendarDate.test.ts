@@ -7,7 +7,11 @@ import {
   formatDate,
   formatMonth,
   fullDate,
+  isDate,
+  isMonth,
   monthOf,
+  moveMonth,
+  selectableMonths,
   selectableRange,
   startOfWeek,
   today,
@@ -137,6 +141,49 @@ describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles', 'Pacific/Kiritimati']
     expect(monthOf('2026-11-01')).toBe('2026-11')
     expect(monthOf('2026-11-30')).toBe('2026-11')
   })
+
+  it.each([
+    ['2026-11', 1, '2026-12'],
+    ['2026-12', 1, '2027-01'],
+    ['2027-01', -1, '2026-12'],
+    ['2000-01', -1, '1999-12'],
+    ['2026-11', 12, '2027-11'],
+    ['2028-02', 1, '2028-03'],
+  ])('%s에서 %d달 옮기면 %s이다', (month, months, expected) => {
+    expect(moveMonth(month, months)).toBe(expected)
+  })
+
+  it.each([
+    ['2026-11-26', '2027-11'],
+    ['2026-11-01', '2027-11'],
+    ['2026-12-31', '2027-12'],
+    ['2027-01-01', '2028-01'],
+    ['2028-02-29', '2029-02'],
+  ])('오늘이 %s이면 2000-01부터 %s까지 고를 수 있다', (day, last) => {
+    expect(selectableMonths(day)).toEqual({ first: '2000-01', last })
+  })
+
+  it.each(['2026-11', '2000-01', '2026-01', '2026-12', '9999-12'])('%s은 달이다', (text) => {
+    expect(isMonth(text)).toBe(true)
+  })
+
+  it.each(['2026-13', '2026-00', '2026-1', '26-11', '2026-11-01', '2026/11', ' 2026-11', '2026-11 ', '', '２０２６-11'])(
+    '"%s"은 달이 아니다',
+    (text) => {
+      expect(isMonth(text)).toBe(false)
+    },
+  )
+
+  it.each(['2026-11-26', '2028-02-29', '2026-12-31', '2000-01-01'])('%s은 있는 날짜다', (text) => {
+    expect(isDate(text)).toBe(true)
+  })
+
+  it.each(['2026-02-29', '2026-11-31', '2026-13-01', '2026-11-00', '2026-11-1', '2026-11', '2026-11-26T00:00', ''])(
+    '"%s"은 날짜가 아니다',
+    (text) => {
+      expect(isDate(text)).toBe(false)
+    },
+  )
 
   it.each([
     ['2026-11-26', '11월 26일 (목)'],

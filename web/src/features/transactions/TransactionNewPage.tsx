@@ -12,6 +12,7 @@ import { uuidV7 } from '../../lib/uuid'
 import { useAccounts } from '../accounts/useAccounts'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { defaultAccountOf } from './formDefaults'
+import { useListMemory } from './listMemory'
 import TransactionFields from './TransactionFields'
 import { foldedFields, toNewTransaction, validateTransaction, type TransactionField } from './transactionForm'
 import { rejectedFields } from './transactionRejection'
@@ -31,6 +32,7 @@ const HOME = '/home'
 export default function TransactionNewPage() {
   const ledger = useCurrentLedger()
   const showToast = useToast()
+  const listMemory = useListMemory()
   const goBack = useGoBack(HOME)
   const creation = useCreateTransaction()
   const accounts = useAccounts()
@@ -67,6 +69,8 @@ export default function TransactionNewPage() {
 
   // 화면을 떠난 뒤에 온 응답으로는 불리지 않는다
   function finish(result: CreateResult) {
+    // 돌아간 화면이 내역이면 그 줄을 강조한다(D-01 성공 뒤). 주소와 방문 기록에는 넣지 않는다
+    listMemory.rememberSaved(result.transaction.id)
     showToast(needsResendNotice(result) ? '이미 저장된 거래가 있어요. 내역에서 확인해 주세요.' : '저장했어요')
     guard.leave(goBack)
   }

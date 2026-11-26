@@ -4,11 +4,12 @@ import AccountAddPage from '../features/accounts/AccountAddPage'
 import AccountsPage from '../features/accounts/AccountsPage'
 import CategoriesPage from '../features/categories/CategoriesPage'
 import NotFoundPage from '../features/not-found/NotFoundPage'
+import TransactionListPage from '../features/transactions/TransactionListPage'
 import TransactionNewPage from '../features/transactions/TransactionNewPage'
 import LedgerLayout from './LedgerLayout'
 import LoginRoute from './LoginRoute'
 import MoreRoute from './MoreRoute'
-import { accountsItem, categoriesItem, moreItem } from './navigation'
+import { accountsItem, categoriesItem, moreItem, transactionsItem } from './navigation'
 import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
 import SessionProvider from './SessionProvider'
@@ -64,6 +65,11 @@ export const routes: RouteObject[] = [
                     handle: { navigationItem: accountsItem, fullScreen: true },
                   },
                   { path: '/categories', element: <CategoriesPage />, handle: { navigationItem: categoriesItem } },
+                  {
+                    path: '/transactions',
+                    element: <TransactionListPage />,
+                    handle: { navigationItem: transactionsItem },
+                  },
                   { path: '/transactions/new', element: <TransactionNewPage />, handle: { fullScreen: true } },
                   { path: '*', element: <NotFoundPage /> },
                 ],

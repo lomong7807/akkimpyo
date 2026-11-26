@@ -5,6 +5,7 @@ import { ButtonLink } from '../components/Button'
 import LoadFailure from '../components/LoadFailure'
 import { CurrentLedgerContext } from '../features/me/CurrentLedgerContext'
 import { useMe } from '../features/me/useMe'
+import ListMemoryProvider from './ListMemoryProvider'
 import Loading from './Loading'
 import PlainLayout from './PlainLayout'
 import { createQueryClient } from './queryClient'
@@ -76,7 +77,9 @@ function Gate() {
     return (
       <CurrentLedgerContext value={ledger}>
         <ToastProvider>
-          {entry === 'stay' ? <Outlet /> : <Navigate to={entry === 'welcome' ? WELCOME : '/home'} replace />}
+          <ListMemoryProvider>
+            {entry === 'stay' ? <Outlet /> : <Navigate to={entry === 'welcome' ? WELCOME : '/home'} replace />}
+          </ListMemoryProvider>
         </ToastProvider>
       </CurrentLedgerContext>
     )
