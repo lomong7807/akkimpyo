@@ -1,0 +1,16 @@
+/*
+ * 가입의 틀(#251). 공통 틀이 없어 상단 바 아래 남은 영역을 채우고, 기다림 글(Loading)을 다른 화면처럼 그 가운데에 둔다.
+ * 아래 여백은 PlainLayout과 같다(Loading의 위 여백 24px과 짝).
+ */
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding-bottom: calc(var(--space-24) + env(safe-area-inset-bottom));
+}

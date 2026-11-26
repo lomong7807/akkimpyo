@@ -1,30 +1,21 @@
 import { useId } from 'react'
 import Amount from '../../components/Amount'
-import { ButtonLink } from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
 import LoadFailure from '../../components/LoadFailure'
 import { SubScreen } from '../../components/Screen'
 import { accountTypes, type Account } from './accounts'
+import AddAccountLink from './AddAccountLink'
 import AccountsSkeleton from './AccountsSkeleton'
 import { accountTypeNames } from './accountTypeNames'
-import { openedFromList } from './openedFromList'
 import { useAccounts } from './useAccounts'
 import styles from './Accounts.module.css'
 
 /** G-01 계좌 목록. 1A에서 계좌 줄은 눌리지 않는다. 계좌 상세(G-03)가 들어오면 맞춘다. */
 export default function AccountsPage() {
   return (
-    <SubScreen title="계좌" parent="/more" action={<AddLink kind="text">추가</AddLink>}>
+    <SubScreen title="계좌" parent="/more" action={<AddAccountLink kind="text">추가</AddAccountLink>}>
       <Accounts />
     </SubScreen>
-  )
-}
-
-function AddLink({ kind, children }: { kind: 'text' | 'primary'; children: string }) {
-  return (
-    <ButtonLink kind={kind} to="/accounts/new" state={openedFromList}>
-      {children}
-    </ButtonLink>
   )
 }
 
@@ -40,7 +31,7 @@ function AccountList({ accounts }: { accounts: Account[] }) {
   if (accounts.length === 0) {
     return (
       <EmptyState description="계좌가 없어요. 계좌를 추가하면 잔액을 한눈에 볼 수 있어요.">
-        <AddLink kind="primary">계좌 추가</AddLink>
+        <AddAccountLink kind="primary">계좌 추가</AddAccountLink>
       </EmptyState>
     )
   }

@@ -24,6 +24,10 @@ if (typeof Element !== 'undefined') {
   Element.prototype.getAnimations = () => []
   installDialog()
   keepUnchangedStyles()
+  // jsdom에는 없다. 브라우저가 한가해지지 않는 것으로 둔다. 공통 틀이 화면 코드를 미리 받으면(#251) 그 불러오기가 테스트가 끝난
+  // 뒤에도 이어져 다음 테스트의 시계를 늦춘다. 미리 받기를 보는 테스트는 가짜를 넣는다
+  window.requestIdleCallback ??= () => 0
+  window.cancelIdleCallback ??= () => {}
   // 배치를 계산하지 않으므로 크기가 바뀌는 일이 없다. 바뀌었을 때를 보는 테스트는 가짜를 넣는다
   globalThis.ResizeObserver ??= class {
     observe() {}

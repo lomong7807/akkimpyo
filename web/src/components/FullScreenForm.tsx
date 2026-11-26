@@ -1,4 +1,5 @@
 import {
+  use,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -14,6 +15,7 @@ import { keepFocusInField } from './keepFocusInField'
 import layout from './layout.module.css'
 import { isModalOpen } from './openModal'
 import { usePressShield } from './pressGuard'
+import { shellRiseElapsed, ShellShownContext } from './shellShown'
 import type { LeaveGuard } from './useLeaveGuard'
 import styles from './FullScreenForm.module.css'
 
@@ -44,6 +46,7 @@ export default function FullScreenForm({
   const screen = useRef<HTMLDivElement>(null)
   const bottomArea = useRef<HTMLDivElement>(null)
   useVisibleArea(screen, bottomArea)
+  useRiseAfterShell(screen)
   useEscape(guard.close)
   // 닫기는 앞 화면의 "뒤로", 저장은 하단 탭과 같은 자리다
   usePressShield(true)
@@ -116,6 +119,18 @@ function useEscape(onEscape: () => void) {
     window.addEventListener('keydown', listen)
     return () => window.removeEventListener('keydown', listen)
   }, [])
+}
+
+/**
+ * 화면 코드를 받는 동안 같은 자리에 틀(FullScreenFormShell)이 올라오고 있었으면, 처음부터 다시 올라오지 않고 틀이 올라온 데서
+ * 이어 남은 만큼만 올라온다(#251). 틀이 다 올라왔으면 움직이지 않는다.
+ */
+function useRiseAfterShell(screen: RefObject<HTMLElement | null>) {
+  const afterShell = use(ShellShownContext)
+  useLayoutEffect(() => {
+    const element = screen.current!
+    if (afterShell) element.style.setProperty('animation-delay', `${-shellRiseElapsed()}ms`)
+  }, [afterShell, screen])
 }
 
 /** 한글을 조합하는 중의 키. Safari는 조합이 끝났다고 먼저 알리므로 입력기가 받은 키(keyCode 229)도 본다. */

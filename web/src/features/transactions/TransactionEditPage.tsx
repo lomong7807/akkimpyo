@@ -5,7 +5,6 @@ import { Button } from '../../components/Button'
 import FullScreenForm from '../../components/FullScreenForm'
 import LoadFailure from '../../components/LoadFailure'
 import RetryMessage from '../../components/RetryMessage'
-import Skeleton, { SkeletonBar } from '../../components/Skeleton'
 import { useToast } from '../../components/ToastContext'
 import { useGoBack } from '../../components/useGoBack'
 import { useLeaveGuard } from '../../components/useLeaveGuard'
@@ -22,12 +21,12 @@ import {
   validateTransaction,
   type TransactionValues,
 } from './transactionForm'
+import TransactionFieldsSkeleton from './TransactionFieldsSkeleton'
 import { rejectedFields } from './transactionRejection'
 import { isInvalidState, isNotFound, staleVersionOf, type TransactionDetail } from './transactions'
 import { useTransactionToEdit } from './useTransactionDetail'
 import { useMoreFold, useTransactionForm } from './useTransactionForm'
 import { useUpdateTransaction } from './useUpdateTransaction'
-import styles from './TransactionEdit.module.css'
 
 /**
  * D-04 거래 수정(1A). 거래 상세(D-06)의 "수정"이 연다. 주소의 id가 UUID 모양이 아니면 요청하지 않고 찾을 수 없음(N-01)이다.
@@ -265,31 +264,5 @@ function Waiting({ queries }: { queries: Query[] }) {
       />
     )
   }
-  return <FieldsSkeleton />
-}
-
-/** 입력칸 모양의 뼈대: 유형(값 글자)과 위쪽 칸 다섯(금액, 가맹점/내용, 카테고리, 계좌, 날짜) */
-function FieldsSkeleton() {
-  return (
-    <Skeleton>
-      <div className={styles.skeleton}>
-        <div className={styles.fieldSkeleton}>
-          <span className={styles.line}>
-            <SkeletonBar kind="name" text="label" />
-          </span>
-          <span className={styles.line}>
-            <SkeletonBar kind="name" text="body" />
-          </span>
-        </div>
-        {Array.from({ length: 5 }, (_, index) => (
-          <div key={index} className={styles.fieldSkeleton}>
-            <span className={styles.line}>
-              <SkeletonBar kind="name" text="label" />
-            </span>
-            <span className={styles.fieldBox} />
-          </div>
-        ))}
-      </div>
-    </Skeleton>
-  )
+  return <TransactionFieldsSkeleton />
 }
