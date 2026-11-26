@@ -5,6 +5,8 @@ import { sessionUserId } from '../api/session'
 import { ButtonLink } from '../components/Button'
 import { forgetLedgerCopies } from '../device/copies'
 import { onPendingChanged } from '../device/pendingQueue'
+import { onSyncedChanged } from '../device/syncedAt'
+import { useToast } from '../components/ToastContext'
 import LoadFailure from '../components/LoadFailure'
 import { parseAccounts } from '../features/accounts/accounts'
 import { parseCategories } from '../features/categories/categories'
@@ -13,6 +15,7 @@ import { deviceKey } from '../features/me/deviceKey'
 import { useLedgerCopy } from '../features/me/ledgerCopy'
 import { useMeCopy } from '../features/me/meCopy'
 import { useAutoSend } from '../features/sync/useAutoSend'
+import { syncedKey } from '../features/sync/useSyncState'
 import { pendingKey } from '../features/transactions/pendingTransactions'
 import { now } from '../lib/clock'
 import { useMe } from '../features/me/useMe'
@@ -52,6 +55,11 @@ function SessionData({ children }: { children: ReactNode }) {
   // 대기열이 바뀌면(이 탭, 다른 탭) 읽어 둔 대기 항목을 버린다. 그 화면이 내려가 있어도 다시 그릴 때 새로 읽는다
   useEffect(
     () => onPendingChanged(() => void queryClient.invalidateQueries({ queryKey: pendingKey(sessionUserId()) })),
+    [queryClient],
+  )
+  // 사본을 새로 받았거나 보내기에 성공하면(이 탭, 다른 탭) 마지막으로 맞춘 시각을 다시 읽는다(B-04 (2-3), #235)
+  useEffect(
+    () => onSyncedChanged(() => void queryClient.invalidateQueries({ queryKey: syncedKey(sessionUserId()) })),
     [queryClient],
   )
   // 되살아난 화면을 그대로 열었으면 조회를 다시 보내, 그사이 서버가 로그인을 끝냈으면 바로 안다
@@ -146,9 +154,14 @@ function Gate() {
 
 /**
  * 쌓인 입력을 저절로 보낸다(F-105, #235). 토큰이 있는 로그인에서만 보낸다. 확인하지 못한 로그인은 확인된 뒤에 보낸다(architect #235 D).
+ * 한 번의 보내기에서 200이고 알릴 것(ADR 006 결정 3)이 있으면 끝난 뒤 토스트 하나를 보인다. 되돌리기 토스트는 걷지 않고 그 뒤에
+ * 보인다(designer #235 Q1, planner P1).
  */
 function AutoSend({ signedIn }: { signedIn: boolean }) {
-  useAutoSend(signedIn)
+  const showToast = useToast()
+  useAutoSend(signedIn, (count) =>
+    showToast(`보낸 입력 ${count}건은 이미 저장된 거래라 저장된 내용으로 두었어요`, undefined, { behindAction: true }),
+  )
   return null
 }
 

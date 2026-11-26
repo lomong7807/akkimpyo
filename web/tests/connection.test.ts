@@ -220,3 +220,40 @@ describe('연결이 돌아왔는지 확인하는 요청', () => {
     expect(probes).toBe(0)
   })
 })
+
+describe('없음이 된 까닭(연결 없음 띠, 00-common 6.1 (6), #235)', () => {
+  it('연결이 있으면 까닭이 없다', async () => {
+    const { offlineCause } = await load()
+    expect(offlineCause()).toBeUndefined()
+  })
+
+  it('처음부터 연결이 없거나 브라우저 신호로 없음이 되면 signal이다(띠는 2초 뒤)', async () => {
+    startOffline()
+    const first = await load()
+    expect(first.offlineCause()).toBe('signal')
+    goOnline()
+    goOffline()
+    expect(first.offlineCause()).toBe('signal')
+  })
+
+  it('요청이 응답 없이 실패해 없음이 되면 request다(띠는 바로)', async () => {
+    const { offlineCause, call } = await load()
+    await call('/unreachable')
+    expect(offlineCause()).toBe('request')
+  })
+
+  it('신호로 없음인 동안 요청이 실패하면 request로 바뀌고 알린다', async () => {
+    const { offlineCause, call, changes } = await load()
+    goOffline()
+    await call('/unreachable')
+    expect(offlineCause()).toBe('request')
+    expect(changes).toEqual(['offline', 'offline'])
+  })
+
+  it('연결이 돌아오면 까닭을 지운다', async () => {
+    const { offlineCause, call } = await load()
+    await call('/unreachable')
+    await call('/ok')
+    expect(offlineCause()).toBeUndefined()
+  })
+})

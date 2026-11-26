@@ -8,6 +8,7 @@ import { startGuardClock } from './support/guardClock'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
+import { readCssRule } from './support/cssRule'
 import { expenseOf, incomeOf, startTransactionList, type TransactionList } from './support/transactionList'
 import { amount, id, LEDGER, openApp, resetGlobals, saveButton, settle, startServer } from './support/transactionScreen'
 import { resetViewport } from './support/viewport'
@@ -102,6 +103,16 @@ function pendingTransfer(fields: Record<string, unknown>) {
 const titles = () => [...document.querySelectorAll('[class*="_title_"]')].map((element) => element.textContent)
 const rowOf = (title: string) => screen.getByText(title).closest('li')!
 const chipIn = (row: HTMLElement) => within(row).queryByText('보내지 않음')
+const rejectedChipIn = (row: HTMLElement) => within(row).queryByText('보낼 수 없음')
+
+/** 서버가 거부해 보낼 수 없음이 된 입력을 쌓는다(#235) */
+async function seedRejected(item: ReturnType<typeof pendingExpense>) {
+  await seedPending(item)
+  vi.resetModules()
+  const { pendingOf, settlePending } = await import('../src/device/pendingQueue')
+  const seen = (await pendingOf(item.userId)).find(({ id: rowId }) => rowId === item.body.id)!
+  await settlePending(seen, { kind: 'rejected', status: 400, code: 'VALIDATION_FAILED', fieldErrors: [], at: now })
+}
 
 /** 내역(11월)을 열고 목록이 그려질 때까지 기다린다. */
 async function openHistory(month = '2026-11') {
@@ -162,6 +173,45 @@ describe('내역(D-01)', () => {
     await openHistory()
     const heads = [...document.querySelectorAll('[class*="_dayHead_"]')].map((head) => head.textContent)
     expect(heads).toEqual(['11월 26일 (목)지출13,000원', '11월 24일 (화)지출2,000원'])
+  })
+
+  describe('보낼 수 없음(D-01 (11), #235)', () => {
+    it('서버가 거부한 입력의 줄에는 오류 칩 "보낼 수 없음"이 붙고 눌리지 않는다', async () => {
+      await seedPending(pendingExpense({ payee: '대기' }))
+      await seedRejected(pendingExpense({ payee: '거부됨' }))
+      await openHistory()
+      const row = rowOf('거부됨')
+      expect(rejectedChipIn(row)).not.toBeNull()
+      expect(chipIn(row)).toBeNull()
+      expect(rejectedChipIn(rowOf('대기'))).toBeNull()
+      expect(within(row).queryByRole('link')).toBeNull()
+      // 셋째 줄, 다른 칩과 같은 자리
+      expect(rejectedChipIn(row)!.closest('[class*="_status_"]')).not.toBeNull()
+    })
+
+    it('오류 칩은 color-surface 바탕, 1px color-danger 테두리, color-danger 글자다', async () => {
+      await seedRejected(pendingExpense({ payee: '거부됨' }))
+      await openHistory()
+      const chip = rejectedChipIn(rowOf('거부됨'))!
+      const style = getComputedStyle(chip)
+      expect(style.backgroundColor).toBe('var(--color-surface)')
+      expect(style.color).toBe('var(--color-danger)')
+      // jsdom은 var()가 든 border 줄임을 계산하지 않아 규칙을 읽는다
+      expect(chip.className).toMatch(/_danger_/)
+      expect(readCssRule('src/components/StatusChip.module.css', '.danger')).toContain('border: 1px solid var(--color-danger);')
+    })
+
+    it('보낼 수 없음 줄의 금액도 수입·지출 합계와 그날 합계에 더한다(보이는 줄과 맞게, planner #102)', async () => {
+      list.months.set('2026-11', [
+        expenseOf({ occurredOn: '2026-11-26', accountId: id.salary, categoryId: id.food, amount: 8000 }),
+      ])
+      await seedPending(pendingExpense({ occurredOn: '2026-11-26', amount: 5000 }))
+      await seedRejected(pendingExpense({ occurredOn: '2026-11-26', amount: 1000, payee: '거부됨' }))
+      await openHistory()
+      expect(historyTotals()).toEqual(['0원', '14,000원'])
+      const heads = [...document.querySelectorAll('[class*="_dayHead_"]')].map((head) => head.textContent)
+      expect(heads).toEqual(['11월 26일 (목)지출14,000원'])
+    })
   })
 
   it('그 달의 것만 보인다(11월 30일은 11월, 12월 1일은 12월)', async () => {
@@ -255,6 +305,17 @@ describe('홈 최근 거래(C-01)', () => {
     expect(recentTitles()).toEqual(['오늘의 대기'])
   })
 
+  it('보낼 수 없음 줄도 섞고 내역과 같은 오류 칩을 셋째 줄에 붙인다. 눌리지 않는다(designer #235 Q2)', async () => {
+    await seedPending(pendingExpense({ occurredOn: '2026-11-26', payee: '대기' }))
+    await seedRejected(pendingExpense({ occurredOn: '2026-11-26', occurredTime: '09:00', payee: '거부됨' }))
+    await openHome()
+    expect(recentTitles()).toEqual(['거부됨', '대기'])
+    const row = rowOf('거부됨')
+    expect(rejectedChipIn(row)!.closest('[class*="_status_"]')).not.toBeNull()
+    expect(chipIn(row)).toBeNull()
+    expect(within(row).queryByRole('link')).toBeNull()
+  })
+
   it('이번 달 합계와 계좌 잔액에는 더하지 않는다(작성자 판단 43)', async () => {
     await seedPending(pendingExpense({ amount: 5000, payee: '대기' }))
     await openHome()
@@ -276,6 +337,20 @@ describe('홈 최근 거래(C-01)', () => {
       await openHome()
       expect(within(totalsRegion()).getByText('보내지 않은 입력 2건은 아직 합계에 없어요')).toBeTruthy()
       expect(screen.getAllByText(/아직 합계에 없어요/)).toHaveLength(1)
+    })
+
+    it('보낼 수 없음은 세지 않는다(곧 합계에 들어갈 것이 아니다, planner #102)', async () => {
+      await seedPending(pendingExpense({ amount: 1000 }))
+      await seedRejected(pendingExpense({ amount: 2000 }))
+      await openHome()
+      expect(within(totalsRegion()).getByText('보내지 않은 입력 1건은 아직 합계에 없어요')).toBeTruthy()
+    })
+
+    it('보낼 수 없음만 있으면 줄이 없다', async () => {
+      await seedRejected(pendingExpense({ amount: 2000 }))
+      await openHome()
+      await within(totalsRegion()).findByText('차액')
+      expect(screen.queryByText(/아직 합계에 없어요/)).toBeNull()
     })
 
     it('이번 달의 보내지 않은 입력이 없으면 줄이 없다', async () => {

@@ -91,7 +91,8 @@ interface TransactionRowProps {
 /**
  * 거래 줄(0.4). 줄 전체가 상세로 가는 링크다. 링크 이름은 aria-labelledby로 제목 전체, 금액, 날짜(묶음 머리), 시각,
  * 둘째 줄, 상태를 차례로 잇는다. 말줄임으로 잘린 제목도 화면 읽기에는 다 읽힌다.
- * 기기에 쌓여 아직 서버에 없는 줄은 셋째 줄에 표시 칩 "보내지 않음"을 붙이고(C-01 (10), D-01 (11)) 링크가 아니다
+ * 기기에 쌓여 아직 서버에 없는 줄은 셋째 줄에 표시 칩 "보내지 않음"을 붙이고(C-01 (10), D-01 (11)) 링크가 아니다. 서버가
+ * 거부한 줄은 그 자리에 오류 칩 "보낼 수 없음"을 붙인다(D-01 (11), designer #235 Q2)
  * (1B 임시. 보내지 않은 입력 목록 B-05로 가는 것은 #236에서 잇는다). 칩은 "취소"와 같은 자리다(0.4, designer #234 B).
  */
 function TransactionRow({ transaction, names, dateId, highlighted }: TransactionRowProps) {
@@ -138,7 +139,7 @@ function TransactionRow({ transaction, names, dateId, highlighted }: Transaction
         )}
         {transaction.pending && (
           <span className={styles.status}>
-            <StatusChip>보내지 않음</StatusChip>
+            {transaction.rejected ? <StatusChip danger>보낼 수 없음</StatusChip> : <StatusChip>보내지 않음</StatusChip>}
           </span>
         )}
       </span>

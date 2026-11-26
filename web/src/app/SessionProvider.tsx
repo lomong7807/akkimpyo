@@ -20,6 +20,7 @@ import type { SignUp } from '../features/auth/useSignup'
 import { keepOpenDrafts } from '../features/drafts/keepDraft'
 import { readMeCopy } from '../features/me/meCopy'
 import { now } from '../lib/clock'
+import { refetchOnReconnect } from './queryClient'
 import { initialSession, nextSession, type SessionEvent } from './sessionState'
 import { SessionContext } from './SessionContext'
 import { uncoverPage, watchSession } from './sessionWatch'
@@ -51,6 +52,7 @@ export default function SessionProvider({ children }: { children: ReactNode }) {
     const stopConfirmed = onSessionConfirmed(() => dispatch('confirmed'))
     const stopWatching = watchSession(() => dispatch('resumed'))
     const stopConnection = watchConnection()
+    const stopRefetching = refetchOnReconnect()
     // 마지막으로 확인한 로그인부터 30일이 지난 사본과, 남긴 때부터 30일이 지난 쓰던 값은 앱을 열 때 지운다(security 권고)
     void sweepExpiredCopies(now()).catch(() => {})
     void sweepExpiredDrafts(now()).catch(() => {})
@@ -63,6 +65,7 @@ export default function SessionProvider({ children }: { children: ReactNode }) {
       stopConfirmed()
       stopWatching()
       stopConnection()
+      stopRefetching()
     }
   }, [])
 
