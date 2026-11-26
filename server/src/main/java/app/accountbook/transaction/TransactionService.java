@@ -112,7 +112,8 @@ public class TransactionService {
         ledgerAccess.requireMember(actorId, ledgerId);
         DeviceIds.requireValidFormat(deviceId);
         Content content = normalize(ledgerId, cmd, actorId);
-        Optional<Transaction> existing = transactionRepository.findById(content.id());
+        // 판정은 한 시점에 읽은 거래 전체로 한다(#202). 그 시점에 이미 완전히 지워졌으면 아래의 기록 확인이 거부한다.
+        Optional<Transaction> existing = transactionRepository.findWithLinesById(content.id());
         if (existing.isPresent()) {
             return new CreateResult(replay(existing.get(), actorId, ledgerId, content), false);
         }
@@ -279,10 +280,10 @@ public class TransactionService {
                 .orElse(now);
     }
 
-    /** 없는 거래와 구성원이 아닌 장부의 거래를 구분하지 않는다. */
+    /** 없는 거래와 구성원이 아닌 장부의 거래를 구분하지 않는다. 라인을 함께 읽는다(#202). */
     private Transaction loadAccessible(UUID actorId, UUID txId) {
         return Optional.ofNullable(txId)
-                .flatMap(transactionRepository::findById)
+                .flatMap(transactionRepository::findWithLinesById)
                 .filter(tx -> ledgerAccess.isMember(actorId, tx.getLedgerId()))
                 .orElseThrow(NotFoundException::new);
     }
