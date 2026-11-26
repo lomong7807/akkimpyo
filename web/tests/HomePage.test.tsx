@@ -22,6 +22,7 @@ import {
   startServer,
   type Opened,
 } from './support/transactionScreen'
+import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/useTransactionList'
 import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
@@ -41,10 +42,9 @@ let detail: TransactionDetailServer
 const NOW = '2026-11-26T12:30:00+09:00'
 
 beforeEach(() => {
-  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)는 같은 때에 멈춰 둔다
+  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)는 진짜 시계다
   setDeviceClock(NOW)
-  vi.useFakeTimers({ toFake: ['Date'], now: Date.parse(NOW) })
-  // 확인 창을 여닫을 때 누름을 막는 300ms는 실제로 기다리지 않는 시계로 앞당긴다
+  // 확인 창을 여닫을 때 누름을 막는 300ms는 실제로 기다리지 않는 시계로 앞당긴다(Date는 바꾸지 않는다)
   startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts } = startServer(server))
@@ -494,6 +494,48 @@ describe('계좌 잔액(F-112, P-220)', () => {
     expect(addressOf(opened)).toBe('/home')
     expect(within(accountsRegion()).getByText('계좌가 없어요')).toBeTruthy()
     expect(within(accountsRegion()).queryByRole('link')).toBeNull()
+  })
+
+  // perf 권고(#90): 잔액 계산이 홈에서 가장 비싼 요청이라(perf PR #176) 거래 목록과 같은 30초 동안 새것으로 본다
+  it('들어올 때 첫 실행 안내를 정하려고 받은 계좌 목록을 홈이 다시 받지 않는다', async () => {
+    await openHome()
+    expect(accounts.requests).toEqual([LEDGER])
+  })
+
+  it('30초 안에 계좌 목록 화면에 다녀오면 계좌 목록을 다시 받지 않는다', async () => {
+    const opened = await openHome()
+    await opened.user.click(within(accountsRegion()).getByRole('link'))
+    await screen.findByRole('heading', { level: 1, name: '계좌' })
+    await act(() => opened.router.navigate(-1))
+    await screen.findByRole('heading', { level: 1, name: '홈' })
+    expect(accounts.requests).toEqual([LEDGER])
+  })
+
+  it('30초가 지나면 홈에 다시 들어올 때 계좌 목록을 다시 받는다', async () => {
+    const opened = await openHome()
+    await act(() => opened.router.navigate('/more'))
+    // 라이브러리가 받은 때와 지금을 재는 시계(Date.now)만 30초 뒤로 보낸다
+    const later = Date.now() + TRANSACTION_LIST_STALE_MS + 1
+    vi.spyOn(Date, 'now').mockReturnValue(later)
+    await act(() => opened.router.navigate('/home'))
+    await screen.findByRole('heading', { level: 1, name: '홈' })
+    await waitFor(() => expect(accounts.requests).toHaveLength(2))
+  })
+
+  it('거래를 저장하면 30초 안이어도 계좌 목록을 다시 받아 홈과 계좌 목록 화면의 잔액이 바로 바뀐다', async () => {
+    const opened = await openHome()
+    expect(balances()[0]).toEqual(['은행', '1,800,000원'])
+    await opened.user.click(within(tabBar()).getByRole('link', { name: '거래 입력' }))
+    await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+    accounts.items = accounts.items.map((each) => ((each as { id: string }).id === id.salary ? { ...each, balance: 1488000 } : each))
+    await saveAmount(opened.user)
+    await screen.findByRole('heading', { level: 1, name: '홈' })
+    await waitFor(() => expect(balances()[0]).toEqual(['은행', '1,788,000원']))
+    expect(accounts.requests).toEqual([LEDGER, LEDGER])
+    await opened.user.click(within(accountsRegion()).getByRole('link'))
+    await screen.findByRole('heading', { level: 1, name: '계좌' })
+    expect(within(main()).getByText('1,488,000원')).toBeTruthy()
+    expect(accounts.requests).toEqual([LEDGER, LEDGER])
   })
 
   it('계좌 목록 화면(G-01)과 같은 캐시를 쓴다. 홈에서 계좌로 가면 받아 둔 목록을 바로 그린다', async () => {

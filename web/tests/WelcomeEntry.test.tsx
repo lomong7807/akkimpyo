@@ -190,11 +190,13 @@ describe('로그인한 채 앱을 열 때', () => {
   it('다른 주소로 연 뒤 앱 안에서 /home으로 가도 다시 정하지 않는다', async () => {
     const opened = await open('/secret')
     await screen.findByText(secret)
+    expect(accounts.requests).toEqual([])
+    // 계좌 목록의 답을 미뤄도 홈이 그려진다. 안내를 정하려고 기다리지 않는다(받는 것은 홈의 계좌 잔액이다)
+    accounts.response = delayed().respond
     await act(() => opened.router.navigate('/home'))
     await home()
     await settle()
     expect(address(opened)).toBe('/home')
-    // 안내를 정하려고 받지 않는다. 받은 것은 홈의 계좌 잔액이 받은 한 번뿐이다
     expect(accounts.requests).toEqual([ledgerIdOf('user-1')])
   })
 
@@ -224,11 +226,12 @@ describe('권한', () => {
 
   it.each(['VIEWER', 'SOMETHING_NEW', ''])('%s면 계좌가 없어도 안내하지 않고 계좌 목록도 받지 않는다', async (role) => {
     backend.meResponse = withRole(role)
+    // 계좌 목록의 답을 미뤄도 홈이 그려진다. 안내를 정하려고 기다리지 않는다(받는 것은 홈의 계좌 잔액이다)
+    accounts.response = delayed().respond
     const opened = await open('/home')
     await home()
     await settle()
     expect(address(opened)).toBe('/home')
-    // 안내를 정하려고 받지 않는다(받았다면 홈이 다시 받아 두 번이다). 받은 것은 홈의 계좌 잔액이 받은 한 번뿐이다
     expect(accounts.requests).toEqual([ledgerIdOf('user-1')])
   })
 
