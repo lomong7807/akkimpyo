@@ -13,6 +13,7 @@ import { deviceKey } from '../features/me/deviceKey'
 import { useLedgerCopy } from '../features/me/ledgerCopy'
 import { useMeCopy } from '../features/me/meCopy'
 import { pendingKey } from '../features/transactions/pendingTransactions'
+import { now } from '../lib/clock'
 import { useMe } from '../features/me/useMe'
 import ListMemoryProvider from './ListMemoryProvider'
 import Loading from './Loading'
@@ -143,7 +144,7 @@ function forgetLedger(queryClient: QueryClient, ledgerId: string) {
   const user = sessionUserId()
   if (user === undefined) return
   for (const kind of ['accounts', 'categories']) queryClient.removeQueries({ queryKey: deviceKey(user, kind, ledgerId) })
-  void forgetLedgerCopies(user, ledgerId).catch(() => {})
+  void forgetLedgerCopies(user, ledgerId, now()).catch(() => {})
 }
 
 const endedState = { sessionEnded: true }
