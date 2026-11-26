@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
+import { queryOptions, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useState } from 'react'
 import { isMonth } from '../../lib/calendarDate'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
@@ -13,10 +13,23 @@ export function transactionKey(ledgerId: string, id: string) {
   return [...ledgerKey(ledgerId, 'transactions'), id] as const
 }
 
+function transactionQuery(ledgerId: string, id: string) {
+  return queryOptions({ queryKey: transactionKey(ledgerId, id), queryFn: () => fetchTransaction(ledgerId, id) })
+}
+
 /** 현재 장부의 거래 하나(D-06). 휴지통에 있으면 deletedAt이 차서 온다. */
 export function useTransactionDetail(id: string) {
   const ledger = useCurrentLedger()
-  return useQuery({ queryKey: transactionKey(ledger.id, id), queryFn: () => fetchTransaction(ledger.id, id) })
+  return useQuery(transactionQuery(ledger.id, id))
+}
+
+/**
+ * 수정(D-04)이 채울 거래. 상세에서 받아 둔 것이 있으면 다시 받지 않고 그 값으로 연다(designer 결정 #89). 없으면 받는다.
+ * 그사이 다른 기기가 고쳤으면 저장할 때 서버가 낡은 version으로 거부한다(P-217).
+ */
+export function useTransactionToEdit(id: string) {
+  const ledger = useCurrentLedger()
+  return useQuery({ ...transactionQuery(ledger.id, id), staleTime: Infinity })
 }
 
 /**
