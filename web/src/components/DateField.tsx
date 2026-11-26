@@ -38,7 +38,6 @@ export default function DateField({ value, onChange, readOnly = false, ref, ...l
             aria-labelledby={`${labelId} ${valueId}`}
             aria-haspopup="dialog"
             aria-expanded={popup.open}
-            aria-invalid={labels.error ? true : undefined}
             aria-disabled={readOnly || undefined}
             onClick={readOnly ? undefined : (event) => popup.openFrom(event.currentTarget)}
             onKeyDown={popup.ignoreHeldKey}

@@ -47,6 +47,7 @@ export function PasswordField(props: FieldProps) {
 /** 칸 오른쪽 끝에 버튼을 둘 수 있는 한 줄 칸. 종류(type)는 부르는 칸이 정한다. */
 export function InputField({
   label,
+  optional,
   help,
   error,
   count,
@@ -55,7 +56,7 @@ export function InputField({
 }: TextFieldProps & { type: string; action?: ReactNode }) {
   const className = action ? `${styles.input} ${styles.withAction}` : styles.input
   return (
-    <Field label={label} help={help} error={error} count={count}>
+    <Field label={label} optional={optional} help={help} error={error} count={count}>
       {(control) => (
         <>
           <input

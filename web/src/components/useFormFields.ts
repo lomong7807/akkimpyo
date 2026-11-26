@@ -25,13 +25,16 @@ export function useFormFields<Values extends object>({ fields, initialValues, va
   const elements = useRef<Partial<Record<Field, HTMLElement | null>>>({})
   const errors = validate(values)
 
-  /** 함께 바뀌는 칸은 한 번에 바꾼다. */
-  function change(changes: Partial<Values>) {
+  /**
+   * 함께 바뀌는 칸은 한 번에 바꾼다. `check`에 적은 칸은 바꾼 값으로 바로 검사해 오류를 보인다(고르면 칸을 벗어나지 않는
+   * 고르는 칸 등).
+   */
+  function change(changes: Partial<Values>, { check = [] }: { check?: Field[] } = {}) {
     const changed = { ...values, ...changes }
     const remaining = validate(changed)
     setValues(changed)
     // 맞게 고치면 바로 지운다. 다시 틀려도 칸을 벗어나기 전에는 띄우지 않는다.
-    setShown((current) => new Set([...current].filter((name) => remaining[name])))
+    setShown((current) => new Set([...current, ...check].filter((name) => remaining[name])))
     setRejected((current) => {
       const kept = { ...current }
       for (const field of Object.keys(changes) as Field[]) delete kept[field]

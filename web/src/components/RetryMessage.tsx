@@ -1,23 +1,44 @@
-import { Button } from './Button'
+import { Button, ButtonLink } from './Button'
 import ErrorMessage from './ErrorMessage'
 import styles from './RetryMessage.module.css'
 
-interface RetryMessageProps {
+type RetryMessageProps = {
   children: string
-  onRetry: () => void
-  /** 나타날 때 "다시 시도"에 초점을 둔다 */
+  /** 나타날 때 버튼에 초점을 둔다 */
   autoFocus?: boolean
-}
+} & (
+  | {
+      onRetry: () => void
+      /** 버튼의 글자. 없으면 "다시 시도"다. */
+      actionLabel?: string
+      to?: never
+    }
+  | {
+      /** 누르면 가는 주소. 버튼은 링크로 그린다. */
+      to: string
+      actionLabel: string
+      onRetry?: never
+    }
+)
 
-/** 보내지 못했다는 문구와 "다시 시도". 누른 버튼 바로 위에 둔다(화면설계서 00-common 4.3). */
-export default function RetryMessage({ children, onRetry, autoFocus }: RetryMessageProps) {
+/**
+ * 보내지 못했다는 문구와 글자 버튼 하나. 누른 버튼 바로 위에 둔다(화면설계서 00-common 4.3).
+ * 버튼은 기본으로 "다시 시도"이고, 다른 동작이 맞는 실패는 그 동작을 준다.
+ */
+export default function RetryMessage({ children, onRetry, actionLabel = '다시 시도', to, autoFocus }: RetryMessageProps) {
   return (
     <div className={styles.message}>
       <ErrorMessage role="alert">{children}</ErrorMessage>
       <div className={styles.retry}>
-        <Button kind="text" onClick={onRetry} autoFocus={autoFocus}>
-          다시 시도
-        </Button>
+        {to === undefined ? (
+          <Button kind="text" onClick={onRetry} autoFocus={autoFocus}>
+            {actionLabel}
+          </Button>
+        ) : (
+          <ButtonLink kind="text" to={to} autoFocus={autoFocus}>
+            {actionLabel}
+          </ButtonLink>
+        )}
       </div>
     </div>
   )

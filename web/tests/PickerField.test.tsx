@@ -99,10 +99,12 @@ describe('고르는 칸', () => {
     expect(readCssRule('src/components/FieldButton.module.css', '.button')).toContain('justify-content: space-between')
   })
 
-  it('오류가 있으면 오류 칸이다', () => {
+  it('오류 문구를 설명으로 잇고 오류 칸 모양이다. 버튼에 없는 aria-invalid는 쓰지 않는다', () => {
     render(<Sample error="계좌를 골라 주세요" />)
-    expect(field().getAttribute('aria-invalid')).toBe('true')
-    expect(screen.getByText('계좌를 골라 주세요')).toBeTruthy()
+    const described = document.getElementById(field().getAttribute('aria-describedby')!)
+    expect(described!.textContent).toBe('계좌를 골라 주세요')
+    expect(field().className).toContain('invalid')
+    expect(field().hasAttribute('aria-invalid')).toBe(false)
   })
 
   it.each(['{Enter}', ' '])('키보드 %s로 연다', async (key) => {

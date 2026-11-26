@@ -34,7 +34,6 @@ export default function PickerField({ valueText, readOnly = false, ref, children
             aria-labelledby={`${labelId} ${valueId}`}
             aria-haspopup="dialog"
             aria-expanded={popup.open}
-            aria-invalid={labels.error ? true : undefined}
             aria-disabled={readOnly || undefined}
             onClick={readOnly ? undefined : (event) => popup.openFrom(event.currentTarget)}
             onKeyDown={popup.ignoreHeldKey}
