@@ -55,7 +55,7 @@ class AccountNameTextTest {
         create("생활비");
 
         assertThatThrownBy(() -> create(nfd("생활비"))).isInstanceOf(DuplicateAccountNameException.class);
-        assertThatThrownBy(() -> create(" 생활비　")).isInstanceOf(DuplicateAccountNameException.class);
+        assertThatThrownBy(() -> create("\u00A0생활비\u3000")).isInstanceOf(DuplicateAccountNameException.class);
     }
 
     @Test
@@ -82,8 +82,8 @@ class AccountNameTextTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"생활​비", "생활비‍", "생활비️", "생활비ㅤ", "ㅤ", "생활\t비",
-            "생활\u0000비", "생활\u0085비", "생활 비", "생활‮비", "생활\uD800비", "생활비\uDC00"})
+    @ValueSource(strings = {"생활\u200B비", "생활비\u200D", "생활비\uFE0F", "생활비\u3164", "\u3164", "생활\t비",
+            "생활\u0000비", "생활\u0085비", "생활\u2028비", "생활\u202E비", "생활\uD800비", "생활비\uDC00"})
     void forbiddenCharactersAndUnpairedSurrogatesAreRejectedAndNothingIsStored(String name) {
         InvalidRequestException e = assertRejected(() -> create(name), FieldErrorCode.INVALID_FORMAT);
 
@@ -92,7 +92,7 @@ class AccountNameTextTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {" ", "　", " 　  ", ""})
+    @ValueSource(strings = {"\u00A0", "\u3000", "\u00A0\u3000 \u2003", ""})
     void nameOfOnlySpacesIsRequired(String name) {
         assertRejected(() -> create(name), FieldErrorCode.REQUIRED);
         assertThat(accountService.list(owner.getId(), ledgerId)).isEmpty();
@@ -100,10 +100,10 @@ class AccountNameTextTest {
 
     @Test
     void spacesAroundAreTrimmedAndEmojiIsKept() {
-        String family = "👨‍👩‍👧";
+        String family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
 
-        assertThat(storedName(create("　 가족 통장 " + family + " "))).isEqualTo("가족 통장 " + family);
-        assertThat(storedName(create("1️⃣번 통장"))).isEqualTo("1️⃣번 통장");
+        assertThat(storedName(create("\u3000\u00A0가족 통장 " + family + "\u202F"))).isEqualTo("가족 통장 " + family);
+        assertThat(storedName(create("1\uFE0F\u20E3번 통장"))).isEqualTo("1\uFE0F\u20E3번 통장");
     }
 
     private Account create(String name) {

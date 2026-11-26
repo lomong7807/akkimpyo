@@ -26,8 +26,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @IntegrationTest
 class CategoryNameTextTest {
 
-    private static final String FAMILY = "👨‍👩‍👧";
-    private static final String KEYCAP_ONE = "1️⃣";
+    private static final String FAMILY = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
+    private static final String KEYCAP_ONE = "1\uFE0F\u20E3";
 
     @Autowired CategoryService categoryService;
     @Autowired CategoryRepository categoryRepository;
@@ -52,7 +52,8 @@ class CategoryNameTextTest {
 
     @Test
     void sameNameInDecomposedAndComposedFormIsDuplicate() {
-        // "식비"는 기본 카테고리(P-223)에 이미 있다.
+        // Fixtures.user는 기본 카테고리(P-223)를 지우므로 직접 만든다.
+        expense("식비");
         assertThatThrownBy(() -> expense(nfd("식비"))).isInstanceOf(DuplicateCategoryNameException.class);
 
         Category snack = expense(nfd("간식"));
@@ -71,7 +72,7 @@ class CategoryNameTextTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"식비‍", "식비️", "식비ㅤ", "ㅤ", "ㅤㅤ", "식​비",
+    @ValueSource(strings = {"식비\u200D", "식비\uFE0F", "식비\u3164", "\u3164", "\u3164\u3164", "식\u200B비",
             "식\u0000비", "식\uD800비"})
     void namesWithInvisibleOrUnstorableCharactersAreRejected(String name) {
         long before = categoryRepository.count();
@@ -86,18 +87,18 @@ class CategoryNameTextTest {
     void familyAndKeycapEmojiAreStored() {
         assertThat(storedName(expense("우리 " + FAMILY))).isEqualTo("우리 " + FAMILY);
         assertThat(storedName(expense(KEYCAP_ONE + " 고정비"))).isEqualTo(KEYCAP_ONE + " 고정비");
-        assertThat(storedName(expense("😀"))).isEqualTo("😀");
+        assertThat(storedName(expense("\uD83D\uDE00"))).isEqualTo("\uD83D\uDE00");
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {" ", "　", "　   "})
+    @ValueSource(strings = {"\u00A0", "\u3000", "\u3000\u00A0\u2009 "})
     void nameOfOnlySpacesIsRequired(String name) {
         assertRejected(() -> expense(name), FieldErrorCode.REQUIRED);
     }
 
     @Test
     void everySpaceAroundIsTrimmed() {
-        assertThat(storedName(expense("　  간식  "))).isEqualTo("간식");
+        assertThat(storedName(expense("\u3000\u00A0 간식\u2003\u205F"))).isEqualTo("간식");
     }
 
     @Test
@@ -105,12 +106,12 @@ class CategoryNameTextTest {
         Category snack = expense("간식");
         Category other = expense("외식");
 
-        assertThat(storedName(categoryService.rename(owner.getId(), other.getId(), nfd("　야식 ")))).isEqualTo("야식");
+        assertThat(storedName(categoryService.rename(owner.getId(), other.getId(), nfd("\u3000야식 ")))).isEqualTo("야식");
         assertThatThrownBy(() -> categoryService.rename(owner.getId(), other.getId(), nfd("간식")))
                 .isInstanceOf(DuplicateCategoryNameException.class);
-        assertRejected(() -> categoryService.rename(owner.getId(), other.getId(), "야식‍"),
+        assertRejected(() -> categoryService.rename(owner.getId(), other.getId(), "야식\u200D"),
                 FieldErrorCode.INVALID_FORMAT);
-        assertRejected(() -> categoryService.rename(owner.getId(), other.getId(), "　"), FieldErrorCode.REQUIRED);
+        assertRejected(() -> categoryService.rename(owner.getId(), other.getId(), "\u3000"), FieldErrorCode.REQUIRED);
         assertThat(storedName(snack)).isEqualTo("간식");
         assertThat(storedName(other)).isEqualTo("야식");
     }

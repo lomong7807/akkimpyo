@@ -148,7 +148,7 @@ class TextMigrationTest {
     void namesTooLongAfterComposingAreFound() {
         // U+0958은 NFC에서 두 글자가 된다(조합 제외 글자). 50자 계좌 이름이 51자가 된다.
         UUID ledger = insertLedger();
-        insertAccount(ledger, "가".repeat(49) + "क़");
+        insertAccount(ledger, "가".repeat(49) + "\u0958");
 
         assertThat(jdbc.queryForList(TOO_LONG_AFTER_NFC)).extracting(row -> row.get("tbl")).containsExactly("account");
         assertThatThrownBy(() -> migrate("latest")).isInstanceOf(FlywayException.class)
@@ -160,7 +160,7 @@ class TextMigrationTest {
     void rowsRejectedByTheNewConstraintsAreFoundAndStopTheSchemaChange() {
         UUID user = insertUser("아낌이");
         UUID ledger = insertLedger();
-        insertAccount(ledger, " 생활비");
+        insertAccount(ledger, "\u00A0생활비");
         insertTransaction(ledger, user, "", null);
         insertTransaction(ledger, user, null, "점심\r\n");
 

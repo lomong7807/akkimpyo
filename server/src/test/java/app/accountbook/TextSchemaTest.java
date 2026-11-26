@@ -30,22 +30,22 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @IntegrationTest
 class TextSchemaTest {
 
-    private static final String ZWJ = "‍";
-    private static final String VS16 = "️";
+    private static final String ZWJ = "\u200D";
+    private static final String VS16 = "\uFE0F";
 
     /** 앱이 받는 까다로운 입력. 각 칸의 앱 규칙을 지난 값이 DB 제약도 지나는지 본다. */
     private static final List<String> TRICKY_INPUTS = List.of(
             nfd("가각간갇갈감갑갓강갖갗같갚갛개객갠갤갬갭"),         // 분해형 한글 20자
-            "👨" + ZWJ + "👩" + ZWJ + "👧", // 가족 이모지
-            "1" + VS16 + "⃣", "#" + VS16 + "⃣",             // 키캡
-            "❤" + VS16 + ZWJ + "🔥",                    // ❤️‍🔥
-            "🇰🇷",                                // 🇰🇷
-            "😀".repeat(20),
-            "　식 비 ",                                  // 앞뒤 공백류, 가운데 U+00A0
-            "식 비",                                              // NFC에서 U+2002가 되는 가운데 공백
-            "é", "Å", "क़",                             // 합쳐지는 글자, 바뀌는 글자, 늘어나는 글자
-            "¡ ÿ",                                      // C1 바로 위의 글자들
-            "가́");
+            "\uD83D\uDC68" + ZWJ + "\uD83D\uDC69" + ZWJ + "\uD83D\uDC67", // 가족 이모지
+            "1" + VS16 + "\u20E3", "#" + VS16 + "\u20E3",             // 키캡
+            "\u2764" + VS16 + ZWJ + "\uD83D\uDD25",                    // 불붙은 하트
+            "\uD83C\uDDF0\uD83C\uDDF7",                                // 태극기
+            "\uD83D\uDE00".repeat(20),
+            "\u3000식\u00A0비\u2000",                                  // 앞뒤 공백류, 가운데 U+00A0
+            "식\u2000비",                                              // NFC에서 U+2002가 되는 가운데 공백
+            "e\u0301", "\u212B", "\u0958",                             // 합쳐지는 글자, 바뀌는 글자, 늘어나는 글자
+            "\u00A1\u00A0\u00FF",                                      // C1 바로 위의 글자들
+            "가\u0301");
 
     @Autowired JdbcTemplate jdbc;
 
@@ -88,7 +88,7 @@ class TextSchemaTest {
         // PostgreSQL은 CHECK를 이름 순으로 본다. U+2000, U+2001은 NFC에서 바뀌는 글자라 *_nfc가 먼저 걸린다.
         List<String> nfcStable = UserText.TRIMMED_SPACES.chars().mapToObj(Character::toString)
                 .filter(space -> Normalizer.isNormalized(space, Normalizer.Form.NFC)).toList();
-        assertThat(nfcStable).hasSize(15).doesNotContain(" ", " ");
+        assertThat(nfcStable).hasSize(15).doesNotContain("\u2000", "\u2001");
 
         nfcStable.forEach(space -> {
             nameColumns().forEach(column -> {
@@ -98,20 +98,20 @@ class TextSchemaTest {
             assertRejectedBy("ck_transaction_payee_trimmed", () -> insertPayee(space + "김밥천국"));
             assertRejectedBy("ck_transaction_payee_trimmed", () -> insertPayee("김밥천국" + space));
         });
-        List.of(" ", " ").forEach(space -> nameColumns().forEach(column ->
+        List.of("\u2000", "\u2001").forEach(space -> nameColumns().forEach(column ->
                 assertRejectedBy(column.constraint("nfc"), () -> column.insert().accept("식비" + space))));
     }
 
     @Test
     void innerSpaceIsAcceptedByDatabase() {
-        nameColumns().forEach(column -> assertAccepted(() -> column.insert().accept("식 비 　값")));
-        assertAccepted(() -> insertPayee("김밥 천국"));
+        nameColumns().forEach(column -> assertAccepted(() -> column.insert().accept("식\u00A0비 \u3000값")));
+        assertAccepted(() -> insertPayee("김밥\u00A0천국"));
     }
 
     @Test
     void memoMayHaveSpacesAroundInDatabase() {
-        assertAccepted(() -> insertMemo("  점심　"));
-        assertAccepted(() -> insertMemo(" "));
+        assertAccepted(() -> insertMemo("  점심\u3000"));
+        assertAccepted(() -> insertMemo("\u00A0"));
     }
 
     @Test
@@ -145,12 +145,12 @@ class TextSchemaTest {
     @Test
     void controlRangeIsJudgedByCodePoint() {
         nameColumns().forEach(column -> {
-            assertAccepted(() -> column.insert().accept("식 비"));
-            assertAccepted(() -> column.insert().accept("식¡비"));
+            assertAccepted(() -> column.insert().accept("식\u00A0비"));
+            assertAccepted(() -> column.insert().accept("식\u00A1비"));
             // UTF-8로 C2 80~C2 9F가 아닌 글자 가운데 0x80~0x9F 바이트를 품은 글자(예: '가' = EA B0 80)는 받는다.
             assertAccepted(() -> column.insert().accept("가갸걀"));
         });
-        assertAccepted(() -> insertMemo(" ¡가"));
+        assertAccepted(() -> insertMemo("\u00A0\u00A1가"));
     }
 
     /**
@@ -183,7 +183,7 @@ class TextSchemaTest {
             assertAccepted(() -> insertMemo(UserText.memo(raw, 500)));
         });
         // 앱이 값 없음으로 바꾸는 입력과 메모만 받는 입력
-        List.of("", "   ", "　 ").forEach(raw -> assertAccepted(() -> insertPayee(UserText.payee(raw, 100))));
+        List.of("", "   ", "\u3000\u00A0").forEach(raw -> assertAccepted(() -> insertPayee(UserText.payee(raw, 100))));
         List.of("", "   ", "\n", "점심\r\n저녁\r", "\r").forEach(raw ->
                 assertAccepted(() -> insertMemo(UserText.memo(raw, 500))));
     }

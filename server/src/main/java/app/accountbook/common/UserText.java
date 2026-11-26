@@ -25,8 +25,8 @@ public final class UserText {
      * 앞뒤에서 지우는 공백류 글자: 유니코드 Zs(공백 구분자) 17자. 거부 검사를 지나고 남는 공백이 이것뿐이다.
      * DB의 ck_*_trimmed(V18)가 btrim에 같은 목록을 쓴다. 바꾸면 그 CHECK도 바꾼다(TextSchemaTest가 비교한다).
      */
-    public static final String TRIMMED_SPACES = "          "
-            + "      　";
+    public static final String TRIMMED_SPACES = "\u0020\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
+            + "\u2007\u2008\u2009\u200A\u202F\u205F\u3000";
 
     private static final String PAYEE_FIELD = "payee";
     private static final String MEMO_FIELD = "memo";
