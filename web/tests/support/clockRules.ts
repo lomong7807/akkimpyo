@@ -59,9 +59,29 @@ export function usesClockHelpers(test: Module, clocked: Set<string>): boolean {
   return importsOf(test).some((name) => clocked.has(name))
 }
 
+/**
+ * 모든 테스트 파일과 tests/support에서 쓰지 않는 것(8절 3, #281). 테스트 데이터의 시각(남긴 때, 받은 때, 가짜 서버가 고친 때)을
+ * 실제 시계로 만들면 앱이 재는 기기 시계와 섞여 날이 지나면 결과가 바뀐다. 인자가 있는 new Date(정한 시각)는 괜찮다.
+ */
+const realClock: { pattern: RegExp; rule: string }[] = [
+  {
+    pattern: /\bDate\.now\s*\(|\bnew Date\s*\(\s*\)/,
+    rule: '테스트 데이터의 시각은 실제 시계(Date.now, 인자 없는 new Date)가 아니라 기기 시계(tests/support/clock의 nowOnDevice)로 만든다(8절 3)',
+  },
+]
+
+function violationsOf(source: string, rules: { pattern: RegExp; rule: string }[]): ClockViolation[] {
+  return source.split('\n').flatMap((text, index) =>
+    rules.filter(({ pattern }) => pattern.test(text)).map(({ rule }) => ({ line: index + 1, text: text.trim(), rule })),
+  )
+}
+
 /** 대상 파일에서 규칙을 어긴 줄 */
 export function findClockViolations(source: string): ClockViolation[] {
-  return source.split('\n').flatMap((text, index) =>
-    forbidden.filter(({ pattern }) => pattern.test(text)).map(({ rule }) => ({ line: index + 1, text: text.trim(), rule })),
-  )
+  return violationsOf(source, forbidden)
+}
+
+/** 실제 시계로 시각을 만드는 줄. 모든 테스트 파일과 tests/support가 대상이다 */
+export function findRealClockUses(source: string): ClockViolation[] {
+  return violationsOf(source, realClock)
 }

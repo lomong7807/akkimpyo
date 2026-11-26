@@ -1,10 +1,18 @@
-import { setClock } from '../../src/lib/clock'
+import { now, setClock } from '../../src/lib/clock'
 
 /** 시간대를 따로 정하지 않은 테스트의 기기 시간대. 서비스의 시간대다. */
 export const SEOUL = 'Asia/Seoul'
 
 /** 시계를 따로 정하지 않은 테스트의 기기의 지금(tests/support/setup.ts) */
 export const DEFAULT_NOW = '2026-11-26T12:00:00+09:00'
+
+/**
+ * 기기 시계의 지금(밀리초). 테스트 데이터의 시각(남긴 때, 받은 때, 가짜 서버가 고친 때)은 이것으로 만든다(8절 3).
+ * 실제 시계(Date.now)로 만들면 앱이 재는 기기 시계(DEFAULT_NOW 등)와 섞여, 실제 날짜가 지나면 결과가 바뀐다(#281).
+ */
+export function nowOnDevice(): number {
+  return now()
+}
 
 /**
  * 기기의 시계를 `at`에 멈춰 두고 기기의 시간대를 `timeZone`으로 한다. `at`은 오프셋(Z, +09:00)을 적은 ISO 시각이다.

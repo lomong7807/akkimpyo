@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import type { SetupServer } from 'msw/node'
 import type { Backend } from './backend'
+import { nowOnDevice } from './clock'
 import { problem } from './problem'
 import type { savedOf } from './transactions'
 
@@ -50,8 +51,8 @@ export function startTransactionDetail(server: SetupServer, backend: Backend) {
   const detail = {
     /** id마다 서버에 있는 거래 */
     items: new Map<string, Stored>(),
-    /** 서버의 지금. 삭제한 시각이 된다. */
-    now: () => new Date().toISOString(),
+    /** 서버의 지금. 삭제·수정한 시각이 된다. 기기 시계와 같게 둔다(실제 시계에 기대지 않는다, #281) */
+    now: () => new Date(nowOnDevice()).toISOString(),
     getResponse: undefined as Respond | undefined,
     deleteResponse: undefined as Respond | undefined,
     restoreResponse: undefined as Respond | undefined,
