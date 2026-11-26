@@ -28,7 +28,7 @@ afterEach(() => {
 
 describe('앱 시작', () => {
   it.each<[string, (backend: Backend) => void, string]>([
-    ['로그인한 기기', (backend) => (backend.cookieUser = 'user-1'), '찾을 수 없어요.'],
+    ['로그인한 기기', (backend) => (backend.cookieUser = 'user-1'), '홈'],
     ['로그인하지 않은 기기', () => {}, '로그인'],
     ['서버 오류', (backend) => (backend.refreshResponse = () => problem(500, 'INTERNAL_ERROR')), '불러오지 못했어요.'],
     ['연결 오류', (backend) => (backend.refreshResponse = () => HttpResponse.error()), '불러오지 못했어요.'],

@@ -45,7 +45,7 @@ type Opened = Awaited<ReturnType<typeof open>>
 
 const address = ({ router }: Opened) => router.state.location.pathname + router.state.location.search
 const welcome = () => screen.findByRole('heading', { level: 1, name: firstTitle })
-const notFound = () => screen.findByRole('heading', { level: 1, name: '찾을 수 없어요.' })
+const home = () => screen.findByRole('heading', { level: 1, name: '홈' })
 const loginHeading = () => screen.findByRole('heading', { level: 1, name: '로그인' })
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 const signedIn = () => void (backend.cookieUser = 'user-1')
@@ -87,7 +87,7 @@ describe('로그인·가입 뒤', () => {
     accounts.items = [accountOf('통장', 'BANK', 0)]
     const opened = await open('/login')
     await logIn(opened.user)
-    await notFound()
+    await home()
     expect(address(opened)).toBe('/home')
     expect(screen.queryByText(firstTitle)).toBeNull()
   })
@@ -105,7 +105,7 @@ describe('로그인·가입 뒤', () => {
 
     await opened.user.click(screen.getByRole('button', { name: '다음' }))
     await opened.user.click(await screen.findByRole('button', { name: '건너뛰기' }))
-    await notFound()
+    await home()
     expect(address(opened)).toBe('/home')
     expect(dom.sawText(secret)).toBe(false)
   })
@@ -137,7 +137,7 @@ describe('로그인·가입 뒤', () => {
     accounts.response = () => problem(500, 'INTERNAL_ERROR')
     const opened = await open('/login')
     await logIn(opened.user)
-    await notFound()
+    await home()
     expect(address(opened)).toBe('/home')
   })
 
@@ -145,7 +145,7 @@ describe('로그인·가입 뒤', () => {
     accounts.response = () => problem(500, 'INTERNAL_ERROR')
     const opened = await open('/signup')
     await signUp(opened.user)
-    await notFound()
+    await home()
     expect(address(opened)).toBe('/home')
     expect(opened.router.state.historyAction).toBe('REPLACE')
   })
@@ -163,7 +163,7 @@ describe('로그인한 채 앱을 열 때', () => {
   it.each(['/', '/home', '/welcome'])('%s로 열었고 계좌가 있으면 /home이다', async (path) => {
     accounts.items = [accountOf('통장', 'BANK', 0)]
     const opened = await open(path)
-    await notFound()
+    await home()
     expect(address(opened)).toBe('/home')
     // 다른 주소였으면 방문 기록을 바꿔 뒤로 가도 그 주소로 돌아오지 않는다
     expect(opened.router.state.historyAction).toBe(path === '/home' ? 'POP' : 'REPLACE')
@@ -191,16 +191,17 @@ describe('로그인한 채 앱을 열 때', () => {
     const opened = await open('/secret')
     await screen.findByText(secret)
     await act(() => opened.router.navigate('/home'))
-    await notFound()
+    await home()
     await settle()
     expect(address(opened)).toBe('/home')
-    expect(accounts.requests).toEqual([])
+    // 안내를 정하려고 받지 않는다. 받은 것은 홈의 계좌 잔액이 받은 한 번뿐이다
+    expect(accounts.requests).toEqual([ledgerIdOf('user-1')])
   })
 
   it('계좌 목록을 불러오지 못하면 안내 없이 /home이다', async () => {
     accounts.response = () => problem(500, 'INTERNAL_ERROR')
     const opened = await open('/welcome')
-    await notFound()
+    await home()
     expect(address(opened)).toBe('/home')
   })
 
@@ -224,16 +225,17 @@ describe('권한', () => {
   it.each(['VIEWER', 'SOMETHING_NEW', ''])('%s면 계좌가 없어도 안내하지 않고 계좌 목록도 받지 않는다', async (role) => {
     backend.meResponse = withRole(role)
     const opened = await open('/home')
-    await notFound()
+    await home()
     await settle()
     expect(address(opened)).toBe('/home')
-    expect(accounts.requests).toEqual([])
+    // 안내를 정하려고 받지 않는다(받았다면 홈이 다시 받아 두 번이다). 받은 것은 홈의 계좌 잔액이 받은 한 번뿐이다
+    expect(accounts.requests).toEqual([ledgerIdOf('user-1')])
   })
 
   it.each(['VIEWER', 'SOMETHING_NEW'])('%s가 /welcome을 열면 /home으로 replace한다', async (role) => {
     backend.meResponse = withRole(role)
     const opened = await open('/welcome')
-    await notFound()
+    await home()
     expect(address(opened)).toBe('/home')
     expect(opened.router.state.historyAction).toBe('REPLACE')
   })
@@ -243,7 +245,7 @@ describe('권한', () => {
     backend.meResponse = withRole(role)
     const opened = await open('/login')
     await logIn(opened.user)
-    await notFound()
+    await home()
     expect(address(opened)).toBe('/home')
   })
 })
@@ -293,7 +295,7 @@ describe('정하는 동안', () => {
     answer.answer(accountsBody())
     vi.useRealTimers()
     await welcome()
-    expect(dom.sawText('찾을 수 없어요.')).toBe(false)
+    expect(dom.sawText('최근 거래')).toBe(false)
     expect(dom.sawElement('nav')).toBe(false)
   })
 
@@ -312,7 +314,7 @@ describe('정하는 동안', () => {
     expect(screen.getByText(loading)).toBe(text)
     list.answer(accountsBody(accountOf('통장', 'BANK', 0)))
     vi.useRealTimers()
-    await notFound()
+    await home()
   })
 
   it('300ms 안에 정하면 글을 보이지 않는다', async () => {

@@ -26,7 +26,7 @@ async function open(path: string) {
 }
 
 describe('찾을 수 없음(N-01)', () => {
-  it.each(['/', '/home', '/없는-주소', '/transactions/1/2/3', '/home?month=2026-11'])(
+  it.each(['/없는-주소', '/transactions/1/2/3', '/homes', '/home/2026-11'])(
     '화면이 없는 주소 %s에서 안내 문장과 홈으로 가는 길을 보여 준다',
     async (path) => {
       await open(path)

@@ -94,7 +94,7 @@ const chipsOf = (kind: string) =>
     .map((item) => item.textContent)
 const settle = (ms = 50) => act(() => new Promise((resolve) => setTimeout(resolve, ms)))
 const path = ({ router }: Opened) => router.state.location.pathname + router.state.location.search
-const home = () => screen.findByRole('heading', { level: 1, name: '찾을 수 없어요.' })
+const home = () => screen.findByRole('heading', { level: 1, name: '홈' })
 const toast = () => screen.getAllByRole('status').find((region) => region.textContent !== '')?.textContent
 
 /** 칸 아래에 이어진 오류 문구. 없으면 없다. */
@@ -710,7 +710,8 @@ describe('건너뛰기', () => {
     expect(path(opened)).toBe('/home')
     expect(screen.queryByRole('alert')).toBeNull()
     expect(toast()).toBeUndefined()
-    await waitFor(() => expect(accounts.requests.length).toBe(before + 1))
+    // 안내가 다시 받는다. 도착한 홈의 계좌 잔액도 같은 목록을 받으므로 한 번 이상이다
+    await waitFor(() => expect(accounts.requests.length).toBeGreaterThan(before))
     await act(() => opened.router.navigate(-1))
     await waitFor(() => expect(path(opened)).toBe('/home'))
   })

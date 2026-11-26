@@ -3,6 +3,7 @@ import { MainScreen } from '../components/Screen'
 import AccountAddPage from '../features/accounts/AccountAddPage'
 import AccountsPage from '../features/accounts/AccountsPage'
 import CategoriesPage from '../features/categories/CategoriesPage'
+import HomePage from '../features/home/HomePage'
 import NotFoundPage from '../features/not-found/NotFoundPage'
 import TransactionDetailPage from '../features/transactions/TransactionDetailPage'
 import TransactionEditPage from '../features/transactions/TransactionEditPage'
@@ -11,7 +12,7 @@ import TransactionNewPage from '../features/transactions/TransactionNewPage'
 import LedgerLayout from './LedgerLayout'
 import LoginRoute from './LoginRoute'
 import MoreRoute from './MoreRoute'
-import { accountsItem, categoriesItem, moreItem, transactionsItem } from './navigation'
+import { accountsItem, categoriesItem, homeItem, moreItem, transactionsItem } from './navigation'
 import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
 import SessionProvider from './SessionProvider'
@@ -59,6 +60,7 @@ export const routes: RouteObject[] = [
                   </MainScreen>
                 ),
                 children: [
+                  { path: '/home', element: <HomePage />, handle: { navigationItem: homeItem } },
                   { path: '/more', element: <MoreRoute />, handle: { navigationItem: moreItem } },
                   { path: '/accounts', element: <AccountsPage />, handle: { navigationItem: accountsItem } },
                   {

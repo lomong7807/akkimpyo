@@ -186,7 +186,7 @@ describe('로그아웃한 뒤', () => {
     expect(oldCache.getMutationCache().getAll()).toEqual([])
 
     await logIn(opened.user, 'user-2')
-    await screen.findByText('찾을 수 없어요.')
+    await screen.findByRole('heading', { level: 1, name: '홈' })
     await act(() => opened.router.navigate('/list'))
     await screen.findByText(itemOf('user-2'))
     const dom = recordDom()
@@ -229,7 +229,7 @@ describe('로그아웃한 뒤', () => {
     await loginHeading()
     const dom = recordDom()
     await logIn(opened.user, 'user-2')
-    await screen.findByText('찾을 수 없어요.')
+    await screen.findByRole('heading', { level: 1, name: '홈' })
     expect(addressOf(opened)).toBe('/home')
     await act(() => opened.router.navigate('/list'))
     await screen.findByText(itemOf('user-2'))

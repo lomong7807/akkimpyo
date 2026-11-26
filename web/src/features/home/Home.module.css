@@ -1,0 +1,313 @@
+/*
+ * 홈(C-01). 구역은 상자로 감싸지 않고 1px 선과 선 위아래 24px로 나눈다(designer 결정 13, L-11).
+ * 휴대폰 배치에서는 내용의 좌우 여백만큼 넓혀 선과 누름 바탕이 화면 끝까지 닿게 하고, 글은 --inset으로 내용의 선에 맞춘다.
+ * 내용을 가운데로 모으는 폭(768px 이상)에서는 선이 내용 폭이고 글은 거래 줄과 같이 16px 안쪽이다(내역과 같다).
+ * 넓은 화면(1024px 이상)은 두 칸이고 선과 줄은 칸의 폭, 글은 칸의 끝에 맞춘다(L-18).
+ */
+.home {
+  --bleed: var(--space-16);
+  --inset: var(--space-16);
+
+  margin-inline: calc(-1 * var(--bleed));
+}
+
+@media (width >= 768px) {
+  .home {
+    --bleed: 0px;
+  }
+}
+
+/* 왼쪽 칸(합계, 계좌 잔액)은 칸 사이 24px을 뺀 폭의 40%, 오른쪽 칸(최근 거래)은 나머지다. 두 칸은 함께 스크롤한다(L-13) */
+@media (width >= 1024px) {
+  .home {
+    --inset: 0px;
+    --row-inset: 0px;
+
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    column-gap: var(--space-24);
+    align-items: start;
+  }
+}
+
+/* 화면 이름. 휴대폰 배치는 상단 바에 제목을 두지 않으므로(00-common 6.1) 화면 읽기에만 둔다 */
+.title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 넓은 화면은 상단 바가 없어 내용 맨 위에 화면 이름을 두고(하위 화면의 제목 줄과 같은 높이), 아래 8px 뒤에 구역이 온다(L-18) */
+@media (width >= 1024px) {
+  .title {
+    position: static;
+    display: flex;
+    align-items: center;
+    width: auto;
+    height: auto;
+    min-height: var(--size-topbar);
+    margin-bottom: var(--space-8);
+    overflow: visible;
+    clip-path: none;
+    font: var(--text-title);
+    white-space: normal;
+  }
+}
+
+.section {
+  padding-top: var(--space-24);
+  padding-bottom: var(--space-24);
+}
+
+/* 구역 사이의 선. 휴대폰 배치에서는 세 구역이 한 줄로 이어진다 */
+.section + .section,
+.column + .column > .section:first-child {
+  border-top: 1px solid var(--color-border);
+}
+
+/* 화면 맨 아래 여백은 공통 틀의 24px만 둔다 */
+.column:last-child > .section:last-child {
+  padding-bottom: 0;
+}
+
+@media (width >= 1024px) {
+  .column + .column > .section:first-child {
+    border-top: 0;
+  }
+
+  .column > .section:last-child {
+    padding-bottom: 0;
+  }
+}
+
+.inset {
+  padding-inline: var(--inset);
+}
+
+/* 구역의 머리 줄. 오른쪽 끝의 화살표나 글자 버튼과 제목의 가운데를 맞춘다 */
+.head {
+  display: flex;
+  align-items: center;
+  column-gap: var(--space-8);
+  font: var(--text-body-strong);
+}
+
+.heading {
+  flex: 1;
+  min-width: 0;
+  font: var(--text-body-strong);
+}
+
+.caret {
+  display: flex;
+  color: var(--color-text-secondary);
+}
+
+/*
+ * "모두 보기": 글자 버튼의 안쪽 여백만큼 당겨 화살표를 내용의 오른쪽 선에 맞춘다(상단 바의 화면별 버튼과 같다).
+ * 누름 영역 44px이 머리 줄(24px)을 늘리지 않도록 위아래로 넘치게 둔다. 그래야 두 칸의 첫 머리 줄이 같은 높이에 선다.
+ */
+.headAction {
+  flex: none;
+  margin-block: calc((1lh - var(--size-touch)) / 2);
+  margin-inline-end: calc(-1 * var(--space-8));
+}
+
+.actionLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* 머리 줄 아래 내용. 구역 안 요소 사이 12px */
+.body {
+  margin-top: var(--space-12);
+}
+
+/* 구역 전체가 링크인 계좌 잔액. 누름 바탕이 선과 선 사이를 다 채우도록 여백을 링크가 갖는다 */
+.linkSection {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.sectionLink {
+  display: block;
+  padding: var(--space-24) var(--inset);
+  color: var(--color-text);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sectionLink:active {
+  background-color: var(--color-press);
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .sectionLink:hover {
+    background-color: var(--color-press);
+  }
+}
+
+/* 링크가 화면 끝까지 닿아 바깥에 그리면 좌우가 잘린다 */
+.sectionLink:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* 이번 달 합계 */
+.summary {
+  margin: 0;
+}
+
+.figureName {
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+}
+
+/*
+ * 큰 지출 숫자(text-hero, 왼쪽 정렬). 줄을 바꾸지 않고, 칸 폭을 넘으면(글자 200% 등) text-title로 내린다(L-12).
+ * 글의 폭을 자바스크립트로 재지 않고 줄바꿈으로 고른다. 같은 금액 두 벌을 한 줄에 늘어놓는다.
+ * - 큰 숫자(.heroAmount)는 늘어나는 비율이 매우 커서, 한 줄에 들어가면 남는 폭을 거의 다 가져간다. 작은 짝의 자리
+ *   (.heroFallback)는 폭이 0에 가까워 글을 그리지 않는다(아래 @container).
+ * - 들어가지 않으면 큰 숫자가 다음 줄로 내려가고 작은 짝의 자리가 첫 줄의 폭을 다 얻어 작은 숫자를 그린다. 큰 숫자는
+ *   높이가 0이라 다음 줄의 글이 상자 밖으로 넘치고, 상자가 넘친 글을 자른다.
+ * 상자의 높이는 늘 큰 숫자의 한 줄(1lh)이라 두 모양 사이에 아래 줄이 움직이지 않는다.
+ */
+.hero {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  overflow: hidden;
+  font: var(--text-hero);
+}
+
+.heroFallback {
+  flex: 1 0 0;
+  min-width: 0;
+  min-height: 1lh;
+  container-type: inline-size;
+}
+
+.heroFallbackAmount {
+  display: none;
+  font: var(--text-title);
+}
+
+/* 1em은 큰 숫자 글자 하나의 크기다. 작은 짝의 자리가 이보다 넓으면 큰 숫자가 들어가지 않은 것이다 */
+@container (width >= 1em) {
+  .heroFallbackAmount {
+    display: block;
+  }
+}
+
+.heroAmount {
+  flex: 1000000 0 auto;
+  height: 0;
+  white-space: nowrap;
+}
+
+/* 수입과 차액: 이름이 왼쪽, 금액이 오른쪽 끝이다. 금액이 줄에 안 들어가면 다음 줄 오른쪽으로 내린다(내역의 합계와 같다) */
+.figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-12);
+}
+
+.spending + .figure {
+  margin-top: var(--space-16);
+}
+
+.figure + .figure {
+  margin-top: var(--space-8);
+}
+
+.figureAmount {
+  margin: 0;
+  margin-inline-start: auto;
+  font: var(--text-body-strong);
+  text-align: end;
+}
+
+/* 뼈대에서 글자 한 줄을 막대로 놓는 줄 */
+.skeletonLine {
+  display: flex;
+}
+
+/* 계좌 잔액 */
+.sums {
+  margin-bottom: 0;
+}
+
+.balance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-12);
+}
+
+.balance + .balance {
+  margin-top: var(--space-8);
+}
+
+.balanceName {
+  flex: 1 1 50%;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  overflow-wrap: anywhere;
+}
+
+.balanceAmount {
+  flex: 0 1 auto;
+  margin: 0;
+  margin-inline-start: auto;
+  font: var(--text-body);
+  text-align: end;
+}
+
+/* 선 아래 자산 합계. 이름과 금액 모두 text-body-strong, 본문 글자색이다 */
+.balance.assets {
+  margin-top: var(--space-12);
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--color-border);
+}
+
+.assets .balanceName,
+.assets .balanceAmount {
+  color: var(--color-text);
+  font: var(--text-body-strong);
+}
+
+.none {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}
+
+/* 구역을 불러오지 못함: 문구와 "다시 시도"를 왼쪽 정렬로 작게 둔다 */
+.failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.failureTitle {
+  margin: 0;
+  font: var(--text-body);
+}
+
+.failureDescription {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+}
+
+/* 글자 버튼의 안쪽 여백만큼 당겨 글자를 문구와 같은 선에서 시작한다 */
+.retry {
+  margin-inline-start: calc(-1 * var(--space-8));
+}
