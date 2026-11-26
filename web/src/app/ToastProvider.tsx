@@ -114,9 +114,11 @@ function Toast({ message, action, onClosed }: ToastProps) {
         <button
           type="button"
           className={styles.action}
-          onClick={() => {
+          onClick={(event) => {
             // 움직임 없이 바로 걷는다. 동작의 결과는 새 토스트가 알린다
             onClosed()
+            // 키보드로 누른 click은 detail이 0이다
+            focusScreenTitle(event.detail === 0)
             action.onAction()
           }}
         >
@@ -125,6 +127,17 @@ function Toast({ message, action, onClosed }: ToastProps) {
       )}
     </div>
   )
+}
+
+/**
+ * 누른 버튼이 사라지므로 초점을 지금 화면의 제목(h1)으로 옮겨 다음 Tab이 화면의 처음부터 이어지게 한다
+ * (designer 검토 2026-11-26). 키보드로 눌렀을 때만 초점 테두리를 보인다.
+ */
+function focusScreenTitle(keyboard: boolean) {
+  const title = document.querySelector<HTMLElement>('h1')
+  if (!title) return
+  if (!title.hasAttribute('tabindex')) title.tabIndex = -1
+  title.focus({ focusVisible: keyboard })
 }
 
 /** 아래로 밀면 부른다. 두 번째 손가락은 보지 않는다. */

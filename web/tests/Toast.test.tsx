@@ -595,6 +595,54 @@ describe('되돌리기가 있는 토스트', () => {
     expect(onUndo).toHaveBeenCalledTimes(1)
   })
 
+  describe('누르면 사라지는 버튼 대신 지금 화면의 제목(h1)으로 초점을 옮긴다(designer 검토 2026-11-26)', () => {
+    function renderWithTitle(title = <h1>내역</h1>) {
+      return renderScreen(
+        <ToastProvider>
+          {title}
+          <UndoCaller />
+        </ToastProvider>,
+      )
+    }
+    const heading = () => screen.getByRole('heading', { level: 1 })
+
+    it('키보드로 누르면(click detail 0) 제목에 초점을 두고 테두리를 보인다', () => {
+      const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+      renderWithTitle()
+      press('삭제하기')
+      fireEvent.click(undoButton(), { detail: 0 })
+      expect(document.activeElement).toBe(heading())
+      expect(heading().getAttribute('tabindex')).toBe('-1')
+      expect(focus.mock.contexts.at(-1)).toBe(heading())
+      expect(focus.mock.calls.at(-1)).toEqual([{ focusVisible: true }])
+      expect(onUndo).toHaveBeenCalledTimes(1)
+    })
+
+    it('마우스나 손가락으로 누르면 제목에 초점을 두되 테두리를 보이지 않는다', () => {
+      const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+      renderWithTitle()
+      press('삭제하기')
+      fireEvent.click(undoButton(), { detail: 1 })
+      expect(document.activeElement).toBe(heading())
+      expect(focus.mock.calls.at(-1)).toEqual([{ focusVisible: false }])
+    })
+
+    it('제목에 이미 tabindex가 있으면 그대로 둔다', () => {
+      renderWithTitle(<h1 tabIndex={0}>내역</h1>)
+      press('삭제하기')
+      fireEvent.click(undoButton(), { detail: 0 })
+      expect(heading().getAttribute('tabindex')).toBe('0')
+      expect(document.activeElement).toBe(heading())
+    })
+
+    it('제목이 없어도 동작은 한다', () => {
+      renderWithTitle(<p>제목 없음</p>)
+      press('삭제하기')
+      fireEvent.click(undoButton(), { detail: 0 })
+      expect(onUndo).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('동작이 새 토스트를 알리면 그것을 보인다', () => {
     function Retry() {
       const showToast = useToast()
