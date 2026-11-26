@@ -170,7 +170,7 @@ describe('마지막으로 확인한 로그인 기록', () => {
   it('다른 사용자로 기록을 쓰면 앞 사용자들의 사본을 지우고 그 사용자의 사본과 다른 사용자의 대기열·쓰던 값은 남긴다', async () => {
     const device = await openDevice()
     await device.copies.saveCopy('user-1', '', 'me', { name: 'user-1' }, AT)
-    await device.copies.saveCopy('user-3', 'ledger-3', 'accounts', [], AT)
+    await device.copies.saveCopy('user-3', 'ledger-3', 'accounts', [], AT, AT)
     await device.copies.saveCopy('user-2', '', 'me', { name: 'user-2' }, AT)
     await putRow(device, 'queue', { userId: 'user-1', id: 'tx-1', queuedAt: AT })
     await putRow(device, 'drafts', { userId: 'user-1', form: 'transaction-new' })
@@ -220,8 +220,8 @@ describe('마지막으로 확인한 로그인 기록', () => {
 describe('읽기용 사본', () => {
   it('받을 때마다 통째로 바꾸고 받은 시각을 남긴다', async () => {
     const device = await openDevice()
-    await device.copies.saveCopy('user-1', 'ledger-1', 'accounts', [{ id: 'a' }, { id: 'b' }], AT)
-    await device.copies.saveCopy('user-1', 'ledger-1', 'accounts', [{ id: 'c' }], AT + 1000)
+    await device.copies.saveCopy('user-1', 'ledger-1', 'accounts', [{ id: 'a' }, { id: 'b' }], AT, AT)
+    await device.copies.saveCopy('user-1', 'ledger-1', 'accounts', [{ id: 'c' }], AT + 1000, AT + 1000)
     expect(await device.copies.readCopy('user-1', 'ledger-1', 'accounts')).toEqual({
       data: [{ id: 'c' }],
       receivedAt: AT + 1000,
@@ -288,6 +288,15 @@ describe('읽기용 사본', () => {
       expect(await device.copies.readCopy('user-2', LEDGER, 'accounts')).toBeDefined()
       expect(await device.copies.readCopy('user-1', 'ledger-2', 'accounts')).toBeDefined()
       expect(await device.copies.readCopy('user-1', '', 'me')).toBeDefined()
+    })
+
+    it('보낸 때 없이 남기려는 장부 사본은 지운 표시가 있으면 막는다', async () => {
+      const device = await openDevice()
+      await device.copies.forgetLedgerCopies('user-1', LEDGER, AT)
+      // 타입은 장부 사본에 보낸 때를 요구한다. 타입을 거치지 않은 호출도 막는 쪽인지 본다.
+      const untyped = device.copies.saveCopy as (...values: unknown[]) => Promise<void>
+      await untyped('user-1', LEDGER, 'accounts', ['보낸 때 모름'], AT + 20)
+      expect(await device.copies.readCopy('user-1', LEDGER, 'accounts')).toBeUndefined()
     })
 
     it('로그아웃은 지운 표시도 함께 지운다', async () => {

@@ -51,23 +51,34 @@ export interface Copy {
 }
 
 /**
- * 받은 사본으로 통째로 바꾼다. `startedAt`은 그 응답을 받은 요청을 보낸 때다(없으면 받은 때). 장부 사본은 그 장부를 지운 때와
- * 같거나 그보다 앞에 보낸 요청의 것이면 남기지 않는다(GoneRow).
+ * 받은 사본으로 통째로 바꾼다. 장부 사본은 그 응답을 받은 요청을 보낸 때(`startedAt`)를 반드시 넘긴다. 그 장부를 지운 때와
+ * 같거나 그보다 앞에 보낸 요청의 것이면 남기지 않는다(GoneRow). 넘기지 않는 호출이 생겨 경쟁이 조용히 되살아나지 않게
+ * 타입으로 막는다(architect #255). 사용자 단위 사본(내 정보)은 지운 때를 보지 않는다.
  */
+export function saveCopy(userId: string, scope: typeof USER_SCOPE, kind: 'me', data: unknown, receivedAt: number): Promise<void>
+export function saveCopy(
+  userId: string,
+  ledgerId: string,
+  kind: Exclude<CopyKind, 'me'>,
+  data: unknown,
+  receivedAt: number,
+  startedAt: number,
+): Promise<void>
 export function saveCopy(
   userId: string,
   scope: string,
   kind: CopyKind,
   data: unknown,
   receivedAt: number,
-  startedAt = receivedAt,
+  startedAt?: number,
 ): Promise<void> {
   const row: CopyRow = { userId, scope, kind, receivedAt, data }
   return transact(['copies'], 'readwrite', async (transaction) => {
     const store = transaction.objectStore('copies')
     if (scope !== USER_SCOPE) {
       const gone = goneAtOf(await resultOf(store.get([userId, scope, 'gone'])))
-      if (gone !== undefined && startedAt <= gone) return
+      // 보낸 때를 모르면 막는 쪽이다
+      if (gone !== undefined && (startedAt === undefined || startedAt <= gone)) return
     }
     store.put(row)
   })
