@@ -14,7 +14,7 @@ export default function CategoryList({ categories }: { categories: Category[] })
     <>
       {made.length === 0 && (
         <div className={styles.empty}>
-          <EmptyState description="아직 만든 카테고리가 없어요." />
+          <EmptyState description="아직 만든 카테고리가 없어요" />
         </div>
       )}
       <ul role="list" className={styles.list}>
