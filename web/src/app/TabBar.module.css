@@ -19,8 +19,13 @@
   list-style: none;
 }
 
+/*
+ * 칸마다 자기 폭을 보는 컨테이너다(아래 @container). 글자 크기는 칸 이름과 같아 기준의 em이 칸 이름의 글자 크기다.
+ */
 .tabs > li {
   display: grid;
+  container-type: inline-size;
+  font: var(--text-caption);
 }
 
 /* 글자를 키워 이름이 두 줄이 된 칸이 있어도 아이콘은 한 줄에 놓이도록 위에서부터 쌓는다 */
@@ -46,6 +51,28 @@
 
 .tab[aria-current] {
   color: var(--color-accent);
+}
+
+/*
+ * 칸 이름이 칸 폭에 들어가지 않으면(글자를 키운 좁은 화면, 칸이 많을 때) 모든 칸의 이름을 함께 화면 읽기에만 남기고
+ * 아이콘을 칸 가운데에 둔다(designer 검토 #90). 재지 않는다. 모든 칸의 폭이 같으므로(1fr) 가장 긴 이름(세 글자, Pretendard
+ * 2.594em)보다 조금 넓은 같은 기준으로 칸마다 보면 모든 칸이 함께 바뀐다. 이름이 더 길어지면 이 기준을 고친다.
+ * 예: 320px 글자 200%의 네 칸은 2.46em이라 숨기고, 390px 200%의 네 칸은 3.13em이라 보이며, 다섯 칸 390px 200%는 2.5em이다.
+ * 탭 바의 높이, 누르는 영역, 지금 칸의 색은 그대로다.
+ */
+@container (width < 2.75em) {
+  .label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .tab {
+    justify-content: center;
+  }
 }
 
 @media (width >= 1024px) {

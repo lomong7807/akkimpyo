@@ -23,7 +23,7 @@ export default function TabBar({ tabs, current, quickEntry }: TabBarProps) {
               <li key={tab.to}>
                 <NavigationLink item={tab} current={tab === current} className={styles.tab}>
                   <Icon name={tab.icon} size={24} />
-                  {tab.label}
+                  <span className={styles.label}>{tab.label}</span>
                 </NavigationLink>
               </li>
             )
