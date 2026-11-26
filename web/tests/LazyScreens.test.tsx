@@ -205,6 +205,24 @@ describe.each(splits)('$name: 화면 코드를 받는 동안', (split) => {
   })
 })
 
+describe('가입의 틀', () => {
+  it('기다림 글은 다른 화면처럼 상단 바 아래 남은 영역을 채운 내용의 가운데다(designer #257)', async () => {
+    started.backend.cookieUser = undefined
+    const release = hold('../src/app/SignupRoute')
+    await openApp('/signup')
+    const status = await screen.findByRole('status')
+    const content = status.closest('main')!
+    const page = content.parentElement!
+    expect(getComputedStyle(page)).toMatchObject({ display: 'flex', flexDirection: 'column', minHeight: '100dvh' })
+    expect(getComputedStyle(content)).toMatchObject({ display: 'flex', flexDirection: 'column', flexGrow: '1' })
+    // Loading이 남은 높이를 채우고 글을 가운데에 둔다
+    expect(getComputedStyle(status)).toMatchObject({ display: 'flex', alignItems: 'center', justifyContent: 'center' })
+    expect(within(page).getByRole('banner')).toBeTruthy()
+    await release()
+    await screen.findByLabelText('표시 이름')
+  })
+})
+
 describe('화면 코드를 받지 못하면', () => {
   it('그 화면의 상단 바와 공통 틀은 남고 내용 자리에 "불러오지 못했어요."가 보인다. 다시 시도하면 받는다', async () => {
     vi.doMock('../src/features/accounts/AccountsPage', () => {
