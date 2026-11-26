@@ -185,6 +185,7 @@ function Figures({ totals }: { totals: IncomeAndExpense }) {
         <dt className={styles.figureName}>지출</dt>
         <dd className={styles.hero}>
           <span className={styles.heroFallback} aria-hidden="true">
+            <span className={styles.heroStrut} />
             <span className={styles.heroFallbackAmount}>
               <Amount kind="expense" value={totals.expense} />
             </span>

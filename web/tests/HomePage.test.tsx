@@ -347,6 +347,11 @@ describe('이번 달 합계(F-111, P-205)', () => {
     expect(readCssRule(CSS, '.heroFallback')).toContain('flex: 1 0 0;')
     expect(readCssRule(CSS, '.heroFallback')).toContain('container-type: inline-size;')
     expect(readCssRule(CSS, '.heroFallbackAmount')).toContain('display: none;')
+    // 큰 숫자가 들어간 때의 높이는 받침이 만들고, 작은 숫자로 내리면 받침을 뺀다
+    expect(readCssRule(CSS, '.heroStrut')).toContain('height: 1lh;')
+    expect(readWebFile(CSS)).toMatch(
+      /@container \(width >= 1em\) \{\s*\.heroStrut \{\s*display: none;\s*\}\s*\.heroFallbackAmount \{\s*display: block;/,
+    )
   })
 
   it('지출 이름과 수입·차액 이름은 보조 글자(text-secondary, 보조색), 수입·차액 금액은 text-body-strong이다', async () => {
