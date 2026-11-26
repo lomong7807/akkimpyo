@@ -2,12 +2,14 @@ import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiError } from '../src/api/apiError'
 import { accessTokenNamed, tokenNameIn } from './support/accessToken'
+import { deviceContents } from './support/device'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { watchAppTimers } from './support/timers'
 import { createFakeLocks, createStuckLocks, installLocks, removeLocks, SESSION_LOCK } from './support/webLocks'
 
 const server = startMockServer()
+
 
 /** 탭 하나. 모듈을 새로 불러와 메모리를 다른 탭과 나누지 않는다. */
 async function openTab() {
@@ -181,8 +183,6 @@ describe('로그인', () => {
 
 describe('access token이 머무는 곳', () => {
   it('로그인하고 갱신해도 저장소, 쿠키, 주소, 방문 기록, console에 남지 않는다', async () => {
-    const openDatabase = vi.fn()
-    vi.stubGlobal('indexedDB', { open: openDatabase })
     const methods = ['log', 'info', 'warn', 'error', 'debug', 'trace'] as const
     const consoleSpies = methods.map((method) => vi.spyOn(console, method))
     localStorage.clear()
@@ -197,7 +197,11 @@ describe('access token이 머무는 곳', () => {
     // 로그인했음을 다른 화면이 아는, 뜻이 없는 임의 값 하나만 남는다
     expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f]{32}$/) })
     expect(sessionStorage.length).toBe(0)
-    expect(openDatabase).not.toHaveBeenCalled()
+    // IndexedDB에는 토큰 없는 마지막 로그인 기록만 남는다(#234)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    const [loginRecords, ...rest] = await deviceContents()
+    expect(loginRecords).toHaveLength(1)
+    expect(JSON.stringify([loginRecords, ...rest])).not.toMatch(/token-|eyJ/)
     expect(document.cookie).toBe('')
     expect(window.location.href).not.toMatch(/token-|eyJ/)
     expect(JSON.stringify(window.history.state)).not.toMatch(/token-|eyJ/)

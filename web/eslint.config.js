@@ -6,8 +6,11 @@ import tseslint from 'typescript-eslint'
 
 // 의존 방향은 app → features → components, api다. 거꾸로 불러오지 않고 components와 api는 서로 모른다.
 // lib는 화면과 무관한 계산이다. React와 앱의 다른 폴더를 모른다.
+// device는 기기 저장소(IndexedDB, #234)다. lib만 부르고 app, features, api가 device를 부른다. IndexedDB를 직접 다루는
+// deviceDb는 device 안에서만 부른다(architect 결정, #102).
 const direction = '의존 방향은 app → features → components, api다.'
 const libDirection = 'lib는 화면과 무관한 계산이라 앱의 다른 폴더를 모른다.'
+const deviceDirection = 'device는 기기 저장소라 lib만 부른다.'
 
 function importsFrom(folder, rule = direction) {
   return {
@@ -29,6 +32,16 @@ const libPackages = {
 const apiInternals = {
   regex: '^\\.\\.?/(.*/)?api(/(?!(request|session|apiError)(\\.ts)?$)|$)',
   message: '화면은 api의 request, session, apiError만 쓴다. 나머지는 api 안의 구현이다.',
+}
+
+const deviceInternals = {
+  regex: '^\\.\\.?/(.*/)?device/deviceDb(\\.ts)?$',
+  message: 'deviceDb는 device 안에서만 쓴다. 저장소마다 있는 device 모듈을 부른다.',
+}
+
+const devicePackages = {
+  regex: '^((react|react-dom|react-router)(/|$)|@tanstack/)',
+  message: 'device는 React와 무관하다. 화면과 잇는 훅은 features에 둔다.',
 }
 
 const mswPackage = {
@@ -64,15 +77,25 @@ export default tseslint.config(
       ],
     },
   },
-  restrictedImports(['src/**/*.{ts,tsx}']),
-  restrictedImports(['src/features/**/*.{ts,tsx}'], [importsFrom('app'), apiInternals]),
+  restrictedImports(['src/**/*.{ts,tsx}'], [deviceInternals]),
+  restrictedImports(['src/features/**/*.{ts,tsx}'], [importsFrom('app'), apiInternals, deviceInternals]),
   restrictedImports(
     ['src/components/**/*.{ts,tsx}'],
-    [importsFrom('app'), importsFrom('features'), importsFrom('api')],
+    [importsFrom('app'), importsFrom('features'), importsFrom('api'), importsFrom('device')],
   ),
   restrictedImports(
     ['src/api/**/*.{ts,tsx}'],
-    [importsFrom('app'), importsFrom('features'), importsFrom('components'), reactPackages],
+    [importsFrom('app'), importsFrom('features'), importsFrom('components'), reactPackages, deviceInternals],
+  ),
+  restrictedImports(
+    ['src/device/**/*.{ts,tsx}'],
+    [
+      importsFrom('app', deviceDirection),
+      importsFrom('features', deviceDirection),
+      importsFrom('components', deviceDirection),
+      importsFrom('api', deviceDirection),
+      devicePackages,
+    ],
   ),
   restrictedImports(
     ['src/lib/**/*.{ts,tsx}'],
@@ -81,6 +104,7 @@ export default tseslint.config(
       importsFrom('features', libDirection),
       importsFrom('components', libDirection),
       importsFrom('api', libDirection),
+      importsFrom('device', libDirection),
       libPackages,
     ],
   ),

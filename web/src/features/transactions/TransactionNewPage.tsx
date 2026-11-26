@@ -1,6 +1,6 @@
 import { useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router'
-import { currentUserId } from '../../api/session'
+import { sessionUserId } from '../../api/session'
 import { Button } from '../../components/Button'
 import FullScreenForm from '../../components/FullScreenForm'
 import RetryMessage from '../../components/RetryMessage'
@@ -36,8 +36,9 @@ export default function TransactionNewPage() {
   const navigate = useNavigate()
   const creation = useCreateTransaction()
   const accounts = useAccounts()
-  // 이 화면을 연 사용자. 기본 계좌를 고르고, 보내는 순간의 사용자와 같은지 본다
-  const [owner] = useState(() => ({ userId: currentUserId(), ledgerId: ledger.id }))
+  // 이 화면을 연 사용자(입력의 주인). 기본 계좌를 고르고, 보내는 순간의 사용자(토큰의 sub)와 같은지 요청 계층이 본다.
+  // 확인하지 못한 로그인이면 기록의 사용자다. 같은 사용자로 확인돼야 보낸다(#234)
+  const [owner] = useState(() => ({ userId: sessionUserId(), ledgerId: ledger.id }))
   const [defaultAccountId, setDefaultAccountId] = useState<string>()
   if (defaultAccountId === undefined && accounts.data) setDefaultAccountId(defaultAccountOf(owner, accounts.data))
   const form = useTransactionForm(defaultAccountId ?? '')

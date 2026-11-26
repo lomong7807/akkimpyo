@@ -23,13 +23,15 @@ describe('ESLint', () => {
   })
 })
 
-describe('의존 방향: app → features → components, api와 lib', () => {
+describe('의존 방향: app → features → components, api → device, 그리고 lib', () => {
   const feature = 'src/features/sample/sample.ts'
   const component = 'src/components/sample.ts'
   const nestedComponent = 'src/components/sample/sample.ts'
   const api = 'src/api/sample.ts'
   const lib = 'src/lib/sample.ts'
   const nestedLib = 'src/lib/sample/sample.ts'
+  const device = 'src/device/sample.ts'
+  const app = 'src/app/sample.ts'
 
   const value = (from: string) => `import { a } from '${from}'\nexport const b = a`
   const type = (from: string) => `import type { A } from '${from}'\nexport type B = A`
@@ -90,6 +92,24 @@ describe('의존 방향: app → features → components, api와 lib', () => {
     ['lib에서 TanStack Query', lib, value('@tanstack/react-query')],
     ['lib에서 다른 TanStack 패키지', lib, value('@tanstack/query-core')],
     ['lib에서 msw', lib, value('msw')],
+    ['lib에서 device', lib, value('../device/copies')],
+    ['device에서 app', device, value('../app/routes')],
+    ['device에서 features', device, value('../features/me/me')],
+    ['device에서 features의 타입', device, type('../features/me/me')],
+    ['device에서 components', device, value('../components/Button')],
+    ['device에서 api', device, value('../api/session')],
+    ['device에서 api의 타입', device, type('../api/apiError')],
+    ['device에서 React', device, value('react')],
+    ['device에서 TanStack Query', device, value('@tanstack/react-query')],
+    ['device에서 msw', device, value('msw')],
+    ['components에서 device', component, value('../device/copies')],
+    ['components 안쪽 폴더에서 device', nestedComponent, type('../../device/loginRecord')],
+    ['features에서 device의 deviceDb', feature, value('../../device/deviceDb')],
+    ['features에서 확장자를 적은 device의 deviceDb', feature, value('../../device/deviceDb.ts')],
+    ['features에서 device의 deviceDb 다시 내보내기', feature, reExport('../../device/deviceDb')],
+    ['app에서 device의 deviceDb', app, value('../device/deviceDb')],
+    ['api에서 device의 deviceDb', api, value('../device/deviceDb')],
+    ['main에서 device의 deviceDb', 'src/main.ts', value('./device/deviceDb')],
   ])('막는다: %s', async (_, path, code) => {
     expect(await ruleIdsFor(code, path)).toEqual(['no-restricted-imports'])
   })
@@ -123,6 +143,13 @@ describe('의존 방향: app → features → components, api와 lib', () => {
     ['components에서 lib', component, value('../lib/amountText')],
     ['components 안쪽 폴더에서 lib', nestedComponent, type('../../lib/calendarDate')],
     ['테스트에서 lib', 'tests/sample.test.ts', value('../src/lib/calendarDate')],
+    ['api에서 device', api, value('../device/loginRecord')],
+    ['features에서 device', feature, value('../../device/copies')],
+    ['features 안쪽 폴더에서 device', 'src/features/sample/deep/sample.ts', type('../../../device/copies')],
+    ['app에서 device', app, value('../device/userData')],
+    ['device에서 device', device, value('./deviceDb')],
+    ['device에서 lib', device, value('../lib/clock')],
+    ['테스트에서 device의 deviceDb', 'tests/sample.test.ts', value('../src/device/deviceDb')],
   ])('막지 않는다: %s', async (_, path, code) => {
     expect(await ruleIdsFor(code, path)).toEqual([])
   })
