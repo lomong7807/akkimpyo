@@ -1,6 +1,14 @@
+// jsdom에는 IndexedDB가 없다. 규격대로 도는 가짜를 전역에 둔다(devDependency, #234)
+import 'fake-indexeddb/auto'
+import { IDBFactory } from 'fake-indexeddb'
 import { afterAll, beforeEach, vi } from 'vitest'
 import { DEFAULT_NOW, setDeviceClock } from './clock'
 import { installDialog, untilUnshielded } from './dialog'
+
+// 테스트마다 기기 저장소를 비운다. 한 테스트 안에서 여는 탭들은 같은 저장소를 함께 쓴다
+beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory()
+})
 
 // 앱을 새로 여는 테스트는 vi.resetModules()로 앱 모듈을 다시 읽는다. 시계 모듈까지 다시 읽으면 테스트가 정한 시계가 새 앱에
 // 닿지 않는다. 그대로 돌려주는 mock으로 두면 resetModules가 다시 읽지 않아 한 파일 안에서 하나를 나눠 쓴다.
