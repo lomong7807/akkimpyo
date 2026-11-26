@@ -88,22 +88,29 @@
   padding-inline: var(--inset);
 }
 
-/* 구역의 머리 줄. 오른쪽 끝의 화살표나 글자 버튼과 제목의 가운데를 맞춘다 */
+/*
+ * 구역의 머리 줄. 오른쪽 끝의 화살표나 글자 버튼과 제목의 가운데를 맞춘다.
+ * 제목은 줄을 바꾸지 않는다. 제목과 오른쪽 것이 한 줄에 안 들어가면(글자 200% 등) 오른쪽 것이 다음 줄 오른쪽으로 간다
+ * (계좌 줄의 금액과 같다. designer 검토 #90).
+ */
 .head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   column-gap: var(--space-8);
+  row-gap: var(--space-8);
   font: var(--text-body-strong);
 }
 
 .heading {
-  flex: 1;
-  min-width: 0;
+  flex: 1 0 auto;
   font: var(--text-body-strong);
+  white-space: nowrap;
 }
 
 .caret {
   display: flex;
+  margin-inline-start: auto;
   color: var(--color-text-secondary);
 }
 
@@ -114,6 +121,7 @@
 .headAction {
   flex: none;
   margin-block: calc((1lh - var(--size-touch)) / 2);
+  margin-inline-start: auto;
   margin-inline-end: calc(-1 * var(--space-8));
 }
 

@@ -604,6 +604,18 @@ describe('최근 거래(F-113)', () => {
     expect(action).toContain('margin-block: calc((1lh - var(--size-touch)) / 2);')
   })
 
+  // designer 검토(#90): 계좌 줄의 금액과 같은 규칙
+  it('구역 제목은 줄을 바꾸지 않고, 제목과 "모두 보기"가 한 줄에 안 들어가면 "모두 보기"가 다음 줄 오른쪽으로 간다', () => {
+    const head = readCssRule(CSS, '.head')
+    expect(head).toContain('flex-wrap: wrap;')
+    expect(head).toContain('row-gap: var(--space-8);')
+    const heading = readCssRule(CSS, '.heading')
+    expect(heading).toContain('flex: 1 0 auto;')
+    expect(heading).toContain('white-space: nowrap;')
+    expect(readCssRule(CSS, '.headAction')).toContain('margin-inline-start: auto;')
+    expect(readCssRule(CSS, '.caret')).toContain('margin-inline-start: auto;')
+  })
+
   it('장부에 거래가 없으면 "거래를 입력하면 여기에 보여요"와 주 버튼 "거래 입력"(빠른 입력과 같은 열기)이다', async () => {
     const opened = await openHome()
     expect(within(recentRegion()).getByText('거래를 입력하면 여기에 보여요')).toBeTruthy()
