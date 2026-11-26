@@ -10,7 +10,7 @@ import styles from './Welcome.module.css'
 const firstAccountTexts: AccountFieldTexts = {
   nameLabel: '계좌 이름',
   namePlaceholder: '예: 국민은행 통장',
-  dateHelp: '이날부터의 거래가 잔액에 반영돼요.',
+  dateHelp: '이날부터의 거래가 잔액에 반영돼요',
 }
 
 interface FirstAccountStepProps {
@@ -49,7 +49,7 @@ export default function FirstAccountStep({ heading, account }: FirstAccountStepP
               건너뛰기
             </Button>
             <p id={skipNoteId} className={styles.skipNote}>
-              &quot;현금&quot; 계좌를 만들고 시작해요.
+              &quot;현금&quot; 계좌를 만들고 시작해요
             </p>
           </div>
         </>
