@@ -6,11 +6,10 @@ import type { FirstAccount } from './useFirstAccount'
 import WelcomeStep from './WelcomeStep'
 import styles from './Welcome.module.css'
 
-/** C-02 (8), (11)의 문구. 종류와 시작 잔액은 계좌 추가(G-02)와 같다(planner 결정 #102). */
+/** C-02 (8)의 문구. 종류, 시작 잔액, 기준일은 계좌 추가(G-02)와 같다(planner 결정 #102). */
 const firstAccountTexts: AccountFieldTexts = {
   nameLabel: '계좌 이름',
   namePlaceholder: '예: 국민은행 통장',
-  dateHelp: '이날부터의 거래가 잔액에 반영돼요',
 }
 
 interface FirstAccountStepProps {

@@ -18,16 +18,17 @@ export interface AccountFieldTexts {
   /** 없으면 도움말을 두지 않는다 */
   nameHelp?: string
   namePlaceholder: string
-  dateHelp: string
 }
 
-/** 계좌 추가(화면설계서 G-02 (1)~(4))의 문구 */
+/** 계좌 추가(화면설계서 G-02 (1))의 문구 */
 const accountAddTexts: AccountFieldTexts = {
   nameLabel: '이름',
   nameHelp: '1~50자',
   namePlaceholder: '예: 국민은행 급여통장',
-  dateHelp: '이날부터의 거래가 잔액에 들어가요',
 }
+
+/** 기준일 도움말(G-02 (4)). 첫 실행 안내(C-02)도 같다(planner 결정 #102) */
+const dateHelp = '이날부터의 거래가 잔액에 들어가요'
 
 interface AccountFieldsProps {
   form: AccountForm
@@ -69,7 +70,7 @@ export default function AccountFields({ form, readOnly, texts = accountAddTexts 
         {...control('openingDate')}
         readOnly={readOnly}
         label="기준일"
-        help={texts.dateHelp}
+        help={dateHelp}
         onChange={(openingDate) => change({ openingDate })}
       />
     </>

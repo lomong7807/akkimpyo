@@ -471,10 +471,10 @@ describe('둘째 장(2/2)의 요소와 처음 값', () => {
     expect(screen.queryByText(typeNotice)).toBeNull()
   })
 
-  it('기준일은 기기의 오늘이고 도움말은 C-02의 문구다', async () => {
+  it('기준일은 기기의 오늘이고 도움말은 계좌 추가(G-02)와 같다', async () => {
     const { user } = await openSecond()
     expect(date().textContent).toBe('11월 26일 (목)')
-    expect(screen.getByText('이날부터의 거래가 잔액에 반영돼요')).toBeTruthy()
+    expect(screen.getByText('이날부터의 거래가 잔액에 들어가요')).toBeTruthy()
     await user.click(date())
     await untilOpened()
     await user.click(screen.getByRole('gridcell', { name: '2026년 11월 3일 화요일' }))
