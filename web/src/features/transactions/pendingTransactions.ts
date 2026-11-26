@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { ApiError } from '../../api/apiError'
 import { sessionUserId } from '../../api/session'
 import { pendingOf, queueTransaction, type PendingTransaction } from '../../device/pendingQueue'
-import { isDate } from '../../lib/calendarDate'
+import { isDate, monthOf } from '../../lib/calendarDate'
 import { now } from '../../lib/clock'
 import { isValidTime } from '../../lib/timeText'
 import type { Category } from '../categories/categories'
@@ -47,7 +47,8 @@ export async function queueNewTransaction({ userId, ledgerId }: Owner, transacti
 
 /*
  * 쌓은 거래의 "보내지 않음" 줄(C-01 (9)(10), D-01 (4)(8)(11)). 서버 거래와 같은 순서 규칙으로 섞는다. 내역 합계와 날짜 묶음
- * 머리의 그날 합계에는 더하고(planner Q5), 홈의 이번 달 합계와 계좌 잔액에는 더하지 않는다(작성자 판단 43).
+ * 머리의 그날 합계에는 더하고(planner Q5), 홈의 이번 달 합계와 계좌 잔액에는 더하지 않는다(작성자 판단 43). 홈 합계 아래에는
+ * 합계에 없는 건수를 알린다(designer #234 B).
  * 대기(waiting)만 보인다. 보낼 수 없음의 줄과 칩은 #235가 더한다.
  */
 
@@ -159,6 +160,16 @@ function insertInOrder(items: ShownTransaction[], rows: ShownTransaction[]): Sho
     else merged.splice(at, 0, row)
   }
   return merged
+}
+
+/**
+ * 그 달의 보내지 않은 수입·지출 건수. 홈의 이번 달 합계 아래에 "합계에 아직 없는" 건수로 알린다(designer #234 B). 이체는
+ * 합계에 들지 않으므로 세지 않는다(P-205). 목록에 보이지 않을 본문(약속과 다름)은 세지 않는다.
+ */
+export function pendingCountInMonth(pending: PendingTransaction[], month: string): number {
+  return pending
+    .flatMap((item) => pendingRow(item, []) ?? [])
+    .filter(({ type, occurredOn }) => type !== 'TRANSFER' && monthOf(occurredOn) === month).length
 }
 
 /** 대기 항목의 수입·지출(P-205: 이체는 뺀다) */

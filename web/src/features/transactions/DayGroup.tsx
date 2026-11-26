@@ -91,8 +91,8 @@ interface TransactionRowProps {
 /**
  * 거래 줄(0.4). 줄 전체가 상세로 가는 링크다. 링크 이름은 aria-labelledby로 제목 전체, 금액, 날짜(묶음 머리), 시각,
  * 둘째 줄, 상태를 차례로 잇는다. 말줄임으로 잘린 제목도 화면 읽기에는 다 읽힌다.
- * 기기에 쌓여 아직 서버에 없는 줄은 둘째 줄 끝에 표시 칩 "보내지 않음"을 붙이고(C-01 (10), D-01 (11)) 링크가 아니다
- * (1B 임시. 보내지 않은 입력 목록 B-05로 가는 것은 #236에서 잇는다).
+ * 기기에 쌓여 아직 서버에 없는 줄은 셋째 줄에 표시 칩 "보내지 않음"을 붙이고(C-01 (10), D-01 (11)) 링크가 아니다
+ * (1B 임시. 보내지 않은 입력 목록 B-05로 가는 것은 #236에서 잇는다). 칩은 "취소"와 같은 자리다(0.4, designer #234 B).
  */
 function TransactionRow({ transaction, names, dateId, highlighted }: TransactionRowProps) {
   const id = useId()
@@ -126,21 +126,19 @@ function TransactionRow({ transaction, names, dateId, highlighted }: Transaction
             <Amount kind={amountKinds[transaction.type]} value={transaction.amount} canceled={canceled} />
           </span>
         </span>
-        {transaction.pending ? (
-          <span className={styles.detailLine}>
-            {detail && <span className={styles.detail}>{detail}</span>}
-            <StatusChip>보내지 않음</StatusChip>
+        {detail && (
+          <span id={`${id}-detail`} className={styles.detail}>
+            {detail}
           </span>
-        ) : (
-          detail && (
-            <span id={`${id}-detail`} className={styles.detail}>
-              {detail}
-            </span>
-          )
         )}
         {canceled && (
           <span id={`${id}-status`} className={styles.status}>
             <StatusChip>취소</StatusChip>
+          </span>
+        )}
+        {transaction.pending && (
+          <span className={styles.status}>
+            <StatusChip>보내지 않음</StatusChip>
           </span>
         )}
       </span>

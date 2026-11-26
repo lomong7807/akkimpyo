@@ -19,7 +19,13 @@ import { canEdit } from '../me/me'
 import { DayGroup } from '../transactions/DayGroup'
 import { groupByDate } from '../transactions/groupByDate'
 import { nameBookOf, type NameBook } from '../transactions/listedText'
-import { mergeRecent, pendingRow, usePendingTransactions, withPendingDays } from '../transactions/pendingTransactions'
+import {
+  mergeRecent,
+  pendingCountInMonth,
+  pendingRow,
+  usePendingTransactions,
+  withPendingDays,
+} from '../transactions/pendingTransactions'
 import { DayHeadSkeleton, RowsSkeleton } from '../transactions/TransactionListSkeleton'
 import { RECENT_COUNT, type IncomeAndExpense, type RecentTransactions } from '../transactions/transactions'
 import { useMonthTotals, useRecentTransactions } from '../transactions/useTransactionList'
@@ -76,6 +82,7 @@ export default function HomePage() {
       <div className={styles.home}>
         <div className={styles.column}>
           <MonthTotals
+            month={month}
             label={`${formatMonth(month, openedOn)} 합계`}
             totals={totals.data}
             state={states.totals}
@@ -151,19 +158,32 @@ function SectionFailure({ queries }: { queries: SectionQuery[] }) {
 }
 
 interface MonthTotalsProps extends SectionProps {
+  /** 이번 달(`YYYY-MM`) */
+  month: string
   /** 머리 줄 "{달}월 합계" */
   label: string
   totals: IncomeAndExpense | undefined
 }
 
-/** (2) 이번 달 합계(F-111). 지출만 큰 숫자이고 수입과 차액은 그 아래 줄이다(designer 결정 14). 1A에는 눌리지 않는다. */
-function MonthTotals({ label, totals, state, queries, skeletonShown }: MonthTotalsProps) {
+/**
+ * (2) 이번 달 합계(F-111). 지출만 큰 숫자이고 수입과 차액은 그 아래 줄이다(designer 결정 14). 1A에는 눌리지 않는다.
+ * 보내지 않은 입력은 합계에 더하지 않으므로(작성자 판단 43), 이번 달에 1건 이상이면 차액 아래에 그 건수를 알린다. 같은
+ * 화면의 그날 합계(보이는 보내지 않음 줄을 더함)와 다른 까닭을 그 자리에서 알린다(designer #234 B). 누를 곳은 없다(#236).
+ */
+function MonthTotals({ month, label, totals, state, queries, skeletonShown }: MonthTotalsProps) {
   const headingId = useId()
+  const pending = usePendingTransactions()
+  const pendingCount = useMemo(() => pendingCountInMonth(pending, month), [pending, month])
   return (
     <section aria-labelledby={headingId} className={styles.section}>
       <SectionHead id={headingId}>{label}</SectionHead>
       <SectionBody>
-        {state === 'ready' && <Figures totals={totals!} />}
+        {state === 'ready' && (
+          <>
+            <Figures totals={totals!} />
+            {pendingCount > 0 && <p className={styles.pendingNote}>보내지 않은 입력 {pendingCount}건은 아직 합계에 없어요</p>}
+          </>
+        )}
         {state === 'failed' && <SectionFailure queries={queries} />}
         {state === 'loading' && (
           <SkeletonSpace shown={skeletonShown}>

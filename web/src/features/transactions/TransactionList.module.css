@@ -223,18 +223,6 @@
   white-space: nowrap;
 }
 
-/* 둘째 줄과 그 끝의 표시 칩 "보내지 않음"(C-01 (10), D-01 (11)). 둘째 줄이 길면 말줄임으로 줄이고 칩은 줄이지 않는다 */
-.detailLine {
-  display: flex;
-  align-items: center;
-  column-gap: var(--space-8);
-  min-width: 0;
-}
-
-.detailLine .detail {
-  min-width: 0;
-}
-
 /* 보내지 않음 줄은 눌리지 않는다(1B 임시, #236). 누르거나 올려도 바탕이 바뀌지 않는다 */
 .pendingRow:active {
   background-color: transparent;

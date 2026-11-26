@@ -13,8 +13,9 @@ import { resetViewport } from './support/viewport'
 
 /*
  * 쌓은 거래의 "보내지 않음" 표시(C-01 (9)(10), D-01 (4)(8)(11), F-103, #234 B). 홈 최근 거래와 내역에 서버 거래와 같은 순서
- * 규칙으로 섞이고 둘째 줄 끝에 표시 칩이 붙는다. 내역 합계와 날짜 묶음 머리의 그날 합계에는 더하고, 홈의 이번 달 합계와
- * 계좌 잔액에는 더하지 않는다(작성자 판단 43, planner Q5). 1B 임시로 보내지 않음 줄은 눌리지 않는다(#236).
+ * 규칙으로 섞이고 셋째 줄에 표시 칩이 붙는다(0.4, "취소"와 같은 자리, designer #234 B). 내역 합계와 날짜 묶음 머리의 그날
+ * 합계에는 더하고, 홈의 이번 달 합계와 계좌 잔액에는 더하지 않는다(작성자 판단 43, planner Q5). 대신 홈 합계 아래에 합계에
+ * 없는 건수를 알린다(designer #234 B). 1B 임시로 보내지 않음 줄은 눌리지 않는다(#236).
  */
 
 const server = startMockServer()
@@ -113,7 +114,7 @@ function historyTotals() {
 }
 
 describe('내역(D-01)', () => {
-  it('그 달의 보내지 않은 입력이 서버 거래와 같은 순서 규칙으로 섞이고 둘째 줄 끝에 "보내지 않음"이 붙는다', async () => {
+  it('그 달의 보내지 않은 입력이 서버 거래와 같은 순서 규칙으로 섞이고 셋째 줄에 "보내지 않음"이 붙는다', async () => {
     list.months.set('2026-11', [
       expenseOf({ occurredOn: '2026-11-26', occurredTime: '12:30', accountId: id.salary, categoryId: id.food, amount: 8000, payee: '서버의 점심' }),
       incomeOf({ occurredOn: '2026-11-25', accountId: id.salary, categoryId: id.pay, amount: 100000, payee: '서버의 급여' }),
@@ -124,9 +125,10 @@ describe('내역(D-01)', () => {
     expect(titles()).toEqual(['서버의 점심', '시각 없는 대기', '아침의 대기', '서버의 급여'])
     expect(chipIn(rowOf('시각 없는 대기'))).not.toBeNull()
     expect(chipIn(rowOf('서버의 점심'))).toBeNull()
-    // 둘째 줄(카테고리 · 계좌)과 같은 줄 끝에 있다
-    const chip = chipIn(rowOf('아침의 대기'))!
-    expect(chip.parentElement!.textContent).toBe('미분류 · 급여통장보내지 않음')
+    // 둘째 줄(카테고리 · 계좌)은 그대로이고, 칩은 그 아래 "취소" 칩과 같은 자리(셋째 줄)에 있다(0.4)
+    const row = rowOf('아침의 대기')
+    expect(row.querySelector('[class*="_detail_"]')!.textContent).toBe('미분류 · 급여통장')
+    expect(chipIn(row)!.closest('[class*="_status_"]')!.textContent).toBe('보내지 않음')
   })
 
   it('보내지 않음 줄은 눌리지 않는다(1B 임시, #236)', async () => {
@@ -256,6 +258,38 @@ describe('홈 최근 거래(C-01)', () => {
     expect(within(totals).getAllByText('0원').length).toBeGreaterThan(0)
     expect(within(totals).queryByText('5,000원')).toBeNull()
     expect(screen.getByText('대기')).toBeTruthy()
+  })
+
+  describe('이번 달 합계 아래 줄(designer #234 B)', () => {
+    const totalsRegion = () => screen.getByRole('region', { name: /11월 합계/ })
+
+    it('이번 달의 보내지 않은 수입·지출이 있으면 합계에 없는 건수를 알린다(이체, 다른 달은 세지 않는다)', async () => {
+      await seedPending(pendingExpense({ occurredOn: '2026-11-01', amount: 5000 }))
+      await seedPending(pendingIncome({ occurredOn: '2026-11-30', amount: 3000 }))
+      await seedPending(pendingTransfer({ occurredOn: '2026-11-26', amount: 10000 }))
+      await seedPending(pendingExpense({ occurredOn: '2026-10-31', amount: 1000 }))
+      await seedPending(pendingExpense({ occurredOn: '2026-12-01', amount: 1000 }))
+      await openHome()
+      expect(within(totalsRegion()).getByText('보내지 않은 입력 2건은 아직 합계에 없어요')).toBeTruthy()
+      expect(screen.getAllByText(/아직 합계에 없어요/)).toHaveLength(1)
+    })
+
+    it('이번 달의 보내지 않은 입력이 없으면 줄이 없다', async () => {
+      await seedPending(pendingTransfer({ occurredOn: '2026-11-26', amount: 10000 }))
+      await seedPending(pendingExpense({ occurredOn: '2026-10-31', amount: 1000 }))
+      await seedPending(pendingExpense({ amount: 1000 }, 'user-2'))
+      await openHome()
+      await within(totalsRegion()).findByText('차액')
+      expect(screen.queryByText(/아직 합계에 없어요/)).toBeNull()
+    })
+
+    it('다른 탭에서 쌓으면 건수가 바로 바뀐다', async () => {
+      await seedPending(pendingExpense({ amount: 1000 }))
+      await openHome()
+      expect(within(totalsRegion()).getByText('보내지 않은 입력 1건은 아직 합계에 없어요')).toBeTruthy()
+      await seedPending(pendingExpense({ amount: 2000 }))
+      expect(await within(totalsRegion()).findByText('보내지 않은 입력 2건은 아직 합계에 없어요')).toBeTruthy()
+    })
   })
 
   it('보던 중에 연결이 끊겨 빠른 입력으로 쌓고 돌아오면 최근 거래에 보내지 않음 줄이 보인다', async () => {
