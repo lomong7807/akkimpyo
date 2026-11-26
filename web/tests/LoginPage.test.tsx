@@ -533,16 +533,66 @@ describe('서버 오류와 지연', () => {
     ])
   })
 
-  it('"다시 시도"가 사라져도 초점이 로그인 버튼에 남는다', async () => {
+  /* 다시 보내는 동안 문구를 남기고 누른 버튼만 도는 표시다(designer 규칙 #102, 계좌 추가·거래 입력과 같다) */
+  it('"다시 시도"로 다시 보내는 동안 문구를 둔 채 "다시 시도"만 돌고 로그인은 누를 수 없으며 초점이 남는다', async () => {
     const answers = [Promise.resolve(problem(500, 'INTERNAL_ERROR')), new Promise<Response>(() => {})]
-    respondToLogin(() => answers.shift()!)
+    const bodies = respondToLogin(() => answers.shift()!)
     const { user } = openLogin()
     await fillAndSubmit(user)
     await screen.findByRole('alert')
     retryButton().focus()
     await user.keyboard('{Enter}')
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull())
-    expect(document.activeElement).toBe(loginButton())
+    await vi.waitFor(() => expect(bodies).toHaveLength(2))
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect(loginButton().hasAttribute('aria-busy')).toBe(false)
+    expect(loginButton().getAttribute('aria-disabled')).toBe('true')
+    expect(document.activeElement).toBe(retryButton())
+    await user.click(loginButton())
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('로그인을 다시 누르면 문구를 둔 채 로그인만 도는 표시이고 "다시 시도"는 누를 수 없다', async () => {
+    const answers = [Promise.resolve(problem(500, 'INTERNAL_ERROR')), new Promise<Response>(() => {})]
+    const bodies = respondToLogin(() => answers.shift()!)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByRole('alert')
+    await user.click(loginButton())
+    await vi.waitFor(() => expect(bodies).toHaveLength(2))
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(loginButton().getAttribute('aria-busy')).toBe('true')
+    expect(retryButton().hasAttribute('aria-busy')).toBe(false)
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    await user.click(retryButton())
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('다시 시도한 것이 또 실패하면 문구를 새로 그려 다시 읽히게 하고 초점은 "다시 시도"에 남는다', async () => {
+    const answers = [problem(500, 'INTERNAL_ERROR'), problem(503, 'INTERNAL_ERROR')]
+    respondToLogin(() => answers.shift()!)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    const first = await screen.findByRole('alert')
+    retryButton().focus()
+    await user.keyboard('{Enter}')
+    await vi.waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().hasAttribute('aria-busy')).toBe(false)
+    expect(loginButton().hasAttribute('aria-disabled')).toBe(false)
+    expect(document.activeElement).toBe(retryButton())
+  })
+
+  it('다시 보낸 것이 맞지 않는 이메일·비밀번호면 문구를 그것으로 바꾸고 "다시 시도"를 지운다', async () => {
+    const answers = [problem(500, 'INTERNAL_ERROR'), problem(401, 'INVALID_CREDENTIALS')]
+    respondToLogin(() => answers.shift()!)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByRole('alert')
+    await user.click(retryButton())
+    await screen.findByText(refused)
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([refused])
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull()
   })
 })
 

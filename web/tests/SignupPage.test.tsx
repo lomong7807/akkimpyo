@@ -822,15 +822,66 @@ describe('서버 오류와 지연', () => {
     await vi.waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })
 
-  it('"다시 시도"가 사라진 동안 초점이 가입 버튼에 남는다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), delayed().respond]
-    respondToSignup(() => answers.shift()!())
+  /* 다시 보내는 동안 문구를 남기고 누른 버튼만 도는 표시다(designer 규칙 #102, 계좌 추가·거래 입력과 같다) */
+  it('"다시 시도"로 다시 보내는 동안 문구를 둔 채 "다시 시도"만 돌고 가입은 누를 수 없으며 초점이 남는다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
+    const bodies = respondToSignup(() => answers.shift()!())
     const { user } = openSignup()
     await fillAndSubmit(user)
     await screen.findByRole('alert')
     await user.keyboard('{Enter}')
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull())
-    expect(document.activeElement).toBe(signupButton())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect(signupButton().hasAttribute('aria-busy')).toBe(false)
+    expect(signupButton().getAttribute('aria-disabled')).toBe('true')
+    expect(document.activeElement).toBe(retryButton())
+    await user.click(signupButton())
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('가입을 다시 누르면 문구를 둔 채 가입만 도는 표시이고 "다시 시도"는 누를 수 없다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
+    const bodies = respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    await screen.findByRole('alert')
+    await user.click(signupButton())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(signupButton().getAttribute('aria-busy')).toBe('true')
+    expect(retryButton().hasAttribute('aria-busy')).toBe(false)
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    await user.click(retryButton())
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('칸을 고치다 "다시 시도"를 눌러 또 실패하면 문구를 새로 그려 다시 읽히게 하고 초점이 "다시 시도"로 간다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    const first = await screen.findByRole('alert')
+    await user.type(displayName(), ' 둘')
+    // 마우스로 누르면 쓰던 칸에 초점이 남는다
+    await user.click(retryButton())
+    await vi.waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(document.activeElement).toBe(retryButton())
+  })
+
+  it('칸에서 엔터로 다시 보낸 것이 또 실패해도 초점이 "다시 시도"로 간다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    const bodies = respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    const first = await screen.findByRole('alert')
+    await user.type(displayName(), '{Enter}')
+    await vi.waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(bodies).toHaveLength(2)
+    expect(document.activeElement).toBe(retryButton())
   })
 
   it('거부된 뒤 다시 보낸 것이 서버 오류면 거부 문구를 지우고 실패를 알린다', async () => {
