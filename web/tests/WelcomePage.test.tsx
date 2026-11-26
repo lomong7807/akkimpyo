@@ -451,7 +451,7 @@ describe('둘째 장(2/2)의 요소와 처음 값', () => {
     await openSecond()
     expect(balance().value).toBe('0')
     expect(sign().getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByText('마이너스 통장이면 -로 바꿔 적어요.')).toBeTruthy()
+    expect(screen.getByText('마이너스 통장이면 -로 바꿔 적어요')).toBeTruthy()
   })
 
   it('카드를 고르면 갚을 금액을 묻고 부호 버튼이 없으며, 금액의 뜻이 바뀌었다고 알린다', async () => {
@@ -460,7 +460,7 @@ describe('둘째 장(2/2)의 요소와 처음 값', () => {
     await user.keyboard('350000')
     await user.click(type('카드'))
     expect(owed().value).toBe('350,000')
-    expect(screen.getByText('카드는 지금 갚을 금액을 적어요.')).toBeTruthy()
+    expect(screen.getByText('카드는 지금 갚을 금액을 적어요')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '마이너스' })).toBeNull()
     expect(screen.getByText(typeNotice)).toBeTruthy()
   })

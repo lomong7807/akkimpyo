@@ -26,7 +26,7 @@ const accountAddTexts: AccountFieldTexts = {
   nameLabel: '이름',
   nameHelp: '1~50자',
   namePlaceholder: '예: 국민은행 급여통장',
-  dateHelp: '이날부터의 거래가 잔액에 들어가요.',
+  dateHelp: '이날부터의 거래가 잔액에 들어가요',
 }
 
 interface AccountFieldsProps {
@@ -78,8 +78,8 @@ export default function AccountFields({ form, readOnly, texts = accountAddTexts 
 
 /** 카드는 갚을 금액을 양수로 받는다. */
 function amountTexts(type: AccountType) {
-  if (type === 'CARD') return { label: '지금 갚을 금액', help: '카드는 지금 갚을 금액을 적어요.' }
-  return { label: '시작 잔액', help: '마이너스 통장이면 -로 바꿔 적어요.' }
+  if (type === 'CARD') return { label: '지금 갚을 금액', help: '카드는 지금 갚을 금액을 적어요' }
+  return { label: '시작 잔액', help: '마이너스 통장이면 -로 바꿔 적어요' }
 }
 
 function TypeField({ form: { values, change, control }, readOnly }: Omit<AccountFieldsProps, 'texts'>) {
