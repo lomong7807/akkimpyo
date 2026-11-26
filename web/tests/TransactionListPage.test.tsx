@@ -442,7 +442,7 @@ describe('날짜 묶음 머리(0.5)', () => {
   })
 
   it('머리는 위 16px, 아래 4px이다', () => {
-    expect(readCssRule(CSS, '.dayHead')).toContain('padding: var(--space-16) var(--space-16) var(--space-4)')
+    expect(readCssRule(CSS, '.dayHead')).toContain('padding: var(--space-16) var(--row-inset, var(--space-16)) var(--space-4)')
   })
 })
 
@@ -613,7 +613,7 @@ describe('거래 줄(0.4)', () => {
     await openList()
     const [row] = rowsOf('11월 26일 (목)')
     expect(styleOf(row).minHeight).toBe('var(--size-row)')
-    expect(readCssRule(CSS, '.row')).toContain('padding: var(--space-8) var(--space-16)')
+    expect(readCssRule(CSS, '.row')).toContain('padding: var(--space-8) var(--row-inset, var(--space-16))')
     expect(readCssRule(CSS, '.row')).not.toContain('border')
     expect(readCssRule(CSS, '.row:active')).toContain('background-color: var(--color-press)')
     expect(readCssRule(CSS, '.row:hover')).toContain('background-color: var(--color-press)')
@@ -1051,7 +1051,7 @@ describe('저장한 뒤 돌아오면', () => {
     setViewportWidth(390)
     expect(styleOf(history).marginInline).toBe('calc(-1 * var(--bleed))')
     expect(row.className).toMatch(/_row_/)
-    expect(readCssRule(CSS, '.row')).toContain('padding: var(--space-8) var(--space-16)')
+    expect(readCssRule(CSS, '.row')).toContain('padding: var(--space-8) var(--row-inset, var(--space-16))')
     setViewportWidth(1280)
     expect(styleOf(history).getPropertyValue('--bleed')).toBe('0px')
   })
@@ -1060,11 +1060,11 @@ describe('저장한 뒤 돌아오면', () => {
 describe('하단 탭과 사이드바의 "내역"', () => {
   const tabBar = () => screen.getByRole('navigation', { name: '주 메뉴' })
 
-  it('하단 탭은 내역, 거래 입력, 더보기 칸이고 내역은 ListBullets 24px이다', async () => {
+  it('하단 탭은 홈, 내역, 거래 입력, 더보기 칸이고 내역은 ListBullets 24px이다', async () => {
     await openList()
     const cells = within(tabBar()).getAllByRole('listitem')
-    expect(cells.map((cell) => cell.textContent)).toEqual(['내역', '', '더보기'])
-    const link = within(cells[0]).getByRole('link', { name: '내역' })
+    expect(cells.map((cell) => cell.textContent)).toEqual(['홈', '내역', '', '더보기'])
+    const link = within(cells[1]).getByRole('link', { name: '내역' })
     expect(link.getAttribute('href')).toBe('/transactions')
     const icon = link.querySelector('svg')!
     expect(styleOf(icon).width).toBe('var(--size-icon-24)')

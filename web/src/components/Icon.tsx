@@ -7,6 +7,7 @@ import check from '../assets/icons/phosphor/check.svg?raw'
 import dotsThree from '../assets/icons/phosphor/dots-three.svg?raw'
 import eyeSlash from '../assets/icons/phosphor/eye-slash.svg?raw'
 import eye from '../assets/icons/phosphor/eye.svg?raw'
+import house from '../assets/icons/phosphor/house.svg?raw'
 import info from '../assets/icons/phosphor/info.svg?raw'
 import listBullets from '../assets/icons/phosphor/list-bullets.svg?raw'
 import magnifyingGlass from '../assets/icons/phosphor/magnifying-glass.svg?raw'
@@ -29,6 +30,7 @@ const svgs = {
   DotsThree: dotsThree,
   Eye: eye,
   EyeSlash: eyeSlash,
+  House: house,
   Info: info,
   ListBullets: listBullets,
   MagnifyingGlass: magnifyingGlass,

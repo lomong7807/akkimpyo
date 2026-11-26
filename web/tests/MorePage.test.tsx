@@ -40,6 +40,7 @@ async function open(path: string, width = 390) {
 const menu = () => screen.getByRole('navigation', { name: '주 메뉴' })
 const content = () => within(screen.getByRole('main'))
 const notFound = () => screen.findByRole('heading', { level: 1, name: '찾을 수 없어요.' })
+const home = () => screen.findByRole('heading', { level: 1, name: '홈' })
 const loginHeading = () => screen.findByRole('heading', { level: 1, name: '로그인' })
 const currentNames = () =>
   within(menu())
@@ -129,7 +130,7 @@ describe('하단 탭의 더보기', () => {
     expect(router.state.location.pathname).toBe('/more')
   })
 
-  it.each(['/more', '/home', '/없는-주소'])('%s에서 더보기를 강조한다', async (path) => {
+  it.each(['/more', '/없는-주소'])('%s에서 더보기를 강조한다', async (path) => {
     await open(path)
     expect(currentNames()).toEqual(['더보기'])
   })
@@ -162,7 +163,7 @@ describe('계좌 항목', () => {
   it('사이드바에서 누르면 계좌 목록으로 가고 지금 항목이 된다. 바뀌는 것은 색뿐이다', async () => {
     const { router, user } = await open('/home', 1280)
     const link = within(menu()).getByRole('link', { name: '계좌' })
-    expect(currentNames()).toEqual([])
+    expect(currentNames()).toEqual(['홈'])
     const before = getComputedStyle(link)
     const look = [before.font, before.backgroundColor, before.minHeight]
     await user.click(link)
@@ -178,7 +179,7 @@ describe('계좌 항목', () => {
 describe('넓은 화면에는 더보기가 없으므로(1A 임시) /home으로 보낸다', () => {
   it.each([1024, 1280])('폭 %dpx에서 열면 뒤로 돌아오지 않게 바꿔 간다', async (width) => {
     const { router } = await open('/more', width)
-    await notFound()
+    await home()
     expect(router.state.location.pathname).toBe('/home')
     expect(router.state.historyAction).toBe('REPLACE')
   })
@@ -194,7 +195,7 @@ describe('넓은 화면에는 더보기가 없으므로(1A 임시) /home으로 �
     act(() => media.resizeTo(1023))
     expect(router.state.location.pathname).toBe('/more')
     act(() => media.resizeTo(1024))
-    await notFound()
+    await home()
     expect(router.state.location.pathname).toBe('/home')
   })
 

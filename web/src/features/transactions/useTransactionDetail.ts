@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { isMonth } from '../../lib/calendarDate'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { ledgerKey } from '../me/ledgerKey'
-import { fetchTransaction, type ListedTransaction, type TransactionPage } from './transactions'
+import { fetchTransaction, type ListedTransaction, type RecentTransactions, type TransactionPage } from './transactions'
+import { recentTransactionsKey } from './useTransactionList'
 
 /**
  * 거래 하나의 캐시 키(장부 앞부분 + transactions + id). 거래를 저장하거나 지우면 장부 앞부분을 무효로 만들어 이것도 다시 받는다.
@@ -33,18 +34,19 @@ export function useTransactionToEdit(id: string) {
 }
 
 /**
- * 내역(D-01)에서 받아 둔 같은 거래. 목록에서 들어오면 상세를 받는 동안 목록에 있던 값을 먼저 보인다(D-06 상태).
- * 화면을 열 때 한 번만 찾는다. 없으면(주소로 바로 열었으면) 없다.
+ * 내역(D-01)이나 홈의 최근 거래(C-01)에서 받아 둔 같은 거래. 목록에서 들어오면 상세를 받는 동안 목록에 있던 값을 먼저
+ * 보인다(D-06 상태). 화면을 열 때 한 번만 찾는다. 없으면(주소로 바로 열었으면) 없다.
  */
 export function useListedTransaction(id: string): ListedTransaction | undefined {
   const ledger = useCurrentLedger()
   const queryClient = useQueryClient()
-  const [listed] = useState(() =>
-    queryClient
+  const [listed] = useState(() => {
+    const months = queryClient
       .getQueriesData<InfiniteData<TransactionPage>>({ queryKey: ledgerKey(ledger.id, 'transactions') })
       .filter(([key, data]) => isMonth(String(key.at(-1))) && data !== undefined)
       .flatMap(([, data]) => data!.pages.flatMap((page) => page.items))
-      .find((item) => item.id.toLowerCase() === id),
-  )
+    const recent = queryClient.getQueryData<RecentTransactions>(recentTransactionsKey(ledger.id))?.items ?? []
+    return [...months, ...recent].find((item) => item.id.toLowerCase() === id)
+  })
   return listed
 }
