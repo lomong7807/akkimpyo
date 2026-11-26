@@ -1,5 +1,5 @@
 import { ApiError, type FieldError } from '../../api/apiError'
-import { amountTooLarge } from '../../components/amountText'
+import { amountTooLarge } from '../../components/AmountField'
 import { formatDate, selectableRange, today } from '../../components/calendarDate'
 import type { FieldErrors } from '../../components/useFormFields'
 import { amountRequired, dateRequired, nameRequired, nameTooLong, nameUnusable, type AccountField } from './accountForm'

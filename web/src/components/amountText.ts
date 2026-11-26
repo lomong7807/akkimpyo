@@ -3,8 +3,6 @@
 /** 부호를 뺀 최대(P-201)의 자릿수 */
 const MAX_DIGITS = 10
 
-export const amountTooLarge = '9,999,999,999원까지 입력할 수 있어요.'
-
 /** 칸에 보이는 글자. 비었으면 부호만 남는다. */
 export function formatAmount(value: number | undefined, negative: boolean): string {
   const digits = value === undefined ? '' : String(value).replace(/\B(?=([0-9]{3})+$)/g, ',')
