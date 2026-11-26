@@ -32,6 +32,7 @@ const ended = '로그인이 풀렸어요. 다시 로그인해 주세요.'
 const open = (path: string) => openApp(path, addScreens([{ path: '/secret', element: <main>{secret}</main> }]))
 const loginHeading = () => screen.findByRole('heading', { level: 1, name: '로그인' })
 const notFound = () => screen.findByRole('heading', { level: 1, name: '찾을 수 없어요.' })
+const home = () => screen.findByRole('heading', { level: 1, name: '홈' })
 const failure = () => screen.findByRole('heading', { level: 1, name: '불러오지 못했어요.' })
 
 async function logIn(user: Awaited<ReturnType<typeof open>>['user']) {
@@ -149,7 +150,7 @@ describe('/', () => {
   it('로그인했으면 /home이다', async () => {
     signedIn()
     const { router } = await open('/')
-    await notFound()
+    await home()
     expect(router.state.location.pathname).toBe('/home')
     expect(router.state.historyAction).toBe('REPLACE')
   })
@@ -157,7 +158,7 @@ describe('/', () => {
   it('로그인하지 않았으면 /login이고, 로그인하면 /home으로 간다', async () => {
     const { router, user } = await open('/')
     await logIn(user)
-    await notFound()
+    await home()
     expect(router.state.location.pathname).toBe('/home')
   })
 })
@@ -200,7 +201,7 @@ describe('로그인 없이 볼 수 있는 주소', () => {
       const { router } = await open(path)
       await waitFor(() => expect(router.state.location.pathname).toBe('/home'))
       await waitFor(() => expect(sessionStorage.length).toBe(0))
-      await notFound()
+      await home()
       expect(router.state.location.pathname).toBe('/home')
     })
   })
@@ -212,7 +213,7 @@ describe('로그인 없이 볼 수 있는 주소', () => {
     sessionStorage.setItem(RETURN_ADDRESS, '/secret')
     await router.navigate(path)
     await waitFor(() => expect(router.state.location.pathname).toBe('/home'))
-    await notFound()
+    await home()
   })
 })
 
@@ -239,7 +240,7 @@ describe('로그인하면', () => {
   it('로그인 화면을 바로 열었으면 /home으로 간다', async () => {
     const { router, user } = await open('/login')
     await logIn(user)
-    await notFound()
+    await home()
     expect(router.state.location.pathname).toBe('/home')
   })
 
@@ -268,7 +269,7 @@ describe('로그인하면', () => {
       sessionStorage.setItem(RETURN_ADDRESS, address)
       const { router, user } = await open('/login')
       await logIn(user)
-      await notFound()
+      await home()
       expect(router.state.location.pathname).toBe('/home')
     },
   )
@@ -279,7 +280,7 @@ describe('로그인하면', () => {
     })
     const { router, user } = await open('/secret')
     await logIn(user)
-    await notFound()
+    await home()
     expect(router.state.location.pathname).toBe('/home')
   })
 

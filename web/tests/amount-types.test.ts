@@ -12,6 +12,7 @@ describe('금액 표시의 타입', () => {
         <Amount kind="income" value={12000} canceled />
         <Amount kind="transfer" value={12000} canceled={false} />
         <Amount kind="balance" value={-12000} />
+        <Amount kind="difference" value={-12000} />
       `),
     ).toEqual([])
   })
@@ -22,6 +23,7 @@ describe('금액 표시의 타입', () => {
     ['없는 종류', '<Amount kind="refund" value={1} />', 'refund'],
     ['글자로 준 금액', '<Amount kind="balance" value="1" />', 'number'],
     ['취소한 잔액', '<Amount kind="balance" value={1} canceled />', 'balance'],
+    ['취소한 차액', '<Amount kind="difference" value={1} canceled />', 'difference'],
   ])('%s는 타입 오류다', (_, jsx, word) => {
     const errors = typeErrors(jsx)
     expect(errors).toHaveLength(1)

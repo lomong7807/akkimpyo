@@ -13,6 +13,7 @@ const files: Record<IconName, string> = {
   DotsThree: 'dots-three',
   Eye: 'eye',
   EyeSlash: 'eye-slash',
+  House: 'house',
   Info: 'info',
   ListBullets: 'list-bullets',
   MagnifyingGlass: 'magnifying-glass',

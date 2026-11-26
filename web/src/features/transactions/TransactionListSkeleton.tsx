@@ -18,12 +18,19 @@ export default function TransactionListSkeleton() {
           <SkeletonBar kind="amount" text="body" />
         </div>
       </div>
-      <div className={styles.dayHead}>
-        <SkeletonBar kind="name" text="label" />
-        <SkeletonBar kind="amount" text="label" />
-      </div>
+      <DayHeadSkeleton />
       <RowsSkeleton count={5} />
     </Skeleton>
+  )
+}
+
+/** 날짜 묶음 머리 모양의 뼈대. 날짜와 그날 합계 자리에 막대를 둔다. */
+export function DayHeadSkeleton() {
+  return (
+    <div className={styles.dayHead}>
+      <SkeletonBar kind="name" text="label" />
+      <SkeletonBar kind="amount" text="label" />
+    </div>
   )
 }
 

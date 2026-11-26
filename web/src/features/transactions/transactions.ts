@@ -8,7 +8,7 @@ import { isUuid } from '../../lib/uuid'
 import { ledgerPath } from '../me/ledgerPath'
 
 /*
- * 거래 만들기의 경로, 헤더, 필드 이름(#14의 요청과 응답 계약), 거래 목록과 상세의 경로, 쿼리, 필드 이름(#15의 응답 계약),
+ * 거래 만들기의 경로, 헤더, 필드 이름(#14의 요청과 응답 계약), 거래 목록(한 달, 장부 전체)과 상세의 경로, 쿼리, 필드 이름(#15의 응답 계약),
  * 삭제와 복원의 경로, 쿼리, 본문(#38의 계약), 수정의 경로와 본문(#36의 계약)은 이 파일에만 있다.
  */
 
@@ -233,17 +233,54 @@ export async function fetchTransactionPage(
   return body
 }
 
-function isTransactionPage(value: unknown, month: string, first: boolean): value is TransactionPage {
+/**
+ * 장부의 한 달 합계(P-205). 그 달의 첫 쪽을 한 건만 받아 합계(totals)만 쓴다(홈의 이번 달 합계, F-111).
+ * 실패하면 ApiError를 던진다.
+ */
+export async function fetchMonthTotals(ledgerId: string, month: string): Promise<IncomeAndExpense> {
+  const query = new URLSearchParams({ month, limit: '1' })
+  const body = await request<unknown>(`${ledgerPath(ledgerId, 'transactions')}?${query}`)
+  if (!isTransactionPage(body, month, true)) throw ApiError.unreadable()
+  // 첫 쪽에는 합계가 늘 있다(isTransactionPage)
+  return body.totals!
+}
+
+/** 홈에 보이는 최근 거래 수(F-113) */
+export const RECENT_COUNT = 10
+
+/** 장부 전체의 최근 거래 */
+export interface RecentTransactions {
+  /** 서버가 정한 순서(목록과 같다). 장부 시간대의 오늘까지의 거래만 온다(서버가 거른다). */
+  items: ListedTransaction[]
+  /** 받은 거래의 날짜마다 그날 전체의 합계 */
+  days: DayTotal[]
+}
+
+/**
+ * 장부 전체에서 가장 최근 거래 10건(F-113). 달을 보내지 않는다. 다음 쪽(nextCursor)은 쓰지 않는다. 달 기준 cursor와
+ * 섞이지 않게 받지 않는다. 받은 거래를 화면에서 거르지 않는다. 실패하면 ApiError를 던진다.
+ */
+export async function fetchRecentTransactions(ledgerId: string): Promise<RecentTransactions> {
+  const query = new URLSearchParams({ limit: String(RECENT_COUNT) })
+  const body = await request<unknown>(`${ledgerPath(ledgerId, 'transactions')}?${query}`)
+  if (!isTransactionPage(body, null, true)) throw ApiError.unreadable()
+  return { items: body.items, days: body.days }
+}
+
+/** 한 쪽의 모양이 약속(#15)과 같은지. `month`가 null이면 장부 전체의 쪽이라 합계가 없고 달을 보지 않는다. */
+function isTransactionPage(value: unknown, month: string | null, first: boolean): value is TransactionPage {
   if (typeof value !== 'object' || value === null) return false
   const { items, nextCursor, totals, days } = value as Partial<Record<keyof TransactionPage, unknown>>
   if (!Array.isArray(items) || !Array.isArray(days)) return false
-  if (!items.every((item) => isListedTransaction(item) && monthOf(item.occurredOn) === month)) return false
-  if (!days.every((day) => isDayTotal(day) && monthOf(day.date) === month)) return false
+  const inMonth = (date: string) => month === null || monthOf(date) === month
+  if (!items.every((item) => isListedTransaction(item) && inMonth(item.occurredOn))) return false
+  if (!days.every((day) => isDayTotal(day) && inMonth(day.date))) return false
   const dates = new Set(days.map(({ date }) => date))
+  const totalsKept = month === null ? totals === null : isIncomeAndExpense(totals) || (!first && totals === null)
   return (
     items.every(({ occurredOn }) => dates.has(occurredOn)) &&
     (nextCursor === null || (typeof nextCursor === 'string' && nextCursor !== '')) &&
-    (isIncomeAndExpense(totals) || (!first && totals === null))
+    totalsKept
   )
 }
 

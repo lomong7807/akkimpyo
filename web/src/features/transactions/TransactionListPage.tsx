@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react'
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { Navigate, useNavigate, useSearchParams } from 'react-router'
 import Amount from '../../components/Amount'
 import { ButtonLink } from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
@@ -9,16 +9,17 @@ import MonthNavigation from '../../components/MonthNavigation'
 import RetryMessage from '../../components/RetryMessage'
 import { MainScreen } from '../../components/Screen'
 import Skeleton from '../../components/Skeleton'
-import StatusChip from '../../components/StatusChip'
-import { formatDate, formatMonth, isMonth, monthOf, moveMonth, selectableMonths, today } from '../../lib/calendarDate'
+import { formatMonth, isMonth, monthOf, moveMonth, selectableMonths, today } from '../../lib/calendarDate'
 import { useAccounts } from '../accounts/useAccounts'
 import { useCategories } from '../categories/useCategories'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { canEdit } from '../me/me'
-import { detailOf, nameBookOf, titleOf, type NameBook } from './listedText'
+import { DayGroup } from './DayGroup'
+import { groupByDate } from './groupByDate'
+import { nameBookOf, type NameBook } from './listedText'
 import { useListMemory } from './listMemory'
 import TransactionListSkeleton, { RowsSkeleton } from './TransactionListSkeleton'
-import type { DayTotal, IncomeAndExpense, ListedTransaction, TransactionPage } from './transactions'
+import type { IncomeAndExpense, TransactionPage } from './transactions'
 import { useTransactionList } from './useTransactionList'
 import styles from './TransactionList.module.css'
 
@@ -190,28 +191,13 @@ function MonthContent({ month, today, list, names, highlight, onHighlightEnd }: 
             items={group.items}
             names={names}
             highlighted={highlighted}
+            headingLevel={2}
           />
         ))}
       </div>
       <ListEnd list={list} rows={rows} />
     </>
   )
-}
-
-interface DayGroupData {
-  date: string
-  items: ListedTransaction[]
-}
-
-/** 서버 순서 그대로 이어진 같은 날짜를 묶는다. 다시 정렬하지 않는다. */
-function groupByDate(items: ListedTransaction[]): DayGroupData[] {
-  const groups: DayGroupData[] = []
-  for (const item of items) {
-    const last = groups.at(-1)
-    if (last?.date === item.occurredOn) last.items.push(item)
-    else groups.push({ date: item.occurredOn, items: [item] })
-  }
-  return groups
 }
 
 /** 그 달의 수입·지출 합계(서버 값). 수입이 0원이면 부호와 강조색 없이 "0원"이다(0.2). */
@@ -244,133 +230,6 @@ function EmptyMonth({ month, today }: { month: string; today: string }) {
         </ButtonLink>
       )}
     </EmptyState>
-  )
-}
-
-interface DayGroupProps {
-  date: string
-  today: string
-  /** 서버가 준 그날 전체 합계 */
-  total: DayTotal | undefined
-  items: ListedTransaction[]
-  names: NameBook
-  highlighted: string | undefined
-}
-
-function DayGroup({ date, today, total, items, names, highlighted }: DayGroupProps) {
-  const headingId = useId()
-  return (
-    <div>
-      <div className={styles.dayHead}>
-        <h2 id={headingId} className={styles.date}>
-          {formatDate(date, today)}
-        </h2>
-        {total && <DaySums total={total} />}
-      </div>
-      {/* Safari는 점을 없앤 목록을 목록으로 알리지 않으므로 role을 적는다 */}
-      <ul role="list" aria-labelledby={headingId} className={styles.rows}>
-        {items.map((item) => (
-          <TransactionRow
-            key={item.id}
-            transaction={item}
-            names={names}
-            dateId={headingId}
-            highlighted={item.id === highlighted}
-          />
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-/** 그날 합계(0.5). 지출만이면 지출, 수입만이면 수입, 둘 다면 수입과 지출, 둘 다 0이면 비운다. */
-function DaySums({ total }: { total: DayTotal }) {
-  if (total.income === 0 && total.expense === 0) return null
-  return (
-    <dl className={styles.daySums}>
-      {total.income > 0 && (
-        <div className={styles.daySum}>
-          <dt className={styles.daySumName}>수입</dt>
-          <dd className={styles.daySumAmount}>
-            <Amount kind="income" value={total.income} />
-          </dd>
-        </div>
-      )}
-      {total.expense > 0 && (
-        <div className={styles.daySum}>
-          <dt className={styles.daySumName}>지출</dt>
-          <dd className={styles.daySumAmount}>
-            <Amount kind="expense" value={total.expense} />
-          </dd>
-        </div>
-      )}
-    </dl>
-  )
-}
-
-const amountKinds = { EXPENSE: 'expense', INCOME: 'income', TRANSFER: 'transfer' } as const
-
-interface TransactionRowProps {
-  transaction: ListedTransaction
-  names: NameBook
-  /** 날짜 묶음 머리의 id. 링크 이름에 날짜를 넣는다. */
-  dateId: string
-  highlighted: boolean
-}
-
-/**
- * 거래 줄(0.4). 줄 전체가 상세로 가는 링크다. 링크 이름은 aria-labelledby로 제목 전체, 금액, 날짜(묶음 머리), 시각,
- * 둘째 줄, 상태를 차례로 잇는다. 말줄임으로 잘린 제목도 화면 읽기에는 다 읽힌다.
- */
-function TransactionRow({ transaction, names, dateId, highlighted }: TransactionRowProps) {
-  const id = useId()
-  const title = titleOf(transaction, names)
-  const detail = detailOf(transaction, names)
-  const time = transaction.occurredTime
-  const canceled = transaction.status === 'CANCELED'
-  const labelledBy = [
-    `${id}-title`,
-    `${id}-amount`,
-    dateId,
-    time && `${id}-time`,
-    detail && `${id}-detail`,
-    canceled && `${id}-status`,
-  ]
-    .filter(Boolean)
-    .join(' ')
-
-  return (
-    <li>
-      <Link
-        to={`/transactions/${transaction.id}`}
-        className={highlighted ? `${styles.row} ${styles.highlighted}` : styles.row}
-        aria-labelledby={labelledBy}
-      >
-        <span id={`${id}-time`} className={`${styles.time} tabular-nums`}>
-          {time ?? ''}
-        </span>
-        <span className={styles.body}>
-          <span className={styles.first}>
-            <span id={`${id}-title`} className={styles.title}>
-              {title}
-            </span>
-            <span id={`${id}-amount`} className={styles.amount}>
-              <Amount kind={amountKinds[transaction.type]} value={transaction.amount} canceled={canceled} />
-            </span>
-          </span>
-          {detail && (
-            <span id={`${id}-detail`} className={styles.detail}>
-              {detail}
-            </span>
-          )}
-          {canceled && (
-            <span id={`${id}-status`} className={styles.status}>
-              <StatusChip>취소</StatusChip>
-            </span>
-          )}
-        </span>
-      </Link>
-    </li>
   )
 }
 

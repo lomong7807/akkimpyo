@@ -1,6 +1,8 @@
 import { http, HttpResponse } from 'msw'
 import type { SetupServer } from 'msw/node'
+import { now } from '../../src/lib/clock'
 import type { Backend } from './backend'
+import { SEOUL } from './clock'
 import { problem } from './problem'
 import { savedOf } from './transactions'
 
@@ -56,9 +58,12 @@ export interface ListRequest {
   names: string[]
 }
 
-/** `items` 가운데 `start`부터 `limit`건을 한 쪽으로 준다. 합계와 그날 합계는 `sums`가 정한 값이 앞선다. */
+/**
+ * `items` 가운데 `start`부터 `limit`건을 한 쪽으로 준다. 합계와 그날 합계는 `sums`가 정한 값이 앞선다.
+ * `month`가 null이면 장부 전체의 쪽이라 합계(totals)가 없다(#15).
+ */
 export function pageOf(
-  month: string,
+  month: string | null,
   items: Listed[],
   start: number,
   limit: number,
@@ -67,10 +72,11 @@ export function pageOf(
   const page = items.slice(start, start + limit)
   const end = start + page.length
   const dates = [...new Set(page.map((item) => String(item.occurredOn)))]
+  const firstTotals = month === null ? null : (sums.totals ?? sumsOf(items))
   return {
     items: page,
-    nextCursor: end < items.length ? `${month}|${end}` : null,
-    totals: start === 0 ? (sums.totals ?? sumsOf(items)) : null,
+    nextCursor: end < items.length ? `${month ?? 'all'}|${end}` : null,
+    totals: start === 0 ? firstTotals : null,
     days: dates.map((date) => ({
       date,
       ...(sums.days?.get(date) ?? sumsOf(items.filter((item) => item.occurredOn === date))),
@@ -78,7 +84,31 @@ export function pageOf(
   }
 }
 
-/** 거래 목록이 되는 가짜 서버. 달마다 거래를 서버의 순서대로 넣어 둔다. 넣지 않은 달은 거래가 없다. */
+/** 장부 시간대(서비스 시간대 Asia/Seoul)의 오늘. 테스트가 정한 기기의 지금(src/lib/clock)으로 센다. */
+function ledgerToday(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: SEOUL, year: 'numeric', month: '2-digit', day: '2-digit' }).format(
+    now(),
+  )
+}
+
+/** 서버의 순서(#15): 날짜 역순, 같은 날은 시각 있는 것이 시각 역순으로 먼저, 같으면 id 역순 */
+function byServerOrder(a: Listed, b: Listed): number {
+  const [dateA, dateB] = [String(a.occurredOn), String(b.occurredOn)]
+  if (dateA !== dateB) return dateA < dateB ? 1 : -1
+  const [timeA, timeB] = [a.occurredTime as string | null, b.occurredTime as string | null]
+  if (timeA !== timeB) {
+    if (timeA === null) return 1
+    if (timeB === null) return -1
+    return timeA < timeB ? 1 : -1
+  }
+  return String(a.id) < String(b.id) ? 1 : -1
+}
+
+/**
+ * 거래 목록이 되는 가짜 서버. 달마다 거래를 서버의 순서대로 넣어 둔다. 넣지 않은 달은 거래가 없다.
+ * 달 없이 부르면(홈의 최근 거래) 넣어 둔 모든 달의 거래를 서버의 순서로 준다. 장부 시간대의 오늘보다 뒤의 날짜는 빠진다
+ * (#15, planner 결정 2026-11-26).
+ */
 export function startTransactionList(server: SetupServer, backend: Backend) {
   const list = {
     /** 달(`YYYY-MM`)마다 서버가 주는 순서의 거래 */
@@ -106,12 +136,19 @@ export function startTransactionList(server: SetupServer, backend: Backend) {
       if (!sent.user) return problem(401, 'UNAUTHENTICATED')
       const answered = await list.response?.(sent)
       if (answered) return answered
-      const month = sent.month ?? ''
+      const { month } = sent
       const start = sent.cursor === null ? 0 : Number(sent.cursor.split('|')[1])
+      const source =
+        month === null
+          ? [...list.months.values()]
+              .flat()
+              .filter(({ occurredOn }) => String(occurredOn) <= ledgerToday())
+              .sort(byServerOrder)
+          : (list.months.get(month) ?? [])
       // 휴지통의 거래는 목록에 없다(#15)
-      const items = (list.months.get(month) ?? []).filter(({ deletedAt }) => deletedAt === null)
+      const items = source.filter(({ deletedAt }) => deletedAt === null)
       const body = pageOf(month, items, start, Number(sent.limit ?? 50), {
-        totals: list.totals.get(month),
+        totals: month === null ? undefined : list.totals.get(month),
         days: list.days,
       })
       return HttpResponse.json(body)
