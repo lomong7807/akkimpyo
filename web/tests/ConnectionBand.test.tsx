@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
 import { goOffline, goOnline } from './support/connection'
-import { passTime, startGuardClock } from './support/guardClock'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
+import { passTime } from './support/testClock'
 import { expenseOf, startTransactionList, type TransactionList } from './support/transactionList'
 import { id, openApp, resetGlobals, settle, startServer, untilDefaultAccount } from './support/transactionScreen'
 import { resetViewport, setViewportWidth } from './support/viewport'
@@ -28,7 +28,6 @@ const CSS = 'src/features/connection/ConnectionBand.module.css'
 
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend } = startServer(server))
   list = startTransactionList(server, backend)

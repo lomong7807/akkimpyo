@@ -6,10 +6,10 @@ import { delayed, meOf, type Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
 import { untilOpened } from './support/dialog'
-import { startGuardClock } from './support/guardClock'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
+import { passTime } from './support/testClock'
 import { startTransactionDetail, type TransactionDetailServer } from './support/transactionDetail'
 import { expenseOf, incomeOf, pageOf, startTransactionList, transferOf, type TransactionList } from './support/transactionList'
 import {
@@ -43,10 +43,8 @@ let detail: TransactionDetailServer
 const NOW = '2026-11-26T12:30:00+09:00'
 
 beforeEach(() => {
-  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)는 진짜 시계다
+  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)와 누름을 막는 300ms는 공용 시계(testClock)다
   setDeviceClock(NOW)
-  // 확인 창을 여닫을 때 누름을 막는 300ms는 실제로 기다리지 않는 시계로 앞당긴다(Date는 바꾸지 않는다)
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts } = startServer(server))
   list = startTransactionList(server, backend)
@@ -515,9 +513,8 @@ describe('계좌 잔액(F-112, P-220)', () => {
   it('30초가 지나면 홈에 다시 들어올 때 계좌 목록을 다시 받는다', async () => {
     const opened = await openHome()
     await act(() => opened.router.navigate('/more'))
-    // 라이브러리가 받은 때와 지금을 재는 시계(Date.now)만 30초 뒤로 보낸다
-    const later = Date.now() + TRANSACTION_LIST_STALE_MS + 1
-    vi.spyOn(Date, 'now').mockReturnValue(later)
+    // 라이브러리가 받은 때와 지금을 재는 시계(Date.now)도 공용 시계라 함께 간다
+    await passTime(TRANSACTION_LIST_STALE_MS + 1)
     await act(() => opened.router.navigate('/home'))
     await screen.findByRole('heading', { level: 1, name: '홈' })
     await waitFor(() => expect(accounts.requests).toHaveLength(2))

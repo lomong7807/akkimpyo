@@ -2,7 +2,6 @@ import { screen, waitFor, within } from '@testing-library/react'
 import type { SetupServer } from 'msw/node'
 import { expect } from 'vitest'
 import { setDeviceClock } from './clock'
-import { startGuardClock } from './guardClock'
 import { installIntersectionObserver } from './intersection'
 import { startTransactionDetail } from './transactionDetail'
 import { expenseOf, incomeOf, startTransactionList, transferOf } from './transactionList'
@@ -12,11 +11,10 @@ import { amount, id, openApp, startServer, type Opened } from './transactionScre
 
 /**
  * 기기의 지금은 서울의 2026-11-26 12:30이다(시간대마다 보는 테스트는 setDeviceClock으로 다시 정한다). 확인 창을 여닫을 때
- * 누름을 막는 300ms는 실제로 기다리지 않는 시계(guardClock)로 앞당긴다.
+ * 누름을 막는 300ms는 공용 시계(testClock)가 앞당긴다.
  */
 export function deviceNow() {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
 }
 
 /** 로그인한 user-1의 장부에 계좌, 카테고리, 거래 만들기, 목록, 상세, 수정이 되는 가짜 서버 */

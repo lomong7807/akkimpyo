@@ -8,7 +8,6 @@ import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { setDeviceClock } from './support/clock'
-import { startGuardClock } from './support/guardClock'
 import { startTransactionDetail, trashed, type TransactionDetailServer } from './support/transactionDetail'
 import { expenseOf, incomeOf, startTransactionList, transferOf, type TransactionList } from './support/transactionList'
 import type { Categories } from './support/categories'
@@ -38,10 +37,9 @@ let list: TransactionList
 let detail: TransactionDetailServer
 
 // 기기의 지금은 서울의 2026-11-26 12:30이다(안내 띠의 밀리초 경계는 purgeNotice.test.ts). 확인 창을 여닫을 때 누름을
-// 막는 300ms는 실제로 기다리지 않는 시계(guardClock)로 앞당긴다.
+// 막는 300ms는 공용 시계(testClock)가 앞당긴다.
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, categories } = startServer(server))
   list = startTransactionList(server, backend)

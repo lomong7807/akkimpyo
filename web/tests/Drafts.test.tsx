@@ -1,7 +1,6 @@
 import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Backend } from './support/backend'
-import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { recordDom } from './support/recordDom'
 import {
@@ -36,7 +35,6 @@ const KEPT = '쓰던 내용은 이 기기에 남아 있어요.'
 const DAY = 24 * 60 * 60 * 1000
 
 beforeEach(() => {
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   started = startEditServer(server)
   ;({ backend, transactions } = started)

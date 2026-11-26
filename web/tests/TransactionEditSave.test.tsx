@@ -6,6 +6,7 @@ import { setDeviceClock } from './support/clock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { holdClock, passTime } from './support/testClock'
 import { trashed, type TransactionDetailServer } from './support/transactionDetail'
 import {
   deviceNow,
@@ -353,11 +354,11 @@ describe('저장하지 못함', () => {
     detail.updateResponse = delayed().respond
     const { user } = await openFromDetail(item)
     await changeAmount(user)
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
     fireEvent.click(saveButton())
-    await act(() => vi.advanceTimersByTimeAsync(14_900))
+    await passTime(14_900)
     expect(screen.queryByRole('alert')).toBeNull()
-    await act(() => vi.advanceTimersByTimeAsync(200))
+    await passTime(200)
     expect(screen.getByRole('alert').textContent).toBe(failed)
   })
 

@@ -5,7 +5,6 @@ import { delayed, meOf, type Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
 import { goOffline, goOnline } from './support/connection'
 import { queueOf, seedLedgerCopy, seedLogin, seedMeCopy } from './support/device'
-import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import {
@@ -29,6 +28,7 @@ import {
   typeRadio,
   type User,
 } from './support/transactionScreen'
+import { holdClock, passTime, releaseClock } from './support/testClock'
 import type { Transactions } from './support/transactions'
 import { resetViewport } from './support/viewport'
 
@@ -51,7 +51,6 @@ let transactions: Transactions
 
 beforeEach(() => {
   setDeviceClock(NOW)
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   localStorage.clear()
@@ -207,11 +206,11 @@ describe('요청 중에 연결이 끊기면(P-904)', () => {
     const opened = await openFromMore()
     await opened.user.click(amount())
     await opened.user.keyboard('12000')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
     fireEvent.click(saveButton())
-    await act(() => vi.advanceTimersByTimeAsync(15_100))
+    await passTime(15_100)
     expect(screen.getByRole('alert').textContent).toBe(failed)
-    vi.useRealTimers()
+    releaseClock()
     expect(await queueOf()).toEqual([])
   })
 })

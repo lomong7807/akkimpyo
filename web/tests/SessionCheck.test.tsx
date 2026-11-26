@@ -6,6 +6,7 @@ import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { holdClock, passTime } from './support/testClock'
 import { createStuckLocks, createFakeLocks, installLocks, removeLocks, SESSION_LOCK } from './support/webLocks'
 
 vi.stubGlobal('scrollTo', vi.fn())
@@ -19,7 +20,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  vi.useRealTimers()
   cleanup()
   removeLocks()
 })
@@ -45,8 +45,8 @@ const unauthenticated = () => problem(401, 'UNAUTHENTICATED')
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
 /** 시계를 멈춘다. 요청은 흐른다. */
-const stopClock = () => void vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-const pass = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+const stopClock = holdClock
+const pass = passTime
 
 /** 시계를 멈춘 채로 `check`가 될 때까지 기다린다. 시계는 한 번에 1ms씩만 흐른다. */
 async function until(check: () => unknown) {

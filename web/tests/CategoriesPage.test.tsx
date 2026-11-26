@@ -7,6 +7,7 @@ import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { holdClock, passTime, releaseClock } from './support/testClock'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
@@ -67,7 +68,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  vi.useRealTimers()
   cleanup()
   resetViewport()
   vi.unstubAllGlobals()
@@ -390,7 +390,7 @@ describe('지출과 수입', () => {
 })
 
 describe('불러오는 중', () => {
-  const pass = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+  const pass = passTime
   const skeleton = () => screen.getByRole('main').querySelector('[aria-hidden="true"]')
 
   /** 다른 화면에서 시계를 멈추고 카테고리로 간다. 요청은 답을 기다린다. */
@@ -400,7 +400,7 @@ describe('불러오는 중', () => {
     installMatchMedia(390)
     const { router } = await openApp('/other', addScreens([{ path: '/other', element: <main>다른 화면</main> }]))
     await screen.findByText('다른 화면')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
     await act(() => router.navigate('/categories'))
     return answer
   }
@@ -446,7 +446,7 @@ describe('불러오는 중', () => {
     await pass(300)
     const classes = [...skeleton()!.children].map((row) => row.className)
     answer.answer(HttpResponse.json({ items }))
-    vi.useRealTimers()
+    releaseClock()
     await list()
     expect(new Set(classes)).toEqual(new Set([rowOf('식비').className]))
   })
@@ -455,7 +455,7 @@ describe('불러오는 중', () => {
     const answer = await openLoading()
     await pass(300)
     answer.answer(HttpResponse.json({ items }))
-    vi.useRealTimers()
+    releaseClock()
     await list()
     expect(content().queryByRole('status')).toBeNull()
     expect(skeleton()).toBeNull()
@@ -465,7 +465,7 @@ describe('불러오는 중', () => {
     const answer = await openLoading()
     const dom = recordDom()
     answer.answer(HttpResponse.json({ items }))
-    vi.useRealTimers()
+    releaseClock()
     await list()
     expect(dom.sawText(loading)).toBe(false)
     expect(dom.sawElement('main [aria-hidden="true"]')).toBe(false)

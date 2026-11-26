@@ -5,10 +5,10 @@ import type { Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
 import { goOffline } from './support/connection'
 import { seedLedgerCopy, seedPending } from './support/device'
-import { passTime, startGuardClock } from './support/guardClock'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
+import { passTime } from './support/testClock'
 import { startTransactionList } from './support/transactionList'
 import { id, LEDGER, openApp, resetGlobals, settle, startServer, untilDefaultAccount } from './support/transactionScreen'
 import { savedOf, type Transactions } from './support/transactions'
@@ -31,7 +31,6 @@ const now = Date.parse(NOW)
 
 beforeEach(() => {
   setDeviceClock(NOW)
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   startTransactionList(server, backend)
