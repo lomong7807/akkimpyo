@@ -7,7 +7,8 @@ import { untilOpened } from './support/dialog'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
-import { startGuardClock, stopGuardClock } from './support/guardClock'
+import { setDeviceClock } from './support/clock'
+import { startGuardClock } from './support/guardClock'
 import { startTransactionDetail, trashed, type TransactionDetailServer } from './support/transactionDetail'
 import { expenseOf, incomeOf, startTransactionList, transferOf, type TransactionList } from './support/transactionList'
 import type { Categories } from './support/categories'
@@ -36,17 +37,11 @@ let categories: Categories
 let list: TransactionList
 let detail: TransactionDetailServer
 
-/**
- * 기기의 지금. 시각은 기기의 시간대다. 확인 창을 여닫을 때 누름을 막는 300ms를 실제로 기다리지 않는 시계(guardClock)를
- * 쓰므로 Date는 이 시각에서 시작해 흐른다. 이 파일은 날짜와 분 단위만 본다(안내 띠의 밀리초 경계는 purgeNotice.test.ts).
- */
-function deviceNow(...parts: [number, number, number, number?, number?]) {
-  stopGuardClock()
-  startGuardClock(new Date(...(parts as [number, number, number])))
-}
-
+// 기기의 지금은 서울의 2026-11-26 12:30이다(안내 띠의 밀리초 경계는 purgeNotice.test.ts). 확인 창을 여닫을 때 누름을
+// 막는 300ms는 실제로 기다리지 않는 시계(guardClock)로 앞당긴다.
 beforeEach(() => {
-  deviceNow(2026, 10, 26, 12, 30)
+  setDeviceClock('2026-11-26T12:30:00+09:00')
+  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, categories } = startServer(server))
   list = startTransactionList(server, backend)
@@ -869,11 +864,16 @@ describe('불러오는 중', () => {
   })
 })
 
-describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles'])('기기의 시간대가 %s일 때 해의 경계', (timeZone) => {
-  beforeEach(() => vi.stubEnv('TZ', timeZone))
-
+// 시간대마다 그 시간대의 2027-01-01 00:30을 오프셋으로 적는다(1월이라 로스앤젤레스는 겨울 시간 −08:00)
+describe.each([
+  ['Asia/Seoul', '+09:00'],
+  ['UTC', 'Z'],
+  ['America/Los_Angeles', '-08:00'],
+  ['Pacific/Kiritimati', '+14:00'],
+  ['Pacific/Pago_Pago', '-11:00'],
+])('기기의 시간대가 %s일 때 해의 경계', (timeZone, offset) => {
   it('새해 첫날에 본 지난해 12월 31일 거래는 연도를 붙이고, 1월 1일 거래는 요일을 붙인다', async () => {
-    deviceNow(2027, 0, 1, 0, 30)
+    setDeviceClock(`2027-01-01T00:30:00${offset}`, timeZone)
     const lastYear = lunch({ occurredOn: '2026-12-31', occurredTime: '23:59' })
     const newYear = lunch({ occurredOn: '2027-01-01', occurredTime: null })
     detail.put(lastYear, newYear)

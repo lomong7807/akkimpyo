@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, meOf, type Backend } from './support/backend'
+import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
 import { installIntersectionObserver, type Intersection } from './support/intersection'
 import { startMockServer } from './support/mockServer'
@@ -40,13 +41,12 @@ let transactions: Transactions
 let list: TransactionList
 let intersection: Intersection
 
-/** 기기의 지금. 시각은 기기의 시간대다. */
-function deviceNow(...parts: [number, number, number, number?, number?, number?]) {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(...(parts as [number, number, number])) })
-}
+const NOW = '2026-11-26T12:30:00+09:00'
 
 beforeEach(() => {
-  deviceNow(2026, 10, 26, 12, 30)
+  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)는 같은 때에 멈춰 둔다
+  setDeviceClock(NOW)
+  vi.useFakeTimers({ toFake: ['Date'], now: Date.parse(NOW) })
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   list = startTransactionList(server, backend)
@@ -164,16 +164,21 @@ describe('주소와 고른 달', () => {
     ])
   })
 
-  describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles'])('기기의 시간대가 %s일 때 기본 달은 기기의 오늘을 따른다', (timeZone) => {
-    beforeEach(() => vi.stubEnv('TZ', timeZone))
-
+  // 시간대마다 그 시간대의 시각을 오프셋으로 적는다(11월 말~1월이라 로스앤젤레스는 겨울 시간 −08:00)
+  describe.each([
+    ['Asia/Seoul', '+09:00'],
+    ['UTC', 'Z'],
+    ['America/Los_Angeles', '-08:00'],
+    ['Pacific/Kiritimati', '+14:00'],
+    ['Pacific/Pago_Pago', '-11:00'],
+  ])('기기의 시간대가 %s일 때 기본 달은 기기의 오늘을 따른다', (timeZone, offset) => {
     it.each([
-      [[2026, 10, 30, 23, 59, 59], '2026-11'],
-      [[2026, 11, 1, 0, 0, 0], '2026-12'],
-      [[2026, 11, 31, 23, 59, 59], '2026-12'],
-      [[2027, 0, 1, 0, 0, 0], '2027-01'],
-    ] as const)('지금이 %j(월은 0부터)이면 %s', async (now, month) => {
-      deviceNow(...(now as unknown as [number, number, number, number, number, number]))
+      ['2026-11-30T23:59:59', '2026-11'],
+      ['2026-12-01T00:00:00', '2026-12'],
+      ['2026-12-31T23:59:59', '2026-12'],
+      ['2027-01-01T00:00:00', '2027-01'],
+    ])('지금이 그 시간대로 %s이면 %s', async (now, month) => {
+      setDeviceClock(`${now}${offset}`, timeZone)
       const opened = await openApp('/transactions')
       await waitFor(() => expect(addressOf(opened)).toBe(`/transactions?month=${month}`))
     })
@@ -622,8 +627,14 @@ describe('거래 줄(0.4)', () => {
   })
 })
 
-describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles'])('기기의 시간대가 %s일 때 달의 경계', (timeZone) => {
-  beforeEach(() => vi.stubEnv('TZ', timeZone))
+describe.each([
+  ['Asia/Seoul', '+09:00'],
+  ['UTC', 'Z'],
+  ['America/Los_Angeles', '-08:00'],
+  ['Pacific/Kiritimati', '+14:00'],
+  ['Pacific/Pago_Pago', '-11:00'],
+])('기기의 시간대가 %s일 때 달의 경계', (timeZone, offset) => {
+  beforeEach(() => setDeviceClock(`2026-11-26T12:30:00${offset}`, timeZone))
 
   const on = (occurredOn: string, payee: string) =>
     expenseOf({ occurredOn, occurredTime: '00:00', accountId: id.card, categoryId: id.food, amount: 1000, payee })

@@ -8,15 +8,12 @@ const PRESS_GUARD_MS = 300
 let running: { frame: typeof requestAnimationFrame; pump: ReturnType<typeof setInterval> } | undefined
 
 /**
- * 누름을 막는 시간을 실제로 기다리지 않게 하는 시계. setTimeout, rAF, Date를 가짜로 바꾸고, 실제로 흐른 시간만큼 따라
- * 보내 진짜 시계처럼 돌게 한다. 막는 시간이 끝나기를 기다리는 곳(untilOpened, untilUnshielded)에서만 그 시간을 앞당긴다.
- * Date는 now에서 시작해 흐른다. 밀리초 경계를 시험하는 파일은 Date를 멈춘 채 쓰고 이 시계를 쓰지 않는다.
+ * 누름을 막는 시간을 실제로 기다리지 않게 하는 시계. setTimeout과 rAF를 가짜로 바꾸고, 실제로 흐른 시간만큼 따라 보내
+ * 진짜 시계처럼 돌게 한다. 막는 시간이 끝나기를 기다리는 곳(untilOpened, untilUnshielded)에서만 그 시간을 앞당긴다.
+ * Date는 바꾸지 않는다. 앱의 지금과 시간대는 기기의 시계(tests/support/clock.ts의 setDeviceClock)로 정한다.
  */
-export function startGuardClock(now?: Date) {
-  vi.useFakeTimers({
-    now,
-    toFake: ['Date', 'setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'],
-  })
+export function startGuardClock() {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'] })
   // 가짜로 바꾸지 않은 진짜 시계로 흐른 시간을 잰다. 바쁜 동안 밀린 시간도 다음에 한꺼번에 보낸다
   let last = performance.now()
   const pump = setInterval(() => {

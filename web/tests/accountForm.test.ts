@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   accountAddMessages,
   accountNameLength,
@@ -6,21 +6,19 @@ import {
   toNewAccount,
   validateAccount,
 } from '../src/features/accounts/accountForm'
+import { setDeviceClock } from './support/clock'
 
 const values = { name: '급여통장', type: 'BANK', openingBalance: 350000, negative: false, openingDate: '2026-11-26' } as const
 
 describe('처음 값', () => {
-  beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'] }))
-  afterEach(() => void vi.useRealTimers())
-
   it.each([
-    ['자정 직전', new Date(2026, 10, 26, 23, 59, 59), '2026-11-26'],
-    ['자정', new Date(2026, 10, 27, 0, 0, 0), '2026-11-27'],
-    ['한 해의 마지막 날', new Date(2026, 11, 31, 23, 59, 59), '2026-12-31'],
-    ['새해 첫날', new Date(2027, 0, 1, 0, 0, 0), '2027-01-01'],
-    ['윤일', new Date(2028, 1, 29, 12, 0, 0), '2028-02-29'],
+    ['자정 직전', '2026-11-26T23:59:59+09:00', '2026-11-26'],
+    ['자정', '2026-11-27T00:00:00+09:00', '2026-11-27'],
+    ['한 해의 마지막 날', '2026-12-31T23:59:59+09:00', '2026-12-31'],
+    ['새해 첫날', '2027-01-01T00:00:00+09:00', '2027-01-01'],
+    ['윤일', '2028-02-29T12:00:00+09:00', '2028-02-29'],
   ])('은행, 0원, 양수이고 기준일은 기기의 오늘이다: %s', (_, now, openingDate) => {
-    vi.setSystemTime(now)
+    setDeviceClock(now)
     expect(newAccountValues()).toEqual({ name: '', type: 'BANK', openingBalance: 0, negative: false, openingDate })
   })
 })

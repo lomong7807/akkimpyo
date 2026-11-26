@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Accounts } from './support/accounts'
 import { ledgerIdOf, type Backend } from './support/backend'
 import { untilOpened, untilUnshielded } from './support/dialog'
+import { setDeviceClock } from './support/clock'
 import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
@@ -43,7 +44,8 @@ let accounts: Accounts
 let transactions: Transactions
 
 beforeEach(() => {
-  startGuardClock(new Date(2026, 10, 26, 12, 30))
+  setDeviceClock('2026-11-26T12:30:00+09:00')
+  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts, transactions } = startServer(server))
   localStorage.clear()
@@ -537,11 +539,15 @@ describe('날짜', () => {
   })
 })
 
-describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles'])('기기의 시간대가 %s일 때', (timeZone) => {
-  beforeEach(() => {
-    vi.stubEnv('TZ', timeZone)
-    vi.setSystemTime(new Date(2026, 10, 26, 23, 45, 30))
-  })
+// 시간대마다 그 시간대의 2026-11-26 23:45:30을 오프셋으로 적는다(11월이라 로스앤젤레스는 겨울 시간 −08:00)
+describe.each([
+  ['Asia/Seoul', '+09:00'],
+  ['UTC', 'Z'],
+  ['America/Los_Angeles', '-08:00'],
+  ['Pacific/Kiritimati', '+14:00'],
+  ['Pacific/Pago_Pago', '-11:00'],
+])('기기의 시간대가 %s일 때', (timeZone, offset) => {
+  beforeEach(() => setDeviceClock(`2026-11-26T23:45:30${offset}`, timeZone))
 
   it('기본 날짜와 시각은 기기의 지금이고 시간대 변환 없이 그대로 보낸다', async () => {
     const { user } = await openForm()

@@ -10,6 +10,7 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
+// 이 계산은 기기의 시간대를 읽지 않아야 하므로 Date의 지역 시각이 쓰는 시간대(TZ)를 바꿔 본다. 결과는 바깥의 TZ와 상관없다.
 describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles'])('기기의 시간대가 %s일 때', (timeZone) => {
   beforeEach(() => vi.stubEnv('TZ', timeZone))
 
