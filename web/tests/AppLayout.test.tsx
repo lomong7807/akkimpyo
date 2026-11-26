@@ -55,6 +55,11 @@ function routesWith(ledgerName?: string): RouteObject[] {
         },
         { path: '/more', element: main('더보기'), handle: { navigationItem: more } },
         { path: '/accounts', element: sub('계좌', '/more'), handle: { navigationItem: accounts } },
+        {
+          path: '/accounts/new',
+          element: <main>{links}</main>,
+          handle: { navigationItem: accounts, fullScreen: true },
+        },
         { path: '*', element: main('없음') },
       ],
     },
@@ -472,5 +477,26 @@ describe.each([
     expect(handledByApp).toBe(false)
     expect(scrollTo).not.toHaveBeenCalled()
     expect(router.state.location.key).toBe(key)
+  })
+})
+
+describe('전체 화면 입력', () => {
+  const tabBar = () => document.querySelector('nav[class*="tabBar"]')
+  const frame = () => document.querySelector('[class*="frame"]')!
+
+  it.each([390, 768])('%dpx에서 하단 탭이 없다. 다른 화면으로 가면 다시 보인다', async (width) => {
+    open('/accounts/new', { width })
+    expect(tabBar()).toBeNull()
+    expect(frame().className).not.toMatch(/withTabs/)
+    fireEvent.click(contentLink('계좌 화면'))
+    expect(await screen.findByRole('heading', { name: '계좌' })).toBeTruthy()
+    expect(tabBar()).toBeTruthy()
+    expect(frame().className).toMatch(/withTabs/)
+  })
+
+  it('넓은 화면에는 사이드바가 그대로 있고 화면이 속한 항목을 강조한다', () => {
+    open('/accounts/new', { width: 1280 })
+    expect(menuNames()).toEqual(['홈', '내역', '계좌', '휴지통'])
+    expect(currentNames()).toEqual(['계좌'])
   })
 })

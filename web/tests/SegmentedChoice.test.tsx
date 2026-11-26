@@ -141,6 +141,65 @@ describe('유형 고르기의 키보드', () => {
   })
 })
 
+describe('읽기 전용', () => {
+  function renderReadOnly(readOnly: boolean) {
+    const onChange = vi.fn()
+    render(<SegmentedChoice label="구분" options={three} value="INCOME" onChange={onChange} readOnly={readOnly} />)
+    return { onChange, user: userEvent.setup() }
+  }
+
+  it('눌러도 화살표를 쳐도 바뀌지 않고 초점도 옮기지 않으며, 바꿀 수 없음을 알린다', async () => {
+    const { onChange, user } = renderReadOnly(true)
+    expect(group().getAttribute('aria-readonly')).toBe('true')
+    await user.click(option('이체'))
+    option('수입').focus()
+    await user.keyboard('{ArrowRight} {Enter}')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(focusedName()).toBe('수입')
+  })
+
+  it('모양은 그대로다', () => {
+    const looks = [true, false].map((readOnly) => {
+      renderReadOnly(readOnly)
+      const look = [group(), ...screen.getAllByRole('radio')].map((element) => {
+        const { backgroundColor, color, font, cursor, opacity } = getComputedStyle(element)
+        return { backgroundColor, color, font, cursor, opacity }
+      })
+      cleanup()
+      return look
+    })
+    expect(looks[0]).toEqual(looks[1])
+  })
+
+  it('읽기 전용이 아니면 aria-readonly가 없다', () => {
+    renderReadOnly(false)
+    expect(group().hasAttribute('aria-readonly')).toBe(false)
+  })
+})
+
+describe('양식 안의 유형 고르기', () => {
+  it('ref는 고른 칸이고 고른 칸이 바뀌면 따라간다', () => {
+    const ref = { current: null as HTMLButtonElement | null }
+    const choice = (value: string) => (
+      <SegmentedChoice label="구분" options={two} value={value} onChange={() => {}} ref={ref} />
+    )
+    const { rerender } = render(choice('EXPENSE'))
+    expect(ref.current).toBe(option('지출'))
+    rerender(choice('INCOME'))
+    expect(ref.current).toBe(option('수입'))
+  })
+
+  it('설명을 잇는다', () => {
+    render(
+      <>
+        <p id="reason">오류 문구</p>
+        <SegmentedChoice label="구분" options={two} value="INCOME" onChange={() => {}} aria-describedby="reason" />
+      </>,
+    )
+    expect(group().getAttribute('aria-describedby')).toBe('reason')
+  })
+})
+
 describe('유형 고르기의 모양(components.md 4절)', () => {
   const styleOf = (element: Element) => getComputedStyle(element)
 

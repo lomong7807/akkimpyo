@@ -1,21 +1,30 @@
 import { useId } from 'react'
 import Amount from '../../components/Amount'
+import { ButtonLink } from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
 import LoadFailure from '../../components/LoadFailure'
 import { SubScreen } from '../../components/Screen'
-import { accountTypes, type Account, type AccountType } from './accounts'
+import { accountTypes, type Account } from './accounts'
 import AccountsSkeleton from './AccountsSkeleton'
+import { accountTypeNames } from './accountTypeNames'
+import { openedFromList } from './openedFromList'
 import { useAccounts } from './useAccounts'
 import styles from './Accounts.module.css'
-
-const typeNames: Record<AccountType, string> = { BANK: '은행', CARD: '카드', CASH: '현금' }
 
 /** G-01 계좌 목록. 1A에서 계좌 줄은 눌리지 않는다. 계좌 상세(G-03)가 들어오면 맞춘다. */
 export default function AccountsPage() {
   return (
-    <SubScreen title="계좌" parent="/more">
+    <SubScreen title="계좌" parent="/more" action={<AddLink kind="text">추가</AddLink>}>
       <Accounts />
     </SubScreen>
+  )
+}
+
+function AddLink({ kind, children }: { kind: 'text' | 'primary'; children: string }) {
+  return (
+    <ButtonLink kind={kind} to="/accounts/new" state={openedFromList}>
+      {children}
+    </ButtonLink>
   )
 }
 
@@ -29,7 +38,11 @@ function Accounts() {
 
 function AccountList({ accounts }: { accounts: Account[] }) {
   if (accounts.length === 0) {
-    return <EmptyState description="계좌가 없어요. 계좌를 추가하면 잔액을 한눈에 볼 수 있어요." />
+    return (
+      <EmptyState description="계좌가 없어요. 계좌를 추가하면 잔액을 한눈에 볼 수 있어요.">
+        <AddLink kind="primary">계좌 추가</AddLink>
+      </EmptyState>
+    )
   }
   return (
     <div className={styles.accounts}>
@@ -38,7 +51,7 @@ function AccountList({ accounts }: { accounts: Account[] }) {
         <Balance value={sumOf(accounts)} />
       </p>
       {accountTypes.map((type) => (
-        <AccountGroup key={type} name={typeNames[type]} accounts={accounts.filter((each) => each.type === type)} />
+        <AccountGroup key={type} name={accountTypeNames[type]} accounts={accounts.filter((each) => each.type === type)} />
       ))}
     </div>
   )

@@ -1,0 +1,31 @@
+/* 글자를 키워 가장 긴 금액이 들어갈 폭이 남지 않으면 칸을 부호 버튼의 다음 줄로 내린다 */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  align-items: center;
+}
+
+.box {
+  position: relative;
+  flex: 1 1 10em;
+  min-width: 0;
+}
+
+/* 칸의 안쪽 12px, "원"의 폭, 숫자와의 사이 8px을 비운다. 글꼴의 한글 폭은 글자 크기의 0.86배다 */
+.input {
+  padding-inline-end: calc(var(--space-12) + 0.875em + var(--space-8));
+  text-align: end;
+}
+
+/* 칸의 테두리 1px과 안쪽 12px */
+.unit {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: calc(var(--space-12) + 1px);
+  display: flex;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  pointer-events: none;
+}

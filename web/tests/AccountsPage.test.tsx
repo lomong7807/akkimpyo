@@ -85,9 +85,17 @@ describe('계좌 목록(G-01)', () => {
     expect(screen.getByRole('navigation', { name: '주 메뉴' })).toBeTruthy()
   })
 
-  it('1A에는 "추가"가 없고 내용에 누를 것이 없다', async () => {
+  it('상단 바 오른쪽 끝에 계좌 추가로 가는 글자 버튼 "추가"가 있다', async () => {
     await open()
-    expect(screen.queryByText('추가')).toBeNull()
+    const bar = screen.getByRole('banner')
+    const link = within(bar).getByRole('link', { name: '추가' })
+    expect(link.getAttribute('href')).toBe('/accounts/new')
+    expect(bar.lastElementChild!.contains(link)).toBe(true)
+    expect(styleOf(link).color).toBe('var(--color-accent)')
+  })
+
+  it('내용에 누를 것이 없다', async () => {
+    await open()
     expect(content().queryAllByRole('button')).toEqual([])
     expect(content().queryAllByRole('link')).toEqual([])
     expect(main().querySelector('[tabindex], [onclick], svg')).toBeNull()
@@ -295,12 +303,19 @@ describe('계좌 목록의 모양', () => {
 })
 
 describe('계좌가 없으면', () => {
-  it('설명만 보이고 자산 합계와 묶음, 버튼이 없다', async () => {
+  it('설명과 주 버튼 "계좌 추가"만 보이고 자산 합계와 묶음이 없다', async () => {
     await open([])
-    expect(main().textContent).toBe(empty)
+    expect(main().textContent).toBe(`${empty}계좌 추가`)
     expect(content().queryAllByRole('list')).toEqual([])
     expect(content().queryAllByRole('heading')).toEqual([])
-    expect(content().queryAllByRole('button')).toEqual([])
+    const link = content().getByRole('link', { name: '계좌 추가' })
+    expect(link.getAttribute('href')).toBe('/accounts/new')
+    expect(styleOf(link).backgroundColor).toBe('var(--color-accent)')
+  })
+
+  it('상단 바의 "추가"도 그대로 있다', async () => {
+    await open([])
+    expect(within(screen.getByRole('banner')).getByRole('link', { name: '추가' })).toBeTruthy()
   })
 })
 

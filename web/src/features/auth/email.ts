@@ -1,4 +1,4 @@
-import { trimEnds } from './trimEnds'
+import { trimEnds } from '../../components/trimEnds'
 
 export const invalidEmail = '이메일 주소 형식을 확인해 주세요'
 

@@ -1,6 +1,6 @@
+import type { FieldErrors } from '../../components/useFormFields'
+import { hasUnusableCharacter, lengthOf, normalizeName } from '../../components/visibleText'
 import { emailError, invalidEmail, trimEmail } from './email'
-import type { FieldErrors } from './useFormFields'
-import { hasUnusableCharacter, trimWhiteSpace } from './visibleText'
 
 export interface SignupValues {
   email: string
@@ -63,7 +63,7 @@ function passwordConfirmError(password: string, passwordConfirm: string): string
 }
 
 function displayNameError(displayName: string): string | undefined {
-  const name = normalizeDisplayName(displayName)
+  const name = normalizeName(displayName)
   if (name === '') return nameRequired
   if (hasUnusableCharacter(name)) return nameUnusable
   if (displayNameLength(displayName) > DISPLAY_NAME_MAX) return nameTooLong
@@ -72,20 +72,10 @@ function displayNameError(displayName: string): string | undefined {
 export const DISPLAY_NAME_MAX = 20
 
 export function displayNameLength(displayName: string): number {
-  return lengthOf(normalizeDisplayName(displayName))
-}
-
-/** 서버가 검사하고 저장하는 표시 이름(P-101, P-214) */
-function normalizeDisplayName(displayName: string): string {
-  return trimWhiteSpace(displayName).normalize('NFC')
+  return lengthOf(normalizeName(displayName))
 }
 
 /** 서버가 검사하고 저장하는 비밀번호(P-101) */
 function normalizePassword(password: string): string {
   return password.normalize('NFKC')
-}
-
-/** 서버와 같이 코드포인트를 센다. */
-function lengthOf(text: string): number {
-  return [...text].length
 }

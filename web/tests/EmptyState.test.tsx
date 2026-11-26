@@ -25,6 +25,18 @@ describe('데이터 없음(00-common 4.2)', () => {
     expect(style.margin).toBe('0px')
   })
 
+  it('버튼은 설명 아래 16px에 글자에 맞춘 폭으로 둔다', () => {
+    render(
+      <EmptyState description={text}>
+        <button type="button">거래 입력</button>
+      </EmptyState>,
+    )
+    const button = screen.getByRole('button', { name: '거래 입력' })
+    expect(button.parentElement!.previousElementSibling).toBe(screen.getByText(text))
+    expect(getComputedStyle(button.parentElement!).marginTop).toBe('var(--space-16)')
+    expect(getComputedStyle(button.parentElement!).display).toBe('block')
+  })
+
   it('남는 자리를 채우지 않아 아래에 목록이 이어질 수 있다', () => {
     const { container } = render(<EmptyState description={text} />)
     const area = getComputedStyle(container.firstElementChild!)

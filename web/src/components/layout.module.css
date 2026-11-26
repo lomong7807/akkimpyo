@@ -22,3 +22,10 @@
     --gutter: var(--space-24);
   }
 }
+
+/* 전체 화면 입력의 폭. .contentWidth에 더해 건다 */
+@media (width >= 1024px) {
+  .fullScreenForm {
+    --content-width: var(--width-full-screen-form);
+  }
+}

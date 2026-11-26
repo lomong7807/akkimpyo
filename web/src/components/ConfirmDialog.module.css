@@ -1,0 +1,27 @@
+/* 시트의 아래 여백 8px과 더해 버튼 아래가 12px이다 */
+.inSheet {
+  padding-inline: var(--space-16);
+  padding-bottom: var(--space-4);
+}
+
+.description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}
+
+/* 두 버튼이 같은 폭으로 한 줄에 들어가지 않으면 뒤의 실행 버튼이 위로 쌓인다 */
+.actions {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  gap: var(--space-8);
+  margin-top: var(--space-24);
+}
+
+/* 칸의 최소 폭은 버튼의 글자와 안쪽 여백이다 */
+.actions > div {
+  display: grid;
+  flex: 1 1 calc(50% - var(--space-8) / 2);
+  grid-template-columns: minmax(max-content, 1fr);
+  min-height: var(--size-button);
+}

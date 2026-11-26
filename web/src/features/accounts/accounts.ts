@@ -25,7 +25,27 @@ export async function fetchAccounts(ledgerId: string): Promise<Account[]> {
   return items
 }
 
-function isAccount(value: Partial<Account> | null): value is Account {
+/** 추가할 계좌 */
+export interface NewAccount {
+  name: string
+  type: AccountType
+  /** 원 단위 정수. 카드의 갚을 금액은 음수로 보낸다. */
+  openingBalance: number
+  /** `YYYY-MM-DD` */
+  openingDate: string
+}
+
+/** 만들어진 계좌를 준다. 실패하면 ApiError를 던진다. */
+export async function createAccount(ledgerId: string, account: NewAccount): Promise<Account> {
+  const body = await request<Partial<Account> | null | undefined>(`/ledgers/${ledgerId}/accounts`, {
+    method: 'POST',
+    body: account,
+  })
+  if (!isAccount(body)) throw ApiError.unreadable()
+  return body
+}
+
+function isAccount(value: Partial<Account> | null | undefined): value is Account {
   return (
     typeof value?.id === 'string' &&
     typeof value.name === 'string' &&
