@@ -36,6 +36,7 @@ export default function SessionProvider({ children }: { children: ReactNode }) {
     let keeping: Promise<boolean> | undefined
     const stopEnding = onSessionEnding((userId) => {
       keeping = keepOpenDrafts(userId, now())
+      if (keeping) dispatch('ending')
     })
     const stopListening = onSessionEnded((end) => {
       const kept = end === 'ended' ? keeping : undefined

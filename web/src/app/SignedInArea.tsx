@@ -92,6 +92,15 @@ function Gate() {
 
   if (session.status === 'signed-out') return <LoginRedirect session={session} />
 
+  // 로그인이 풀려 쓰던 값을 남기는 중이다. 입력 화면을 내리고 남긴 뒤 로그인 화면으로 간다(#234 C2)
+  if (session.ending) {
+    return (
+      <PlainLayout>
+        <Loading />
+      </PlainLayout>
+    )
+  }
+
   if (session.status === 'unknown' || session.status === 'retrying' || (copyMissing && !ledger)) {
     return (
       <PlainLayout>

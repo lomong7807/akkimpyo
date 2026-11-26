@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Backend } from './support/backend'
 import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
+import { recordDom } from './support/recordDom'
 import {
   amount,
   openApp,
@@ -92,6 +93,16 @@ describe('거래 입력(D-04 새 입력)', () => {
       path: '/transactions/new',
       values: { id: sentId, values: { amount: 12000, payee: '점심' } },
     })
+  })
+
+  it('남기는 동안 입력 화면은 바로 내려가고, 401로 끝난 저장의 실패 문구가 잠깐도 보이지 않는다(architect)', async () => {
+    const { user } = await openForm()
+    await typeNewTransaction(user)
+    revoke()
+    const dom = recordDom()
+    await user.click(saveButton())
+    expect(await loginNotice()).toBe(ENDED + KEPT)
+    expect(dom.sawText('문제가 생겨 저장하지 못했어요')).toBe(false)
   })
 
   it('같은 계정으로 다시 로그인하면 원래 화면에 값을 채우고, 저장하면 같은 거래 id로 보낸 뒤 쓰던 값을 지운다', async () => {
