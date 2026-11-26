@@ -10,7 +10,7 @@ import java.time.ZoneId;
 final class TransactionLimits {
 
     static final long MIN_AMOUNT = 1L;
-    static final long MAX_AMOUNT = 9_999_999_998L;
+    static final long MAX_AMOUNT = 9_999_999_999L;
 
     private TransactionLimits() {
     }
