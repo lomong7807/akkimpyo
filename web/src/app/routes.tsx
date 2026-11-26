@@ -1,4 +1,4 @@
-import { Navigate, Outlet, ScrollRestoration, type RouteObject } from 'react-router'
+import { Navigate, Outlet, type RouteObject } from 'react-router'
 import { MainScreen } from '../components/Screen'
 import AccountAddPage from '../features/accounts/AccountAddPage'
 import AccountsPage from '../features/accounts/AccountsPage'
@@ -15,6 +15,7 @@ import MoreRoute from './MoreRoute'
 import { accountsItem, categoriesItem, homeItem, moreItem, transactionsItem } from './navigation'
 import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
+import ScrollPosition from './ScrollPosition'
 import SessionProvider from './SessionProvider'
 import SignedInArea from './SignedInArea'
 import SignedOutArea from './SignedOutArea'
@@ -26,7 +27,7 @@ export const routes: RouteObject[] = [
   {
     element: (
       <SessionProvider>
-        <ScrollRestoration />
+        <ScrollPosition />
         <Outlet />
       </SessionProvider>
     ),

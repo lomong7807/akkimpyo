@@ -142,7 +142,7 @@ function EditForm({ id, opened, waiting, onGone }: EditFormProps) {
   // 화면을 떠난 뒤에 온 응답으로는 불리지 않는다
   function finish() {
     showToast('저장했어요')
-    guard.leave(goBack)
+    guard.leaveAfterSave(goBack)
   }
 
   function showFailure(error: Error) {

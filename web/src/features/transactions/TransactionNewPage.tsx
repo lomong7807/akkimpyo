@@ -72,7 +72,7 @@ export default function TransactionNewPage() {
     // 돌아간 화면이 내역이면 그 줄을 강조한다(D-01 성공 뒤). 주소와 방문 기록에는 넣지 않는다
     listMemory.rememberSaved(result.transaction.id)
     showToast(needsResendNotice(result) ? '이미 저장된 거래가 있어요. 내역에서 확인해 주세요.' : '저장했어요')
-    guard.leave(goBack)
+    guard.leaveAfterSave(goBack)
   }
 
   function showFailure(error: Error) {
