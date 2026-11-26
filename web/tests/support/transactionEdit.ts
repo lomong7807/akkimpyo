@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import type { SetupServer } from 'msw/node'
 import { expect } from 'vitest'
-import { startGuardClock, stopGuardClock } from './guardClock'
+import { setDeviceClock } from './clock'
+import { startGuardClock } from './guardClock'
 import { installIntersectionObserver } from './intersection'
 import { startTransactionDetail } from './transactionDetail'
 import { expenseOf, incomeOf, startTransactionList, transferOf } from './transactionList'
@@ -10,12 +11,12 @@ import { amount, id, openApp, startServer, type Opened } from './transactionScre
 /* 거래 수정(D-04 수정 모드) 화면 테스트가 함께 쓰는 가짜 서버, 거래, 찾기, 여는 길 */
 
 /**
- * 기기의 지금. 시각은 기기의 시간대다. 확인 창을 여닫을 때 누름을 막는 300ms를 실제로 기다리지 않는 시계(guardClock)를
- * 쓰므로 Date는 이 시각에서 시작해 흐른다. 수정 테스트는 날짜를 그대로 보내는지만 보고 시간대에 기대지 않는다.
+ * 기기의 지금은 서울의 2026-11-26 12:30이다(시간대마다 보는 테스트는 setDeviceClock으로 다시 정한다). 확인 창을 여닫을 때
+ * 누름을 막는 300ms는 실제로 기다리지 않는 시계(guardClock)로 앞당긴다.
  */
 export function deviceNow() {
-  stopGuardClock()
-  startGuardClock(new Date(2026, 10, 26, 12, 30))
+  setDeviceClock('2026-11-26T12:30:00+09:00')
+  startGuardClock()
 }
 
 /** 로그인한 user-1의 장부에 계좌, 카테고리, 거래 만들기, 목록, 상세, 수정이 되는 가짜 서버 */
