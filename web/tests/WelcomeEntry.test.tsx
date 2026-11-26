@@ -13,7 +13,7 @@ import { createFakeLocks, installLocks, removeLocks } from './support/webLocks'
 
 const RETURN_ADDRESS = 'akkimpyo-return-address'
 const secret = '로그인한 사람만 보는 내용'
-const loading = '불러오고 있어요.'
+const loading = '불러오고 있어요'
 const firstTitle = '기본 카테고리를 넣어 두었어요'
 
 const server = startMockServer()
@@ -278,7 +278,7 @@ describe('정하는 동안', () => {
     check()
   }
 
-  it('가려던 화면도 안내도 그리지 않고, 300ms가 지나면 "불러오고 있어요."를 보인다', async () => {
+  it('가려던 화면도 안내도 그리지 않고, 300ms가 지나면 "불러오고 있어요"를 보인다', async () => {
     const answer = delayed()
     accounts.response = answer.respond
     stopClock()
