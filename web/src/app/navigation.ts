@@ -36,6 +36,7 @@ export interface ScreenHandle {
   fullScreen?: boolean
 }
 
+export const transactionsItem: MainNavigationItem = { label: '내역', to: '/transactions', icon: 'ListBullets' }
 export const moreItem: MainNavigationItem = { label: '더보기', to: '/more', icon: 'DotsThree' }
 export const accountsItem: NavigationItem = { label: '계좌', to: '/accounts' }
 export const categoriesItem: NavigationItem = { label: '카테고리', to: '/categories' }
@@ -44,11 +45,11 @@ export const quickEntryItem: NavigationItem = { label: '거래 입력', to: '/tr
 
 /**
  * 하단 탭과 사이드바의 항목. 화면을 만드는 이슈가 자기 항목을 더한다.
- * 1A에는 홈, 내역, 통계 탭이 아직 없어 하단 탭은 [거래 입력, 더보기] 두 칸이다(1A 임시).
+ * 1A에는 홈, 통계 탭이 아직 없어 하단 탭은 [내역, 거래 입력, 더보기] 세 칸이다(1A 임시).
  */
 export const navigation: Navigation = {
-  tabs: [QUICK_ENTRY, moreItem],
+  tabs: [transactionsItem, QUICK_ENTRY, moreItem],
   quickEntry: quickEntryItem,
   fallbackTab: moreItem,
-  sidebar: { main: [], more: [accountsItem, categoriesItem] },
+  sidebar: { main: [transactionsItem], more: [accountsItem, categoriesItem] },
 }

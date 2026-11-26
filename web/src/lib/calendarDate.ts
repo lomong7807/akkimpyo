@@ -39,6 +39,21 @@ export function monthOf(date: string): string {
   return date.slice(0, 7)
 }
 
+/** `YYYY-MM` 모양의 있는 달인지 */
+export function isMonth(text: string): boolean {
+  return /^[0-9]{4}-(0[1-9]|1[0-2])$/.test(text)
+}
+
+/** `YYYY-MM-DD` 모양의 있는 날짜인지. 2월 30일처럼 없는 날은 아니다. */
+export function isDate(text: string): boolean {
+  return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(text) && addDays(text, 0) === text
+}
+
+/** 달을 `months`달 옮긴다. */
+export function moveMonth(month: string, months: number): string {
+  return monthOf(addMonths(`${month}-01`, months))
+}
+
 export function addDays(date: string, days: number): string {
   const [year, month, day] = partsOf(date)
   return dateOf(utc(year, month, day + days))
@@ -62,6 +77,12 @@ export function endOfWeek(date: string): string {
 /** 날짜 칸에서 고를 수 있는 범위(P-202, F-204) */
 export function selectableRange(today: string): DateRange {
   return { first: '2000-01-01', last: addMonths(today, 12) }
+}
+
+/** 달 이동에서 고를 수 있는 달(화면설계서 00-common 5.9). 날짜 칸의 범위가 걸친 달이다. */
+export function selectableMonths(today: string): DateRange {
+  const { first, last } = selectableRange(today)
+  return { first: monthOf(first), last: monthOf(last) }
 }
 
 export function clampDate(date: string, { first, last }: DateRange): string {
