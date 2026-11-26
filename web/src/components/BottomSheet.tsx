@@ -9,12 +9,14 @@ const CLOSE_RATIO = 1 / 4
 interface BottomSheetProps {
   open: boolean
   title: string
+  /** X를 누를 수 없게 둔다(안에서 처리 중일 때). 닫는 다른 길은 onClose를 받는 쪽이 막는다. */
+  closeDisabled?: boolean
   onClose: () => void
   children: ReactNode
 }
 
 /** 바닥 시트(화면설계서 00-common 5.4). 초점은 안의 내용이 useEffect에서 옮긴다. */
-export default function BottomSheet({ open, title, onClose, children }: BottomSheetProps) {
+export default function BottomSheet({ open, title, closeDisabled = false, onClose, children }: BottomSheetProps) {
   const titleId = useId()
   const sheet = useRef<HTMLDivElement>(null)
   const dragHandlers = useDragDown(sheet, onClose)
@@ -27,7 +29,7 @@ export default function BottomSheet({ open, title, onClose, children }: BottomSh
             <h2 id={titleId} className={styles.title}>
               {title}
             </h2>
-            <Button kind="icon" icon="X" aria-label="닫기" onClick={onClose} />
+            <Button kind="icon" icon="X" aria-label="닫기" disabled={closeDisabled} onClick={onClose} />
           </div>
         </div>
         <div className={styles.content}>{children}</div>
