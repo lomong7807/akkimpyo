@@ -14,12 +14,16 @@ export type LedgerCopyKind = 'accounts' | 'categories'
 
 /**
  * 서버에서 받고 그 사용자의 장부 사본으로 통째로 남긴다. 보낼 때와 받은 뒤의 사용자(토큰의 sub)가 같을 때만 남긴다.
+ * 보낸 때를 함께 넘겨, 그 뒤에 그 장부를 볼 수 없게 되어 사본을 지웠으면 이 응답으로 되살리지 않는다(device/copies).
  * 남기기는 기다리지 않고, 실패해도 받은 값은 그대로 준다.
  */
 export async function fetchKeepingCopy<T>(ledgerId: string, kind: LedgerCopyKind, fetch: () => Promise<T>): Promise<T> {
   const user = currentUserId()
+  const startedAt = now()
   const data = await fetch()
-  if (user !== undefined && currentUserId() === user) void saveCopy(user, ledgerId, kind, data, now()).catch(() => {})
+  if (user !== undefined && currentUserId() === user) {
+    void saveCopy(user, ledgerId, kind, data, now(), startedAt).catch(() => {})
+  }
   return data
 }
 

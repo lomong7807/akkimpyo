@@ -32,16 +32,56 @@ interface MetaRow {
   confirmedAt: number
 }
 
+/**
+ * 그 장부의 사본을 지운 때(장부를 볼 수 없게 됨). 그때보다 앞에 시작한 요청의 응답으로는 그 장부의 사본을 다시 만들지
+ * 않는다. 지우기 전에 보내 늦게 도착한 계좌·카테고리 응답이 지운 사본을 되살리는 경쟁을 막는다(#251 worker가 찾음, security Q4).
+ * 저장소에 두므로 다른 탭이 지운 것도 막는다. 로그아웃과 30일 지우기가 사용자의 다른 줄과 함께 지운다.
+ */
+interface GoneRow {
+  userId: string
+  scope: string
+  kind: 'gone'
+  goneAt: number
+}
+
 export interface Copy {
   data: unknown
   /** 서버에서 받은 시각(밀리초) */
   receivedAt: number
 }
 
-/** 받은 사본으로 통째로 바꾼다. */
-export function saveCopy(userId: string, scope: string, kind: CopyKind, data: unknown, receivedAt: number): Promise<void> {
+/**
+ * 받은 사본으로 통째로 바꾼다. 장부 사본은 그 응답을 받은 요청을 보낸 때(`startedAt`)를 반드시 넘긴다. 그 장부를 지운 때와
+ * 같거나 그보다 앞에 보낸 요청의 것이면 남기지 않는다(GoneRow). 넘기지 않는 호출이 생겨 경쟁이 조용히 되살아나지 않게
+ * 타입으로 막는다(architect #255). 사용자 단위 사본(내 정보)은 지운 때를 보지 않는다.
+ */
+export function saveCopy(userId: string, scope: typeof USER_SCOPE, kind: 'me', data: unknown, receivedAt: number): Promise<void>
+export function saveCopy(
+  userId: string,
+  ledgerId: string,
+  kind: Exclude<CopyKind, 'me'>,
+  data: unknown,
+  receivedAt: number,
+  startedAt: number,
+): Promise<void>
+export function saveCopy(
+  userId: string,
+  scope: string,
+  kind: CopyKind,
+  data: unknown,
+  receivedAt: number,
+  startedAt?: number,
+): Promise<void> {
   const row: CopyRow = { userId, scope, kind, receivedAt, data }
-  return transact(['copies'], 'readwrite', (transaction) => void transaction.objectStore('copies').put(row))
+  return transact(['copies'], 'readwrite', async (transaction) => {
+    const store = transaction.objectStore('copies')
+    if (scope !== USER_SCOPE) {
+      const gone = goneAtOf(await resultOf(store.get([userId, scope, 'gone'])))
+      // 보낸 때를 모르면 막는 쪽이다
+      if (gone !== undefined && (startedAt === undefined || startedAt <= gone)) return
+    }
+    store.put(row)
+  })
 }
 
 /** 그 사용자의 사본. 없거나 줄의 주인이 다르면 없다. 저장소를 쓸 수 없으면 DeviceUnavailable을 던진다. */
@@ -91,20 +131,33 @@ export function sweepExpiredCopies(at: number): Promise<void> {
  * 대기열은 지우지 않는다(보낼 때 "보낼 수 없음"이 된다). 개인정보를 지우는 일이라 첫 화면 묶음에 둔다. 따로 싣는 조각이면
  * 받기가 실패할 때 조용히 건너뛴다(architect 2026-11-26).
  */
-export function forgetLedgerCopies(userId: string, ledgerId: string): Promise<void> {
-  return transact(['copies'], 'readwrite', (transaction) => {
-    transaction.objectStore('copies').delete(IDBKeyRange.bound([userId, ledgerId], [userId, ledgerId, []]))
-  })
+export function forgetLedgerCopies(userId: string, ledgerId: string, at: number): Promise<void> {
+  return transact(['copies'], 'readwrite', (transaction) => forgetLedger(transaction.objectStore('copies'), userId, ledgerId, at))
 }
 
 /** 내 정보의 장부 목록에 없는 장부의 사본을 지운다. 사용자 단위 사본(내 정보, 메타)은 남긴다. */
-export function keepCopiesOfLedgers(userId: string, ledgerIds: readonly string[]): Promise<void> {
+export function keepCopiesOfLedgers(userId: string, ledgerIds: readonly string[], at: number): Promise<void> {
   return transact(['copies'], 'readwrite', async (transaction) => {
     const store = transaction.objectStore('copies')
     const keys = await resultOf(store.getAllKeys(userRange(userId)))
+    const gone = new Set<string>()
     for (const key of keys) {
-      const scope = Array.isArray(key) ? key[1] : undefined
-      if (typeof scope === 'string' && scope !== USER_SCOPE && !ledgerIds.includes(scope)) store.delete(key)
+      const [, scope, kind] = Array.isArray(key) ? key : []
+      if (typeof scope !== 'string' || scope === USER_SCOPE || ledgerIds.includes(scope) || kind === 'gone') continue
+      gone.add(scope)
     }
+    for (const ledgerId of gone) forgetLedger(store, userId, ledgerId, at)
   })
+}
+
+/** 그 장부의 사본을 지우고 지운 때를 남긴다. */
+function forgetLedger(store: IDBObjectStore, userId: string, ledgerId: string, at: number) {
+  store.delete(IDBKeyRange.bound([userId, ledgerId], [userId, ledgerId, []]))
+  const gone: GoneRow = { userId, scope: ledgerId, kind: 'gone', goneAt: at }
+  store.put(gone)
+}
+
+function goneAtOf(value: unknown): number | undefined {
+  const goneAt = (value as Partial<GoneRow> | null | undefined)?.goneAt
+  return isInstantMs(goneAt) ? goneAt : undefined
 }

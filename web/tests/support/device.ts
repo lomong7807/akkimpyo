@@ -74,7 +74,7 @@ export async function seedLedgerCopy(
   receivedAt = Date.now() - DAY,
 ) {
   const { copies } = await device()
-  await copies.saveCopy(userId, ledgerId, kind, data, receivedAt)
+  await copies.saveCopy(userId, ledgerId, kind, data, receivedAt, receivedAt)
 }
 
 /** 장부의 사본 */
