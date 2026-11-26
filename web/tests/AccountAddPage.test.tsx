@@ -199,6 +199,9 @@ describe('이름', () => {
     ['공백류뿐', ' \u{A0}\u{3000}', nameRequired],
     ['51자', '가'.repeat(51), nameTooLong],
     ['보이지 않는 글자', '급여\u{200B}통장', nameUnusable],
+    // 서버는 앞뒤의 공백류(Zs)만 지우고 탭과 U+0085는 거부한다(#220)
+    ['끝의 탭', '급여통장\t', nameUnusable],
+    ['앞의 U+0085', '\u{85}급여통장', nameUnusable],
   ])('%s이면 칸을 벗어날 때 알린다', async (_, value, message) => {
     const { user } = await open()
     await user.click(name())

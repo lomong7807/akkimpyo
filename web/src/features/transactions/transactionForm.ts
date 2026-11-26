@@ -1,7 +1,7 @@
 import type { FieldErrors } from '../../components/useFormFields'
 import { today } from '../../lib/calendarDate'
 import { currentTime, isValidTime, normalizeTime } from '../../lib/timeText'
-import { hasUnusableCharacter, lengthOf, trimWhiteSpace } from '../../lib/visibleText'
+import { hasUnusableCharacter, lengthOf, trimSpaces } from '../../lib/visibleText'
 import type { NewTransaction, TransactionType } from './transactions'
 
 /** 칸의 값. 오류를 보이는 칸은 화면 위쪽부터 transactionFields의 순서다. */
@@ -72,7 +72,7 @@ export function newTransactionValues(): TransactionValues {
 
 /** 서버가 검사하고 저장하는 가맹점/내용. 앞뒤 공백류를 지우고 조합형으로 맞춘다(P-214). */
 export function normalizePayee(payee: string): string {
-  return trimWhiteSpace(payee).normalize('NFC')
+  return trimSpaces(payee).normalize('NFC')
 }
 
 /** 서버와 같이 조합형으로 맞춘 코드포인트를 센다. 메모는 공백을 지우지 않는다(P-214). */
@@ -101,9 +101,9 @@ export function validateTransaction(values: TransactionValues): FieldErrors<Tran
   }
 }
 
+// 보이지 않는 글자도 글자 수에 들어가므로 쓸 수 없는 글자의 문구를 먼저 보인다(00-common 4.4)
 function payeeError(payee: string): string | undefined {
-  // 보이지 않는 글자도 글자 수에 들어가므로 이 문구를 먼저 보인다(00-common 4.4)
-  if (hasUnusableCharacter(normalizePayee(payee))) return unusableCharacter
+  if (hasUnusableCharacter(payee)) return unusableCharacter
   if (payeeLength(payee) > PAYEE_MAX) return payeeTooLong
 }
 
