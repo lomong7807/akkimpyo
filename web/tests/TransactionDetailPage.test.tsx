@@ -21,6 +21,7 @@ import {
   type Opened,
 } from './support/transactionScreen'
 import { resetViewport, setViewportWidth } from './support/viewport'
+import { readWebFile } from './support/webFile'
 
 /* D-06 거래 상세와 삭제(F-224, F-227, F-230 되돌리기). 상세·삭제·복원 API(#15, #38)는 가짜 서버가 계약대로 답한다. */
 
@@ -372,6 +373,27 @@ describe('배치와 모양', () => {
     const value = row.querySelector('dd')!
     expect(styleOf(value).textAlign).toBe('start')
     expect(styleOf(value).whiteSpace).toBe('pre-line')
+  })
+
+  /*
+   * 글자를 키워 줄이 좁아지면 모든 항목 줄이 메모 모양이 된다(designer 검토, frontend가 C안으로 정함 2026-11-26).
+   * jsdom은 컨테이너 쿼리를 계산하지 않으므로 규칙을 글자 그대로 읽는다. 걸리는 폭은 브라우저 스크린샷으로 확인한다.
+   */
+  describe('글자를 키워 좁아지면', () => {
+    const css = () => readWebFile(CSS).replace(/\s+/g, ' ')
+
+    it('항목 묶음이 폭 컨테이너이고, 13.25em보다 좁으면 줄마다 이름 아래 4px에 값을 왼쪽 정렬로 둔다', () => {
+      expect(readCssRule(CSS, '.detail')).toContain('container: detail / inline-size')
+      const query = /@container detail \(width < 13\.25em\) \{(.*?\}) \}/.exec(css())?.[1] ?? ''
+      expect(query).toContain('.item { flex-direction: column; gap: var(--space-4); }')
+      expect(query).toContain('.value { text-align: start; }')
+      // 뼈대 줄도 같은 모양이다
+      expect(query).toContain('.item > * { margin-inline-start: 0; }')
+    })
+
+    it('기준 폭은 글자 크기(em)를 따른다. 100%의 320px(20em)은 지금 모양, 200%의 390px(12.2em)은 메모 모양이다', () => {
+      expect(css()).not.toMatch(/@container detail \(width < [\d.]+(px|rem)\)/)
+    })
   })
 })
 

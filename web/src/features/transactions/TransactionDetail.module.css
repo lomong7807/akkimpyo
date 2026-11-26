@@ -6,6 +6,8 @@
   --bleed: var(--space-16);
 
   margin-inline: calc(-1 * var(--bleed));
+  /* 글자를 키워 좁아지면 항목 줄의 모양을 바꾼다(아래 @container) */
+  container: detail / inline-size;
 }
 
 /* 내용을 가운데로 모으는 폭에서는 선이 내용 폭에 맞는다 */
@@ -101,6 +103,30 @@
 .memo .value {
   text-align: start;
   white-space: pre-line;
+}
+
+/*
+ * 글자를 키워 줄이 좁아지면 모든 항목 줄을 메모 모양(이름 아래 4px에 값, 왼쪽 정렬)으로 한다(designer 검토 2026-11-26).
+ * 줄마다 따로 판단하지 않아 한 화면 안의 줄 모양이 같다. 기준 폭은 em이라 글자 크기를 따른다.
+ * 근거(Pretendard 본문에서 잰 폭): 가장 긴 이름 "보내는 계좌"·"들어온 계좌"는 4.57em("날짜·시각" 3.71em)이다.
+ * 값 자리가 줄 안쪽 폭의 절반 이상이려면 안쪽 폭 >= 2 x (4.57em + 간격 1em) = 11.14em, 좌우 여백 2em을 더해 13.14em이다.
+ * 13.25em에서 값 자리는 5.68em이라 값의 한 낱말("신한카드" 3.46em, "2025년" 3.23em)이 들어간다.
+ * 100%에서 320px은 20em(지금 모양), 200%에서 390px은 12.2em(메모 모양)이다.
+ */
+@container detail (width < 13.25em) {
+  .item {
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .value {
+    text-align: start;
+  }
+
+  /* 뼈대 줄의 값 막대도 왼쪽에 둔다 */
+  .item > * {
+    margin-inline-start: 0;
+  }
 }
 
 /* (21) 마지막 항목 아래 40px. 글자 버튼의 안쪽 8px만큼 당겨 글자를 내용의 왼쪽 선에 맞춘다 */
