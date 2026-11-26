@@ -15,10 +15,16 @@
   bottom: calc(var(--toast-above-form, 0px) + var(--space-16));
 }
 
+/*
+ * 버튼이 있으면 글 자리가 토스트 폭의 절반보다 좁아질 때(글자를 키운 때) 버튼이 글 아래 오른쪽으로 내려간다
+ * (designer 검토 2026-11-26). 내려간 버튼은 누르는 영역을 위로 12px 당겨 두므로 줄 사이를 12px 띄워 글과 겹치지 않게 한다
+ */
 .toast {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   column-gap: var(--space-8);
+  row-gap: var(--space-12);
   width: 100%;
   max-width: var(--width-content-narrow);
   min-height: var(--size-toast);
@@ -47,8 +53,9 @@
   opacity: 0;
 }
 
-/* 글이 길면 그만큼 늘어난다 */
+/* 글이 길면 그만큼 늘어난다. 글 자리는 토스트 폭의 절반보다 좁아지지 않고, 낱말보다 좁을 때만 낱말 안에서 끊는다 */
 .message {
+  flex: 1 1 50%;
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;

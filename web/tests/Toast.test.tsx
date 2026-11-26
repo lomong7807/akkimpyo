@@ -518,6 +518,29 @@ describe('되돌리기가 있는 토스트', () => {
     expect(undoButton().getAttribute('type')).toBe('button')
   })
 
+  it('글 자리가 토스트 폭의 절반보다 좁아지면(글자 200%) 버튼이 글 아래 오른쪽으로 내려간다', () => {
+    renderUndo()
+    press('삭제하기')
+    const toastStyle = getComputedStyle(toast()!)
+    expect(toastStyle.flexWrap).toBe('wrap')
+    expect(toastStyle.columnGap).toBe('var(--space-8)')
+    // 내려간 버튼의 누르는 영역(위로 12px 당김)이 글과 겹치지 않는다
+    expect(toastStyle.rowGap).toBe('var(--space-12)')
+    expect(getComputedStyle(within(region()).getByText('휴지통으로 옮겼어요')).flex).toBe('1 1 50%')
+    // 내려가도 오른쪽 끝이다
+    expect(readCssRule(CSS, '.action')).toContain('margin-inline: auto calc(-1 * var(--space-8))')
+  })
+
+  it('글 자리가 절반보다 넓으면 낱말 안에서 끊지 않는다. 글 자리가 낱말보다 좁을 때만 낱말 안에서 끊는다', () => {
+    renderUndo()
+    press('삭제하기')
+    const text = getComputedStyle(within(region()).getByText('휴지통으로 옮겼어요'))
+    expect(text.minWidth).toBe('0px')
+    expect(text.overflowWrap).toBe('anywhere')
+    // 버튼은 줄지 않아 글이 버튼 옆에서 낱말 안으로 밀려 끊기지 않는다
+    expect(getComputedStyle(undoButton()).flex).toBe('0 0 auto')
+  })
+
   it('버튼은 반전 동작 색의 굵은 본문이고, 누르는 영역 44px이 토스트 높이를 늘리지 않는다', () => {
     renderUndo()
     press('삭제하기')
