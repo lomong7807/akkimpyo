@@ -20,6 +20,7 @@ import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -76,7 +77,7 @@ class TransactionReadRaceTest {
     // ---------------------------------------------------------------- 재전송 판정
 
     /** 완전 삭제는 휴지통에서 한다(version 2 이상). 고쳐진 거래라 내용을 비교하지 않는 줄이다. */
-    @Test
+    @RepeatedTest(20)
     void 휴지통의_거래를_재전송_판정하는_사이_완전히_지워지면_쓸_수_없는_id다() {
         transactionService.delete(owner.getId(), id, 1, DEVICE);
 
@@ -87,7 +88,7 @@ class TransactionReadRaceTest {
     }
 
     /** 고친 적 없는 거래(version 1)는 내용을 비교하는 줄이다. 비교할 라인이 비어 내용이 다르다고 보면 안 된다. */
-    @Test
+    @RepeatedTest(20)
     void 고친_적_없는_거래를_재전송_판정하는_사이_완전히_지워지면_쓸_수_없는_id다() {
         CompletableFuture<CreateResult> resent = readWhile(this::purge, this::resend);
 
@@ -95,7 +96,7 @@ class TransactionReadRaceTest {
                 conflict -> assertThat(conflict.current()).isEmpty());
     }
 
-    @Test
+    @RepeatedTest(20)
     void 재전송_판정하는_사이_고쳐지면_고친_거래로_답한다() {
         CompletableFuture<CreateResult> resent = readWhile(this::update, this::resend);
 
@@ -106,7 +107,7 @@ class TransactionReadRaceTest {
 
     // ---------------------------------------------------------------- 조회
 
-    @Test
+    @RepeatedTest(20)
     void 조회하는_사이_완전히_지워지면_없는_거래다() {
         transactionService.delete(owner.getId(), id, 1, DEVICE);
 
@@ -115,7 +116,7 @@ class TransactionReadRaceTest {
         assertThat(outcome(read)).isInstanceOf(NotFoundException.class);
     }
 
-    @Test
+    @RepeatedTest(20)
     void 조회하는_사이_고쳐지면_고친_거래를_준다() {
         CompletableFuture<TransactionView> read = readWhile(this::update, this::stored);
 

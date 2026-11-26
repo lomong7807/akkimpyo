@@ -21,6 +21,7 @@ import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -75,7 +76,7 @@ class TransactionCreateRaceTest {
         jdbc.update("delete from users where id in (?, ?)", owner.getId(), stranger.getId());
     }
 
-    @Test
+    @RepeatedTest(20)
     void 내용이_같으면_한_건만_만들고_나머지는_재전송이다() {
         Race race = race(() -> create(owner, ledgerId, cash, 12_000), () -> create(owner, ledgerId, cash, 12_000));
 
@@ -84,7 +85,7 @@ class TransactionCreateRaceTest {
         assertOnlyFirstIsStored(race);
     }
 
-    @Test
+    @RepeatedTest(20)
     void 내용이_다르면_먼저_저장된_거래를_담은_충돌이다() {
         Race race = race(() -> create(owner, ledgerId, cash, 12_000), () -> create(owner, ledgerId, cash, 13_000));
 
@@ -92,7 +93,7 @@ class TransactionCreateRaceTest {
         assertOnlyFirstIsStored(race);
     }
 
-    @Test
+    @RepeatedTest(20)
     void 다른_장부에서_먼저_쓴_id면_아무것도_담지_않은_충돌이다() {
         Race race = race(() -> create(owner, ledgerId, cash, 12_000),
                 () -> create(stranger, strangerLedgerId, strangerCash, 12_000));
@@ -105,7 +106,7 @@ class TransactionCreateRaceTest {
      * 같은 장부의 같은 id는 기본키와 uq_transaction_id_ledger(V10)에 함께 걸리고, PostgreSQL은 OID가 작은 인덱스의
      * 이름을 알린다. 기본키를 REINDEX CONCURRENTLY로 다시 만들면 OID가 커져 이름이 바뀐다. 끝나면 순서를 되돌린다.
      */
-    @Test
+    @RepeatedTest(20)
     void 기본키보다_장부_유니크가_먼저_걸려도_재전송이다() {
         jdbc.execute("REINDEX INDEX CONCURRENTLY transaction_pkey");
         try {
@@ -123,7 +124,7 @@ class TransactionCreateRaceTest {
      * 뒤 요청이 같은 id도 완전 삭제 기록도 없다고 본 뒤 INSERT하기 전에, 그 id가 만들어지고 완전히 지워진 경우다.
      * 부딪힐 행이 지워져 기본키 위반이 나지 않는다.
      */
-    @Test
+    @RepeatedTest(20)
     void 기다리는_사이_만들어지고_완전히_지워진_id면_새로_만들지_않는다() {
         Race race = race(() -> create(owner, ledgerId, cash, 12_000), () -> create(owner, ledgerId, cash, 12_000),
                 this::purge);
@@ -132,7 +133,7 @@ class TransactionCreateRaceTest {
         assertOnlyPurgeRecordIsStored();
     }
 
-    @Test
+    @RepeatedTest(20)
     void 완전_삭제가_커밋되기_전의_재전송은_있던_거래로_답하고_커밋된_뒤에는_거부된다() {
         CreateResult stored = create(owner, ledgerId, cash, 12_000);
 
