@@ -1,6 +1,6 @@
 import { globSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { clockModules, findClockViolations, usesClockHelpers, type Module } from './support/clockRules'
+import { clockModules, findClockViolations, findRealClockUses, usesClockHelpers, type Module } from './support/clockRules'
 import { readWebFile, webPath } from './support/webFile'
 
 const moduleOf = (path: string): Module => ({
@@ -44,6 +44,18 @@ describe('시계 규칙 검사기', () => {
     ])
   })
 
+  it.each([
+    ['실제 시계의 지금', '    savedAt: Date.now() - 31 * DAY,'],
+    ['인자 없는 Date', "  now: () => new Date().toISOString(),"],
+  ])('테스트 데이터를 %s로 만드는 줄을 찾는다(#281)', (_, line) => {
+    expect(findRealClockUses(`const a = {\n${line}\n}`)).toEqual([expect.objectContaining({ line: 2, text: line.trim() })])
+  })
+
+  it('기기 시계와 정한 시각은 허용한다', () => {
+    const source = "savedAt: nowOnDevice() - DAY\nconst at = new Date(Date.parse('2026-11-26T03:15:00Z'))\nnew Date(0)"
+    expect(findRealClockUses(source)).toEqual([])
+  })
+
   it('공용 시계의 도우미는 허용한다', () => {
     const source = 'holdClock()\nawait passTime(300)\nreleaseClock()\nconst user = setupUser()\n// vi.useRealTimers를 쓰지 않는다'
     expect(findClockViolations(source)).toEqual([])
@@ -68,6 +80,15 @@ describe('web/tests', () => {
   it('공용 시계를 쓰는 파일은 시계를 따로 다루지 않는다', () => {
     const violations = targets.flatMap(({ name, source }) =>
       findClockViolations(source).map(({ line, text, rule }) => `tests/${name}:${line} ${text} — ${rule}`),
+    )
+    expect(violations).toEqual([])
+  })
+
+  it('테스트 파일과 tests/support는 실제 시계로 시각을 만들지 않는다(#281). 이 검사의 예시 글자는 뺀다', () => {
+    const checked = [...support, ...tests].filter(({ name }) => name !== 'clock-rules.test')
+    expect(checked.map(({ name }) => name)).toEqual(expect.arrayContaining(['Drafts.test', 'support/device']))
+    const violations = checked.flatMap(({ name, source }) =>
+      findRealClockUses(source).map(({ line, text, rule }) => `tests/${name}:${line} ${text} — ${rule}`),
     )
     expect(violations).toEqual([])
   })

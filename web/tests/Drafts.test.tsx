@@ -1,6 +1,7 @@
 import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Backend } from './support/backend'
+import { nowOnDevice } from './support/clock'
 import { startMockServer } from './support/mockServer'
 import { recordDom } from './support/recordDom'
 import {
@@ -199,7 +200,7 @@ describe('거래 수정(D-04 수정)', () => {
       memo: '',
     }
     await keepDrafts('user-1', [
-      { form: 'transaction-edit', path: editPath(kept), values: { version: kept.version, values }, savedAt: Date.now() },
+      { form: 'transaction-edit', path: editPath(kept), values: { version: kept.version, values }, savedAt: nowOnDevice() },
     ])
     await openApp(editPath(other))
     await waitFor(() => expect(payee().value).toBe('다른 거래'))
@@ -273,8 +274,8 @@ describe('남긴 때부터 30일', () => {
   it('앱을 열 때 30일이 지난 쓰던 값을 지운다', async () => {
     vi.resetModules()
     const { keepDrafts } = await import('../src/device/drafts')
-    const old = { form: 'account-add' as const, path: '/accounts/new', values: {}, savedAt: Date.now() - 31 * DAY }
-    const fresh = { form: 'transaction-edit' as const, path: '/transactions/x/edit', values: {}, savedAt: Date.now() - DAY }
+    const old = { form: 'account-add' as const, path: '/accounts/new', values: {}, savedAt: nowOnDevice() - 31 * DAY }
+    const fresh = { form: 'transaction-edit' as const, path: '/transactions/x/edit', values: {}, savedAt: nowOnDevice() - DAY }
     await keepDrafts('user-1', [old, fresh])
     await openForm()
     await waitFor(async () => expect(await draftOf('user-1', 'account-add')).toBeUndefined())

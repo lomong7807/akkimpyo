@@ -1,5 +1,6 @@
 import { vi } from 'vitest'
 import { meOf } from './backend'
+import { nowOnDevice } from './clock'
 
 /*
  * 기기 저장소(#234)에 미리 넣어 두는 값과 남은 값. 앱과 같은 IndexedDB를 쓰므로 앱을 열기 전에도 뒤에도 부를 수 있다.
@@ -60,7 +61,7 @@ export async function seedLogin({
 }
 
 /** 내 정보의 사본을 둔다. */
-export async function seedMeCopy(userId = 'user-1', me: unknown = meOf(userId), receivedAt = Date.now() - DAY) {
+export async function seedMeCopy(userId = 'user-1', me: unknown = meOf(userId), receivedAt = nowOnDevice() - DAY) {
   const { copies } = await device()
   await copies.saveCopy(userId, '', 'me', me, receivedAt)
 }
@@ -71,7 +72,7 @@ export async function seedLedgerCopy(
   ledgerId: string,
   kind: 'accounts' | 'categories',
   data: unknown,
-  receivedAt = Date.now() - DAY,
+  receivedAt = nowOnDevice() - DAY,
 ) {
   const { copies } = await device()
   await copies.saveCopy(userId, ledgerId, kind, data, receivedAt, receivedAt)
