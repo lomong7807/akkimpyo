@@ -504,6 +504,65 @@ describe('화면 키보드', () => {
   })
 })
 
+/* 되돌리기가 있는 토스트는 이 화면을 열어도 남아 저장 자리 위 16px에 놓인다(00-common 5.7, designer 결정 #102) */
+describe('남은 토스트의 자리', () => {
+  const resized: (() => void)[] = []
+  const observed: Element[] = []
+  let saveTop = 772
+
+  beforeEach(() => {
+    resized.length = 0
+    observed.length = 0
+    saveTop = 772
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          resized.push(callback)
+        }
+        observe(element: Element) {
+          observed.push(element)
+        }
+        disconnect() {
+          resized.length = 0
+        }
+      },
+    )
+    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(844)
+    // 저장 자리는 양식의 마지막 칸이다
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const isBottom = this.parentElement?.tagName === 'FORM' && this.parentElement.lastElementChild === this
+      return { top: isBottom ? saveTop : 0 } as DOMRect
+    })
+  })
+
+  const offset = () => document.documentElement.style.getPropertyValue('--toast-above-form')
+  const bottomArea = () => screen.getByRole('button', { name: '저장' }).parentElement!
+
+  it('저장 자리의 윗선을 화면 아래에서 잰 거리로 알린다', () => {
+    openAt('/new')
+    expect(offset()).toBe('72px')
+  })
+
+  it('저장 자리나 화면의 크기가 바뀌면(오류 문구, 화면 키보드) 다시 잰다', () => {
+    openAt('/new')
+    expect(observed).toContain(bottomArea())
+    expect(observed).toContain(screen.getByRole('main').parentElement)
+    saveTop = 700
+    act(() => resized.forEach((callback) => callback()))
+    expect(offset()).toBe('144px')
+  })
+
+  it('화면을 떠나면 지우고 더 재지 않는다', async () => {
+    const user = await openFromList()
+    expect(offset()).not.toBe('')
+    await user.keyboard('{Escape}')
+    await screen.findByText('목록')
+    expect(offset()).toBe('')
+    expect(resized).toEqual([])
+  })
+})
+
 describe('모양', () => {
   const styleOf = (element: Element) => getComputedStyle(element)
 

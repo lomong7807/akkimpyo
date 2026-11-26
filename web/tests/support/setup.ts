@@ -6,4 +6,10 @@ if (typeof Element !== 'undefined') {
   Element.prototype.setPointerCapture = () => {}
   Element.prototype.getAnimations = () => []
   installDialog()
+  // 배치를 계산하지 않으므로 크기가 바뀌는 일이 없다. 바뀌었을 때를 보는 테스트는 가짜를 넣는다
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
 }

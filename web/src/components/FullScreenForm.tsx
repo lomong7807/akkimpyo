@@ -42,7 +42,9 @@ export default function FullScreenForm({
   children,
 }: FullScreenFormProps) {
   const screen = useRef<HTMLDivElement>(null)
+  const bottomArea = useRef<HTMLDivElement>(null)
   useVisibleArea(screen)
+  useToastAboveBottom(screen, bottomArea)
   useEscape(guard.close)
   // 닫기는 앞 화면의 "뒤로", 저장은 하단 탭과 같은 자리다
   usePressShield(true)
@@ -75,7 +77,9 @@ export default function FullScreenForm({
       <main className={styles.main}>
         <form className={styles.form} noValidate onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
           <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>{children}</div>
-          <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.bottom}`}>{bottom}</div>
+          <div ref={bottomArea} className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.bottom}`}>
+            {bottom}
+          </div>
         </form>
       </main>
       <ConfirmDialog
@@ -149,4 +153,32 @@ function useVisibleArea(screen: RefObject<HTMLElement | null>) {
       viewport.removeEventListener('scroll', fit)
     }
   }, [screen])
+}
+
+/** 저장 자리의 윗선을 화면 아래에서 잰 거리. 토스트(ToastProvider)가 이 화면에 남으면 그 위 16px에 놓인다. */
+const TOAST_ABOVE_FORM = '--toast-above-form'
+
+/**
+ * 되돌리기가 있는 토스트는 이 화면을 열어도 걷지 않고 저장 자리 위에 남는다(00-common 5.7, designer 결정 2026-11-26).
+ * 저장 자리의 높이는 오류 문구와 글자 크기에 따라, 자리는 화면 키보드에 따라 바뀌므로 둘의 크기가 바뀔 때마다 다시 잰다.
+ * 토스트는 이 화면 밖에 있어 화면의 요소가 아니라 문서의 맨 위 요소에 알린다.
+ */
+function useToastAboveBottom(screen: RefObject<HTMLElement | null>, bottom: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    const area = bottom.current!
+
+    function place() {
+      root.style.setProperty(TOAST_ABOVE_FORM, `${root.clientHeight - area.getBoundingClientRect().top}px`)
+    }
+
+    place()
+    const observer = new ResizeObserver(place)
+    observer.observe(screen.current!)
+    observer.observe(area)
+    return () => {
+      observer.disconnect()
+      root.style.removeProperty(TOAST_ABOVE_FORM)
+    }
+  }, [screen, bottom])
 }
