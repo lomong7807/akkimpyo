@@ -4,6 +4,7 @@ import { Navigate, Outlet, useLocation, type Location } from 'react-router'
 import { sessionUserId } from '../api/session'
 import { ButtonLink } from '../components/Button'
 import { forgetLedgerCopies } from '../device/copies'
+import { onPendingChanged } from '../device/pendingQueue'
 import LoadFailure from '../components/LoadFailure'
 import { parseAccounts } from '../features/accounts/accounts'
 import { parseCategories } from '../features/categories/categories'
@@ -11,6 +12,7 @@ import { CurrentLedgerContext } from '../features/me/CurrentLedgerContext'
 import { deviceKey } from '../features/me/deviceKey'
 import { useLedgerCopy } from '../features/me/ledgerCopy'
 import { useMeCopy } from '../features/me/meCopy'
+import { pendingKey } from '../features/transactions/pendingTransactions'
 import { useMe } from '../features/me/useMe'
 import ListMemoryProvider from './ListMemoryProvider'
 import Loading from './Loading'
@@ -45,6 +47,11 @@ function SessionData({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createSessionQueryClient)
   // 비우면 진행 중인 요청의 결과도 버린다
   useEffect(() => () => queryClient.clear(), [queryClient])
+  // 대기열이 바뀌면(이 탭, 다른 탭) 읽어 둔 대기 항목을 버린다. 그 화면이 내려가 있어도 다시 그릴 때 새로 읽는다
+  useEffect(
+    () => onPendingChanged(() => void queryClient.invalidateQueries({ queryKey: pendingKey(sessionUserId()) })),
+    [queryClient],
+  )
   // 되살아난 화면을 그대로 열었으면 조회를 다시 보내, 그사이 서버가 로그인을 끝냈으면 바로 안다
   useEffect(() => {
     if (resumed > 0) void queryClient.refetchQueries({ type: 'active' }, { cancelRefetch: false })
