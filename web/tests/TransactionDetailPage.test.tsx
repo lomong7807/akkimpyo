@@ -760,6 +760,14 @@ describe('되돌리기(F-230)', () => {
 })
 
 describe('삭제한 거래를 주소로 열면', () => {
+  it('남은 날은 기기의 시계로 화면을 연 때부터 센다', async () => {
+    setDeviceClock('2026-12-25T12:30:00+09:00')
+    const item = lunch({ version: 2, ...trashed('2026-11-26T03:30:00.000Z') })
+    detail.put(item)
+    await openDetail(item)
+    expect(screen.getByText('삭제한 거래예요. 1일 뒤 영구 삭제돼요.')).toBeTruthy()
+  })
+
   it('상단 바 아래 16px에 안내 띠를 보이고 삭제 버튼이 없다. 항목은 같다', async () => {
     const item = lunch({ version: 2, ...trashed('2026-11-24T03:30:00.000Z') })
     detail.put(item)
