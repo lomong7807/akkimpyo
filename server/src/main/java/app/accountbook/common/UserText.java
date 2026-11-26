@@ -17,11 +17,14 @@ import java.text.Normalizer;
  *   <li>공백류는 {@link #TRIMMED_SPACES}다. 탭과 줄바꿈은 공백류가 아니라 제어 문자라서 앞뒤에 있어도 거부한다.
  * </ul>
  * 거부는 입력란을 담은 {@link InvalidRequestException}이고 문구에 입력값을 넣지 않는다.
- * 돌려준 값은 DB의 이름 CHECK(ck_*_trimmed, ck_*_length)도 지난다.
+ * 돌려준 값은 DB의 이름·가맹점·메모 CHECK(V18의 *_trimmed, *_nfc, *_no_control)도 지난다(TextSchemaTest).
  */
 public final class UserText {
 
-    /** 앞뒤에서 지우는 공백류 글자: 유니코드 Zs(공백 구분자) 17자. 거부 검사를 지나고 남는 공백이 이것뿐이다. */
+    /**
+     * 앞뒤에서 지우는 공백류 글자: 유니코드 Zs(공백 구분자) 17자. 거부 검사를 지나고 남는 공백이 이것뿐이다.
+     * DB의 ck_*_trimmed(V18)가 btrim에 같은 목록을 쓴다. 바꾸면 그 CHECK도 바꾼다(TextSchemaTest가 비교한다).
+     */
     public static final String TRIMMED_SPACES = "          "
             + "      　";
 
