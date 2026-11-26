@@ -52,7 +52,8 @@ class CategoryNameTextTest {
 
     @Test
     void sameNameInDecomposedAndComposedFormIsDuplicate() {
-        // "식비"는 기본 카테고리(P-223)에 이미 있다.
+        // Fixtures.user는 기본 카테고리(P-223)를 지우므로 직접 만든다.
+        expense("식비");
         assertThatThrownBy(() -> expense(nfd("식비"))).isInstanceOf(DuplicateCategoryNameException.class);
 
         Category snack = expense(nfd("간식"));
