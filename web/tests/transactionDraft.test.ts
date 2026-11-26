@@ -21,6 +21,11 @@ const opened = {
 
 const mine = { ...opened, amount: 30000 }
 
+/** 칸 하나를 뺀 연 때의 값 */
+function without(field: keyof typeof opened) {
+  return Object.fromEntries(Object.entries(opened).filter(([key]) => key !== field))
+}
+
 describe('수정 입력의 쓰던 값', () => {
   it('version, 쓰던 값, 연 때의 값을 받는다', () => {
     expect(editTransactionDraftOf({ version: 1, values: mine, openedValues: opened })).toEqual({
@@ -40,6 +45,7 @@ describe('수정 입력의 쓰던 값', () => {
     ['null', null],
     ['금액이 글자', { ...opened, amount: '25000' }],
     ['금액이 음수', { ...opened, amount: -1 }],
+    ['금액이 실수', { ...opened, amount: 25000.5 }],
     ['날짜가 없음', { ...opened, occurredOn: undefined }],
     ['날짜 모양이 아님', { ...opened, occurredOn: '2026-13-01' }],
     ['모르는 유형', { ...opened, type: 'REFUND' }],
@@ -47,6 +53,21 @@ describe('수정 입력의 쓰던 값', () => {
     ['객체가 아님', 'opened'],
   ])('연 때의 값이 있는데 모양이 틀리면(%s) 채우지 않는다', (_, openedValues) => {
     expect(editTransactionDraftOf({ version: 1, values: mine, openedValues })).toBeUndefined()
+  })
+
+  // 금액은 비어 있을 수 있어(아직 쓰지 않은 칸) 빠져도 받는다. 날짜는 위에서 본다
+  it.each(['type', 'payee', 'categoryId', 'accountId', 'toAccountId', 'occurredTime', 'memo'] as const)(
+    '연 때의 값에 칸이 빠졌으면(%s) 채우지 않는다',
+    (field) => {
+      expect(editTransactionDraftOf({ version: 1, values: mine, openedValues: without(field) })).toBeUndefined()
+    },
+  )
+
+  it('연 때의 값에 금액이 없으면(쓰지 않은 칸) 받는다', () => {
+    expect(editTransactionDraftOf({ version: 1, values: mine, openedValues: without('amount') })?.openedValues).toEqual({
+      ...opened,
+      amount: undefined,
+    })
   })
 
   it.each([
