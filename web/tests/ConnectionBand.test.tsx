@@ -1,4 +1,4 @@
-import { act, cleanup, screen, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Backend } from './support/backend'
@@ -84,8 +84,9 @@ describe('보이는 때', () => {
     act(() => goOffline())
     list.response = () => HttpResponse.error()
     await act(() => router.navigate('/transactions?month=2026-11'))
-    await screen.findByText('불러오지 못했어요.')
-    expect(band()).not.toBeNull()
+    // 내역은 홈이 받아 둔 최근 한 달로 보인다(#238). 그 달을 받는 요청이 연결 문제로 실패한 때 띠가 뜬다
+    await waitFor(() => expect(list.requests.some(({ month }) => month === '2026-11')).toBe(true))
+    await waitFor(() => expect(band()).not.toBeNull())
   })
 
   it('화면을 옮겨도 2초를 처음부터 다시 세지 않는다', async () => {

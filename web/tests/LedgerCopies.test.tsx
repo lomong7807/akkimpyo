@@ -26,7 +26,7 @@ import type { Categories } from './support/categories'
 
 /*
  * 계좌·카테고리의 읽기용 사본(ADR 006 결정 1, P-902, #234 A2). 받을 때마다 통째로 바꾸고, 장부를 볼 수 없게 되면 그 장부의
- * 사본을 지운다(security Q4). 새 거래 입력은 사본을 먼저 쓰고 서버의 값으로 바꾼다. 읽기 화면은 사본을 쓰지 않는다(#238).
+ * 사본을 지운다(security Q4). 새 거래 입력은 사본을 먼저 쓰고 서버의 값으로 바꾼다. 읽기 화면도 사본을 쓴다(#238, OfflineRead).
  */
 
 const server = startMockServer()
@@ -134,7 +134,8 @@ describe('사본을 남기는 때', () => {
     await seedDevice()
     accounts.response = () => HttpResponse.json({ items: [{ id: 1 }] })
     await openApp('/accounts')
-    await screen.findByText('불러오지 못했어요.')
+    // 받지 못했으므로 기기의 사본을 기준 시각과 함께 보인다(#238)
+    await screen.findByText('사본의 통장')
     await settle()
     expect((await ledgerCopy('user-1', LEDGER, 'accounts'))?.data).toEqual(copiedAccounts)
   })
@@ -203,7 +204,8 @@ describe('장부 단위로 지우는 때(security Q4)', () => {
     backend.cookieUser = 'user-1'
     fail()
     await openApp(path)
-    await screen.findAllByText(/불러오지 못했어요|찾을 수 없어요|없는 거래/)
+    // 계좌 목록은 받지 못하면 기기의 사본으로 보인다(#238)
+    await screen.findAllByText(/불러오지 못했어요|찾을 수 없어요|없는 거래|사본의 통장/)
     await settle(100)
     expect((await ledgerKinds(LEDGER)).sort()).toEqual(['accounts', 'categories'])
   })
@@ -282,11 +284,12 @@ describe('새 거래 입력은 사본을 먼저 쓴다', () => {
     expect(accountField().textContent).not.toContain('사본의 통장')
   })
 
-  it('읽기 화면(계좌 목록)은 사본을 쓰지 않는다(#238)', async () => {
+  it('읽기 화면(계좌 목록)도 연결이 없으면 사본으로 읽기 전용으로 보이고 기준 시각을 붙인다(#238)', async () => {
     await seedDevice()
     await openOffline('/accounts')
-    await screen.findByText('불러오지 못했어요.')
-    expect(document.body.textContent).not.toContain('사본의 통장')
+    expect(await screen.findByText('사본의 통장')).toBeTruthy()
+    expect(screen.getByText('11월 25일 (수) 12:30 기준')).toBeTruthy()
+    expect(screen.queryByText('불러오지 못했어요.')).toBeNull()
   })
 })
 

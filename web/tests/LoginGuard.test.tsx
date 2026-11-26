@@ -1,7 +1,8 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, ledgerNameOf, startBackend, type Backend } from './support/backend'
+import { goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -129,7 +130,6 @@ describe('로그인 여부를 확인하지 못하면', () => {
   it.each([
     ['서버 오류', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['약속과 다른 200', () => HttpResponse.json({})],
     ['403', () => problem(403, 'ORIGIN_NOT_ALLOWED')],
   ])('%s이면 로그인 풀림으로 다루지 않고 "불러오지 못했어요."를 보인다', async (_, respond) => {
@@ -143,6 +143,32 @@ describe('로그인 여부를 확인하지 못하면', () => {
     expect(dom.sawText(secret)).toBe(false)
     expect(dom.sawElement('nav, header, form')).toBe(false)
     expect(sessionStorage.length).toBe(0)
+  })
+})
+
+describe('연결이 없어 로그인 여부를 확인하지 못하면(00-common 4.1, 1B)', () => {
+  it('"불러오지 못했어요."와 "연결되면 자동으로 불러올게요."만 보이고 "다시 시도"와 "로그인하러 가기"를 두지 않는다', async () => {
+    backend.refreshResponse = () => HttpResponse.error()
+    const dom = recordDom()
+    const { router } = await open('/secret')
+    await failure()
+    expect(screen.getByRole('main').textContent).toBe('불러오지 못했어요.연결되면 자동으로 불러올게요.')
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('link')).toBeNull()
+    await settle()
+    expect(router.state.location.pathname).toBe('/secret')
+    expect(dom.sawText(secret)).toBe(false)
+  })
+
+  it('연결이 돌아오면 저절로 다시 확인해 들어간다', async () => {
+    backend.refreshResponse = () => HttpResponse.error()
+    await open('/secret')
+    await failure()
+    await settle()
+    backend.refreshResponse = undefined
+    signedIn()
+    act(() => goOnline())
+    expect(await screen.findByText(secret)).toBeTruthy()
   })
 })
 

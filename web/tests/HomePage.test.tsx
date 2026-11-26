@@ -24,6 +24,7 @@ import {
   type Opened,
 } from './support/transactionScreen'
 import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/useTransactionList'
+import { monthOf, today } from '../src/lib/calendarDate'
 import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
@@ -163,8 +164,10 @@ function asViewer() {
   backend.meResponse = () => HttpResponse.json({ ...me, ledgers: [{ ...me.ledgers[0], role: 'VIEWER' }] })
 }
 
-const totalsRequests = () => list.requests.filter(({ month }) => month !== null)
-const recentRequests = () => list.requests.filter(({ month }) => month === null)
+/** 홈의 이번 달 합계 요청. 기기에 남기는 최근 한 달(#238)의 다른 달 합계는 뺀다(이번 달은 같은 캐시라 한 번이다) */
+const totalsRequests = () => list.requests.filter(({ month }) => month !== null && month === monthOf(today()))
+/** 홈의 최근 10건 요청. 기기에 남기는 최근 한 달(50건씩)은 뺀다 */
+const recentRequests = () => list.requests.filter(({ month, limit }) => month === null && limit === '10')
 
 describe('주소와 공통 틀', () => {
   it('/home은 공통 틀 안의 주 화면이다. 상단 바에 장부 이름만 있고 "뒤로"가 없으며 화면 이름은 "홈"(h1)이다', async () => {
@@ -834,17 +837,20 @@ describe('구역 하나가 실패해도 다른 구역은 보인다', () => {
     expect(within(accountsRegion()).getByRole('link')).toBeTruthy()
     expect(recentRows()).toHaveLength(10)
     list.response = undefined
+    // 기기에 남기는 최근 한 달(#238)도 이번 달 합계를 같은 캐시로 받으므로 실패한 뒤 한 번 더 받았을 수 있다
+    const before = totalsRequests().length
     await opened.user.click(within(totalsRegion()).getByRole('button', { name: '다시 시도' }))
     await waitFor(() => expect(within(totalsRegion()).queryByText(failed)).toBeNull())
     expect(totals()[0][0]).toBe('지출')
-    expect(totalsRequests()).toHaveLength(2)
+    expect(totalsRequests()).toHaveLength(before + 1)
   })
 
   it('최근 거래를 받지 못하면 그 구역에만 실패가 보인다', async () => {
     putTransactions()
     list.response = (sent) => (sent.month === null ? problem(500, 'INTERNAL_ERROR') : undefined)
     const opened = await openHome()
-    expect(within(recentRegion()).getByText(failed)).toBeTruthy()
+    // 기기의 최근 한 달(#238)을 읽은 뒤에 실패가 된다
+    expect(await within(recentRegion()).findByText(failed)).toBeTruthy()
     expect(within(recentRegion()).getByRole('link', { name: '모두 보기' })).toBeTruthy()
     expect(totals()[0][0]).toBe('지출')
     expect(within(accountsRegion()).getByRole('link')).toBeTruthy()
@@ -857,7 +863,7 @@ describe('구역 하나가 실패해도 다른 구역은 보인다', () => {
     putTransactions()
     const categories = startCategoriesFailing()
     const opened = await openHome()
-    expect(within(recentRegion()).getByText(failed)).toBeTruthy()
+    expect(await within(recentRegion()).findByText(failed)).toBeTruthy()
     expect(within(accountsRegion()).getByRole('link')).toBeTruthy()
     categories.fail = false
     const before = recentRequests().length

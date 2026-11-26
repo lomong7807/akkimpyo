@@ -6,7 +6,6 @@ import Amount from '../../components/Amount'
 import { Button, ButtonLink } from '../../components/Button'
 import { ConfirmQuestion, type ConfirmFailure } from '../../components/ConfirmDialog'
 import DialogFrame from '../../components/DialogFrame'
-import LoadFailure from '../../components/LoadFailure'
 import Notice from '../../components/Notice'
 import { SubScreen } from '../../components/Screen'
 import { LoadingStatus, SkeletonSpace } from '../../components/Skeleton'
@@ -15,10 +14,15 @@ import { useLoadingMessage } from '../../components/useLoadingMessage'
 import { formatDate, today as todayOfDevice } from '../../lib/calendarDate'
 import { now } from '../../lib/clock'
 import { isUuid } from '../../lib/uuid'
-import { useAccounts } from '../accounts/useAccounts'
-import { useCategories } from '../categories/useCategories'
-import { useCurrentLedger } from '../me/CurrentLedgerContext'
+import { parseAccounts } from '../accounts/accounts'
+import { accountsKey, useAccounts } from '../accounts/useAccounts'
+import { parseCategories } from '../categories/categories'
+import { categoriesKey, useCategories } from '../categories/useCategories'
+import { useShown } from '../connection/deviceFirst'
+import LoadFailureHere from '../connection/LoadFailureHere'
 import { useConnection } from '../connection/useConnection'
+import { useCurrentLedger } from '../me/CurrentLedgerContext'
+import { useKeptCopy } from '../me/ledgerCopy'
 import { canEdit } from '../me/me'
 import NotFoundPage from '../not-found/NotFoundPage'
 import ConflictPanel, { AgainQuestion, LatestRow, type PanelFailure } from './ConflictPanel'
@@ -26,8 +30,15 @@ import { updatedTextOf } from './conflictValues'
 import { nameBookOf, titleOf, type NameBook } from './listedText'
 import { DetailSkeleton, FieldsSkeleton } from './TransactionDetailSkeleton'
 import { purgeNoticeOf } from './purgeNotice'
+import { useKeptLastMonth } from './lastMonth'
 import { isConnectionLoss } from './pendingTransactions'
-import { isInvalidState, staleVersionOf, type ListedTransaction, type TransactionDetail } from './transactions'
+import {
+  isInvalidState,
+  isTransactionDetail,
+  staleVersionOf,
+  type ListedTransaction,
+  type TransactionDetail,
+} from './transactions'
 import { useDeleteTransaction, useOfferUndo } from './useDeleteTransaction'
 import { useListedTransaction, useTransactionDetail } from './useTransactionDetail'
 import styles from './TransactionDetail.module.css'
@@ -42,6 +53,8 @@ const statusNames = { POSTED: '완료', CANCELED: '취소', PENDING: '승인 대
 /**
  * D-06 거래 상세(1A). 주소의 id가 UUID 모양이 아니면 요청하지 않고 찾을 수 없음(N-01)을 보인다.
  * 1A에는 승인취소, 변경 이력, 이벤트·결제한 사람(2단계), 넓은 화면의 오른쪽 칸이 없다.
+ * 연결이 없으면 수정과 삭제를 비활성으로 두고 문구를 붙이지 않는다(띠가 알린다). 받아 둔 거래가 없으면 기기의 최근 한 달에 있는
+ * 거래를 읽기 전용으로 보이고, 거기에도 없으면 "연결되면 자동으로 불러올게요."다(F-908, #238).
  */
 export default function TransactionDetailPage() {
   const { id } = useParams()
@@ -50,32 +63,58 @@ export default function TransactionDetailPage() {
   return <TransactionScreen key={lowered} id={lowered} />
 }
 
-/** 거래, 계좌, 카테고리를 함께 기다린다. 계좌와 카테고리 이름은 목록으로 바꾼다(내역과 같다). */
+/**
+ * 거래, 계좌, 카테고리를 함께 기다린다. 계좌와 카테고리 이름은 목록으로 바꾼다(내역과 같다). 이름은 기기에 남긴 목록으로도
+ * 그린다(00-common 4.5). 받아 둔 거래가 없을 때 기기의 최근 한 달에 그 거래가 있으면 받는 동안 먼저 보이고(동작 버튼은 받은 뒤에),
+ * 연결이 없거나 받지 못하면 그것을 읽기 전용으로 보인다.
+ */
 function TransactionScreen({ id }: { id: string }) {
   const ledger = useCurrentLedger()
   const detail = useTransactionDetail(id)
-  const accounts = useAccounts()
-  const categories = useCategories()
+  const accountsQuery = useAccounts()
+  const categoriesQuery = useCategories()
+  const accounts = useShown(accountsQuery, accountsKey(ledger.id), useKeptCopy(ledger.id, 'accounts', parseAccounts))
+  const categories = useShown(categoriesQuery, categoriesKey(ledger.id), useKeptCopy(ledger.id, 'categories', parseCategories))
+  // 최근 한 달은 홈이 받아 남긴다. 상세는 받아 둔 것이나 기기의 사본만 읽는다
+  const lastMonth = useKeptLastMonth({ fetch: false })
+  const online = useConnection() === 'online'
   const listed = useListedTransaction(id)
   const [today] = useState(todayOfDevice)
+  const accountList = accounts.state === 'ready' ? accounts.data : undefined
+  const categoryList = categories.state === 'ready' ? categories.data : undefined
   const names = useMemo(
-    () => accounts.data && categories.data && nameBookOf(accounts.data, categories.data),
-    [accounts.data, categories.data],
+    () => accountList && categoryList && nameBookOf(accountList, categoryList),
+    [accountList, categoryList],
   )
+  // 목록의 거래도 상세의 값을 모두 싣고 오면 상세로 그릴 수 있다(#15, ledger 2026-11-27)
+  const kept = useMemo(() => {
+    const item = lastMonth?.value.items.find((each) => each.id.toLowerCase() === id)
+    return isTransactionDetail(item) ? item : undefined
+  }, [lastMonth, id])
 
+  // 기기의 최근 한 달로 그린 거래는 연결이 있으면 받는 중이라 동작 버튼을 받은 뒤에 보이고, 없으면 비활성으로 보인다
+  const fromDevice = !detail.data && kept !== undefined && names !== undefined
+  const shownTransaction = detail.data ?? (fromDevice ? kept : undefined)
   // (1) 수정은 편집 이상에게만 보이고 휴지통의 거래에는 없다. 휴지통에 있는지 알아야 하므로 거래를 받은 뒤에 보인다
-  const editable = detail.data !== undefined && detail.data.deletedAt === null && canEdit(ledger)
+  const editable =
+    shownTransaction !== undefined && shownTransaction.deletedAt === null && canEdit(ledger) && (!fromDevice || !online)
 
   // 없거나 다른 장부의 거래, 완전히 지운 거래는 서버가 구분하지 않고 404다(P-903)
   if (!detail.data && detail.error instanceof ApiError && detail.error.status === 404) return <NotFoundPage />
 
+  let content
+  if (detail.data && names) content = <DetailContent transaction={detail.data} names={names} today={today} />
+  else if (fromDevice) content = <DetailContent transaction={kept} names={names} today={today} actions={!online} />
+  else {
+    const queries = [detail, accountsQuery, categoriesQuery]
+    // 연결이 없으면 기기의 최근 한 달을 다 읽은 뒤에 없다고 한다
+    const waiting = (!online && lastMonth === undefined) || [accounts, categories].some(({ state }) => state === 'loading')
+    content = <Waiting queries={queries} listed={listed} names={names} today={today} waiting={waiting} />
+  }
+
   return (
     <SubScreen title="거래 상세" parent={PARENT} action={editable ? <EditLink id={id} /> : undefined}>
-      {detail.data && names ? (
-        <DetailContent transaction={detail.data} names={names} today={today} />
-      ) : (
-        <Waiting queries={[detail, accounts, categories]} listed={listed} names={names} today={today} />
-      )}
+      {content}
     </SubScreen>
   )
 }
@@ -92,15 +131,17 @@ interface WaitingProps {
   listed: ListedTransaction | undefined
   names: NameBook | undefined
   today: string
+  /** 기기에 남긴 것을 아직 읽는 중이라 실패로 보이지 않는다 */
+  waiting: boolean
 }
 
-/** 불러오는 중이거나 불러오지 못한 때 */
-function Waiting({ queries, listed, names, today }: WaitingProps) {
+/** 불러오는 중이거나 불러오지 못한 때. 불러오지 못했을 때의 문구와 버튼은 연결에 따른다(LoadFailureHere) */
+function Waiting({ queries, listed, names, today, waiting }: WaitingProps) {
   // 다시 받는 동안에는 isError가 풀리므로 이 화면에서 받아 본 적이 있는지로 본다
   const failed = queries.filter((query) => !query.data && query.isFetchedAfterMount)
-  if (failed.length > 0) {
+  if (failed.length > 0 && !waiting) {
     return (
-      <LoadFailure
+      <LoadFailureHere
         headingLevel={2}
         busy={queries.some((query) => query.isFetching)}
         onRetry={() => failed.forEach((query) => void query.refetch())}
@@ -114,9 +155,11 @@ interface DetailContentProps {
   transaction: TransactionDetail
   names: NameBook
   today: string
+  /** 동작 버튼(삭제)을 둔다. 기기의 최근 한 달로 그린 거래는 연결이 없을 때만 비활성으로 둔다 */
+  actions?: boolean
 }
 
-function DetailContent({ transaction, names, today }: DetailContentProps) {
+function DetailContent({ transaction, names, today, actions = true }: DetailContentProps) {
   const ledger = useCurrentLedger()
   // 안내 띠의 남은 날은 화면을 연 때로 센다
   const [openedAt] = useState(now)
@@ -134,14 +177,25 @@ function DetailContent({ transaction, names, today }: DetailContentProps) {
           <Fields transaction={transaction} names={names} today={today} />
         </dl>
         {/* 휴지통에서 연 거래(1A는 주소로 연 것)에는 버튼이 없다. 복원과 완전히 지우기는 1C다 */}
-        {!deleted && canEdit(ledger) && <DeleteAction transaction={transaction} names={names} />}
+        {!deleted && canEdit(ledger) && actions && <DeleteAction transaction={transaction} names={names} />}
       </div>
     </>
   )
 }
 
-/** (1) 수정. 상단 바 오른쪽 끝의 글자 버튼이고(계좌 G-01의 "추가"와 같다) 거래 수정(D-04)을 연다(F-208). */
+/**
+ * (1) 수정. 상단 바 오른쪽 끝의 글자 버튼이고(계좌 G-01의 "추가"와 같다) 거래 수정(D-04)을 연다(F-208).
+ * 연결이 없으면 비활성이고 문구를 붙이지 않는다(D-06 네트워크 오류, 띠가 알린다).
+ */
 function EditLink({ id }: { id: string }) {
+  const online = useConnection() === 'online'
+  if (!online) {
+    return (
+      <Button kind="text" disabled>
+        수정
+      </Button>
+    )
+  }
   return (
     <ButtonLink kind="text" to={`/transactions/${id}/edit`}>
       수정
@@ -340,7 +394,8 @@ function DeleteAction({ transaction, names }: DeleteActionProps) {
   return (
     <>
       <div className={styles.deleteSlot}>
-        <Button kind="text-danger" onClick={ask}>
+        {/* 연결이 없으면 확인 창을 열지 않는다. 문구는 붙이지 않는다(띠가 알린다, D-06 네트워크 오류) */}
+        <Button kind="text-danger" disabled={!online} onClick={ask}>
           삭제
         </Button>
       </div>

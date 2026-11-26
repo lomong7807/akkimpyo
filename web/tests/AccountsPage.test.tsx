@@ -413,7 +413,6 @@ describe('불러오지 못하면', () => {
 
   it.each([
     ['서버 오류', () => problem(500, 'INTERNAL_ERROR')],
-    ['연결 오류', () => HttpResponse.error()],
     ['없는 장부', () => problem(404, 'NOT_FOUND')],
     ['모르는 종류가 섞인 응답', () => accountsBody(salary, accountOf('대출', 'LOAN', -1))],
     ['정수가 아닌 잔액', () => accountsBody(salary, accountOf('지갑', 'CASH', 0.1))],
@@ -428,6 +427,15 @@ describe('불러오지 못하면', () => {
     expect(texts(screen.getAllByRole('heading', { level: 1 }))).toEqual(['계좌'])
     expect(dom.sawText('급여통장')).toBe(false)
     expect(consoleError).not.toHaveBeenCalled()
+  })
+
+  it('연결 오류이고 기기에 남긴 계좌 목록이 없으면 버튼 없이 "연결되면 자동으로 불러올게요."다(F-908, #238)', async () => {
+    accounts.response = () => HttpResponse.error()
+    await openApp('/accounts')
+    await failure()
+    expect(main().textContent).toBe(`${failed}연결되면 자동으로 불러올게요.`)
+    expect(content().queryByRole('button')).toBeNull()
+    expect(texts(screen.getAllByRole('heading', { level: 1 }))).toEqual(['계좌'])
   })
 
   it('"다시 시도"를 누르면 화면은 그대로 두고 그 버튼만 처리 중이며, 받으면 목록을 보인다', async () => {
@@ -513,6 +521,7 @@ describe('이미 불러온 뒤', () => {
     expect(rowsOf('은행')).toEqual(['급여통장3,210,000원', '비상금1,000,000원'])
     expect(screen.queryByText(failed)).toBeNull()
     expect(content().queryByRole('button')).toBeNull()
+    expect(totalRow().textContent).toContain('12:00 기준')
   })
 
   it('30초가 지나 다시 불러온 것이 약속과 달라도 있던 내용을 그대로 보인다', async () => {
@@ -522,7 +531,8 @@ describe('이미 불러온 뒤', () => {
     await refocus()
     await waitFor(() => expect(accounts.requests).toHaveLength(2))
     await settle()
-    expect(totalRow().textContent).toBe('자산 합계3,682,600원')
+    // 새로 불러오지 못했으므로 그 값을 받은 시각을 붙인다(N-03 (5), #238)
+    expect(totalRow().textContent).toBe('자산 합계12:00 기준3,682,600원')
   })
 
   it('30초가 지나 다시 불러오는 동안 뼈대로 바꾸지 않고, 받으면 합계를 다시 계산한다', async () => {

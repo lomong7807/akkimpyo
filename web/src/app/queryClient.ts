@@ -1,6 +1,7 @@
 import { onlineManager, QueryCache, QueryClient, type QueryKey, type QueryMeta } from '@tanstack/react-query'
 import { ApiError } from '../api/apiError'
 import { connection, onConnectionChange } from '../api/connection'
+import { recordReceivedAt } from '../features/connection/receivedAt'
 
 // 다시 시도는 사용자가 누른다. 브라우저의 연결 신호를 보고 요청을 미뤄 두었다가 저절로 보내지도 않는다.
 const requestOnce = { retry: false, networkMode: 'always' } as const
@@ -15,13 +16,16 @@ interface QueryClientOptions {
 
 /** 서버에서 온 데이터의 캐시 */
 export function createQueryClient({ onLedgerGone }: QueryClientOptions = {}): QueryClient {
+  const queryCache = new QueryCache({
+    onError(error, query) {
+      const ledgerId = onLedgerGone && goneLedgerOf(error, query.queryKey, query.meta)
+      if (ledgerId) onLedgerGone(ledgerId)
+    },
+  })
+  // 연결이 없을 때 보던 내용에 붙이는 "{시각} 기준"(F-908)의 시각
+  recordReceivedAt(queryCache)
   return new QueryClient({
-    queryCache: new QueryCache({
-      onError(error, query) {
-        const ledgerId = onLedgerGone && goneLedgerOf(error, query.queryKey, query.meta)
-        if (ledgerId) onLedgerGone(ledgerId)
-      },
-    }),
+    queryCache,
     // networkMode 'always'이면 TanStack이 refetchOnReconnect를 끄므로 조회에만 다시 켠다. 연결이 돌아오면 보이는 화면의 오래됐거나
     // 실패한 조회를 다시 받는다(F-908, refetchOnReconnect 함수 참고). 동작(mutation)은 다시 하지 않는다
     defaultOptions: { queries: { ...requestOnce, refetchOnReconnect: true }, mutations: requestOnce },

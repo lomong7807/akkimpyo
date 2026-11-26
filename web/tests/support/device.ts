@@ -66,11 +66,11 @@ export async function seedMeCopy(userId = 'user-1', me: unknown = meOf(userId), 
   await copies.saveCopy(userId, '', 'me', me, receivedAt)
 }
 
-/** 장부의 사본(계좌, 카테고리)을 둔다. */
+/** 장부의 사본(계좌, 카테고리, 최근 한 달 내역 #238)을 둔다. */
 export async function seedLedgerCopy(
   userId: string,
   ledgerId: string,
-  kind: 'accounts' | 'categories',
+  kind: 'accounts' | 'categories' | 'transactions',
   data: unknown,
   receivedAt = nowOnDevice() - DAY,
 ) {
@@ -79,7 +79,7 @@ export async function seedLedgerCopy(
 }
 
 /** 장부의 사본 */
-export async function ledgerCopy(userId: string, ledgerId: string, kind: 'accounts' | 'categories') {
+export async function ledgerCopy(userId: string, ledgerId: string, kind: 'accounts' | 'categories' | 'transactions') {
   const { copies } = await device()
   return copies.readCopy(userId, ledgerId, kind)
 }

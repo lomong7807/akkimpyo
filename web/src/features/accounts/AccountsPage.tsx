@@ -1,16 +1,24 @@
 import { useId } from 'react'
 import Amount from '../../components/Amount'
 import EmptyState from '../../components/EmptyState'
-import LoadFailure from '../../components/LoadFailure'
 import { SubScreen } from '../../components/Screen'
-import { accountTypes, type Account } from './accounts'
+import BasisTime from '../connection/BasisTime'
+import { useShown } from '../connection/deviceFirst'
+import LoadFailureHere from '../connection/LoadFailureHere'
+import { useCurrentLedger } from '../me/CurrentLedgerContext'
+import { useKeptCopy } from '../me/ledgerCopy'
+import { accountTypes, parseAccounts, type Account } from './accounts'
 import AddAccountLink from './AddAccountLink'
 import AccountsSkeleton from './AccountsSkeleton'
 import { accountTypeNames } from './accountTypeNames'
-import { useAccounts } from './useAccounts'
+import { accountsKey, useAccounts } from './useAccounts'
 import styles from './Accounts.module.css'
 
-/** G-01 계좌 목록. 1A에서 계좌 줄은 눌리지 않는다. 계좌 상세(G-03)가 들어오면 맞춘다. */
+/**
+ * G-01 계좌 목록. 1A에서 계좌 줄은 눌리지 않는다. 계좌 상세(G-03)가 들어오면 맞춘다.
+ * 기기에 남긴 계좌 목록이 있으면 받는 동안 먼저 보이고(00-common 4.5), 연결이 없거나 받지 못하면 그것을 읽기 전용으로 보이며
+ * 자산 합계 옆에 기준 시각을 붙인다(F-908).
+ */
 export default function AccountsPage() {
   return (
     <SubScreen title="계좌" parent="/more" action={<AddAccountLink kind="text">추가</AddAccountLink>}>
@@ -20,14 +28,18 @@ export default function AccountsPage() {
 }
 
 function Accounts() {
-  const { data, isFetchedAfterMount, isFetching, refetch } = useAccounts()
-  if (data) return <AccountList accounts={data} />
-  // 다시 받는 동안에는 isError가 풀리므로 이 화면에서 받아 본 적이 있는지로 본다
-  if (isFetchedAfterMount) return <LoadFailure headingLevel={2} onRetry={() => void refetch()} busy={isFetching} />
+  const ledger = useCurrentLedger()
+  const query = useAccounts()
+  const shown = useShown(query, accountsKey(ledger.id), useKeptCopy(ledger.id, 'accounts', parseAccounts))
+  if (shown.state === 'ready') return <AccountList accounts={shown.data} basis={shown.basis} />
+  if (shown.state === 'failed') {
+    return <LoadFailureHere headingLevel={2} onRetry={() => void query.refetch()} busy={query.isFetching} />
+  }
   return <AccountsSkeleton />
 }
 
-function AccountList({ accounts }: { accounts: Account[] }) {
+/** 계좌 목록. `basis`가 있으면 (2) 자산 합계 옆에 기준 시각을 붙인다(F-908). */
+function AccountList({ accounts, basis }: { accounts: Account[]; basis: number | undefined }) {
   if (accounts.length === 0) {
     return (
       <EmptyState description="계좌가 없어요. 계좌를 추가하면 잔액을 한눈에 볼 수 있어요.">
@@ -39,6 +51,7 @@ function AccountList({ accounts }: { accounts: Account[] }) {
     <div className={styles.accounts}>
       <p className={`${styles.row} ${styles.total}`}>
         <span className={styles.name}>자산 합계</span>
+        {basis !== undefined && <BasisTime at={basis} className={styles.basis} />}
         <Balance value={sumOf(accounts)} />
       </p>
       {accountTypes.map((type) => (

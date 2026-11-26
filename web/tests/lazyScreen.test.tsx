@@ -2,8 +2,10 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event'
 import { use, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { watchConnection } from '../src/api/connection'
 import { lazyScreen, type ScreenShell } from '../src/app/lazyScreen'
 import { ShellShownContext } from '../src/components/shellShown'
+import { goOffline, goOnline } from './support/connection'
 import { recordDom } from './support/recordDom'
 
 /*
@@ -178,6 +180,25 @@ describe('화면 코드를 받지 못하면', () => {
     await user.click(retryButton())
     await code.arrive()
     expect(main().getByText('틀 다음의 화면')).toBeTruthy()
+  })
+
+  it('연결이 없으면(api/connection) 버튼 없이 "연결되면 자동으로 불러올게요."이고, 연결이 돌아오면 저절로 다시 받는다(#238)', async () => {
+    const stop = watchConnection()
+    try {
+      act(() => goOffline())
+      const code = screenCode()
+      const { Screen } = lazyScreen(code.load, shell)
+      render(<Screen />)
+      await code.fail()
+      expect(main().getByText('연결되면 자동으로 불러올게요.')).toBeTruthy()
+      expect(main().queryByRole('button')).toBeNull()
+      act(() => goOnline())
+      expect(code.load).toHaveBeenCalledTimes(2)
+      await code.arrive()
+      expect(main().getByText('틀 다음의 화면')).toBeTruthy()
+    } finally {
+      stop()
+    }
   })
 
   it('저장소가 막혀 있으면 되풀이를 막을 수 없으므로 새로고침하지 않는다', async () => {

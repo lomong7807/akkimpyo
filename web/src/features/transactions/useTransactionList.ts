@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { queryOptions, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { ledgerKey, LEDGER_LIST } from '../me/ledgerKey'
 import { fetchMonthTotals, fetchRecentTransactions, fetchTransactionPage, RECENT_COUNT } from './transactions'
@@ -46,15 +46,20 @@ export function useTransactionList(month: string) {
   })
 }
 
-/** 현재 장부의 한 달 수입·지출 합계(홈의 이번 달 합계, F-111) */
-export function useMonthTotals(month: string) {
-  const ledger = useCurrentLedger()
-  return useQuery({
-    queryKey: monthTotalsKey(ledger.id, month),
-    queryFn: () => fetchMonthTotals(ledger.id, month),
+/** 장부의 한 달 수입·지출 합계를 받는 법. 기기에 남기는 최근 한 달(#238)도 이것으로 받아 홈과 같은 요청을 두 번 보내지 않는다 */
+export function monthTotalsQuery(ledgerId: string, month: string) {
+  return queryOptions({
+    queryKey: monthTotalsKey(ledgerId, month),
+    queryFn: () => fetchMonthTotals(ledgerId, month),
     staleTime: TRANSACTION_LIST_STALE_MS,
     meta: LEDGER_LIST,
   })
+}
+
+/** 현재 장부의 한 달 수입·지출 합계(홈의 이번 달 합계, F-111) */
+export function useMonthTotals(month: string) {
+  const ledger = useCurrentLedger()
+  return useQuery(monthTotalsQuery(ledger.id, month))
 }
 
 /** 현재 장부 전체의 최근 거래 10건(홈의 최근 거래, F-113) */

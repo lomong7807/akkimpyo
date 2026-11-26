@@ -7,15 +7,14 @@ import { forgetLedgerCopies } from '../device/copies'
 import { onPendingChanged } from '../device/pendingQueue'
 import { onSyncedChanged } from '../device/syncedAt'
 import { useToast } from '../components/ToastContext'
-import LoadFailure from '../components/LoadFailure'
 import { parseAccounts } from '../features/accounts/accounts'
 import { parseCategories } from '../features/categories/categories'
+import LoadFailureHere from '../features/connection/LoadFailureHere'
 import { CurrentLedgerContext } from '../features/me/CurrentLedgerContext'
 import { deviceKey } from '../features/me/deviceKey'
 import { useLedgerCopy } from '../features/me/ledgerCopy'
 import { useMeCopy } from '../features/me/meCopy'
 import { useAutoSend } from '../features/sync/useAutoSend'
-import { syncedKey } from '../features/sync/useSyncState'
 import { pendingKey } from '../features/transactions/pendingTransactions'
 import { now } from '../lib/clock'
 import { useMe } from '../features/me/useMe'
@@ -57,9 +56,10 @@ function SessionData({ children }: { children: ReactNode }) {
     () => onPendingChanged(() => void queryClient.invalidateQueries({ queryKey: pendingKey(sessionUserId()) })),
     [queryClient],
   )
-  // 사본을 새로 받았거나 보내기에 성공하면(이 탭, 다른 탭) 마지막으로 맞춘 시각을 다시 읽는다(B-04 (2-3), #235)
+  // 사본을 새로 받았거나 보내기에 성공하면(이 탭, 다른 탭) 마지막으로 맞춘 시각(B-04 (2-3), #235)과 읽어 둔 사본(#238)을 다시
+  // 읽는다. 사본을 읽기만 하고 다시 쓰지 않으므로 되돌이가 생기지 않는다
   useEffect(
-    () => onSyncedChanged(() => void queryClient.invalidateQueries({ queryKey: syncedKey(sessionUserId()) })),
+    () => onSyncedChanged(() => void queryClient.invalidateQueries({ queryKey: deviceKey(sessionUserId()) })),
     [queryClient],
   )
   // 되살아난 화면을 그대로 열었으면 조회를 다시 보내, 그사이 서버가 로그인을 끝냈으면 바로 안다
@@ -113,11 +113,12 @@ function Gate() {
   if (session.status === 'unknown' || session.status === 'retrying' || (copyMissing && !ledger)) {
     return (
       <PlainLayout>
-        <LoadFailure onRetry={retry} busy={session.status === 'retrying'}>
+        {/* 연결이 없으면 두 버튼 없이 연결을 기다리고, 돌아오면 저절로 다시 확인한다(00-common 4.1, 1B, SessionProvider) */}
+        <LoadFailureHere onRetry={retry} busy={session.status === 'retrying'}>
           <ButtonLink kind="text" to="/login" replace onClick={() => leaveAddress(session, location)}>
             로그인하러 가기
           </ButtonLink>
-        </LoadFailure>
+        </LoadFailureHere>
       </PlainLayout>
     )
   }
@@ -139,7 +140,7 @@ function Gate() {
   if (!me.data && me.errorUpdateCount > 0) {
     return (
       <PlainLayout>
-        <LoadFailure onRetry={() => void me.refetch()} busy={me.isFetching} />
+        <LoadFailureHere onRetry={() => void me.refetch()} busy={me.isFetching} />
       </PlainLayout>
     )
   }

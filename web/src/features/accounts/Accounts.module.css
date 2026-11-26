@@ -48,6 +48,18 @@
   font: var(--text-title);
 }
 
+/* 연결이 없거나 새로 불러오지 못했을 때 자산 합계 금액 옆의 "10:42 기준"(G-01 네트워크 오류, 보조 글자 13px) */
+.basis {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}
+
+.basis + .amount {
+  margin-inline-start: 0;
+}
+
 .group {
   padding-top: var(--space-24);
   border-top: 1px solid var(--color-border);

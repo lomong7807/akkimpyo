@@ -10,10 +10,13 @@ import { isInstantMs, isUserId, otherUsersRanges, resultOf, transact, userRange 
  * 이 저장소에는 사본이 아닌 줄(meta, gone, 보낸 시각 sent #235)도 있다. 사본을 여럿 읽는 곳은 copiesOf만 쓴다(architect #235 F).
  */
 
-/** 사본의 종류. 내 정보(me)는 사용자 단위라 장부 자리가 빈 글자다. */
-export type CopyKind = 'me' | 'accounts' | 'categories'
+/**
+ * 사본의 종류. 내 정보(me)는 사용자 단위라 장부 자리가 빈 글자다. transactions는 장부의 최근 한 달 내역(P-902, #238)이다.
+ * 종류가 늘어도 지우는 길(로그아웃, 다른 사용자의 로그인, 30일, 장부를 볼 수 없게 됨)은 키 범위로 지우므로 그대로 닿는다.
+ */
+export type CopyKind = 'me' | 'accounts' | 'categories' | 'transactions'
 
-const COPY_KINDS: readonly CopyKind[] = ['me', 'accounts', 'categories']
+const COPY_KINDS: readonly CopyKind[] = ['me', 'accounts', 'categories', 'transactions']
 
 /** 사용자 단위 사본의 장부 자리 */
 export const USER_SCOPE = ''
@@ -100,7 +103,7 @@ export function saveCopy(
   })
 }
 
-/** 그 사용자의 사본 전부(내 정보, 장부마다 계좌·카테고리). 사본이 아닌 줄과 모양이 틀린 줄은 뺀다. */
+/** 그 사용자의 사본 전부(내 정보, 장부마다 계좌·카테고리·최근 한 달 내역). 사본이 아닌 줄과 모양이 틀린 줄은 뺀다. */
 export async function copiesOf(userId: string): Promise<ScopedCopy[]> {
   const rows: unknown[] = await transact(['copies'], 'readonly', (transaction) =>
     resultOf(transaction.objectStore('copies').getAll(userRange(userId))),

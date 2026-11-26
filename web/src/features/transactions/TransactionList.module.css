@@ -252,6 +252,28 @@
   padding: var(--space-16);
 }
 
+/* 연결이 없을 때 합계 머리 오른쪽의 "10:42 기준"(D-01 네트워크 오류, 보조 글자 13px). 바로 아래 합계와 4px */
+.basis {
+  margin: var(--space-8) 0 0;
+  padding: 0 var(--space-16);
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  text-align: end;
+}
+
+.basis + .totals {
+  margin-top: var(--space-4);
+}
+
+/* 연결이 없을 때 그 달의 앞쪽 일부가 저장 범위 밖이면 목록 끝에 두는 "연결되면 볼 수 있어요"(00-common 5.10). 더 불러오기 실패와 같은 자리 */
+.outOfRange {
+  margin: 0;
+  padding: var(--space-16);
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+  text-align: center;
+}
+
 /* 화면 읽기에만 알린다 */
 .announcement {
   position: absolute;
