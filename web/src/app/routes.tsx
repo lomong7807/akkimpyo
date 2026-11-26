@@ -9,6 +9,7 @@ import TransactionDetailPage from '../features/transactions/TransactionDetailPag
 import TransactionEditPage from '../features/transactions/TransactionEditPage'
 import TransactionListPage from '../features/transactions/TransactionListPage'
 import TransactionNewPage from '../features/transactions/TransactionNewPage'
+import ClearStaleCaret from './ClearStaleCaret'
 import LedgerLayout from './LedgerLayout'
 import LoginRoute from './LoginRoute'
 import MoreRoute from './MoreRoute'
@@ -27,6 +28,8 @@ export const routes: RouteObject[] = [
   {
     element: (
       <SessionProvider>
+        {/* 위치를 되살리기 전에 앞 화면의 커서를 지운다. 순서를 바꾸지 않는다 */}
+        <ClearStaleCaret />
         <ScrollPosition />
         <Outlet />
       </SessionProvider>
