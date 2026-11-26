@@ -81,14 +81,18 @@
   }
 }
 
-/* 칸 가운데에 놓는다. 그림자와 글자는 없다(owner 결정 11) */
+/*
+ * 칸 가운데에 놓는다. 그림자와 글자는 없다(owner 결정 11).
+ * 정사각형이고 크기는 토큰 값과 칸 폭(칸은 컨테이너라 100cqi) 중 작은 것이다. 글자를 키운 좁은 화면에서 옆 칸을 가리지 않는다
+ * (designer 검토 #90). 아이콘은 그대로 가운데다.
+ */
 .quickEntry {
   display: flex;
   align-items: center;
   justify-content: center;
   place-self: center;
-  width: var(--size-quick-entry);
-  height: var(--size-quick-entry);
+  width: min(var(--size-quick-entry), 100cqi);
+  height: min(var(--size-quick-entry), 100cqi);
   border-radius: var(--radius-10);
   background-color: var(--color-accent);
   color: var(--color-on-accent);
