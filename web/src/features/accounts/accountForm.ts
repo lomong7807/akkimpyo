@@ -32,15 +32,18 @@ export interface AccountMessages {
   dateRequired: string
 }
 
-/** 계좌 추가(화면설계서 G-02 입력값 오류)의 문구 */
+/**
+ * 계좌 추가(화면설계서 G-02 입력값 오류)의 문구. 한 문장짜리에는 마침표를 찍지 않고
+ * 두 문장 이상이면 문장마다 찍는다(00-common 3.1, planner 결정 #102).
+ */
 export const accountAddMessages: AccountMessages = {
-  nameRequired: '이름을 입력해 주세요.',
-  nameTooLong: '50자까지 쓸 수 있어요.',
+  nameRequired: '이름을 입력해 주세요',
+  nameTooLong: '50자까지 쓸 수 있어요',
   nameUnusable: '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.',
   nameDuplicate: '같은 이름의 계좌가 있어요. 다른 이름을 써 주세요.',
-  typeRequired: '종류를 골라 주세요.',
+  typeRequired: '종류를 골라 주세요',
   amountRequired: '금액을 입력해 주세요. 없으면 0을 적어요.',
-  dateRequired: '기준일을 골라 주세요.',
+  dateRequired: '기준일을 골라 주세요',
 }
 
 export const ACCOUNT_NAME_MAX = 50

@@ -91,5 +91,5 @@ function dateMessage(code: string, messages: AccountMessages): string | undefine
 /** 달력이 막으므로 서버가 거부한 때에만 나온다. 서버는 장부의 시간대로 판정한다. */
 function dateOutOfRange(today: string): string {
   const { first, last } = selectableRange(today)
-  return `${formatDate(first, today)}부터 ${formatDate(last, today)}까지 고를 수 있어요.`
+  return `${formatDate(first, today)}부터 ${formatDate(last, today)}까지 고를 수 있어요`
 }

@@ -34,9 +34,9 @@ const nameUnusable = '쓸 수 없는 글자가 있어요. 모두 지우고 다�
 const nameDuplicate = '같은 이름의 계좌가 있어요'
 const typeRequired = '종류를 골라 주세요'
 const amountRequired = '금액을 입력해 주세요. 없으면 0을 적어요.'
-const amountTooLarge = '9,999,999,999원까지 입력할 수 있어요.'
+const amountTooLarge = '9,999,999,999원까지 입력할 수 있어요'
 const dateRequired = '기준일을 골라 주세요'
-const dateOutOfRange = '2000년 1월 1일부터 2027년 11월 26일까지 고를 수 있어요.'
+const dateOutOfRange = '2000년 1월 1일부터 2027년 11월 26일까지 고를 수 있어요'
 
 const server = startMockServer()
 let backend: Backend

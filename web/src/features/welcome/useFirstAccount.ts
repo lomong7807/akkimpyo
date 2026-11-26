@@ -18,10 +18,7 @@ const HOME = '/home'
 const firstAccountMessages: AccountMessages = {
   ...accountAddMessages,
   nameRequired: '계좌 이름을 입력해 주세요',
-  nameTooLong: '50자까지 쓸 수 있어요',
   nameDuplicate: '같은 이름의 계좌가 있어요',
-  typeRequired: '종류를 골라 주세요',
-  dateRequired: '기준일을 골라 주세요',
 }
 
 /** "건너뛰기"가 만드는 계좌. 이 장에 쓰던 값은 쓰지 않는다. 기준일은 누른 때의 기기의 오늘이다. */
