@@ -85,13 +85,16 @@ function Group({ name, children }: { name: string; children: (headingId: string)
   )
 }
 
-/** 최상위 카테고리를 서버가 준 순서대로 둔다(미분류 포함). Safari는 점을 없앤 목록을 목록으로 알리지 않으므로 role을 적는다. */
+/**
+ * 최상위 카테고리를 서버가 준 순서대로 둔다(미분류 포함). 이름은 사용자가 고칠 수 있어 길면 칩 안에서 줄을 바꾼다.
+ * Safari는 점을 없앤 목록을 목록으로 알리지 않으므로 role을 적는다.
+ */
 function Chips({ labelledBy, categories }: { labelledBy: string; categories: Category[] }) {
   return (
     <ul role="list" aria-labelledby={labelledBy} className={styles.chips}>
       {categories.map(({ id, name }) => (
         <li key={id}>
-          <StatusChip>{name}</StatusChip>
+          <StatusChip wrap>{name}</StatusChip>
         </li>
       ))}
     </ul>

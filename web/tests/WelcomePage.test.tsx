@@ -186,6 +186,16 @@ describe('첫 장(1/2)', () => {
     expect(screen.queryByText('외식')).toBeNull()
   })
 
+  it('긴 이름(사용자가 만든 20자)도 자르지 않고 칸 폭 안에서 줄을 바꾼다', async () => {
+    const long = '가나다라마바사아자차카타파하거너더러머버'
+    categories.items = [categoryOf('EXPENSE', long), categoryOf('EXPENSE', '미분류', true)]
+    await openFirst()
+    const chip = within(screen.getByRole('list', { name: '지출' })).getByText(long)
+    expect(chip.textContent).toBe(long)
+    expect(getComputedStyle(chip).whiteSpace).toBe('normal')
+    expect(getComputedStyle(chip).maxWidth).toBe('100%')
+  })
+
   it('다른 구성원이 지워 미분류만 남았으면 미분류 칩만 보인다', async () => {
     categories.items = [categoryOf('EXPENSE', '미분류', true), categoryOf('INCOME', '미분류', true)]
     await openFirst()
@@ -193,10 +203,10 @@ describe('첫 장(1/2)', () => {
     expect(chipsOf('수입')).toEqual(['미분류'])
   })
 
-  it('칩은 표시 칩(StatusChip) 그대로이고 누를 수 없다', async () => {
+  it('칩은 사용자가 고칠 수 있는 이름이라 길면 줄을 바꾸는 표시 칩(StatusChip wrap)이고 누를 수 없다', async () => {
     await openFirst()
     const chip = within(screen.getByRole('list', { name: '지출' })).getByText('식비')
-    const { container } = render(<StatusChip>식비</StatusChip>)
+    const { container } = render(<StatusChip wrap>식비</StatusChip>)
     expect(chip.className).toBe(container.firstElementChild!.className)
     expect(chip.tagName).toBe('SPAN')
     const lists = screen.getAllByRole('list')
