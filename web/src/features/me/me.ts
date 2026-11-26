@@ -16,6 +16,14 @@ export interface Me {
   ledgers: [Ledger, ...Ledger[]]
 }
 
+/** 편집 이상(소유자, 편집 가능)의 권한. 모르는 값은 보기 전용처럼 다룬다. */
+const editorRoles = ['OWNER', 'MEMBER']
+
+/** 장부의 거래, 계좌, 카테고리를 만들고 고칠 수 있다(기능정의서 1.3의 편집 이상). */
+export function canEdit({ role }: Ledger): boolean {
+  return editorRoles.includes(role)
+}
+
 /** 실패하면 ApiError를 던진다. */
 export async function fetchMe(): Promise<Me> {
   const body = await request<Partial<Me> | null | undefined>('/me')

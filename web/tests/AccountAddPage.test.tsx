@@ -11,14 +11,14 @@ import { recordDom } from './support/recordDom'
 import { createFakeLocks, installLocks, removeLocks } from './support/webLocks'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 
-const nameRequired = '이름을 입력해 주세요.'
-const nameTooLong = '50자까지 쓸 수 있어요.'
+const nameRequired = '이름을 입력해 주세요'
+const nameTooLong = '50자까지 쓸 수 있어요'
 const nameUnusable = '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'
 const nameDuplicate = '같은 이름의 계좌가 있어요. 다른 이름을 써 주세요.'
 const amountRequired = '금액을 입력해 주세요. 없으면 0을 적어요.'
-const amountTooLarge = '9,999,999,999원까지 입력할 수 있어요.'
-const dateRequired = '기준일을 골라 주세요.'
-const dateOutOfRange = '2000년 1월 1일부터 2027년 11월 26일까지 고를 수 있어요.'
+const amountTooLarge = '9,999,999,999원까지 입력할 수 있어요'
+const dateRequired = '기준일을 골라 주세요'
+const dateOutOfRange = '2000년 1월 1일부터 2027년 11월 26일까지 고를 수 있어요'
 const typeNotice = '종류를 바꾸면 금액의 뜻이 바뀌어요. 금액을 다시 확인해 주세요.'
 const failed = '문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
 const question = '쓰던 내용을 버릴까요?'
@@ -597,8 +597,8 @@ describe('서버가 거부함', () => {
     ['name', 'TOO_LONG', 0, nameTooLong],
     ['name', 'INVALID_FORMAT', 0, nameUnusable],
     ['name', 'DUPLICATE', 0, nameDuplicate],
-    ['type', 'REQUIRED', 1, '종류를 골라 주세요.'],
-    ['type', 'INVALID_FORMAT', 1, '종류를 골라 주세요.'],
+    ['type', 'REQUIRED', 1, '종류를 골라 주세요'],
+    ['type', 'INVALID_FORMAT', 1, '종류를 골라 주세요'],
     ['openingBalance', 'REQUIRED', 2, amountRequired],
     ['openingBalance', 'INVALID_FORMAT', 2, amountRequired],
     ['openingBalance', 'OUT_OF_RANGE', 2, amountTooLarge],

@@ -6,7 +6,7 @@ import AmountField from '../src/components/AmountField'
 import { readCssRule } from './support/cssRule'
 
 const CSS = 'src/components/AmountField.module.css'
-const tooLarge = '9,999,999,999원까지 입력할 수 있어요.'
+const tooLarge = '9,999,999,999원까지 입력할 수 있어요'
 
 afterEach(() => {
   cleanup()
