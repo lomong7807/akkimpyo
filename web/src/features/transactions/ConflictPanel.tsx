@@ -65,9 +65,11 @@ export default function ConflictPanel({
   const actionButton = useRef<HTMLButtonElement>(null)
   const target = focus === 'action' && action ? actionButton : closeButton
 
-  // 처음, 그리고 새 최신 내용으로 다시 그릴 때. 손가락이나 Safari의 마우스로 누른 버튼은 초점을 받지 않으므로 늘 옮긴다
+  // 처음, 그리고 새 최신 내용으로 다시 그릴 때. 손가락이나 Safari의 마우스로 누른 버튼은 초점을 받지 않으므로 늘 옮긴다.
+  // 판이 길어 스크롤되면 맨 아래 버튼으로 내려가지 않고 제목과 고친 시각부터 보이게 둔다. WebKit은 모달 안에서
+  // preventScroll을 따르지 않고 초점을 준 버튼까지 내린다(Playwright WebKit 2388로 확인, 2026-11-27)
   useEffect(() => {
-    target.current?.focus()
+    target.current?.focus({ preventScroll: true })
   }, [target, redraws])
 
   // 실패마다 실행 버튼("다시 시도")으로 옮긴다(5.6, designer #239 D1)

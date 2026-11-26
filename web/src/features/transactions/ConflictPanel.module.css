@@ -129,6 +129,11 @@
     display: none;
   }
 
+  /* 열 머리가 없으므로 줄은 설명 아래 24px에서 바로 시작한다 */
+  .rows {
+    margin-top: 0;
+  }
+
   .row {
     grid-template-columns: minmax(0, 1fr);
     row-gap: var(--space-8);

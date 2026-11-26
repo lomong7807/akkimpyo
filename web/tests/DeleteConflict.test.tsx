@@ -149,7 +149,8 @@ describe('다시 하기', () => {
     const opened = await conflictOnDelete()
     await opened.user.click(retryButton())
     await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
-    expect(board()).toBeNull()
+    // 주소가 먼저 바뀌고 화면은 그 뒤에 그려진다
+    await waitFor(() => expect(board()).toBeNull())
     expect(sentVersions()).toEqual(['version=1', 'version=2'])
     await waitFor(() => expect(toastText()).toBe('휴지통으로 옮겼어요되돌리기'))
   })
