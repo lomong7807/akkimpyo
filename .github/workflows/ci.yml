@@ -75,7 +75,9 @@ jobs:
       - name: Build
         run: npm run build
 
-  # [측정용, 머지 전 확정값으로 바꾼다] M=2, 3, 4를 한 번에 돌려 shard별 시간을 잰다.
+  # 테스트가 2코어 러너 한 대에서 5분을 넘어, Vitest --shard로 나눠 러너 여러 대에서 동시에 돌린다.
+  # Vitest는 파일 경로의 해시 순으로 파일 수만 고르게 나누므로 shard 사이 시간은 고르지 않다.
+  # shard 수를 바꿀 때는 shard 목록과 total을 함께 바꾼다.
   web-test:
     name: web (test ${{ matrix.shard }}/${{ matrix.total }})
     runs-on: ubuntu-24.04
@@ -83,16 +85,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { shard: 1, total: 2 }
-          - { shard: 2, total: 2 }
-          - { shard: 1, total: 3 }
-          - { shard: 2, total: 3 }
-          - { shard: 3, total: 3 }
-          - { shard: 1, total: 4 }
-          - { shard: 2, total: 4 }
-          - { shard: 3, total: 4 }
-          - { shard: 4, total: 4 }
+        shard: [1, 2, 3, 4]
+        total: [4]
     defaults:
       run:
         working-directory: web
