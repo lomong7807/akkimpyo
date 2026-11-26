@@ -243,10 +243,10 @@ describe('같은 id를 다시 보냄(200)', () => {
 })
 
 describe('서버 오류와 지연', () => {
+  // 요청 중에 연결이 끊긴 새 거래(응답 없음)는 #234부터 같은 id로 기기에 쌓는다(P-904). OfflineSave.test.tsx가 본다
   it.each([
     ['500', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['429', () => problem(429, 'TOO_MANY_REQUESTS')],
     ['404', () => problem(404, 'NOT_FOUND')],
     ['모르는 칸만 온 400', refuse(['refund', 'NOT_ALLOWED'])],
@@ -296,7 +296,7 @@ describe('서버 오류와 지연', () => {
   })
 
   it('"다시 시도"는 같은 id로 보낸다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => HttpResponse.error(), undefined]
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => new HttpResponse('<html>', { status: 502 }), undefined]
     transactions.response = (sent) => answers.shift()?.() ?? HttpResponse.json(savedOf(sent.body), { status: 201 })
     const { user } = await openForm()
     await saveAmount(user)

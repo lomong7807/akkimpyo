@@ -250,6 +250,13 @@
   text-align: end;
 }
 
+/* 이번 달의 보내지 않은 입력이 합계에 없음을 알리는 줄. 차액 아래 8px, 왼쪽(designer #234 B) */
+.pendingNote {
+  margin: var(--space-8) 0 0;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}
+
 /* 뼈대에서 글자 한 줄을 막대로 놓는 줄 */
 .skeletonLine {
   display: flex;
