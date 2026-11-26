@@ -18,7 +18,9 @@ import { DayGroup } from './DayGroup'
 import { groupByDate } from './groupByDate'
 import { nameBookOf, type NameBook } from './listedText'
 import { useListMemory } from './listMemory'
+import { mergeMonth, pendingRow, pendingSums, usePendingTransactions, withPendingDays } from './pendingTransactions'
 import TransactionListSkeleton, { RowsSkeleton } from './TransactionListSkeleton'
+import type { Category } from '../categories/categories'
 import type { IncomeAndExpense, TransactionPage } from './transactions'
 import { useTransactionList } from './useTransactionList'
 import styles from './TransactionList.module.css'
@@ -119,6 +121,7 @@ function MonthTransactions({ month, today, highlight, onHighlightEnd }: MonthTra
         today={today}
         list={list}
         names={names}
+        categories={categories.data!}
         highlight={highlight}
         onHighlightEnd={onHighlightEnd}
       />
@@ -145,14 +148,37 @@ interface MonthContentProps extends Omit<MonthTransactionsProps, 'today'> {
   today: string
   list: TransactionListQuery & { data: { pages: TransactionPage[] } }
   names: NameBook
+  categories: Category[]
 }
 
-function MonthContent({ month, today, list, names, highlight, onHighlightEnd }: MonthContentProps) {
+/**
+ * 그 달의 줄과 합계. 이 기기에 쌓은 보내지 않은 입력을 같은 순서 규칙으로 섞는다(D-01 (8)(11)). 수입·지출 합계에는 그 달의
+ * 보내지 않은 입력을 더하고(D-01 (4)), 그날 합계에는 보이는 보내지 않음 줄을 더한다(planner Q5).
+ */
+function MonthContent({ month, today, list, names, categories, highlight, onHighlightEnd }: MonthContentProps) {
   const pages = list.data.pages
-  const items = useMemo(() => pages.flatMap((page) => page.items), [pages])
+  const pending = usePendingTransactions()
+  const serverItems = useMemo(() => pages.flatMap((page) => page.items), [pages])
+  const monthPending = useMemo(() => {
+    const serverIds = new Set(serverItems.map(({ id }) => id.toLowerCase()))
+    return pending
+      .flatMap((item) => pendingRow(item, categories) ?? [])
+      .filter((row) => monthOf(row.occurredOn) === month && !serverIds.has(row.id.toLowerCase()))
+  }, [pending, categories, serverItems, month])
+  const items = useMemo(
+    () => mergeMonth(serverItems, monthPending, !list.hasNextPage),
+    [serverItems, monthPending, list.hasNextPage],
+  )
   const groups = useMemo(() => groupByDate(items), [items])
-  const dayTotals = useMemo(() => new Map(pages.flatMap((page) => page.days).map((day) => [day.date, day])), [pages])
-  const totals = pages[0].totals ?? { income: 0, expense: 0 }
+  const dayTotals = useMemo(
+    () => withPendingDays(new Map(pages.flatMap((page) => page.days).map((day) => [day.date, day])), items),
+    [pages, items],
+  )
+  const totals = useMemo(() => {
+    const server = pages[0].totals ?? { income: 0, expense: 0 }
+    const added = pendingSums(monthPending)
+    return { income: server.income + added.income, expense: server.expense + added.expense }
+  }, [pages, monthPending])
   const rows = useRef<HTMLDivElement>(null)
 
   // 다시 받기가 끝난 뒤의 목록에 그 줄이 있으면 1초 동안 강조한다. 없으면 강조하지 않고 끝낸다
@@ -200,7 +226,7 @@ function MonthContent({ month, today, list, names, highlight, onHighlightEnd }: 
   )
 }
 
-/** 그 달의 수입·지출 합계(서버 값). 수입이 0원이면 부호와 강조색 없이 "0원"이다(0.2). */
+/** 그 달의 수입·지출 합계(서버 값에 보내지 않은 입력을 더한 것). 수입이 0원이면 부호와 강조색 없이 "0원"이다(0.2). */
 function Totals({ totals }: { totals: IncomeAndExpense }) {
   return (
     <dl className={styles.totals}>

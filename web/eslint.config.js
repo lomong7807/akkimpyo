@@ -30,8 +30,15 @@ const libPackages = {
 }
 
 const apiInternals = {
-  regex: '^\\.\\.?/(.*/)?api(/(?!(request|session|apiError)(\\.ts)?$)|$)',
-  message: '화면은 api의 request, session, apiError만 쓴다. 나머지는 api 안의 구현이다.',
+  regex: '^\\.\\.?/(.*/)?api(/(?!(request|session|apiError|connection)(\\.ts)?$)|$)',
+  message: '화면은 api의 request, session, apiError, connection만 쓴다. 나머지는 api 안의 구현이다.',
+}
+
+// 화면은 연결 상태를 읽기만 한다. 상태는 api 안의 요청 결과(http)와 앱 시작(app)이 바꾼다(4.3, architect #234 B).
+const connectionWrites = {
+  regex: '^\\.\\.?/(.*/)?api/connection(\\.ts)?$',
+  allowImportNames: ['connection', 'onConnectionChange', 'Connection'],
+  message: '화면은 api의 connection에서 connection, onConnectionChange, Connection만 쓴다. 연결 상태는 api가 바꾼다.',
 }
 
 const deviceInternals = {
@@ -78,7 +85,7 @@ export default tseslint.config(
     },
   },
   restrictedImports(['src/**/*.{ts,tsx}'], [deviceInternals]),
-  restrictedImports(['src/features/**/*.{ts,tsx}'], [importsFrom('app'), apiInternals, deviceInternals]),
+  restrictedImports(['src/features/**/*.{ts,tsx}'], [importsFrom('app'), apiInternals, connectionWrites, deviceInternals]),
   restrictedImports(
     ['src/components/**/*.{ts,tsx}'],
     [importsFrom('app'), importsFrom('features'), importsFrom('api'), importsFrom('device')],

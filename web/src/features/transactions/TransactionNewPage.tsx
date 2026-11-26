@@ -1,5 +1,6 @@
 import { useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router'
+import { connection } from '../../api/connection'
 import { sessionUserId } from '../../api/session'
 import { Button } from '../../components/Button'
 import FullScreenForm from '../../components/FullScreenForm'
@@ -8,14 +9,16 @@ import { useToast } from '../../components/ToastContext'
 import { useGoBack } from '../../components/useGoBack'
 import { useLeaveGuard } from '../../components/useLeaveGuard'
 import { uuidV7 } from '../../lib/uuid'
+import { useConnection } from '../connection/useConnection'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { EntryCopiesContext, useEntryAccounts } from './entryLists'
 import { defaultAccountOf } from './formDefaults'
 import { useListMemory } from './listMemory'
+import { isConnectionLoss, QUEUE_FAILED, QUEUED_TOAST, queueNewTransaction } from './pendingTransactions'
 import TransactionFields from './TransactionFields'
 import { toNewTransaction, validateTransaction } from './transactionForm'
 import { rejectedFields } from './transactionRejection'
-import { idConflictOf, needsResendNotice, type CreateResult } from './transactions'
+import { idConflictOf, needsResendNotice, type CreateResult, type NewTransaction } from './transactions'
 import { useCreateTransaction } from './useCreateTransaction'
 import { useMoreFold, useTransactionForm } from './useTransactionForm'
 
@@ -27,6 +30,8 @@ const HOME = '/home'
  * 거래 id는 화면을 열 때 만들고, 실패한 뒤 다시 시도하거나 값을 고쳐 다시 저장해도 같은 id로 보낸다(ADR 006).
  * 앞 요청이 서버에 저장됐을 수 있기 때문이다. 새 id는 그 id를 쓸 수 없다는 거부(current 없는 409)에서
  * "새 거래로 저장"을 누를 때만 만든다.
+ * 연결이 없으면 요청 없이 기기에 쌓고, 요청 중에 연결이 끊기면 같은 id로 쌓는다(F-103, P-904). 서버 오류와 15초 지연은 쌓지
+ * 않는다. 저장 버튼은 연결과 관계없이 누를 수 있다.
  */
 export default function TransactionNewPage() {
   const ledger = useCurrentLedger()
@@ -49,8 +54,11 @@ export default function TransactionNewPage() {
   const [shown, setShown] = useState<{ failure: Failure; count: number }>()
   // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돌고 다른 버튼은 누를 수 없다(00-common 4.5, designer 검토 2026-11-26)
   const [sender, setSender] = useState<Sender>('save')
+  // 기기에 쌓는 중이거나 쌓았다. 쌓았으면 화면을 떠날 때까지 그대로다
+  const [queueing, setQueueing] = useState(false)
+  const online = useConnection() === 'online'
 
-  const busy = creation.isPending || creation.isSuccess
+  const busy = creation.isPending || creation.isSuccess || queueing
   const guard = useLeaveGuard({ parent: HOME, changed: form.changed, busy })
   const failure = shown?.failure
 
@@ -63,10 +71,32 @@ export default function TransactionNewPage() {
       return
     }
     setSender(from)
+    const transaction = toNewTransaction(form.effective, transactionId)
+    if (connection() === 'offline') {
+      void queue(transaction)
+      return
+    }
     creation.mutate(
-      { transaction: toNewTransaction(form.effective, transactionId), user: owner.userId },
-      { onSuccess: finish, onError: showFailure },
+      { transaction, user: owner.userId },
+      { onSuccess: finish, onError: (error) => (isConnectionLoss(error) ? void queue(transaction) : showFailure(error)) },
     )
+  }
+
+  /** 기기에 쌓고 이전 화면으로 간다. 쌓지 못하면 저장 위에 문구를 보이고 값을 둔다(designer Q8). */
+  async function queue(transaction: NewTransaction) {
+    setQueueing(true)
+    try {
+      await queueNewTransaction(owner, transaction)
+    } catch {
+      setQueueing(false)
+      creation.reset()
+      setShown((last) => ({ failure: { kind: 'not-queued' }, count: (last?.count ?? 0) + 1 }))
+      return
+    }
+    // 돌아간 화면이 내역이면 보내지 않음 줄을 강조한다(서버에 저장했을 때와 같다)
+    listMemory.rememberSaved(transaction.id)
+    showToast(QUEUED_TOAST)
+    guard.leaveAfterSave(goBack)
   }
 
   // 화면을 떠난 뒤에 온 응답으로는 불리지 않는다
@@ -128,7 +158,17 @@ export default function TransactionNewPage() {
                 문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.
               </RetryMessage>
             )}
-            {failure?.kind === 'saved-differently' && (
+            {failure?.kind === 'not-queued' && (
+            <RetryMessage
+              failures={shown?.count}
+              onRetry={retry}
+              busy={messageBusy}
+              disabled={saveBusy || !online}
+            >
+              {QUEUE_FAILED}
+            </RetryMessage>
+          )}
+          {failure?.kind === 'saved-differently' && (
               <RetryMessage
                 failures={shown?.count}
                 to={`/transactions/${failure.savedId}`}
@@ -176,6 +216,8 @@ type Failure =
   | { kind: 'saved-differently'; savedId: string }
   /** 그 id를 쓸 수 없다(current 없는 409). 새 id로 만든다 */
   | { kind: 'id-unusable' }
+  /** 연결이 없는데 기기에 쌓지 못했다(저장소를 쓸 수 없음). "다시 시도"는 연결이 없는 동안 비활성이다 */
+  | { kind: 'not-queued' }
 
 /** 저장 위에 보일 실패. 칸에 보인 거부와 실패가 없으면 없다. */
 function failureOf(error: Error): Failure | undefined {

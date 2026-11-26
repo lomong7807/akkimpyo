@@ -4,7 +4,8 @@ import Amount from '../../components/Amount'
 import StatusChip from '../../components/StatusChip'
 import { formatDate } from '../../lib/calendarDate'
 import { detailOf, titleOf, type NameBook } from './listedText'
-import type { DayTotal, ListedTransaction } from './transactions'
+import type { ShownTransaction } from './pendingTransactions'
+import type { DayTotal } from './transactions'
 import styles from './TransactionList.module.css'
 
 /*
@@ -15,9 +16,9 @@ import styles from './TransactionList.module.css'
 interface DayGroupProps {
   date: string
   today: string
-  /** 서버가 준 그날 전체 합계 */
+  /** 서버가 준 그날 전체 합계(보이는 보내지 않음 줄을 더한 것) */
   total: DayTotal | undefined
-  items: ListedTransaction[]
+  items: ShownTransaction[]
   names: NameBook
   /** 강조할 거래 id */
   highlighted?: string
@@ -80,7 +81,7 @@ function DaySums({ total }: { total: DayTotal }) {
 const amountKinds = { EXPENSE: 'expense', INCOME: 'income', TRANSFER: 'transfer' } as const
 
 interface TransactionRowProps {
-  transaction: ListedTransaction
+  transaction: ShownTransaction
   names: NameBook
   /** 날짜 묶음 머리의 id. 링크 이름에 날짜를 넣는다. */
   dateId: string
@@ -90,6 +91,8 @@ interface TransactionRowProps {
 /**
  * 거래 줄(0.4). 줄 전체가 상세로 가는 링크다. 링크 이름은 aria-labelledby로 제목 전체, 금액, 날짜(묶음 머리), 시각,
  * 둘째 줄, 상태를 차례로 잇는다. 말줄임으로 잘린 제목도 화면 읽기에는 다 읽힌다.
+ * 기기에 쌓여 아직 서버에 없는 줄은 셋째 줄에 표시 칩 "보내지 않음"을 붙이고(C-01 (10), D-01 (11)) 링크가 아니다
+ * (1B 임시. 보내지 않은 입력 목록 B-05로 가는 것은 #236에서 잇는다). 칩은 "취소"와 같은 자리다(0.4, designer #234 B).
  */
 function TransactionRow({ transaction, names, dateId, highlighted }: TransactionRowProps) {
   const id = useId()
@@ -108,36 +111,50 @@ function TransactionRow({ transaction, names, dateId, highlighted }: Transaction
     .filter(Boolean)
     .join(' ')
 
+  const className = highlighted ? `${styles.row} ${styles.highlighted}` : styles.row
+  const content = (
+    <>
+      <span id={`${id}-time`} className={`${styles.time} tabular-nums`}>
+        {time ?? ''}
+      </span>
+      <span className={styles.body}>
+        <span className={styles.first}>
+          <span id={`${id}-title`} className={styles.title}>
+            {title}
+          </span>
+          <span id={`${id}-amount`} className={styles.amount}>
+            <Amount kind={amountKinds[transaction.type]} value={transaction.amount} canceled={canceled} />
+          </span>
+        </span>
+        {detail && (
+          <span id={`${id}-detail`} className={styles.detail}>
+            {detail}
+          </span>
+        )}
+        {canceled && (
+          <span id={`${id}-status`} className={styles.status}>
+            <StatusChip>취소</StatusChip>
+          </span>
+        )}
+        {transaction.pending && (
+          <span className={styles.status}>
+            <StatusChip>보내지 않음</StatusChip>
+          </span>
+        )}
+      </span>
+    </>
+  )
+  if (transaction.pending) {
+    return (
+      <li>
+        <div className={`${className} ${styles.pendingRow}`}>{content}</div>
+      </li>
+    )
+  }
   return (
     <li>
-      <Link
-        to={`/transactions/${transaction.id}`}
-        className={highlighted ? `${styles.row} ${styles.highlighted}` : styles.row}
-        aria-labelledby={labelledBy}
-      >
-        <span id={`${id}-time`} className={`${styles.time} tabular-nums`}>
-          {time ?? ''}
-        </span>
-        <span className={styles.body}>
-          <span className={styles.first}>
-            <span id={`${id}-title`} className={styles.title}>
-              {title}
-            </span>
-            <span id={`${id}-amount`} className={styles.amount}>
-              <Amount kind={amountKinds[transaction.type]} value={transaction.amount} canceled={canceled} />
-            </span>
-          </span>
-          {detail && (
-            <span id={`${id}-detail`} className={styles.detail}>
-              {detail}
-            </span>
-          )}
-          {canceled && (
-            <span id={`${id}-status`} className={styles.status}>
-              <StatusChip>취소</StatusChip>
-            </span>
-          )}
-        </span>
+      <Link to={`/transactions/${transaction.id}`} className={className} aria-labelledby={labelledBy}>
+        {content}
       </Link>
     </li>
   )
