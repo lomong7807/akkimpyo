@@ -12,7 +12,7 @@ import {
   startOfWeek,
   today,
   weeksOf,
-} from '../src/components/calendarDate'
+} from '../src/lib/calendarDate'
 
 afterEach(() => {
   vi.useRealTimers()

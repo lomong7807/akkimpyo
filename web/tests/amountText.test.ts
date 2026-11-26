@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { formatAmount, joinDigits, pastedDigits, positionAfterDigits } from '../src/components/amountText'
+import { formatAmount, joinDigits, pastedDigits, positionAfterDigits } from '../src/lib/amountText'
 
 describe('보이는 금액', () => {
   it.each([

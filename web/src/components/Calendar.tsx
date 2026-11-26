@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { flushSync } from 'react-dom'
-import { Button } from './Button'
 import {
   addDays,
   addMonths,
@@ -14,7 +13,8 @@ import {
   today,
   WEEKDAYS,
   weeksOf,
-} from './calendarDate'
+} from '../lib/calendarDate'
+import { Button } from './Button'
 import styles from './Calendar.module.css'
 
 const moves: Partial<Record<string, (date: string) => string>> = {

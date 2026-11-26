@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { hasUnusableCharacter, lengthOf, normalizeName, trimWhiteSpace } from '../src/components/visibleText'
+import { hasUnusableCharacter, lengthOf, normalizeName, trimWhiteSpace } from '../src/lib/visibleText'
 
 /** 보이지 않는 글자를 시험 이름에서 알아보게 적는다. */
 const named = (text: string) =>

@@ -1,7 +1,7 @@
 import { ApiError, type FieldError } from '../../api/apiError'
-import { amountTooLarge } from '../../components/amountText'
-import { formatDate, selectableRange, today } from '../../components/calendarDate'
+import { amountTooLarge } from '../../components/AmountField'
 import type { FieldErrors } from '../../components/useFormFields'
+import { formatDate, selectableRange, today } from '../../lib/calendarDate'
 import { amountRequired, dateRequired, nameRequired, nameTooLong, nameUnusable, type AccountField } from './accountForm'
 
 /* 계좌 추가가 거부된 칸의 code(#13의 응답 계약)는 이 파일에만 있다. 칸의 이름은 보내는 값(NewAccount)과 같다. */

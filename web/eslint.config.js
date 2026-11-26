@@ -5,16 +5,25 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 // 의존 방향은 app → features → components, api다. 거꾸로 불러오지 않고 components와 api는 서로 모른다.
-function importsFrom(folder) {
+// lib는 화면과 무관한 계산이다. React와 앱의 다른 폴더를 모른다.
+const direction = '의존 방향은 app → features → components, api다.'
+const libDirection = 'lib는 화면과 무관한 계산이라 앱의 다른 폴더를 모른다.'
+
+function importsFrom(folder, rule = direction) {
   return {
     regex: `^\\.\\.?/(.*/)?${folder}(/|$)`,
-    message: `의존 방향은 app → features → components, api다. 여기서 ${folder}를 불러오지 않는다.`,
+    message: `${rule} 여기서 ${folder}를 불러오지 않는다.`,
   }
 }
 
 const reactPackages = {
   regex: '^(react|react-dom|react-router|@tanstack/react-query)(/|$)',
   message: 'api는 React와 무관하다. 화면과 잇는 훅은 features에 둔다.',
+}
+
+const libPackages = {
+  regex: '^((react|react-dom|react-router)(/|$)|@tanstack/)',
+  message: 'lib는 React와 무관하다. 화면과 잇는 코드는 components나 features에 둔다.',
 }
 
 const apiInternals = {
@@ -64,5 +73,15 @@ export default tseslint.config(
   restrictedImports(
     ['src/api/**/*.{ts,tsx}'],
     [importsFrom('app'), importsFrom('features'), importsFrom('components'), reactPackages],
+  ),
+  restrictedImports(
+    ['src/lib/**/*.{ts,tsx}'],
+    [
+      importsFrom('app', libDirection),
+      importsFrom('features', libDirection),
+      importsFrom('components', libDirection),
+      importsFrom('api', libDirection),
+      libPackages,
+    ],
   ),
 )
