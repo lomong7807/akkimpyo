@@ -6,7 +6,8 @@ import { transactionTypes } from './transactions'
 /*
  * 거래 입력의 쓰던 값(00-common 4.1, #234 C2, 설계 7절). 기기 저장소의 값은 믿지 않고 모양을 다시 본다.
  * - 새 입력은 거래 id를 꼭 같이 남긴다. 앞 요청이 서버에 저장됐을 수 있어 다시 저장할 때 같은 id로 보내야 한다(ADR 006)
- * - 수정은 연 때의 version을 남긴다. 그사이 서버의 거래가 바뀌었으면 저장할 때 충돌(N-04)이 뜬다
+ * - 수정은 연 때의 version과 값을 짝으로 남긴다. 그사이 서버의 거래가 바뀌었으면 저장할 때 충돌(N-04)이 뜨고, "내 입력 다시 적용"
+ *   (F-909)은 내가 바꾼 칸을 연 때의 값과 비교한다(#266). 연 때의 값이 없으면(#266 전에 남긴 것) 그대로 받는다
  */
 
 export interface NewTransactionDraft {
@@ -17,6 +18,8 @@ export interface NewTransactionDraft {
 export interface EditTransactionDraft {
   version: number
   values: TransactionValues
+  /** 연 때의 값. #266 전에 남긴 것에는 없다 */
+  openedValues?: TransactionValues
 }
 
 export function newTransactionDraftOf(saved: unknown): NewTransactionDraft | undefined {
@@ -26,11 +29,16 @@ export function newTransactionDraftOf(saved: unknown): NewTransactionDraft | und
   return isUuid(id) && checked ? { id, values: checked } : undefined
 }
 
+/** 연 때의 값이 있는데 모양이 틀리면 채우지 않는다. 옛 동작(다시 연 때의 값과 비교)으로 떨어지면 다른 기기의 수정을 되돌린다 */
 export function editTransactionDraftOf(saved: unknown): EditTransactionDraft | undefined {
   if (typeof saved !== 'object' || saved === null) return undefined
-  const { version, values } = saved as Partial<Record<keyof EditTransactionDraft, unknown>>
+  const { version, values, openedValues } = saved as Partial<Record<keyof EditTransactionDraft, unknown>>
   const checked = transactionValuesOf(values)
-  return Number.isSafeInteger(version) && checked ? { version: version as number, values: checked } : undefined
+  if (!Number.isSafeInteger(version) || !checked) return undefined
+  const draft = { version: version as number, values: checked }
+  if (openedValues === undefined) return draft
+  const opened = transactionValuesOf(openedValues)
+  return opened && { ...draft, openedValues: opened }
 }
 
 function transactionValuesOf(values: unknown): TransactionValues | undefined {

@@ -428,36 +428,102 @@ describe('최신 거래(current)가 없거나 읽을 수 없음', () => {
 })
 
 describe('이 기기에 남겼다 채운 입력(#234 C2)', () => {
-  it('채운 입력이 충돌해 다시 얹으면, 남겼던 version이 아니라 최신 version으로 보낸다', async () => {
-    const item = lunch()
-    put(item)
-    // 앱을 새로 열 때와 같은 모듈에 남긴다(앞 테스트의 저장소 연결을 쓰지 않는다, Drafts.test.tsx와 같다)
+  /** 상세의 값과 같은 칸의 값(lunch). 남긴 쓰던 값과 연 때의 값을 이것으로 만든다 */
+  const lunchValues = {
+    type: 'EXPENSE',
+    amount: 25000,
+    payee: '김밥천국',
+    categoryId: id.dining,
+    accountId: id.wallet,
+    toAccountId: '',
+    occurredOn: '2026-11-25',
+    occurredTime: '13:05',
+    memo: '팀 점심\n영수증은 사진첩에',
+  }
+
+  /** 앱을 새로 열 때와 같은 모듈에 남긴다(앞 테스트의 저장소 연결을 쓰지 않는다, Drafts.test.tsx와 같다) */
+  async function keepEditDraft(item: Item, values: object) {
     vi.resetModules()
     const { keepDrafts } = await import('../src/device/drafts')
-    const values = {
-      type: 'EXPENSE',
-      amount: 30000,
-      payee: '김밥천국',
-      categoryId: id.dining,
-      accountId: id.wallet,
-      toAccountId: '',
-      occurredOn: '2026-11-25',
-      occurredTime: '13:05',
-      memo: '팀 점심\n영수증은 사진첩에',
-    }
     const savedAt = Date.parse('2026-11-26T12:00:00+09:00')
-    await keepDrafts('user-1', [{ form: 'transaction-edit', path: editPath(item), values: { version: 1, values }, savedAt }])
-    changeElsewhere(item)
+    await keepDrafts('user-1', [{ form: 'transaction-edit', path: editPath(item), values, savedAt }])
+  }
+
+  /** 남긴 쓰던 값을 채운 수정 화면에서 저장해 판이 열릴 때까지 기다린다. */
+  async function conflictAfterRestore(item: Item) {
     const opened = await openApp(editPath(item))
     await waitFor(() => expect(amount().value).toBe('30,000'))
     await opened.user.click(saveButton())
     await waitFor(() => expect(sheet()).toBeTruthy())
     await untilOpened()
+    return opened
+  }
+
+  it('채운 입력이 충돌해 다시 얹으면, 남겼던 version이 아니라 최신 version으로 보낸다', async () => {
+    const item = lunch()
+    put(item)
+    await keepEditDraft(item, { version: 1, values: { ...lunchValues, amount: 30000 } })
+    changeElsewhere(item)
+    const opened = await conflictAfterRestore(item)
     await opened.user.click(reapplyButton()!)
     await waitFor(() => expect(sheet()).toBeNull())
     await opened.user.click(saveButton())
     await waitFor(() => expect(detail.requests.update).toHaveLength(2))
     expect(sentVersions()).toEqual([1, 2])
     await waitFor(() => expect(toastText()).toBe('저장했어요'))
+  })
+
+  it('남긴 연 때의 값과 비교해 내가 바꾼 칸만 얹는다. 그사이 다른 기기가 고친 칸은 최신 내용 그대로다(#266)', async () => {
+    const item = lunch()
+    put(item)
+    // 연 때 {금액 25,000, 가맹점 김밥천국}(version 1)에서 금액만 30,000으로 고치는 중에 로그인이 풀렸다
+    await keepEditDraft(item, { version: 1, values: { ...lunchValues, amount: 30000 }, openedValues: lunchValues })
+    // 그사이 다른 기기가 가맹점만 고쳤다(version 2)
+    changeElsewhere(item, { amount: 25000, payee: '김밥나라' })
+    const opened = await conflictAfterRestore(item)
+    expect(payee().value).toBe('김밥천국')
+    // 비교 판은 그대로 두 값이 다른 줄을 다 보인다
+    expect(compareRows()).toEqual([
+      ['금액', '25,000원', '30,000원'],
+      ['가맹점/내용', '김밥나라', '김밥천국'],
+    ])
+    await opened.user.click(reapplyButton()!)
+    await waitFor(() => expect(sheet()).toBeNull())
+    expect(amount().value).toBe('30,000')
+    expect(payee().value).toBe('김밥나라')
+    expect(notice()).toBeTruthy()
+    await opened.user.click(saveButton())
+    await waitFor(() => expect(detail.requests.update).toHaveLength(2))
+    expect(sentVersions()).toEqual([1, 2])
+    expect(detail.requests.update[1].body).toMatchObject({ amount: 30000, payee: '김밥나라' })
+  })
+
+  it('연 때의 값이 없는 옛 쓰던 값이면 지금처럼 다시 연 때 받은 값과 비교한다(#266 전에 남긴 것)', async () => {
+    const item = lunch()
+    put(item)
+    await keepEditDraft(item, { version: 1, values: { ...lunchValues, amount: 30000 } })
+    changeElsewhere(item, { amount: 25000, payee: '김밥나라' })
+    const opened = await conflictAfterRestore(item)
+    await opened.user.click(reapplyButton()!)
+    await waitFor(() => expect(sheet()).toBeNull())
+    // 다시 연 때의 가맹점(김밥나라)과 쓰던 값(김밥천국)이 달라 내가 바꾼 칸으로 본다
+    expect(amount().value).toBe('30,000')
+    expect(payee().value).toBe('김밥천국')
+  })
+
+  it('연 때의 값의 모양이 틀리면 쓰던 값을 채우지 않는다', async () => {
+    const item = lunch()
+    put(item)
+    await keepEditDraft(item, {
+      version: 1,
+      values: { ...lunchValues, amount: 30000 },
+      openedValues: { ...lunchValues, amount: '25000' },
+    })
+    await openApp(editPath(item))
+    await waitFor(() => expect(payee().value).toBe('김밥천국'))
+    // 채우려고 읽은 뒤에는 지운다. 지워졌으면 채우기를 이미 지나갔다
+    const { readDraft } = await import('../src/device/draftReads')
+    await waitFor(async () => expect(await readDraft('user-1', 'transaction-edit')).toBeUndefined())
+    expect(amount().value).toBe('25,000')
   })
 })
