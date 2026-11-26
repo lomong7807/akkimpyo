@@ -3,7 +3,7 @@ import { useParams } from 'react-router'
 import { ApiError } from '../../api/apiError'
 import { currentUserId } from '../../api/session'
 import Amount from '../../components/Amount'
-import { Button } from '../../components/Button'
+import { Button, ButtonLink } from '../../components/Button'
 import ConfirmDialog, { type ConfirmFailure } from '../../components/ConfirmDialog'
 import LoadFailure from '../../components/LoadFailure'
 import Notice from '../../components/Notice'
@@ -35,7 +35,7 @@ const statusNames = { POSTED: '완료', CANCELED: '취소', PENDING: '승인 대
 
 /**
  * D-06 거래 상세(1A). 주소의 id가 UUID 모양이 아니면 요청하지 않고 찾을 수 없음(N-01)을 보인다.
- * 1A에는 "수정"(#89), 승인취소, 변경 이력, 이벤트·결제한 사람(2단계), 넓은 화면의 오른쪽 칸이 없다.
+ * 1A에는 승인취소, 변경 이력, 이벤트·결제한 사람(2단계), 넓은 화면의 오른쪽 칸이 없다.
  */
 export default function TransactionDetailPage() {
   const { id } = useParams()
@@ -46,6 +46,7 @@ export default function TransactionDetailPage() {
 
 /** 거래, 계좌, 카테고리를 함께 기다린다. 계좌와 카테고리 이름은 목록으로 바꾼다(내역과 같다). */
 function TransactionScreen({ id }: { id: string }) {
+  const ledger = useCurrentLedger()
   const detail = useTransactionDetail(id)
   const accounts = useAccounts()
   const categories = useCategories()
@@ -56,11 +57,14 @@ function TransactionScreen({ id }: { id: string }) {
     [accounts.data, categories.data],
   )
 
+  // (1) 수정은 편집 이상에게만 보이고 휴지통의 거래에는 없다. 휴지통에 있는지 알아야 하므로 거래를 받은 뒤에 보인다
+  const editable = detail.data !== undefined && detail.data.deletedAt === null && canEdit(ledger)
+
   // 없거나 다른 장부의 거래, 완전히 지운 거래는 서버가 구분하지 않고 404다(P-903)
   if (!detail.data && detail.error instanceof ApiError && detail.error.status === 404) return <NotFoundPage />
 
   return (
-    <SubScreen title="거래 상세" parent={PARENT}>
+    <SubScreen title="거래 상세" parent={PARENT} action={editable ? <EditLink id={id} /> : undefined}>
       {detail.data && names ? (
         <DetailContent transaction={detail.data} names={names} today={today} />
       ) : (
@@ -127,6 +131,15 @@ function DetailContent({ transaction, names, today }: DetailContentProps) {
         {!deleted && canEdit(ledger) && <DeleteAction transaction={transaction} />}
       </div>
     </>
+  )
+}
+
+/** (1) 수정. 상단 바 오른쪽 끝의 글자 버튼이고(계좌 G-01의 "추가"와 같다) 거래 수정(D-04)을 연다(F-208). */
+function EditLink({ id }: { id: string }) {
+  return (
+    <ButtonLink kind="text" to={`/transactions/${id}/edit`}>
+      수정
+    </ButtonLink>
   )
 }
 

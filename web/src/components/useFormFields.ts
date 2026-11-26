@@ -16,7 +16,7 @@ type TextField<Values> = { [Field in keyof Values]: Values[Field] extends string
 /** 입력칸의 값과 오류 문구. 검사하는 때와 초점의 규칙은 화면설계서 00-common 4.4다. */
 export function useFormFields<Values extends object>({ fields, initialValues, validate }: FormFieldsOptions<Values>) {
   type Field = keyof Values
-  const [initial] = useState(initialValues)
+  const [initial, setInitial] = useState(initialValues)
   const [values, setValues] = useState(initial)
   /** 칸을 벗어나거나 제출해 오류 문구를 보이고 있는 칸 */
   const [shown, setShown] = useState<Set<Field>>(new Set())
@@ -91,8 +91,19 @@ export function useFormFields<Values extends object>({ fields, initialValues, va
     }
   }
 
+  /**
+   * 처음 값을 새로 정하고 칸을 그 값으로 채운다. 보이던 오류 문구는 지운다. 화면을 연 뒤에 받아 온 값(고칠 거래)으로 채울 때 쓴다.
+   * 이 값과 같으면 바꾸지 않은 것이다.
+   */
+  function reset(next: Values) {
+    setInitial(next)
+    setValues(next)
+    setShown(new Set())
+    setRejected({})
+  }
+
   /** 연 뒤에 바꾼 값이 있다. 되돌린 값은 바꾸지 않은 것이다. */
   const changed = (Object.keys(initial) as Field[]).some((field) => values[field] !== initial[field])
 
-  return { values, changed, change, control, fieldProps, check, checkAll, reject }
+  return { values, changed, change, control, fieldProps, check, checkAll, reject, reset }
 }

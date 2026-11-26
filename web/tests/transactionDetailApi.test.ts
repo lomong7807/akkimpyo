@@ -243,3 +243,108 @@ describe('거부의 뜻', () => {
     expect(tab.isInvalidState(error)).toBe(false)
   })
 })
+
+describe('수정(PUT)', () => {
+  const update = {
+    type: 'EXPENSE',
+    occurredOn: '2026-11-24',
+    occurredTime: null,
+    accountId: account,
+    categoryId: null,
+    amount: 30000,
+    payee: '김밥나라',
+    memo: null,
+    version: 1,
+  } as const
+
+  it('본문에 거래 id 없이 version을 싣고 기기 값을 헤더로 한 번 보내 바뀐 거래를 준다', async () => {
+    const item = lunch()
+    detail.put(item)
+    const tab = await openSignedInTab()
+    const saved = await tab.updateTransaction(ledgerId, String(item.id), update, 'user-1')
+    expect(detail.requests.update).toHaveLength(1)
+    expect(detail.requests.update[0]).toMatchObject({
+      ledgerId,
+      id: item.id,
+      user: 'user-1',
+      query: '',
+      device: 'iphone.safari',
+    })
+    expect(detail.requests.update[0].body).toEqual(update)
+    expect(saved).toMatchObject({ id: item.id, version: 2, amount: 30000, payee: '김밥나라', occurredTime: null })
+  })
+
+  it('이체는 보내는 계좌와 받는 계좌로 보낸다', async () => {
+    const item = transferOf({ occurredOn: '2026-11-25', fromAccountId: account, toAccountId: category, amount: 1 })
+    detail.put(item)
+    const tab = await openSignedInTab()
+    const transfer = {
+      type: 'TRANSFER',
+      occurredOn: '2026-11-25',
+      occurredTime: '09:00',
+      fromAccountId: category,
+      toAccountId: account,
+      amount: 2,
+      memo: '바꿈',
+      version: 1,
+    } as const
+    await tab.updateTransaction(ledgerId, String(item.id), transfer, 'user-1')
+    expect(detail.requests.update[0].body).toEqual(transfer)
+  })
+
+  it('UUID가 아닌 id는 보내지 않는다', async () => {
+    const tab = await openSignedInTab()
+    await errorOf(tab.updateTransaction(ledgerId, '../me', update, 'user-1'))
+    expect(detail.requests.update).toEqual([])
+  })
+
+  it.each([
+    ['다른 사용자가 시작함', 'user-2'],
+    ['시작한 사용자를 모름', undefined],
+  ])('보내는 순간의 사용자가 시작한 사용자와 다르면 보내지 않는다(%s)', async (_, startedBy) => {
+    const item = lunch()
+    detail.put(item)
+    const tab = await openSignedInTab()
+    await errorOf(tab.updateTransaction(ledgerId, String(item.id), update, startedBy))
+    expect(detail.requests.update).toEqual([])
+  })
+
+  it('로그아웃한 뒤에는 보내지 않는다', async () => {
+    const item = lunch()
+    detail.put(item)
+    const tab = await openSignedInTab()
+    tab.logout()
+    await errorOf(tab.updateTransaction(ledgerId, String(item.id), update, 'user-1'))
+    expect(detail.requests.update).toEqual([])
+  })
+
+  it.each([
+    ['다른 거래', { id: '01900000-0000-7000-8000-999999999999' }],
+    ['휴지통에 있음', trashed('2026-11-26T03:15:00.123Z')],
+    ['메모 항목이 없음', { memo: undefined }],
+    ['version이 없음', { version: undefined }],
+    ['금액이 글자', { amount: '30000' }],
+  ])('약속과 다른 응답(%s)은 받지 않는다', async (_, changes) => {
+    const item = lunch()
+    detail.updateResponse = () => HttpResponse.json({ ...item, version: 2, ...changes })
+    const tab = await openSignedInTab()
+    const error = await errorOf(tab.updateTransaction(ledgerId, String(item.id), update, 'user-1'))
+    expect(error).toMatchObject({ kind: 'server' })
+  })
+
+  it('낡은 version이면 409 STALE_VERSION이고 최신 거래(current)를 준다', async () => {
+    const item = lunch({ version: 3 })
+    detail.put(item)
+    const tab = await openSignedInTab()
+    const error = await errorOf(tab.updateTransaction(ledgerId, String(item.id), update, 'user-1'))
+    expect(tab.staleVersionOf(error, String(item.id))).toEqual({ current: item })
+  })
+
+  it('version이 맞는데 휴지통에 있으면 409 INVALID_STATE다', async () => {
+    const item = lunch(trashed('2026-11-26T03:15:00.123Z'))
+    detail.put(item)
+    const tab = await openSignedInTab()
+    const error = await errorOf(tab.updateTransaction(ledgerId, String(item.id), update, 'user-1'))
+    expect(tab.isInvalidState(error)).toBe(true)
+  })
+})

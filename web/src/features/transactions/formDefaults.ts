@@ -11,6 +11,11 @@ export function defaultAccountOf(owner: { userId: string | undefined; ledgerId: 
   return readLastAccount(owner, ordered.map(({ id }) => id)) ?? ordered[0]?.id ?? ''
 }
 
+/** 그 장부의 미분류 카테고리(시스템 카테고리)인지. 서버는 미분류로 저장한 거래에 이 id를 준다(#15). */
+export function isUncategorized(categories: Category[], id: string): boolean {
+  return categories.some((category) => category.system && category.id === id)
+}
+
 /** 고른 카테고리의 구분. 목록에 없으면 없다. */
 export function categoryKindOf(categories: Category[] | undefined, id: string): CategoryKind | undefined {
   return categories?.find((category) => category.id === id || category.children.some((child) => child.id === id))

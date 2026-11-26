@@ -2,7 +2,13 @@ import type { FieldErrors } from '../../components/useFormFields'
 import { today } from '../../lib/calendarDate'
 import { currentTime, isValidTime, normalizeTime } from '../../lib/timeText'
 import { hasUnusableCharacter, lengthOf, trimSpaces } from '../../lib/visibleText'
-import type { NewTransaction, TransactionType } from './transactions'
+import type {
+  NewTransaction,
+  TransactionContent,
+  TransactionDetail,
+  TransactionType,
+  TransactionUpdate,
+} from './transactions'
 
 /** 칸의 값. 오류를 보이는 칸은 화면 위쪽부터 transactionFields의 순서다. */
 export interface TransactionValues {
@@ -142,14 +148,63 @@ export function typeChange(
   return change
 }
 
-/** 서버에 보낼 값. 검사에 맞은 값과 기본 계좌까지 채운 계좌만 받는다. 날짜와 시각은 시간대 변환 없이 그대로 보낸다. */
+/**
+ * 수정(D-04)의 처음 값. 저장된 거래의 값이고, 없는 값(가맹점, 시각, 메모)은 빈 칸이다. 이체의 보내는 계좌는 계좌 칸이 맡는다.
+ * 서버는 미분류를 그 장부의 미분류 카테고리 id로 주므로(#15) 그 id면 빈 칸(미분류)으로 연다. `isUncategorized`는 그 판단이다.
+ */
+export function savedTransactionValues(
+  transaction: TransactionDetail,
+  isUncategorized: (categoryId: string) => boolean,
+): TransactionValues {
+  const shared = {
+    type: transaction.type,
+    amount: transaction.amount,
+    occurredOn: transaction.occurredOn,
+    occurredTime: transaction.occurredTime ?? '',
+    memo: transaction.memo ?? '',
+  }
+  if (transaction.type === 'TRANSFER') {
+    const { fromAccountId, toAccountId } = transaction
+    return { ...shared, payee: '', categoryId: '', accountId: fromAccountId, toAccountId }
+  }
+  const { categoryId, accountId, payee } = transaction
+  return {
+    ...shared,
+    payee: payee ?? '',
+    categoryId: isUncategorized(categoryId) ? '' : categoryId,
+    accountId,
+    toAccountId: '',
+  }
+}
+
+/** 새 거래로 보낼 값. 검사에 맞은 값과 기본 계좌까지 채운 계좌만 받는다. */
 export function toNewTransaction(values: TransactionValues, id: string): NewTransaction {
+  return { id, ...toTransactionContent(values) }
+}
+
+/**
+ * 두 값을 보내면 서버에 같은 내용이 되는지. 칸의 글자가 달라도 보낼 값이 같으면(가맹점의 앞뒤 공백 등) 같다.
+ * 수정에서 바꾼 것이 없으면 보내지 않는 데 쓴다. 둘 다 검사에 맞은 값이어야 한다.
+ */
+export function hasSameContent(a: TransactionValues, b: TransactionValues): boolean {
+  return JSON.stringify(toTransactionContent(a)) === JSON.stringify(toTransactionContent(b))
+}
+
+/** 수정으로 보낼 값(#36). `version`은 화면이 연 때의 거래의 것이다. 받는 값은 toNewTransaction과 같다. */
+export function toTransactionUpdate(values: TransactionValues, version: number): TransactionUpdate {
+  return { ...toTransactionContent(values), version }
+}
+
+/**
+ * 거래에 넣을 값. 서버가 저장할 모양으로 맞춘다(가맹점은 앞뒤 공백을 지우고, 글자는 조합형, 빈 칸은 null).
+ * 날짜와 시각은 시간대 변환 없이 그대로 보낸다.
+ */
+function toTransactionContent(values: TransactionValues): TransactionContent {
   const occurredTime = values.occurredTime === '' ? null : normalizeTime(values.occurredTime)
   const memo = values.memo === '' ? null : values.memo.normalize('NFC')
   const amount = values.amount!
   if (values.type === 'TRANSFER') {
     return {
-      id,
       type: 'TRANSFER',
       occurredOn: values.occurredOn,
       occurredTime,
@@ -161,7 +216,6 @@ export function toNewTransaction(values: TransactionValues, id: string): NewTran
   }
   const payee = normalizePayee(values.payee)
   return {
-    id,
     type: values.type,
     occurredOn: values.occurredOn,
     occurredTime,

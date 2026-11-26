@@ -152,6 +152,40 @@ describe('전체 화면 입력의 틀', () => {
     await openFromList()
     expect(document.activeElement).toBe(document.body)
   })
+
+  it('저장 자리를 주지 않으면(받는 동안) 그 자리를 숨기고, 주면 같은 화면에 나타난다', () => {
+    function Waiting({ ready }: { ready: boolean }) {
+      const guard = useLeaveGuard({ parent: '/list', changed: false, busy: false })
+      return (
+        <FullScreenForm title="거래 수정" guard={guard} onSubmit={onSubmit} bottom={ready ? <button>저장</button> : undefined}>
+          <p>칸</p>
+        </FullScreenForm>
+      )
+    }
+    function Screen() {
+      const [ready, setReady] = useState(false)
+      return (
+        <>
+          <Waiting ready={ready} />
+          <button type="button" onClick={() => setReady(true)}>
+            받음
+          </button>
+        </>
+      )
+    }
+    window.history.replaceState(null, '', '/edit')
+    router = createBrowserRouter([{ path: '/edit', element: <Screen /> }])
+    render(<RouterProvider router={router} />)
+    const frame = screen.getByRole('main').parentElement!
+    const bottom = screen.getByText('칸').closest('form')!.lastElementChild as HTMLElement
+    expect(bottom.hidden).toBe(true)
+    expect(getComputedStyle(bottom).display).toBe('none')
+    fireEvent.click(screen.getByRole('button', { name: '받음' }))
+    expect(screen.getByRole('main').parentElement).toBe(frame)
+    expect(bottom.hidden).toBe(false)
+    expect(getComputedStyle(bottom).display).toBe('flex')
+    expect(bottom.contains(screen.getByRole('button', { name: '저장' }))).toBe(true)
+  })
 })
 
 describe('바꾼 값이 없으면', () => {

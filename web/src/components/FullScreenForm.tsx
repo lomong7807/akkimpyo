@@ -22,8 +22,8 @@ interface FullScreenFormProps {
   /** 떠나는 길. useLeaveGuard가 준다. */
   guard: LeaveGuard
   onSubmit: () => void
-  /** 맨 아래에 고정하는 저장 버튼과 그 위의 문구 */
-  bottom: ReactNode
+  /** 맨 아래에 고정하는 저장 버튼과 그 위의 문구. 없으면 저장 자리를 숨긴다(수정할 거래를 받는 동안, D-04 상태). */
+  bottom?: ReactNode
   /** Ctrl+엔터(Mac은 Cmd+엔터)를 어느 칸에서나 저장으로 받는다(D-04 (16)). 한글을 조합하는 중과 판이 열린 동안은 받지 않는다. */
   submitShortcut?: boolean
   children: ReactNode
@@ -76,7 +76,12 @@ export default function FullScreenForm({
       <main className={styles.main}>
         <form className={styles.form} noValidate onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
           <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>{children}</div>
-          <div ref={bottomArea} className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.bottom}`}>
+          {/* 숨겨도 남겨 둔다. 저장 자리의 높이를 재는 곳이 이 요소를 지켜본다 */}
+          <div
+            ref={bottomArea}
+            hidden={bottom === undefined}
+            className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.bottom}`}
+          >
             {bottom}
           </div>
         </form>

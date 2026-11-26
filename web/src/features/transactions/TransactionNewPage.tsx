@@ -1,5 +1,4 @@
 import { useState, type MouseEvent } from 'react'
-import { flushSync } from 'react-dom'
 import { useNavigate } from 'react-router'
 import { currentUserId } from '../../api/session'
 import { Button } from '../../components/Button'
@@ -7,7 +6,6 @@ import FullScreenForm from '../../components/FullScreenForm'
 import RetryMessage from '../../components/RetryMessage'
 import { useToast } from '../../components/ToastContext'
 import { useGoBack } from '../../components/useGoBack'
-import type { FieldErrors } from '../../components/useFormFields'
 import { useLeaveGuard } from '../../components/useLeaveGuard'
 import { uuidV7 } from '../../lib/uuid'
 import { useAccounts } from '../accounts/useAccounts'
@@ -15,11 +13,11 @@ import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { defaultAccountOf } from './formDefaults'
 import { useListMemory } from './listMemory'
 import TransactionFields from './TransactionFields'
-import { foldedFields, toNewTransaction, validateTransaction, type TransactionField } from './transactionForm'
+import { toNewTransaction, validateTransaction } from './transactionForm'
 import { rejectedFields } from './transactionRejection'
 import { idConflictOf, needsResendNotice, type CreateResult } from './transactions'
 import { useCreateTransaction } from './useCreateTransaction'
-import { useTransactionForm } from './useTransactionForm'
+import { useMoreFold, useTransactionForm } from './useTransactionForm'
 
 /** 앞서 본 화면이 없을 때(주소를 바로 연 경우) 닫으면 가는 곳 */
 const HOME = '/home'
@@ -44,7 +42,7 @@ export default function TransactionNewPage() {
   if (defaultAccountId === undefined && accounts.data) setDefaultAccountId(defaultAccountOf(owner, accounts.data))
   const form = useTransactionForm(defaultAccountId ?? '')
   const [id, setId] = useState(uuidV7)
-  const [moreOpen, setMoreOpen] = useState(false)
+  const { moreOpen, setMoreOpen, unfoldFor } = useMoreFold(false)
   // 저장 위의 실패. 다시 보내는 동안에도 남기고, 실패마다 count를 올려 새로 그려 다시 읽히게 한다
   const [shown, setShown] = useState<{ failure: Failure; count: number }>()
   // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돌고 다른 버튼은 누를 수 없다(00-common 4.5, designer 검토 2026-11-26)
@@ -53,11 +51,6 @@ export default function TransactionNewPage() {
   const busy = creation.isPending || creation.isSuccess
   const guard = useLeaveGuard({ parent: HOME, changed: form.changed, busy })
   const failure = shown?.failure
-
-  /** 접힌 칸에 보일 오류가 있으면 먼저 펼쳐 그 칸으로 초점을 옮길 수 있게 한다. */
-  function unfoldFor(errors: FieldErrors<TransactionField>) {
-    if (foldedFields.some((field) => errors[field])) flushSync(() => setMoreOpen(true))
-  }
 
   function submit(transactionId = id, from: Sender = 'save') {
     if (busy) return

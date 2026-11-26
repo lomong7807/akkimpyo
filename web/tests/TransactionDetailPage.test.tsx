@@ -123,14 +123,14 @@ async function askToDelete(opened: Opened) {
 }
 
 describe('주소와 상단 바', () => {
-  it('/transactions/{id}는 하위 화면 "거래 상세"다. "뒤로"가 있고 1A에는 "수정"이 없다', async () => {
+  it('/transactions/{id}는 하위 화면 "거래 상세"다. "뒤로"와 "수정"(#89, TransactionEditPage.test.tsx)이 있다', async () => {
     const item = lunch()
     put(item)
     await openDetail(item)
     expect(heading().textContent).toBe('거래 상세')
     const bar = within(screen.getByRole('banner'))
     expect(bar.getByRole('button', { name: '뒤로' })).toBeTruthy()
-    expect(bar.queryByRole('button', { name: '수정' })).toBeNull()
+    expect(bar.getByRole('link', { name: '수정' })).toBeTruthy()
     expect(screen.getByRole('navigation', { name: '주 메뉴' })).toBeTruthy()
   })
 
