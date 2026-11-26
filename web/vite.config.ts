@@ -1,10 +1,11 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { serviceWorker } from './plugins/serviceWorkerPlugin'
 
 const backend = 'http://localhost:8080'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), serviceWorker()],
   server: {
     port: 5173,
     proxy: {
