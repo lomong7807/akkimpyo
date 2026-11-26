@@ -49,7 +49,7 @@ jobs:
         run: ./gradlew build
 
   web:
-    name: web (lint, test, build)
+    name: web (lint, build)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
@@ -72,11 +72,48 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
-        run: npm test
-
       - name: Build
         run: npm run build
+
+  # [측정용, 머지 전 확정값으로 바꾼다] M=2, 3, 4를 한 번에 돌려 shard별 시간을 잰다.
+  web-test:
+    name: web (test ${{ matrix.shard }}/${{ matrix.total }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { shard: 1, total: 2 }
+          - { shard: 2, total: 2 }
+          - { shard: 1, total: 3 }
+          - { shard: 2, total: 3 }
+          - { shard: 3, total: 3 }
+          - { shard: 1, total: 4 }
+          - { shard: 2, total: 4 }
+          - { shard: 3, total: 4 }
+          - { shard: 4, total: 4 }
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.3.0'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Test
+        env:
+          SHARD: ${{ matrix.shard }}/${{ matrix.total }}
+        run: npm test -- --shard="$SHARD"
 
   # 새 취약점 공개로 빨개진 것과 코드 때문에 빨개진 것을 구분하려고 web과 따로 둔다.
   web-audit:
