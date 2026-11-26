@@ -7,6 +7,7 @@ import { untilOpened } from './support/dialog'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { startTransactionDetail, trashed, type TransactionDetailServer } from './support/transactionDetail'
 import { expenseOf, incomeOf, startTransactionList, transferOf, type TransactionList } from './support/transactionList'
 import type { Categories } from './support/categories'
@@ -35,9 +36,13 @@ let categories: Categories
 let list: TransactionList
 let detail: TransactionDetailServer
 
-/** 기기의 지금. 시각은 기기의 시간대다. */
+/**
+ * 기기의 지금. 시각은 기기의 시간대다. 확인 창을 여닫을 때 누름을 막는 300ms를 실제로 기다리지 않는 시계(guardClock)를
+ * 쓰므로 Date는 이 시각에서 시작해 흐른다. 이 파일은 날짜와 분 단위만 본다(안내 띠의 밀리초 경계는 purgeNotice.test.ts).
+ */
 function deviceNow(...parts: [number, number, number, number?, number?]) {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(...(parts as [number, number, number])) })
+  stopGuardClock()
+  startGuardClock(new Date(...(parts as [number, number, number])))
 }
 
 beforeEach(() => {
