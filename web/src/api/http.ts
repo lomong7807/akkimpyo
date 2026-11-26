@@ -1,4 +1,5 @@
-import { ApiError, parseProblem } from './apiError'
+import { now } from '../lib/clock'
+import { ApiError, parseProblem, retryAfterOf } from './apiError'
 import { reportNoResponse, reportResponse } from './connection'
 
 const BASE_PATH = '/api/v1'
@@ -39,7 +40,9 @@ export async function sendForResponse(
 ): Promise<{ status: number; body: unknown }> {
   const { response, text } = await exchange(path, options)
   if (!response.ok) {
-    throw ApiError.response(response.status, parseProblem(response.headers.get('Content-Type'), text))
+    const problem = parseProblem(response.headers.get('Content-Type'), text)
+    const retryAfter = response.status === 429 ? retryAfterOf(response.headers.get('Retry-After'), now()) : undefined
+    throw ApiError.response(response.status, problem, retryAfter)
   }
   if (options.successStatus !== undefined && response.status !== options.successStatus) {
     throw ApiError.unreadable(response.status)

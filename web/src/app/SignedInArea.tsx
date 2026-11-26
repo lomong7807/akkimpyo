@@ -12,6 +12,7 @@ import { CurrentLedgerContext } from '../features/me/CurrentLedgerContext'
 import { deviceKey } from '../features/me/deviceKey'
 import { useLedgerCopy } from '../features/me/ledgerCopy'
 import { useMeCopy } from '../features/me/meCopy'
+import { useAutoSend } from '../features/sync/useAutoSend'
 import { pendingKey } from '../features/transactions/pendingTransactions'
 import { now } from '../lib/clock'
 import { useMe } from '../features/me/useMe'
@@ -117,6 +118,7 @@ function Gate() {
     return (
       <CurrentLedgerContext value={ledger}>
         <ToastProvider>
+          <AutoSend signedIn={signedIn} />
           <ListMemoryProvider>
             {entry === 'stay' ? <Outlet /> : <Navigate to={entry === 'welcome' ? WELCOME : '/home'} replace />}
           </ListMemoryProvider>
@@ -140,6 +142,14 @@ function Gate() {
       <Loading />
     </PlainLayout>
   )
+}
+
+/**
+ * 쌓인 입력을 저절로 보낸다(F-105, #235). 토큰이 있는 로그인에서만 보낸다. 확인하지 못한 로그인은 확인된 뒤에 보낸다(architect #235 D).
+ */
+function AutoSend({ signedIn }: { signedIn: boolean }) {
+  useAutoSend(signedIn)
+  return null
 }
 
 /** 로그인 한 번 동안의 캐시. 장부를 볼 수 없게 된 조회가 오면 그 장부의 사본을 지운다. */
