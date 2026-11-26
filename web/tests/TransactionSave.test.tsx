@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Accounts } from './support/accounts'
 import { delayed, type Backend } from './support/backend'
 import { untilOpened } from './support/dialog'
+import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
@@ -50,7 +51,7 @@ let accounts: Accounts
 let transactions: Transactions
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12, 30) })
+  startGuardClock(new Date(2026, 10, 26, 12, 30))
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts, transactions } = startServer(server))
   localStorage.clear()

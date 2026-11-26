@@ -10,6 +10,7 @@ import { TextField } from '../src/components/TextField'
 import { useLeaveGuard } from '../src/components/useLeaveGuard'
 import { readCssRule } from './support/cssRule'
 import { shield, untilOpened, untilUnshielded } from './support/dialog'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { recordDom } from './support/recordDom'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
@@ -65,12 +66,14 @@ const routes: RouteObject[] = [
 let router: ReturnType<typeof createBrowserRouter>
 
 beforeEach(() => {
+  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   installMatchMedia(390)
 })
 
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   router?.dispose()
   resetViewport()
   onSubmit.mockClear()
