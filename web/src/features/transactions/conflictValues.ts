@@ -77,7 +77,8 @@ export function compareRows(
 
 /**
  * "내 입력 다시 적용"(F-909, ADR 006 결정 5): 최신 내용 위에 내가 바꾼 칸(연 때의 값과 달라진 칸)만 얹는다.
- * 얹는 값은 내가 쓴 글자 그대로다. `opened`는 화면을 연 때의 값이다.
+ * 얹는 값은 내가 쓴 글자 그대로다. `opened`는 고치기 시작한 때의 값이다. 이 기기에 남겼다 채운 입력이면 남길 때 함께 남긴
+ * 연 때의 값이다(#266). 다시 연 때 받은 값을 주면 그사이 다른 기기가 고친 칸도 내가 바꾼 칸으로 본다.
  */
 export function reapplyMine(
   opened: TransactionValues,
