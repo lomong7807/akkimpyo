@@ -1166,3 +1166,34 @@ describe('다른 탭이 잠금을 빼앗으면', () => {
 function everythingIn(error: ApiError): string {
   return [String(error), error.stack, JSON.stringify(error, Object.getOwnPropertyNames(error)), String(error.cause)].join()
 }
+
+describe('지금 로그인한 사용자', () => {
+  it('로그인하기 전에는 없고, 로그인하면 access token의 sub다', async () => {
+    const backend = startBackend()
+    backend.makeToken = (name) => accessTokenNamed(name, { sub: 'user-7' })
+    const tab = await openTab()
+    expect(tab.currentUserId()).toBeUndefined()
+    await tab.login(credentials)
+    expect(tab.currentUserId()).toBe('user-7')
+  })
+
+  it('로그아웃하면 없다', async () => {
+    startBackend()
+    server.use(http.post('/api/v1/auth/logout', () => new HttpResponse(null, { status: 204 })))
+    const tab = await openTab()
+    await tab.login(credentials)
+    tab.logout()
+    expect(tab.currentUserId()).toBeUndefined()
+  })
+
+  it.each([
+    ['sub가 없는', { name: 'x' }],
+    ['sub가 빈 글자인', { sub: '' }],
+  ])('%s 토큰이면 없다', async (_, payload) => {
+    const backend = startBackend()
+    backend.makeToken = (name) => accessTokenNamed(name, payload)
+    const tab = await openTab()
+    await tab.login(credentials)
+    expect(tab.currentUserId()).toBeUndefined()
+  })
+})

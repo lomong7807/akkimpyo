@@ -17,7 +17,7 @@ import {
   recordLogout,
   settleLogout,
 } from './sessionMarks'
-import { isSameUser } from './tokenUser'
+import { isSameUser, userOf } from './tokenUser'
 
 const UNAUTHENTICATED = 'UNAUTHENTICATED'
 
@@ -148,6 +148,15 @@ export function suspendSession(): void {
 export function resumeSession(): void {
   endIfOver()
   suspended = false
+}
+
+/**
+ * 지금 로그인한 사용자의 id(access token의 sub). 로그인하지 않았거나 읽지 못하면 없다.
+ * 서명을 확인하지 않은 값이라 권한 판단에 쓰지 않는다. 기기에 남기는 값을 사용자마다 나누거나, 저장을 시작한 사용자와
+ * 보내는 사용자가 같은지 볼 때 쓴다.
+ */
+export function currentUserId(): string | undefined {
+  return accessToken === undefined ? undefined : userOf(accessToken)
 }
 
 /** 이 탭에서 쓰던 로그인이 끝나면 부른다. 돌려받은 함수로 끊는다. */

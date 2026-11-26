@@ -4,6 +4,7 @@ import AccountAddPage from '../features/accounts/AccountAddPage'
 import AccountsPage from '../features/accounts/AccountsPage'
 import CategoriesPage from '../features/categories/CategoriesPage'
 import NotFoundPage from '../features/not-found/NotFoundPage'
+import TransactionNewPage from '../features/transactions/TransactionNewPage'
 import LedgerLayout from './LedgerLayout'
 import LoginRoute from './LoginRoute'
 import MoreRoute from './MoreRoute'
@@ -63,6 +64,7 @@ export const routes: RouteObject[] = [
                     handle: { navigationItem: accountsItem, fullScreen: true },
                   },
                   { path: '/categories', element: <CategoriesPage />, handle: { navigationItem: categoriesItem } },
+                  { path: '/transactions/new', element: <TransactionNewPage />, handle: { fullScreen: true } },
                   { path: '*', element: <NotFoundPage /> },
                 ],
               },

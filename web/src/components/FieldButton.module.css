@@ -14,3 +14,9 @@
 .button[aria-disabled='true'] {
   cursor: default;
 }
+
+/* 긴 이름은 줄을 바꿔 다 보인다 */
+.value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

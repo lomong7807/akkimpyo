@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigationType } from 'react-router'
-import type { MainNavigationItem, Navigation, NavigationItem } from './navigation'
+import type { MainNavigationItem, NavigationItem } from './navigation'
 
 /** 방문 기록의 항목(location.key)마다 그 화면으로 들어온 탭 */
 interface TabTrail {
@@ -14,7 +14,7 @@ interface TabTrail {
  * 지금 화면으로 들어온 탭이고, 주소로 바로 열어 들어온 탭이 없으면 화면이 속한 탭이다.
  */
 export function useCurrentTab(
-  { tabs, fallbackTab }: Pick<Navigation, 'tabs' | 'fallbackTab'>,
+  { tabs, fallbackTab }: { tabs: MainNavigationItem[]; fallbackTab?: MainNavigationItem },
   screenItem?: NavigationItem,
 ): MainNavigationItem | undefined {
   const { key, pathname } = useLocation()

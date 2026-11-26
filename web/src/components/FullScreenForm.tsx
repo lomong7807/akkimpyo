@@ -1,4 +1,13 @@
-import { useEffect, useEffectEvent, useLayoutEffect, useRef, type ReactNode, type RefObject, type SubmitEvent } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  type SubmitEvent,
+} from 'react'
 import { Button } from './Button'
 import ConfirmDialog from './ConfirmDialog'
 import { keepFocusInField } from './keepFocusInField'
@@ -15,6 +24,8 @@ interface FullScreenFormProps {
   onSubmit: () => void
   /** 맨 아래에 고정하는 저장 버튼과 그 위의 문구 */
   bottom: ReactNode
+  /** Ctrl+엔터(Mac은 Cmd+엔터)를 어느 칸에서나 저장으로 받는다(D-04 (16)). 한글을 조합하는 중과 판이 열린 동안은 받지 않는다. */
+  submitShortcut?: boolean
   children: ReactNode
 }
 
@@ -22,7 +33,14 @@ interface FullScreenFormProps {
  * 전체 화면 입력(화면설계서 00-common 5.5). 모달이 아니라 화면이다.
  * 라우트의 handle에 fullScreen을 적어 하단 탭을 없앤다.
  */
-export default function FullScreenForm({ title, guard, onSubmit, bottom, children }: FullScreenFormProps) {
+export default function FullScreenForm({
+  title,
+  guard,
+  onSubmit,
+  bottom,
+  submitShortcut = false,
+  children,
+}: FullScreenFormProps) {
   const screen = useRef<HTMLDivElement>(null)
   useVisibleArea(screen)
   useEscape(guard.close)
@@ -30,6 +48,13 @@ export default function FullScreenForm({ title, guard, onSubmit, bottom, childre
   usePressShield(true)
 
   function handleSubmit(event: SubmitEvent) {
+    event.preventDefault()
+    onSubmit()
+  }
+
+  function handleKeyDown(event: ReactKeyboardEvent) {
+    if (!submitShortcut || event.key !== 'Enter' || !(event.ctrlKey || event.metaKey)) return
+    if (isComposing(event.nativeEvent) || event.repeat || isModalOpen()) return
     event.preventDefault()
     onSubmit()
   }
@@ -48,7 +73,7 @@ export default function FullScreenForm({ title, guard, onSubmit, bottom, childre
         <h1 className={styles.title}>{title}</h1>
       </header>
       <main className={styles.main}>
-        <form className={styles.form} noValidate onSubmit={handleSubmit}>
+        <form className={styles.form} noValidate onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
           <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>{children}</div>
           <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.bottom}`}>{bottom}</div>
         </form>
@@ -72,8 +97,7 @@ export default function FullScreenForm({ title, guard, onSubmit, bottom, childre
  */
 function useEscape(onEscape: () => void) {
   const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    const composing = event.isComposing || event.keyCode === 229
-    if (event.key !== 'Escape' || composing || event.repeat || isModalOpen()) return
+    if (event.key !== 'Escape' || isComposing(event) || event.repeat || isModalOpen()) return
     // 그냥 두면 브라우저가 이 Esc로 막 연 확인 창을 닫는다
     event.preventDefault()
     onEscape()
@@ -84,6 +108,11 @@ function useEscape(onEscape: () => void) {
     window.addEventListener('keydown', listen)
     return () => window.removeEventListener('keydown', listen)
   }, [])
+}
+
+/** 한글을 조합하는 중의 키. Safari는 조합이 끝났다고 먼저 알리므로 입력기가 받은 키(keyCode 229)도 본다. */
+function isComposing(event: KeyboardEvent): boolean {
+  return event.isComposing || event.keyCode === 229
 }
 
 /**
