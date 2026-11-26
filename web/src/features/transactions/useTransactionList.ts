@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
-import { ledgerKey } from '../me/ledgerKey'
+import { ledgerKey, LEDGER_LIST } from '../me/ledgerKey'
 import { fetchMonthTotals, fetchRecentTransactions, fetchTransactionPage, RECENT_COUNT } from './transactions'
 
 /**
@@ -42,6 +42,7 @@ export function useTransactionList(month: string) {
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     staleTime: TRANSACTION_LIST_STALE_MS,
+    meta: LEDGER_LIST,
   })
 }
 
@@ -52,6 +53,7 @@ export function useMonthTotals(month: string) {
     queryKey: monthTotalsKey(ledger.id, month),
     queryFn: () => fetchMonthTotals(ledger.id, month),
     staleTime: TRANSACTION_LIST_STALE_MS,
+    meta: LEDGER_LIST,
   })
 }
 
@@ -62,5 +64,6 @@ export function useRecentTransactions() {
     queryKey: recentTransactionsKey(ledger.id),
     queryFn: () => fetchRecentTransactions(ledger.id),
     staleTime: TRANSACTION_LIST_STALE_MS,
+    meta: LEDGER_LIST,
   })
 }

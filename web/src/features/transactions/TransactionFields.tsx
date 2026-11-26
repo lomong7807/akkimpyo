@@ -8,8 +8,8 @@ import SegmentedChoice from '../../components/SegmentedChoice'
 import TextAreaField from '../../components/TextAreaField'
 import { TextField } from '../../components/TextField'
 import TimeField from '../../components/TimeField'
-import { useCategories } from '../categories/useCategories'
 import { categoryKindOf } from './formDefaults'
+import { useEntryCategories } from './entryLists'
 import { AccountField, CategoryField } from './TransactionPickers'
 import { MEMO_MAX, memoLength, PAYEE_MAX, payeeLength, typeChange, type TransactionField } from './transactionForm'
 import type { TransactionType } from './transactions'
@@ -57,7 +57,7 @@ export default function TransactionFields({
   editing = false,
 }: TransactionFieldsProps) {
   const { values, effective, change, control, check } = form
-  const categories = useCategories()
+  const categories = useEntryCategories()
   const transfer = values.type === 'TRANSFER'
   const foldedId = useId()
   const amount = useRef<HTMLInputElement>(null)

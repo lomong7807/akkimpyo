@@ -1,6 +1,7 @@
 import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
-import { ledgerKey } from '../me/ledgerKey'
+import { fetchKeepingCopy } from '../me/ledgerCopy'
+import { ledgerKey, LEDGER_LIST } from '../me/ledgerKey'
 import { TRANSACTION_LIST_STALE_MS } from '../transactions/useTransactionList'
 import { fetchAccounts } from './accounts'
 
@@ -18,7 +19,9 @@ export function accountsKey(ledgerId: string) {
 export function accountsQuery(ledgerId: string) {
   return queryOptions({
     queryKey: accountsKey(ledgerId),
-    queryFn: () => fetchAccounts(ledgerId),
+    // 받을 때마다 기기 사본으로 남긴다(#234). 장부를 볼 수 없게 되면(404) 그 장부의 사본을 지운다(LEDGER_LIST)
+    queryFn: () => fetchKeepingCopy(ledgerId, 'accounts', () => fetchAccounts(ledgerId)),
+    meta: LEDGER_LIST,
     staleTime: TRANSACTION_LIST_STALE_MS,
   })
 }
