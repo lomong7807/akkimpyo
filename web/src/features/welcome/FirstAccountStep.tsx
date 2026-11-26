@@ -29,9 +29,11 @@ export default function FirstAccountStep({ heading, account }: FirstAccountStepP
       onSubmit={create}
       bottom={
         <>
-          {/* 초점은 옮기지 않는다(가입 A-03과 같다). 문구는 role="alert"로 읽힌다 */}
+          {/* 이 영역은 화면 키보드 위로 올라가지 않으므로 초점을 "다시 시도"로 옮겨 키보드를 내린다(가입 A-03과 같다, designer 결정 #102) */}
           {failed && (
-            <RetryMessage onRetry={retry}>문제가 생겨 계좌를 만들지 못했어요. 잠시 후 다시 시도해 주세요.</RetryMessage>
+            <RetryMessage onRetry={retry} autoFocus>
+              문제가 생겨 계좌를 만들지 못했어요. 잠시 후 다시 시도해 주세요.
+            </RetryMessage>
           )}
           <Button ref={createButton} kind="primary" type="submit" busy={busy && pressed === 'create'} disabled={busy}>
             계좌 만들기
