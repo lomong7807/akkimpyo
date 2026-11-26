@@ -5,7 +5,6 @@ import { accountOf, startAccounts } from './support/accounts'
 import { startBackend, type Backend } from './support/backend'
 import { copyKeys, queueOf, seedLedgerCopy, seedPending } from './support/device'
 import { untilOpened, untilUnshielded } from './support/dialog'
-import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
@@ -25,7 +24,6 @@ const NOW = Date.parse('2026-11-26T12:00:00+09:00')
 
 beforeEach(() => {
   vi.stubGlobal('scrollTo', vi.fn())
-  startGuardClock()
   backend = startBackend(server)
   const accounts = startAccounts(server, backend)
   accounts.items = [accountOf('통장', 'BANK', 0)]
@@ -38,7 +36,6 @@ afterEach(async () => {
   cleanup()
   await untilUnshielded()
   resetViewport()
-  stopGuardClock()
   vi.unstubAllGlobals()
 })
 

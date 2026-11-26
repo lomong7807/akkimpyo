@@ -1,6 +1,5 @@
 import { onlineManager } from '@tanstack/react-query'
 import { cleanup, fireEvent, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import { useNavigate, type RouteObject } from 'react-router'
@@ -12,6 +11,7 @@ import LoginPage from '../src/features/auth/LoginPage'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { renderRoutes } from './support/renderRoutes'
+import { holdClock, passTime, setupUser } from './support/testClock'
 import { resetViewport, setViewportWidth } from './support/viewport'
 
 vi.stubGlobal('scrollTo', vi.fn())
@@ -61,7 +61,7 @@ function routesWith(login: ReactNode): RouteObject[] {
 function openLogin({ queryClient = createQueryClient(), sessionEnded = false, initialEmail = '' } = {}) {
   const login = <Login sessionEnded={sessionEnded} initialEmail={initialEmail} />
   const router = renderRoutes(routesWith(login), '/login', queryClient)
-  return { user: userEvent.setup(), router }
+  return { user: setupUser(), router }
 }
 
 /** 로그인 API의 응답을 정하고, 받은 본문을 모아 돌려준다. */
@@ -78,12 +78,12 @@ function respondToLogin(respond: () => Response | Promise<Response>) {
 
 const success = () => HttpResponse.json({ accessToken: 'token-1' })
 
-async function fill(user: ReturnType<typeof userEvent.setup>, emailValue: string, passwordValue: string) {
+async function fill(user: ReturnType<typeof setupUser>, emailValue: string, passwordValue: string) {
   await user.type(email(), emailValue)
   await user.type(password(), passwordValue)
 }
 
-async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
+async function fillAndSubmit(user: ReturnType<typeof setupUser>) {
   await fill(user, 'name@example.com', 'pass1234')
   await user.click(loginButton())
 }
@@ -522,16 +522,12 @@ describe('서버 오류와 지연', () => {
     respondToLogin(() => new Promise(() => {}))
     const { user } = openLogin()
     await fill(user, 'name@example.com', 'pass1234')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      fireEvent.click(loginButton())
-      await vi.advanceTimersByTimeAsync(14_900)
-      expect(screen.queryByRole('alert')).toBeNull()
-      await vi.advanceTimersByTimeAsync(200)
-      expect(screen.getByRole('alert').textContent).toBe(failed)
-    } finally {
-      vi.useRealTimers()
-    }
+    holdClock()
+    fireEvent.click(loginButton())
+    await passTime(14_900)
+    expect(screen.queryByRole('alert')).toBeNull()
+    await passTime(200)
+    expect(screen.getByRole('alert').textContent).toBe(failed)
   })
 
   it('저절로 다시 보내지 않는다', async () => {
@@ -678,7 +674,7 @@ it('성공한 뒤 다음 화면이 열릴 때까지 다시 누를 수 없다', a
   const bodies = respondToLogin(success)
   const slowHome = { path: '/home', loader: () => new Promise(() => {}), element: null, hydrateFallbackElement: null }
   renderRoutes([{ path: '/login', element: <Login /> }, slowHome], '/login')
-  const user = userEvent.setup()
+  const user = setupUser()
   await fillAndSubmit(user)
   await vi.waitFor(() => expect(bodies).toHaveLength(1))
   await new Promise((resolve) => setTimeout(resolve, 30))

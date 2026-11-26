@@ -1,6 +1,5 @@
 import { onlineManager } from '@tanstack/react-query'
 import { cleanup, fireEvent, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { useNavigate, type RouteObject } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -12,6 +11,7 @@ import { readCssRule } from './support/cssRule'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { renderRoutes } from './support/renderRoutes'
+import { holdClock, passTime, setupUser } from './support/testClock'
 import { resetViewport, setViewportWidth } from './support/viewport'
 
 vi.stubGlobal('scrollTo', vi.fn())
@@ -93,7 +93,7 @@ function routesWith(initialEmail: string): RouteObject[] {
 
 function openSignup({ queryClient = createQueryClient(), initialEmail = '' } = {}) {
   const router = renderRoutes(routesWith(initialEmail), '/signup', queryClient)
-  return { user: userEvent.setup(), router }
+  return { user: setupUser(), router }
 }
 
 /** 가입 API의 응답을 정하고, 받은 본문을 모아 돌려준다. */
@@ -117,7 +117,7 @@ const refuse =
       fieldErrors: fieldErrors.map(([field, code]) => ({ field, code, message: '개발자가 읽는 글' })),
     })
 
-type User = ReturnType<typeof userEvent.setup>
+type User = ReturnType<typeof setupUser>
 
 const valid = { email: 'name@example.com', password: 'pass1234', confirm: 'pass1234', displayName: '이서연' }
 
@@ -764,16 +764,12 @@ describe('서버 오류와 지연', () => {
     respondToSignup(delayed().respond)
     const { user } = openSignup()
     await fill(user)
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      fireEvent.click(signupButton())
-      await vi.advanceTimersByTimeAsync(14_900)
-      expect(screen.queryByRole('alert')).toBeNull()
-      await vi.advanceTimersByTimeAsync(200)
-      expect(screen.getByRole('alert').textContent).toBe(failed)
-    } finally {
-      vi.useRealTimers()
-    }
+    holdClock()
+    fireEvent.click(signupButton())
+    await passTime(14_900)
+    expect(screen.queryByRole('alert')).toBeNull()
+    await passTime(200)
+    expect(screen.getByRole('alert').textContent).toBe(failed)
   })
 
   it('저절로 다시 보내지 않는다', async () => {
@@ -930,7 +926,7 @@ describe('성공', () => {
     const bodies = respondToSignup(success)
     const slowWelcome = { path: '/welcome', loader: () => new Promise(() => {}), element: null, hydrateFallbackElement: null }
     renderRoutes([{ path: '/signup', element: <Signup initialEmail="" /> }, slowWelcome], '/signup')
-    const user = userEvent.setup()
+    const user = setupUser()
     await fillAndSubmit(user)
     await vi.waitFor(() => expect(bodies).toHaveLength(1))
     await new Promise((resolve) => setTimeout(resolve, 30))

@@ -1,5 +1,4 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { useState, type ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DateField from '../src/components/DateField'
@@ -7,7 +6,7 @@ import { TextField } from '../src/components/TextField'
 import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
 import { shield, untilOpened, untilUnshielded } from './support/dialog'
-import { startGuardClock, stopGuardClock } from './support/guardClock'
+import { setupUser } from './support/testClock'
 import { installMatchMedia } from './support/viewport'
 
 const PHONE = 390
@@ -17,13 +16,11 @@ let viewport: ReturnType<typeof installMatchMedia>
 
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:00:00+09:00')
-  startGuardClock()
   viewport = installMatchMedia(PHONE)
 })
 
 afterEach(() => {
   cleanup()
-  stopGuardClock()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -58,7 +55,7 @@ function described() {
 
 /** 다 열려 날짜를 누를 수 있을 때까지 기다린다. */
 async function open(props: Props = {}) {
-  const user = userEvent.setup()
+  const user = setupUser()
   render(<Sample {...props} />)
   await user.click(field())
   if (dialog()) await untilOpened()
@@ -133,7 +130,7 @@ describe('칸', () => {
 
   it('양식 안에서 열어도 양식을 보내지 않는다', async () => {
     const onSubmit = vi.fn()
-    const user = userEvent.setup()
+    const user = setupUser()
     render(
       <form onSubmit={onSubmit}>
         <Sample />
@@ -206,7 +203,7 @@ describe('고르기', () => {
     })
 
     it.each(['{Enter}', ' '])('키보드 "%s"로 열고 고른다', async (key) => {
-      const user = userEvent.setup()
+      const user = setupUser()
       render(<Sample />)
       await user.tab()
       expect(document.activeElement).toBe(field())
@@ -250,7 +247,7 @@ describe('고르기', () => {
     })
 
     it('여는 순간의 오늘을 다시 읽는다', async () => {
-      const user = userEvent.setup()
+      const user = setupUser()
       setDeviceClock('2026-11-26T23:59:00+09:00')
       render(<Sample value="" />)
       setDeviceClock('2026-11-27T00:00:00+09:00')
@@ -261,7 +258,7 @@ describe('고르기', () => {
 
     it('열리는 동안 이어서 눌러도 날짜가 골라지지 않고 열려 있다', async () => {
       const onChange = vi.fn()
-      const user = userEvent.setup()
+      const user = setupUser()
       render(<Sample onChange={onChange} />)
       await user.click(field())
       // 칸이 시트가 덮는 자리에 있으면 둘째 누름이 올라온 달력에 닿는다
@@ -332,7 +329,7 @@ describe('고르기', () => {
   })
 
   it('누를 때 버튼에 초점을 주지 않는 브라우저에서도 초점이 칸으로 돌아간다', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<Sample />)
     // Safari처럼 누르는 동안 초점이 옮겨지지 않게 한다
     field().addEventListener('mousedown', (event) => event.preventDefault())

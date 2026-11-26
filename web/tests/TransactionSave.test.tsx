@@ -5,7 +5,6 @@ import type { Accounts } from './support/accounts'
 import { delayed, type Backend } from './support/backend'
 import { untilOpened } from './support/dialog'
 import { setDeviceClock } from './support/clock'
-import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
@@ -36,6 +35,7 @@ import {
   type Opened,
   type User,
 } from './support/transactionScreen'
+import { holdClock, passTime } from './support/testClock'
 import { startTransactionDetail } from './support/transactionDetail'
 import { savedOf, type Transactions } from './support/transactions'
 import { resetViewport } from './support/viewport'
@@ -54,7 +54,6 @@ let transactions: Transactions
 
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts, transactions } = startServer(server))
   localStorage.clear()
@@ -277,11 +276,11 @@ describe('서버 오류와 지연', () => {
     transactions.response = delayed().respond
     const { user } = await openForm()
     await user.keyboard('12000')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
     fireEvent.click(saveButton())
-    await act(() => vi.advanceTimersByTimeAsync(14_900))
+    await passTime(14_900)
     expect(screen.queryByRole('alert')).toBeNull()
-    await act(() => vi.advanceTimersByTimeAsync(200))
+    await passTime(200)
     expect(screen.getByRole('alert').textContent).toBe(failed)
   })
 

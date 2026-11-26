@@ -1,11 +1,10 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ConfirmDialog from '../src/components/ConfirmDialog'
 import { readCssRule } from './support/cssRule'
 import { untilOpened } from './support/dialog'
-import { startGuardClock, stopGuardClock } from './support/guardClock'
+import { setupUser } from './support/testClock'
 import { installMatchMedia } from './support/viewport'
 
 const CSS = 'src/components/ConfirmDialog.module.css'
@@ -14,13 +13,11 @@ const CENTER_CSS = 'src/components/CenterDialog.module.css'
 let viewport: ReturnType<typeof installMatchMedia>
 
 beforeEach(() => {
-  startGuardClock()
   viewport = installMatchMedia(390)
 })
 
 afterEach(() => {
   cleanup()
-  stopGuardClock()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -56,7 +53,7 @@ const styleOf = (element: Element) => getComputedStyle(element)
 
 async function ask(width = 390) {
   viewport.resizeTo(width)
-  const user = userEvent.setup()
+  const user = setupUser()
   render(<Sample />)
   await user.click(opener())
   return user
@@ -85,7 +82,7 @@ describe.each(layouts)('확인 창: %s', (_, width) => {
     ['물러나는 버튼', (user) => user.click(keep())],
     ['가림막', (user) => user.click(dialog()!)],
     ['Esc', (user) => user.keyboard('{Escape}')],
-  ] as [string, (user: ReturnType<typeof userEvent.setup>) => Promise<unknown>][])(
+  ] as [string, (user: ReturnType<typeof setupUser>) => Promise<unknown>][])(
     '%s로 닫으면 실행하지 않고 초점이 연 버튼으로 돌아간다',
     async (_, close) => {
       const user = await ask(width)
@@ -280,7 +277,7 @@ describe.each(layouts)('처리 중과 실패: %s', (_, width) => {
 
   function open(props: { busy?: boolean; failure?: Failure } = {}) {
     viewport.resizeTo(width)
-    const user = userEvent.setup()
+    const user = setupUser()
     const rendered = render(<Working {...props} />)
     return { user, rerender: (next: typeof props) => rendered.rerender(<Working {...next} />) }
   }
@@ -306,7 +303,7 @@ describe.each(layouts)('처리 중과 실패: %s', (_, width) => {
   it.each([
     ['Esc', (user) => user.keyboard('{Escape}')],
     ['가림막', (user) => user.click(dialog()!)],
-  ] as [string, (user: ReturnType<typeof userEvent.setup>) => Promise<unknown>][])(
+  ] as [string, (user: ReturnType<typeof setupUser>) => Promise<unknown>][])(
     '처리 중에는 %s로 닫히지 않는다',
     async (__, close) => {
       const { user } = open({ busy: true })

@@ -3,7 +3,6 @@ import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, meOf, type Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
-import { passTime, resumeGuardClock, startGuardClock } from './support/guardClock'
 import { readCssRule } from './support/cssRule'
 import { installIntersectionObserver, type Intersection } from './support/intersection'
 import { startMockServer } from './support/mockServer'
@@ -28,6 +27,7 @@ import {
   transferOf,
   type TransactionList,
 } from './support/transactionList'
+import { holdClock, passTime } from './support/testClock'
 import { savedOf, type Transactions } from './support/transactions'
 import { resetViewport, setViewportWidth } from './support/viewport'
 
@@ -45,9 +45,8 @@ let intersection: Intersection
 const NOW = '2026-11-26T12:30:00+09:00'
 
 beforeEach(() => {
-  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)는 그 묶음에서 같은 때에 멈춘다
+  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)는 공용 시계(testClock)다
   setDeviceClock(NOW)
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   list = startTransactionList(server, backend)
@@ -57,8 +56,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  // 라이브러리의 시계를 멈춘 묶음도 덮개 시계에서 화면을 정리해 빠진 뒤의 덮개를 걷는다
-  resumeGuardClock()
   cleanup()
   resetViewport()
   resetGlobals()
@@ -898,13 +895,11 @@ describe('거래가 없는 달(4.2)', () => {
 })
 
 describe('받아 둔 목록을 다시 받는 때', () => {
-  // 받은 때부터 센 초를 정확히 맞추도록 라이브러리의 시계(Date)를 멈추고 진짜 시계로 기다린다(덮개 시계를 쓰지 않는다)
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse(NOW) })
-  })
-
-  /** 기기의 시계를 `seconds`초 앞으로 보낸다. 캐시가 오래됐는지는 이 시계로 정한다. */
-  const advance = (seconds: number) => vi.setSystemTime(Date.now() + seconds * 1000)
+  /**
+   * `seconds`초가 지난 것으로 한다. 캐시가 오래됐는지는 라이브러리의 시계(Date)로 정한다. 받은 때부터 센 초를 정확히 맞추도록
+   * 그 테스트는 목록을 받기 전에 시계를 멈추고(holdClock) 이것으로만 보낸다.
+   */
+  const advance = (seconds: number) => passTime(seconds * 1000)
 
   async function openTwoPages() {
     list.months.set('2026-11', manyItems(51))
@@ -916,9 +911,10 @@ describe('받아 둔 목록을 다시 받는 때', () => {
   }
 
   it('받은 지 30초 안에 돌아오면 다시 받지 않는다', async () => {
+    holdClock()
     const opened = await openTwoPages()
     const before = pageRequests().length
-    advance(29)
+    await advance(29)
     await act(() => opened.router.navigate('/transactions?month=2026-11'))
     await settle(100)
     expect(allRows()).toHaveLength(51)
@@ -926,9 +922,10 @@ describe('받아 둔 목록을 다시 받는 때', () => {
   })
 
   it('30초가 지나 돌아오면 불러온 쪽을 모두 차례로 다시 받는다', async () => {
+    holdClock()
     const opened = await openTwoPages()
     const before = pageRequests().length
-    advance(31)
+    await advance(31)
     await act(() => opened.router.navigate('/transactions?month=2026-11'))
     await waitFor(() => expect(pageRequests()).toHaveLength(before + 2))
     expect(pageRequests().slice(before).map(({ cursor }) => cursor)).toEqual([null, '2026-11|50'])
@@ -936,14 +933,15 @@ describe('받아 둔 목록을 다시 받는 때', () => {
 
   // 창에 다시 초점이 오면(탭으로 돌아오면) 브라우저가 visibilitychange를 보낸다
   it('30초가 지난 뒤 창에 초점이 오면 다시 받고, 30초 안이면 받지 않는다', async () => {
+    holdClock()
     putNovember()
     await openList()
     const before = pageRequests().length
-    advance(29)
+    await advance(29)
     await act(async () => window.dispatchEvent(new Event('visibilitychange')))
     await settle(100)
     expect(pageRequests()).toHaveLength(before)
-    advance(2)
+    await advance(2)
     await act(async () => window.dispatchEvent(new Event('visibilitychange')))
     await waitFor(() => expect(pageRequests()).toHaveLength(before + 1))
   })

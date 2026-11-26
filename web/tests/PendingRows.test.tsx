@@ -4,7 +4,6 @@ import type { Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
 import { goOffline } from './support/connection'
 import { seedPending } from './support/device'
-import { startGuardClock } from './support/guardClock'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { expenseOf, incomeOf, startTransactionList, type TransactionList } from './support/transactionList'
@@ -27,7 +26,6 @@ const now = Date.parse(NOW)
 
 beforeEach(() => {
   setDeviceClock(NOW)
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend } = startServer(server))
   list = startTransactionList(server, backend)

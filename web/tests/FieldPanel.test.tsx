@@ -1,11 +1,10 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import FieldPanel from '../src/components/FieldPanel'
 import { readCssRule } from './support/cssRule'
 import { untilOpened } from './support/dialog'
-import { startGuardClock, stopGuardClock } from './support/guardClock'
+import { setupUser } from './support/testClock'
 
 const rule = (selector: string) => readCssRule('src/components/FieldPanel.module.css', selector)
 
@@ -51,20 +50,15 @@ function panelContent(height: number, room: () => number) {
   vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(() => Math.min(height, room()))
 }
 
-beforeEach(() => {
-  startGuardClock()
-})
-
 afterEach(() => {
   cleanup()
-  stopGuardClock()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
 describe('펼친 판', () => {
   it('이름이 칸 이름인 대화 상자이고 머리, 손잡이, 닫기가 없다', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<Sample />)
     await user.click(field())
     expect(screen.getByRole('dialog', { name: '기준일' })).toBeTruthy()
@@ -74,10 +68,10 @@ describe('펼친 판', () => {
   })
 
   it.each([
-    ['바깥 누르기', async (user: ReturnType<typeof userEvent.setup>) => user.click(dialog()!)],
-    ['Esc', async (user: ReturnType<typeof userEvent.setup>) => user.keyboard('{Escape}')],
+    ['바깥 누르기', async (user: ReturnType<typeof setupUser>) => user.click(dialog()!)],
+    ['Esc', async (user: ReturnType<typeof setupUser>) => user.keyboard('{Escape}')],
   ])('%s로 닫히고 초점이 칸으로 돌아간다', async (_, close) => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<Sample />)
     await user.click(field())
     await untilOpened()
@@ -88,7 +82,7 @@ describe('펼친 판', () => {
   })
 
   it('안을 눌러서는 닫히지 않는다', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<Sample />)
     await user.click(field())
     await untilOpened()
@@ -99,7 +93,7 @@ describe('펼친 판', () => {
 
 describe('자리', () => {
   async function open(top: number, contentHeight: number, left?: number) {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<Sample />)
     fieldAt(top, left)
     panelContent(contentHeight, () => {
@@ -150,14 +144,14 @@ describe('자리', () => {
 
   it('닫은 뒤에는 창 크기를 보지 않는다', async () => {
     const remove = vi.spyOn(window, 'removeEventListener')
-    const user = userEvent.setup()
+    const user = setupUser()
     await open(100, 390)
     await user.keyboard('{Escape}')
     expect(remove.mock.calls.some(([type]) => type === 'resize')).toBe(true)
   })
 
   it('다시 열면 그때의 자리에 놓는다', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     await open(100, 390)
     await user.keyboard('{Escape}')
     vi.mocked(field().getBoundingClientRect).mockReturnValue(new DOMRect(300, 200, 560, 48))
@@ -185,7 +179,7 @@ describe('모양', () => {
   })
 
   it('폭 320px, 모서리 12px, 펼친 판 그림자이고 가림막이 없다', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<Sample />)
     await user.click(field())
     const style = getComputedStyle(panel())
