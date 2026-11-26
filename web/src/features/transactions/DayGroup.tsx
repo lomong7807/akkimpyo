@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import Amount from '../../components/Amount'
 import StatusChip from '../../components/StatusChip'
 import { formatDate } from '../../lib/calendarDate'
+import { PENDING_PATH } from '../sync/useSyncState'
 import { detailOf, titleOf, type NameBook } from './listedText'
 import type { ShownTransaction } from './pendingTransactions'
 import type { DayTotal } from './transactions'
@@ -91,9 +92,9 @@ interface TransactionRowProps {
 /**
  * 거래 줄(0.4). 줄 전체가 상세로 가는 링크다. 링크 이름은 aria-labelledby로 제목 전체, 금액, 날짜(묶음 머리), 시각,
  * 둘째 줄, 상태를 차례로 잇는다. 말줄임으로 잘린 제목도 화면 읽기에는 다 읽힌다.
- * 기기에 쌓여 아직 서버에 없는 줄은 셋째 줄에 표시 칩 "보내지 않음"을 붙이고(C-01 (10), D-01 (11)) 링크가 아니다. 서버가
- * 거부한 줄은 그 자리에 오류 칩 "보낼 수 없음"을 붙인다(D-01 (11), designer #235 Q2)
- * (1B 임시. 보내지 않은 입력 목록 B-05로 가는 것은 #236에서 잇는다). 칩은 "취소"와 같은 자리다(0.4, designer #234 B).
+ * 기기에 쌓여 아직 서버에 없는 줄은 셋째 줄에 표시 칩 "보내지 않음"을 붙이고(C-01 (10), D-01 (11)), 서버가 거부한 줄은 그 자리에
+ * 오류 칩 "보낼 수 없음"을 붙인다(D-01 (11), designer #235 Q2). 칩은 "취소"와 같은 자리다(0.4, designer #234 B). 이 줄은 서버에
+ * 없어 상세를 열 수 없으므로 누르면 보내지 않은 입력 목록(B-05)으로 간다(0.4, C-01 (10), 작성자 판단 42, #236).
  */
 function TransactionRow({ transaction, names, dateId, highlighted }: TransactionRowProps) {
   const id = useId()
@@ -107,7 +108,7 @@ function TransactionRow({ transaction, names, dateId, highlighted }: Transaction
     dateId,
     time && `${id}-time`,
     detail && `${id}-detail`,
-    canceled && `${id}-status`,
+    (canceled || transaction.pending) && `${id}-status`,
   ]
     .filter(Boolean)
     .join(' ')
@@ -138,23 +139,20 @@ function TransactionRow({ transaction, names, dateId, highlighted }: Transaction
           </span>
         )}
         {transaction.pending && (
-          <span className={styles.status}>
+          <span id={`${id}-status`} className={styles.status}>
             {transaction.rejected ? <StatusChip danger>보낼 수 없음</StatusChip> : <StatusChip>보내지 않음</StatusChip>}
           </span>
         )}
       </span>
     </>
   )
-  if (transaction.pending) {
-    return (
-      <li>
-        <div className={`${className} ${styles.pendingRow}`}>{content}</div>
-      </li>
-    )
-  }
   return (
     <li>
-      <Link to={`/transactions/${transaction.id}`} className={className} aria-labelledby={labelledBy}>
+      <Link
+        to={transaction.pending ? PENDING_PATH : `/transactions/${transaction.id}`}
+        className={className}
+        aria-labelledby={labelledBy}
+      >
         {content}
       </Link>
     </li>

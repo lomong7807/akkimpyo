@@ -52,9 +52,10 @@ async function openTab({ signIn = true } = {}) {
   const session = await import('../src/api/session')
   const pending = await import('../src/device/pendingQueue')
   const synced = await import('../src/device/syncedAt')
-  const { sendQueue } = await import('../src/features/sync/sendQueue')
+  const { sendQueue, onSendFinished } = await import('../src/features/sync/sendQueue')
+  const { discardPending } = await import('../src/features/pending/discardPending')
   if (signIn) await session.login(credentials)
-  return { session, pending, synced, sendQueue }
+  return { session, pending, synced, sendQueue, onSendFinished, discardPending }
 }
 
 type Tab = Awaited<ReturnType<typeof openTab>>
@@ -349,7 +350,7 @@ describe('200의 알림(ADR 006 결정 3)', () => {
       sent.body.id === id(1)
         ? HttpResponse.json(savedOf(sent.body), { status: 201 })
         : HttpResponse.json(savedOf(sent.body, 'user-1', { version: 3 }), { status: 200 })
-    expect(await tab.sendQueue()).toEqual({ noticed: 2 })
+    expect(await tab.sendQueue()).toEqual({ noticed: 2, sent: 3, rejected: 0, unsent: 0 })
   })
 })
 
@@ -459,5 +460,189 @@ describe('탭 사이(architect #235 B, C)', () => {
     first.answer(HttpResponse.json(savedOf(expense(1)), { status: 201 }))
     await sending
     expect(sentIds()).toEqual([id(1)])
+  })
+})
+
+describe('보내기 한 번의 결과(B-05 지금 보내기, #236)', () => {
+  it('보낸 건수, 서버가 거부한 건수를 준다. 모두 끝났으면 멈춘 까닭이 없다', async () => {
+    const tab = await openTab()
+    for (const n of [1, 2, 3]) await tab.pending.queueTransaction(item(n))
+    transactions.response = (sent) =>
+      sent.body.id === id(2) ? problem(400, 'VALIDATION_FAILED') : HttpResponse.json(savedOf(sent.body), { status: 201 })
+    expect(await tab.sendQueue({ byUser: true })).toEqual({ noticed: 0, sent: 2, rejected: 1, unsent: 0 })
+  })
+
+  it('보내던 중 연결이 끊기면 그 줄과 남은 대기 건수를 주고 까닭은 connection이다', async () => {
+    const tab = await openTab()
+    for (const n of [1, 2, 3, 4]) await tab.pending.queueTransaction(item(n))
+    transactions.response = (sent) =>
+      sent.body.id === id(2) ? HttpResponse.error() : HttpResponse.json(savedOf(sent.body), { status: 201 })
+    expect(await tab.sendQueue({ byUser: true })).toEqual({ noticed: 0, sent: 1, rejected: 0, unsent: 3, stopped: 'connection' })
+    expect(await states(tab)).toEqual([
+      [id(2), 'waiting'],
+      [id(3), 'waiting'],
+      [id(4), 'waiting'],
+    ])
+  })
+
+  it('서버 오류(5xx)면 그 줄은 대기로 남고 다음 줄을 보낸다. 까닭은 trouble이다', async () => {
+    const tab = await openTab()
+    for (const n of [1, 2]) await tab.pending.queueTransaction(item(n))
+    transactions.response = (sent) =>
+      sent.body.id === id(1) ? problem(503, 'INTERNAL_ERROR') : HttpResponse.json(savedOf(sent.body), { status: 201 })
+    expect(await tab.sendQueue({ byUser: true })).toEqual({ noticed: 0, sent: 1, rejected: 0, unsent: 1, stopped: 'trouble' })
+  })
+
+  it('서버 오류 뒤에 연결이 끊기면 까닭은 connection이고 둘 다 센다', async () => {
+    const tab = await openTab()
+    for (const n of [1, 2, 3]) await tab.pending.queueTransaction(item(n))
+    transactions.response = (sent) => (sent.body.id === id(1) ? problem(500, 'INTERNAL_ERROR') : HttpResponse.error())
+    expect(await tab.sendQueue({ byUser: true })).toMatchObject({ sent: 0, unsent: 3, stopped: 'connection' })
+  })
+
+  it('429면 남은 줄을 보내지 않고 trouble이다. 기다리는 동안 다시 누르면 보내지 않고 trouble이다', async () => {
+    const tab = await openTab()
+    for (const n of [1, 2]) await tab.pending.queueTransaction(item(n))
+    transactions.response = () => problem(429, 'TOO_MANY_REQUESTS')
+    expect(await tab.sendQueue({ byUser: true })).toMatchObject({ sent: 0, unsent: 2, stopped: 'trouble' })
+    transactions.response = undefined
+    expect(await tab.sendQueue({ byUser: true })).toMatchObject({ sent: 0, stopped: 'trouble' })
+    expect(sentIds()).toEqual([id(1)])
+  })
+
+  it('토큰이 없으면(확인하지 못한 로그인) 지금 보내기는 trouble로 끝난다', async () => {
+    const tab = await openTab({ signIn: false })
+    await tab.pending.queueTransaction(item(1))
+    expect(await tab.sendQueue({ byUser: true })).toMatchObject({ sent: 0, stopped: 'trouble' })
+    expect(transactions.sent).toEqual([])
+  })
+
+  it('끝날 때마다 사용자가 눌렀는지와 함께 알린다. 다른 탭이 보내는 중이라 건너뛴 저절로 보내기는 알리지 않는다', async () => {
+    const one = await openTab()
+    const two = await openTab()
+    await one.pending.queueTransaction(item(1))
+    const finished: [number, boolean][] = []
+    one.onSendFinished((result, byUser) => finished.push([result.sent, byUser]))
+    two.onSendFinished((result, byUser) => finished.push([result.sent, byUser]))
+    const first = delayed()
+    transactions.response = () => first.respond()
+    const sending = two.sendQueue()
+    await first.arrived
+    await one.sendQueue()
+    first.answer(HttpResponse.json(savedOf(expense(1)), { status: 201 }))
+    await sending
+    await one.sendQueue({ byUser: true })
+    expect(finished).toEqual([
+      [1, false],
+      [0, true],
+    ])
+  })
+})
+
+describe('지금 보내기와 탭 사이 잠금(#236)', () => {
+  it('다른 탭이 보내는 중이면 건너뛰지 않고 끝나기를 기다렸다가 남은 것을 보낸다', async () => {
+    const one = await openTab()
+    const two = await openTab()
+    await one.pending.queueTransaction(item(1))
+    await one.pending.queueTransaction(item(2))
+    const first = delayed()
+    transactions.response = (sent) => (sent.body.id === id(1) ? first.respond() : HttpResponse.json(savedOf(sent.body), { status: 201 }))
+    const auto = two.sendQueue()
+    await first.arrived
+    const now = one.sendQueue({ byUser: true })
+    first.answer(HttpResponse.json(savedOf(expense(1)), { status: 201 }))
+    await auto
+    // 다른 탭이 둘 다 보냈으므로 이 탭은 보낼 것이 없다
+    expect(await now).toEqual({ noticed: 0, sent: 0, rejected: 0, unsent: 0 })
+    expect(sentIds()).toEqual([id(1), id(2)])
+  })
+
+  it('다른 탭이 잠금을 쥔 채 15초 안에 놓지 않으면 보내지 않고 trouble로 끝난다', async () => {
+    const tab = await openTab()
+    await tab.pending.queueTransaction(item(1))
+    const held = Promise.withResolvers<void>()
+    void navigator.locks.request('akkimpyo-queue', {}, () => held.promise)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const sending = tab.sendQueue({ byUser: true })
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(await sending).toMatchObject({ sent: 0, stopped: 'trouble' })
+    } finally {
+      vi.useRealTimers()
+      held.resolve()
+    }
+    expect(transactions.sent).toEqual([])
+  })
+})
+
+describe('버리기(F-109, #236)', () => {
+  it('그 줄을 지운다', async () => {
+    const tab = await openTab()
+    await tab.pending.queueTransaction(item(1))
+    await tab.pending.queueTransaction(item(2))
+    expect(await tab.discardPending('user-1', id(1))).toBe('discarded')
+    expect(await states(tab)).toEqual([[id(2), 'waiting']])
+  })
+
+  it('그 줄을 보내는 중이면 응답을 기다렸다가, 서버가 받았으면 지울 것이 없어 gone이다', async () => {
+    const tab = await openTab()
+    await tab.pending.queueTransaction(item(1))
+    const first = delayed()
+    transactions.response = () => first.respond()
+    const sending = tab.sendQueue()
+    await first.arrived
+    const discarding = tab.discardPending('user-1', id(1))
+    first.answer(HttpResponse.json(savedOf(expense(1)), { status: 201 }))
+    await sending
+    expect(await discarding).toBe('gone')
+    expect(await states(tab)).toEqual([])
+  })
+
+  it('보내는 중에 받은 응답이 서버 오류면 대기로 남은 그 줄을 지운다', async () => {
+    const tab = await openTab()
+    await tab.pending.queueTransaction(item(1))
+    const first = delayed()
+    transactions.response = () => first.respond()
+    const sending = tab.sendQueue()
+    await first.arrived
+    const discarding = tab.discardPending('user-1', id(1))
+    first.answer(problem(500, 'INTERNAL_ERROR'))
+    await sending
+    expect(await discarding).toBe('discarded')
+    expect(await states(tab)).toEqual([])
+  })
+
+  it('보낼 수 없음인 줄도 지운다', async () => {
+    const tab = await openTab()
+    await tab.pending.queueTransaction(item(1))
+    transactions.response = () => problem(400, 'VALIDATION_FAILED')
+    await tab.sendQueue()
+    expect(await tab.discardPending('user-1', id(1))).toBe('discarded')
+    expect(await states(tab)).toEqual([])
+  })
+
+  it('다른 탭이 잠금을 쥔 채 15초 안에 놓지 않으면 지우지 않고 QueueBusy를 던진다', async () => {
+    const tab = await openTab()
+    await tab.pending.queueTransaction(item(1))
+    const held = Promise.withResolvers<void>()
+    void navigator.locks.request('akkimpyo-queue', {}, () => held.promise)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const discarding = tab.discardPending('user-1', id(1)).catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect((await discarding) as Error).toMatchObject({ name: 'QueueBusy' })
+    } finally {
+      vi.useRealTimers()
+      held.resolve()
+    }
+    expect(await states(tab)).toEqual([[id(1), 'waiting']])
+  })
+
+  it('잠금 기능이 없는 브라우저에서도 지운다', async () => {
+    removeLocks()
+    const tab = await openTab()
+    await tab.pending.queueTransaction(item(1))
+    expect(await tab.discardPending('user-1', id(1))).toBe('discarded')
+    installLocks(createFakeLocks())
   })
 })

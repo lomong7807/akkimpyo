@@ -83,6 +83,13 @@ export const categoriesScreen = lazyScreen(() => import('../features/categories/
   headingLevel: 2,
 })
 
+/** B-05. 기기 데이터라 뼈대가 없다(#236) */
+export const pendingScreen = lazyScreen(() => import('../features/pending/PendingPage'), {
+  Frame: subScreen('보내지 않은 입력', '/more'),
+  Placeholder: Loading,
+  headingLevel: 2,
+})
+
 export const moreScreen = lazyScreen(() => import('./MoreRoute'), { Frame: MainScreen, Placeholder: Loading })
 
 export const notFoundScreen = lazyScreen(() => import('../features/not-found/NotFoundPage'), {

@@ -32,6 +32,20 @@ export function rejectedFields(error: unknown): FieldErrors<TransactionField> | 
   return Object.keys(rejected).length > 0 ? rejected : undefined
 }
 
+/**
+ * 서버가 거부한 까닭이 그사이 지워진 계좌나 카테고리인지(보내지 않은 입력 목록 B-05 (6), P-226, #236). 둘 다면 계좌가 앞선다
+ * (B-05 거부 이유 문구 표의 순서). 아니면 없다. 대기열에 남은 거부(다른 판의 앱이 남겼을 수 있다)도 읽으므로 모양을 다시 본다.
+ */
+export function goneReference(code: string, fieldErrors: readonly unknown[]): 'account' | 'category' | undefined {
+  if (code !== 'VALIDATION_FAILED') return undefined
+  const gone = fieldErrors.flatMap((error) => {
+    const { field, code: fieldCode } = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>
+    return typeof field === 'string' && fieldCode === 'NOT_FOUND' ? [fieldOf(field)] : []
+  })
+  if (gone.includes('accountId') || gone.includes('toAccountId')) return 'account'
+  return gone.includes('categoryId') ? 'category' : undefined
+}
+
 /** 보낸 필드 이름에서 화면의 칸. 이체의 보내는 계좌는 계좌 칸이 맡는다. */
 function fieldOf(field: string): TransactionField | undefined {
   if (field === 'fromAccountId') return 'accountId'

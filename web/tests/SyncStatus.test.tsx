@@ -18,7 +18,7 @@ import { readWebFile } from './support/webFile'
 /*
  * 동기화 상태 표시(B-04, F-104, 00-common 6.5, #235). 이 기기에서 이 계정이 쌓은 보내지 않은 입력이 1건 이상일 때만 보인다.
  * 휴대폰은 상단 바, 넓은 화면은 사이드바 맨 아래 묶음(2-4)과 마지막으로 맞춘 시각(2-3). 더보기 맨 아래에도 맞춘 시각(M-01 (16)).
- * 1B 동안 B-04와 사이드바 건수 줄은 눌리지 않는다(B-05는 #236). 그동안 이름에 ", 목록 보기"를 붙이지 않는다(designer #235 Q3).
+ * B-04와 사이드바 건수 줄은 누르면 보내지 않은 입력 목록(B-05)으로 간다(#236). 이름 끝에 ", 목록 보기"를 붙인다(00-common 6.5).
  * 자동 보내기에서 200이고 알릴 것이 있으면 토스트 하나(designer #235 Q1, planner P1).
  */
 
@@ -109,7 +109,7 @@ describe('B-04 휴대폰 상단 바', () => {
     await seedPending(pending())
     await open()
     const status = await waitFor(() => syncStatus()!)
-    expect(within(status).getByText('보내지 않은 입력 2건')).toBeTruthy()
+    expect(within(status).getByText('보내지 않은 입력 2건, 목록 보기')).toBeTruthy()
     const parts = status.querySelectorAll('[class*="_part_"]')
     expect(parts).toHaveLength(1)
     expect(parts[0].textContent).toBe('2건')
@@ -122,7 +122,7 @@ describe('B-04 휴대폰 상단 바', () => {
     await seedRejected()
     await open()
     const status = await waitFor(() => syncStatus()!)
-    expect(within(status).getByText('보내지 않은 입력 3건, 그중 보낼 수 없음 1건')).toBeTruthy()
+    expect(within(status).getByText('보내지 않은 입력 3건, 그중 보낼 수 없음 1건, 목록 보기')).toBeTruthy()
     const parts = [...status.querySelectorAll<HTMLElement>('[class*="_part_"]')]
     expect(parts.map((part) => part.textContent)).toEqual(['1건', '2건'])
     expect(parts[0].className).toMatch(/_rejected_/)
@@ -134,7 +134,7 @@ describe('B-04 휴대폰 상단 바', () => {
     await seedRejected()
     await open()
     const status = await waitFor(() => syncStatus()!)
-    expect(within(status).getByText('보내지 않은 입력 1건, 그중 보낼 수 없음 1건')).toBeTruthy()
+    expect(within(status).getByText('보내지 않은 입력 1건, 그중 보낼 수 없음 1건, 목록 보기')).toBeTruthy()
     expect(status.querySelectorAll('[class*="_part_"]')).toHaveLength(1)
   })
 
@@ -144,16 +144,17 @@ describe('B-04 휴대폰 상단 바', () => {
     expect(syncStatus()).toBeNull()
   })
 
-  it('1B 동안 누를 수 없고, 한 덩어리의 자리를 44px 이상으로 잡는다', async () => {
+  it('한 덩어리가 보내지 않은 입력 목록(B-05)으로 가는 링크이고, 누르는 자리를 44px 이상으로 잡는다(#236)', async () => {
     await seedPending(pending())
-    await open()
+    const opened = await open()
     const status = await waitFor(() => syncStatus()!)
-    expect(within(status).queryByRole('button')).toBeNull()
-    expect(within(status).queryByRole('link')).toBeNull()
-    expect(screen.queryByText(/목록 보기/)).toBeNull()
+    expect(status.tagName).toBe('A')
+    expect(screen.getByRole('link', { name: '보내지 않은 입력 1건, 목록 보기' })).toBe(status)
     const style = getComputedStyle(status)
     expect(style.minHeight).toBe('var(--size-touch)')
     expect(style.minWidth).toBe('var(--size-touch)')
+    await opened.user.click(status)
+    await waitFor(() => expect(opened.router.state.location.pathname).toBe('/pending'))
   })
 
   it('글자는 text-caption 600, 아이콘은 20px이고 돌아가는 원이 없다', async () => {
@@ -197,16 +198,16 @@ describe('건수가 바뀌는 때', () => {
   it('쌓을 때, 서버가 거부했을 때, 버렸을 때 바로 바뀐다', async () => {
     await seedPending(pending())
     await open()
-    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 1건')).toBeTruthy())
+    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 1건, 목록 보기')).toBeTruthy())
     const queue = await appQueue()
     const second = pending()
     await queue.queueTransaction(second)
-    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 2건')).toBeTruthy())
+    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 2건, 목록 보기')).toBeTruthy())
     const seen = (await queue.pendingOf('user-1')).find(({ id: rowId }) => rowId === second.body.id)!
     await queue.settlePending(seen, { kind: 'rejected', status: 400, code: 'VALIDATION_FAILED', fieldErrors: [], at: now })
-    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 2건, 그중 보낼 수 없음 1건')).toBeTruthy())
+    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 2건, 그중 보낼 수 없음 1건, 목록 보기')).toBeTruthy())
     await queue.removePending('user-1', second.body.id)
-    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 1건')).toBeTruthy())
+    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 1건, 목록 보기')).toBeTruthy())
   })
 
   it('보내면 건수가 줄고 0건이면 사라진다', async () => {
@@ -222,16 +223,16 @@ describe('건수가 바뀌는 때', () => {
     await seedPending(pending())
     await open()
     act(() => goOffline())
-    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 1건')).toBeTruthy())
+    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 1건, 목록 보기')).toBeTruthy())
     await (await appQueue()).queueTransaction(pending())
-    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 2건')).toBeTruthy())
+    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 2건, 목록 보기')).toBeTruthy())
   })
 
   it('모든 장부의 합계다', async () => {
     await seedPending(pending('user-1', '1ed9e700-0000-4000-8000-0000000000ff'))
     await seedPending(pending())
     await open()
-    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 2건')).toBeTruthy())
+    await waitFor(() => expect(within(syncStatus()!).getByText('보내지 않은 입력 2건, 목록 보기')).toBeTruthy())
   })
 })
 
@@ -245,10 +246,20 @@ describe('넓은 화면 사이드바 맨 아래 묶음', () => {
     const rejected = within(bottom).getByText('그중 보낼 수 없음 1건')
     expect(getComputedStyle(rejected).color).toBe('var(--color-danger)')
     expect(getComputedStyle(within(bottom).getByText('보내지 않은 입력 2건')).color).toBe('var(--color-text-secondary)')
-    const lines = [...bottom.querySelectorAll('p')].map((line) => line.textContent)
+    const lines = [...bottom.querySelectorAll('a > span, p')].map((line) => line.textContent)
     expect(lines).toEqual(['보내지 않은 입력 2건', '그중 보낼 수 없음 1건', expect.stringMatching(/에 맞춤$/)])
     expect(within(bottom).queryByRole('button')).toBeNull()
-    expect(within(bottom).queryByRole('link')).toBeNull()
+  })
+
+  it('건수 줄은 보내지 않은 입력 목록(B-05)으로 가는 링크이고 이름은 B-04와 같다. 누르는 자리는 44px 이상이다(#236)', async () => {
+    await seedPending(pending())
+    await seedRejected()
+    const opened = await open('/home', 1280)
+    const bottom = sidebarBottom()
+    const link = await waitFor(() => within(bottom).getByRole('link', { name: '보내지 않은 입력 2건, 그중 보낼 수 없음 1건, 목록 보기' }))
+    expect(getComputedStyle(link).minHeight).toBe('var(--size-touch)')
+    await opened.user.click(link)
+    await waitFor(() => expect(opened.router.state.location.pathname).toBe('/pending'))
   })
 
   it('0건이면 건수 줄 없이 맞춘 시각만 있다', async () => {
