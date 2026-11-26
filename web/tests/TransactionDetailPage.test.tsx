@@ -469,6 +469,9 @@ describe('삭제(F-227)', () => {
     const opened = await openFromList(item)
     await askToDelete(opened)
     await opened.user.click(inDialog('삭제'))
+    // 상세에는 줄 링크가 없으므로 내역으로 돌아온 것(남은 줄)을 먼저 본 뒤 지운 줄이 빠지기를 기다린다
+    await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-11'))
+    await screen.findByRole('link', { name: /^올래국수/ })
     await waitFor(() => expect(screen.queryByRole('link', { name: /^김밥천국/ })).toBeNull())
     expect(screen.getByRole('link', { name: /^올래국수/ })).toBeTruthy()
   })
@@ -662,6 +665,9 @@ describe('되돌리기(F-230)', () => {
     const opened = await openFromList(item)
     await askToDelete(opened)
     await opened.user.click(inDialog('삭제'))
+    // 상세에는 줄 링크가 없으므로 내역으로 돌아온 것(남은 줄)을 먼저 본다
+    await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-11'))
+    await screen.findByRole('link', { name: /^올래국수/ })
     await waitFor(() => expect(screen.queryByRole('link', { name: /^김밥천국/ })).toBeNull())
     await waitFor(() => expect(toastRegion().textContent).toBe('휴지통으로 옮겼어요되돌리기'))
     return opened
