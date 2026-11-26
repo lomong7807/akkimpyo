@@ -29,7 +29,7 @@ function Caller() {
   const showToast = useToast()
   return (
     <>
-      <button type="button" onClick={() => showToast("'신한카드' 계좌를 추가했어요.")}>
+      <button type="button" onClick={() => showToast("'신한카드' 계좌를 추가했어요")}>
         알리기
       </button>
       <button type="button" onClick={() => showToast('다른 알림')}>
@@ -74,7 +74,7 @@ describe('토스트의 자리', () => {
     const before = region()
     press('알리기')
     expect(region()).toBe(before)
-    expect(message()).toBe("'신한카드' 계좌를 추가했어요.")
+    expect(message()).toBe("'신한카드' 계좌를 추가했어요")
   })
 
   it('영역은 뒤 화면을 누르는 것을 막지 않고 토스트만 누른다', () => {

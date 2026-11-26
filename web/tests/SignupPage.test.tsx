@@ -173,7 +173,7 @@ describe('가입(A-03)의 요소', () => {
       const id = input.getAttribute('aria-describedby')
       return id && document.getElementById(id)!.textContent
     })
-    expect(helps).toEqual([null, passwordRule, null, '장부를 함께 쓰는 사람에게 보여요.'])
+    expect(helps).toEqual([null, passwordRule, null, '장부를 함께 쓰는 사람에게 보여요'])
   })
 
   it('1단계에 없는 요소를 두지 않는다', () => {
@@ -406,7 +406,7 @@ describe('표시 이름의 글자 수', () => {
       .getAttribute('aria-describedby')!
       .split(' ')
       .map((id) => document.getElementById(id)!.textContent)
-    expect(described).toEqual(['장부를 함께 쓰는 사람에게 보여요.', '17/20'])
+    expect(described).toEqual(['장부를 함께 쓰는 사람에게 보여요', '17/20'])
   })
 
   it('이메일과 비밀번호에는 없다', async () => {

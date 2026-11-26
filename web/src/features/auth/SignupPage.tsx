@@ -107,7 +107,7 @@ export default function SignupPage({ signUp, onSignedUp, initialEmail }: SignupP
               {...fieldProps('displayName')}
               readOnly={busy}
               label="표시 이름"
-              help="장부를 함께 쓰는 사람에게 보여요."
+              help="장부를 함께 쓰는 사람에게 보여요"
               count={{ current: displayNameLength(values.displayName), max: DISPLAY_NAME_MAX }}
               autoCorrect="off"
               spellCheck={false}

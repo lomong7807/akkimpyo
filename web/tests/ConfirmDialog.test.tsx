@@ -35,7 +35,7 @@ function Sample() {
       <ConfirmDialog
         open={open}
         title="쓰던 내용을 버릴까요?"
-        description="저장하지 않은 내용은 사라져요."
+        description="저장하지 않은 내용은 사라져요"
         closeLabel="계속 쓰기"
         actionLabel="버리기"
         onClose={() => setOpen(false)}
@@ -69,7 +69,7 @@ describe.each(layouts)('확인 창: %s', (_, width) => {
     await ask(width)
     expect(screen.getByRole('dialog', { name: '쓰던 내용을 버릴까요?' })).toBe(dialog())
     expect(screen.getByRole('heading', { level: 2, name: '쓰던 내용을 버릴까요?' })).toBeTruthy()
-    expect(screen.getByText('저장하지 않은 내용은 사라져요.')).toBeTruthy()
+    expect(screen.getByText('저장하지 않은 내용은 사라져요')).toBeTruthy()
     expect(keep().compareDocumentPosition(discard())).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
@@ -128,7 +128,7 @@ describe.each(layouts)('확인 창: %s', (_, width) => {
 
   it('설명은 본문 크기의 보조 글자색이다', async () => {
     await ask(width)
-    const description = styleOf(screen.getByText('저장하지 않은 내용은 사라져요.'))
+    const description = styleOf(screen.getByText('저장하지 않은 내용은 사라져요'))
     expect(description.font).toBe('var(--text-body)')
     expect(description.color).toBe('var(--color-text-secondary)')
     expect(description.margin).toBe('0px')
@@ -147,7 +147,7 @@ describe('휴대폰 배치의 확인 창', () => {
 
   it('좌우 16px이고 버튼 아래는 시트의 8px에 4px을 더한 12px과 안전 영역이다', async () => {
     await ask()
-    const body = screen.getByText('저장하지 않은 내용은 사라져요.').parentElement!
+    const body = screen.getByText('저장하지 않은 내용은 사라져요').parentElement!
     expect(styleOf(body).getPropertyValue('padding-inline')).toBe('var(--space-16)')
     expect(styleOf(body).paddingBottom).toBe('var(--space-4)')
     expect(readCssRule('src/components/BottomSheet.module.css', '.content')).toContain(
@@ -205,7 +205,7 @@ describe('넓은 화면의 확인 창', () => {
 
   it('시트의 여백은 걸리지 않는다', async () => {
     await ask(1280)
-    const body = screen.getByText('저장하지 않은 내용은 사라져요.').parentElement!
+    const body = screen.getByText('저장하지 않은 내용은 사라져요').parentElement!
     expect(styleOf(body).getPropertyValue('padding-inline')).not.toBe('var(--space-16)')
     expect(readCssRule(CSS, '.actions')).not.toContain('border')
   })
@@ -231,7 +231,7 @@ describe('열린 채로', () => {
       <ConfirmDialog
         open={open}
         title="쓰던 내용을 버릴까요?"
-        description="저장하지 않은 내용은 사라져요."
+        description="저장하지 않은 내용은 사라져요"
         closeLabel="계속 쓰기"
         actionLabel="버리기"
         onClose={() => {}}

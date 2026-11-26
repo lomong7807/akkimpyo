@@ -187,7 +187,7 @@ describe('바꾼 값이 있으면', () => {
     await user.type(name(), '급여통장')
     await close(user)
     expect(await screen.findByRole('dialog', { name: question })).toBeTruthy()
-    expect(screen.getByText('저장하지 않은 내용은 사라져요.')).toBeTruthy()
+    expect(screen.getByText('저장하지 않은 내용은 사라져요')).toBeTruthy()
     expect(document.activeElement).toBe(screen.getByRole('button', { name: '계속 쓰기' }))
     expect(path()).toBe('/new')
     // 뒤로는 브라우저가 옮긴 주소를 되돌린다
