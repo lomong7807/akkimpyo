@@ -19,8 +19,8 @@ describe('미리 캐시 목록', () => {
     ])
   })
 
-  it('sw.js 자신과 소스 맵은 넣지 않는다', () => {
-    expect(precacheOf(['index.html', 'sw.js', 'assets/index-abc.js.map'])).toEqual(['/index.html'])
+  it('service worker 파일(sw.js, 긴급히 끄는 sw-off.js)과 소스 맵은 넣지 않는다', () => {
+    expect(precacheOf(['index.html', 'sw.js', 'sw-off.js', 'assets/index-abc.js.map'])).toEqual(['/index.html'])
   })
 
   it('윈도의 경로 구분자도 /로 바꾼다', () => {
