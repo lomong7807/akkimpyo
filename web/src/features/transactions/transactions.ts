@@ -9,7 +9,7 @@ import { ledgerPath } from '../me/ledgerPath'
 
 /*
  * 거래 만들기의 경로, 헤더, 필드 이름(#14의 요청과 응답 계약), 거래 목록과 상세의 경로, 쿼리, 필드 이름(#15의 응답 계약),
- * 삭제와 복원의 경로, 쿼리, 본문(#38의 계약)은 이 파일에만 있다.
+ * 삭제와 복원의 경로, 쿼리, 본문(#38의 계약), 수정의 경로와 본문(#36의 계약)은 이 파일에만 있다.
  */
 
 export const transactionTypes = ['EXPENSE', 'INCOME', 'TRANSFER'] as const
@@ -48,6 +48,18 @@ export interface NewTransfer {
 }
 
 export type NewTransaction = NewIncomeOrExpense | NewTransfer
+
+/** 거래 id를 뺀 본문. 지출·수입과 이체를 나눈 채 뺀다. */
+type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never
+
+/** 거래에 넣는 값. 만들기의 본문에서 거래 id를 뺀 것이다. */
+export type TransactionContent = WithoutId<NewTransaction>
+
+/**
+ * 거래 수정의 본문(#36). 만들기 모양에서 거래 id를 빼고(id는 경로에 있다) 화면이 연 때의 version을 더한다.
+ * 유형은 저장된 것과 같아야 한다(P-213). 다르면 서버가 400(type, NOT_ALLOWED)으로 거부한다.
+ */
+export type TransactionUpdate = TransactionContent & { version: number }
 
 interface Person {
   id: string
@@ -299,6 +311,25 @@ export async function deleteTransaction(
   return body
 }
 
+/**
+ * 거래 하나를 고친다(#36). 요청은 하나이고 `startedBy`는 createTransaction과 같다. 바뀐 거래를 준다. 내용이 저장된 것과
+ * 같으면 서버가 version을 올리지 않는다. 받은 거래로 상세를 그리므로 상세와 같은 모양이고 휴지통에 없어야 받는다.
+ * 낡은 version은 409 STALE_VERSION(staleVersionOf), version은 맞는데 휴지통이면 409 INVALID_STATE(isInvalidState),
+ * 완전히 지웠거나 다른 장부의 것이면 404 거부다. 실패하면 ApiError를 던진다.
+ */
+export async function updateTransaction(
+  ledgerId: string,
+  id: string,
+  update: TransactionUpdate,
+  startedBy: string | undefined,
+): Promise<TransactionDetail> {
+  const path = transactionPath(ledgerId, id)
+  checkSender(startedBy)
+  const body = await request<unknown>(path, { method: 'PUT', body: update, headers: deviceHeaders() })
+  if (!isTransactionDetail(body) || !isSameId(body.id, id) || body.deletedAt !== null) throw ApiError.unreadable()
+  return body
+}
+
 /** 휴지통의 거래를 되살린다. `version`은 삭제 응답의 것이다. 나머지는 deleteTransaction과 같다. */
 export async function restoreTransaction(
   ledgerId: string,
@@ -326,6 +357,11 @@ export function staleVersionOf(error: unknown, id: string): { current?: Transact
 /** version은 맞는데 지금 상태에서 할 수 없다는 거부(409 INVALID_STATE). 이미 지운 거래를 지우려 한 것 등이다. */
 export function isInvalidState(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && error.code === 'INVALID_STATE'
+}
+
+/** 없는 거래라는 거부(404). 완전히 지운 거래와 다른 장부의 거래를 서버가 나누지 않는다(P-903). */
+export function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404
 }
 
 /** 거래 하나의 경로. 거래 id도 주소에 넣기 전에 UUID 모양인지 본다(ledgerPath와 같다). */
