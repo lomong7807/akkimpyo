@@ -969,6 +969,8 @@ describe('상세에서 뒤로 돌아오면', () => {
     const target = allRows()[50]
     await opened.user.click(target)
     await waitFor(() => expect(opened.router.state.location.pathname).toMatch(/^\/transactions\/0190/))
+    // 상세의 코드가 와서 목록에 있던 값을 먼저 보인 뒤부터 본다. 그 전은 상세의 틀이다(#251)
+    await screen.findByText('날짜·시각')
     const dom = recordDom()
     await act(() => opened.router.navigate(-1))
     await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-10'))

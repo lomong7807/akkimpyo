@@ -463,7 +463,8 @@ describe('같은 id로 만들 수 없음(409 ID_CONFLICT)', () => {
     await waitFor(() => expect(path(opened)).toBe(`/transactions/${savedId}`))
     expect(discardQuestion()).toBeNull()
     expect(await screen.findByRole('heading', { level: 1, name: '거래 상세' })).toBeTruthy()
-    expect(detail.requests.get.map(({ id }) => id)).toEqual([savedId])
+    // 상세 요청은 상세 화면의 코드가 온 뒤에 나간다(#251)
+    await waitFor(() => expect(detail.requests.get.map(({ id }) => id)).toEqual([savedId]))
   })
 
   it('버린 입력 화면은 방문 기록에서 상세로 바뀌어, 상세에서 뒤로 가면 입력을 연 화면이다', async () => {

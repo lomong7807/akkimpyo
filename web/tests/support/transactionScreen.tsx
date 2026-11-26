@@ -129,12 +129,12 @@ export async function openFromMore() {
 }
 
 /**
- * 거래 입력이 열리고 기본 계좌가 들어갈 때까지 기다린다.
+ * 거래 입력이 열리고 기본 계좌가 들어갈 때까지 기다린다. 화면 코드를 받는 동안의 틀에도 같은 제목이 있으므로 칸이 나오기를 기다린다(#251).
  * 칸은 한 번만 찾아 그 글자를 지켜본다. 바뀔 때마다 역할로 다시 찾으면 화면 전체의 이름을 매번 다시 계산한다.
  */
-async function untilDefaultAccount() {
+export async function untilDefaultAccount() {
   await screen.findByRole('heading', { level: 1, name: '거래 입력' })
-  const field = accountField()
+  const field = await waitFor(accountField)
   await waitFor(() => expect(field.textContent).not.toBe(''))
   // 지켜본 칸이 바뀌지 않고 화면에 그대로 있다
   expect(field.isConnected).toBe(true)

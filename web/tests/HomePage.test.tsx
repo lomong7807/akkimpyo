@@ -19,6 +19,7 @@ import {
   openApp,
   resetGlobals,
   saveAmount,
+  untilDefaultAccount,
   startServer,
   type Opened,
 } from './support/transactionScreen'
@@ -526,7 +527,7 @@ describe('계좌 잔액(F-112, P-220)', () => {
     const opened = await openHome()
     expect(balances()[0]).toEqual(['은행', '1,800,000원'])
     await opened.user.click(within(tabBar()).getByRole('link', { name: '거래 입력' }))
-    await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+    await untilDefaultAccount()
     accounts.items = accounts.items.map((each) => ((each as { id: string }).id === id.salary ? { ...each, balance: 1488000 } : each))
     await saveAmount(opened.user)
     await screen.findByRole('heading', { level: 1, name: '홈' })
