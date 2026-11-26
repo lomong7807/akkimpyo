@@ -76,6 +76,7 @@ const widths = {
   '--width-full-screen-form': 560,
   '--width-dialog': 480,
   '--width-toast': 480,
+  '--width-welcome': 480,
 } as const
 
 interface Situation {

@@ -972,7 +972,7 @@ describe('배치', () => {
     expect(getComputedStyle(scroller(button())).overflowY).toBe('visible')
     expect(getComputedStyle(bottomOf(button()).parentElement!).height).toBe('auto')
     const page = getComputedStyle(screen.getByRole('main'))
-    expect(page.maxWidth).toContain('var(--width-dialog)')
+    expect(page.maxWidth).toBe('calc(var(--width-welcome) + 2 * var(--space-24))')
     expect(page.getPropertyValue('margin-inline')).toBe('auto')
     expect(wideRule('.page')).toContain('calc(var(--space-40) + env(safe-area-inset-top))')
   })
@@ -980,6 +980,6 @@ describe('배치', () => {
   it('휴대폰 배치는 폭을 줄이지 않는다', async () => {
     await openFirst()
     setViewportWidth(390)
-    expect(getComputedStyle(screen.getByRole('main')).maxWidth).not.toContain('var(--width-dialog)')
+    expect(getComputedStyle(screen.getByRole('main')).maxWidth).not.toContain('var(--width-welcome)')
   })
 })
