@@ -12,6 +12,9 @@ import type { Account } from './accounts'
 import { isOpenedFromList } from './openedFromList'
 import { useAccountForm } from './useAccountForm'
 import { useCreateAccount } from './useCreateAccount'
+import { useKeepDraft } from '../drafts/keepDraft'
+import { useRestoredDraft } from '../drafts/restoreDraft'
+import { accountValuesOf } from './accountDraft'
 
 const LIST = '/accounts'
 
@@ -29,6 +32,12 @@ export default function AccountAddPage() {
 
   const busy = creation.isPending || creation.isSuccess
   const guard = useLeaveGuard({ parent: LIST, changed: form.changed, busy })
+  // 로그인이 풀리면 쓰던 값을 이 기기에 남기고, 같은 계정으로 이 주소에 돌아오면 채운다(00-common 4.1, #234 C2)
+  useKeepDraft('account-add', () => (form.changed ? form.values : undefined))
+  useRestoredDraft('account-add', (saved) => {
+    const values = accountValuesOf(saved)
+    if (values) form.change(values)
+  })
 
   function submit(from: 'save' | 'retry' = 'save') {
     if (busy) return

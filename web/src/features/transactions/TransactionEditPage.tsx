@@ -31,6 +31,9 @@ import { rejectedFields } from './transactionRejection'
 import { isInvalidState, isNotFound, staleVersionOf, type TransactionDetail } from './transactions'
 import { useTransactionToEdit } from './useTransactionDetail'
 import { useMoreFold, useTransactionForm } from './useTransactionForm'
+import { useKeepDraft } from '../drafts/keepDraft'
+import { useRestoredDraft } from '../drafts/restoreDraft'
+import { editTransactionDraftOf } from './transactionDraft'
 import { useUpdateTransaction } from './useUpdateTransaction'
 
 /**
@@ -150,6 +153,23 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
     form.reset(opened.values)
   }
   const { moreOpen, setMoreOpen, unfoldFor } = useMoreFold(true)
+  // 로그인이 풀리면 쓰던 값과 연 때의 version을 이 기기에 남기고, 같은 계정으로 이 주소에 돌아오면 채운다(00-common 4.1, #234 C2).
+  // 채웠으면 그 version으로 보내, 그사이 서버의 거래가 바뀌었으면 충돌(N-04)이 뜬다
+  const [draftVersion, setDraftVersion] = useState<number>()
+  const baseVersion = draftVersion ?? opened?.transaction.version
+  useKeepDraft('transaction-edit', () =>
+    baseVersion !== undefined && form.changed ? { version: baseVersion, values: form.values } : undefined,
+  )
+  useRestoredDraft(
+    'transaction-edit',
+    (saved) => {
+      const draft = editTransactionDraftOf(saved)
+      if (!draft) return
+      setDraftVersion(draft.version)
+      form.change(draft.values)
+    },
+    filled,
+  )
   // 저장 위의 실패. 다시 보내는 동안에도 남기고, 실패마다 count를 올려 새로 그려 다시 읽히게 한다
   const [shown, setShown] = useState<{ failure: Failure; count: number }>()
   // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돈다(00-common 4.5)
@@ -177,7 +197,7 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
     if (hasSameContent(form.effective, opened.values)) return guard.leave(goBack)
     setSender(from)
     updating.mutate(
-      { update: toTransactionUpdate(form.effective, opened.transaction.version), user },
+      { update: toTransactionUpdate(form.effective, baseVersion ?? opened.transaction.version), user },
       { onSuccess: finish, onError: showFailure },
     )
   }
@@ -220,6 +240,8 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
     const latest = lists.valuesOf(conflict.current)
     const merged = reapplyMine(opened.values, form.effective, latest)
     onRebase({ transaction: conflict.current, values: latest })
+    // 이 기기에 남겼다 채운 입력의 version(#234 C2)이 아니라 최신 version으로 보낸다
+    setDraftVersion(undefined)
     form.reset(latest, merged)
     setReapplied(true)
     setConflictOpen(false)

@@ -1,7 +1,10 @@
 import { useId, type Ref } from 'react'
 import { Button } from '../../components/Button'
 import RetryMessage from '../../components/RetryMessage'
+import { accountValuesOf } from '../accounts/accountDraft'
 import AccountFields, { type AccountFieldTexts } from '../accounts/AccountFields'
+import { useKeepDraft } from '../drafts/keepDraft'
+import { useRestoredDraft } from '../drafts/restoreDraft'
 import type { FirstAccount } from './useFirstAccount'
 import WelcomeStep from './WelcomeStep'
 import styles from './Welcome.module.css'
@@ -21,6 +24,12 @@ interface FirstAccountStepProps {
 export default function FirstAccountStep({ heading, account }: FirstAccountStepProps) {
   const { form, busy, sender, failures, create, skip, retry } = account
   const skipNoteId = useId()
+  // 로그인이 풀리면 쓰던 값을 이 기기에 남기고, 같은 계정으로 이 장에 돌아오면 채운다(00-common 4.1, #234 C2)
+  useKeepDraft('first-account', () => (form.changed ? form.values : undefined))
+  useRestoredDraft('first-account', (saved) => {
+    const values = accountValuesOf(saved)
+    if (values) form.change(values)
+  })
   return (
     <WelcomeStep
       step={2}

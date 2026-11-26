@@ -92,6 +92,15 @@ function Gate() {
 
   if (session.status === 'signed-out') return <LoginRedirect session={session} />
 
+  // 로그인이 풀려 쓰던 값을 남기는 중이다. 입력 화면을 내리고 남긴 뒤 로그인 화면으로 간다(#234 C2)
+  if (session.ending) {
+    return (
+      <PlainLayout>
+        <Loading />
+      </PlainLayout>
+    )
+  }
+
   if (session.status === 'unknown' || session.status === 'retrying' || (copyMissing && !ledger)) {
     return (
       <PlainLayout>
@@ -147,12 +156,11 @@ function forgetLedger(queryClient: QueryClient, ledgerId: string) {
   void forgetLedgerCopies(user, ledgerId, now()).catch(() => {})
 }
 
-const endedState = { sessionEnded: true }
-
 function LoginRedirect({ session }: { session: Session }) {
   const location = useLocation()
   useEffect(() => leaveAddress(session, location), [session, location])
-  return <Navigate to="/login" replace state={session.end === 'ended' ? endedState : null} />
+  const state = session.end === 'ended' ? { sessionEnded: true, draftKept: session.draftKept === true } : null
+  return <Navigate to="/login" replace state={state} />
 }
 
 /** 로그인한 뒤 돌아오도록 가려던 주소를 기억한다. 사용자가 로그아웃했으면 앞 사용자의 주소를 남기지 않는다. */

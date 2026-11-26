@@ -18,7 +18,19 @@ import {
   untilDetail,
   type Item,
 } from './support/transactionEdit'
-import { amount, discardQuestion, id, memo, payee, resetGlobals, saveButton, settle, time, type User } from './support/transactionScreen'
+import {
+  amount,
+  discardQuestion,
+  id,
+  memo,
+  openApp,
+  payee,
+  resetGlobals,
+  saveButton,
+  settle,
+  time,
+  type User,
+} from './support/transactionScreen'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 
 /*
@@ -412,5 +424,40 @@ describe('최신 거래(current)가 없거나 읽을 수 없음', () => {
     await settle()
     expect(sheet()).toBeNull()
     expect(screen.getByRole('link', { name: '최신 내용 보기' })).toBeTruthy()
+  })
+})
+
+describe('이 기기에 남겼다 채운 입력(#234 C2)', () => {
+  it('채운 입력이 충돌해 다시 얹으면, 남겼던 version이 아니라 최신 version으로 보낸다', async () => {
+    const item = lunch()
+    put(item)
+    // 앱을 새로 열 때와 같은 모듈에 남긴다(앞 테스트의 저장소 연결을 쓰지 않는다, Drafts.test.tsx와 같다)
+    vi.resetModules()
+    const { keepDrafts } = await import('../src/device/drafts')
+    const values = {
+      type: 'EXPENSE',
+      amount: 30000,
+      payee: '김밥천국',
+      categoryId: id.dining,
+      accountId: id.wallet,
+      toAccountId: '',
+      occurredOn: '2026-11-25',
+      occurredTime: '13:05',
+      memo: '팀 점심\n영수증은 사진첩에',
+    }
+    const savedAt = Date.parse('2026-11-26T12:00:00+09:00')
+    await keepDrafts('user-1', [{ form: 'transaction-edit', path: editPath(item), values: { version: 1, values }, savedAt }])
+    changeElsewhere(item)
+    const opened = await openApp(editPath(item))
+    await waitFor(() => expect(amount().value).toBe('30,000'))
+    await opened.user.click(saveButton())
+    await waitFor(() => expect(sheet()).toBeTruthy())
+    await untilOpened()
+    await opened.user.click(reapplyButton()!)
+    await waitFor(() => expect(sheet()).toBeNull())
+    await opened.user.click(saveButton())
+    await waitFor(() => expect(detail.requests.update).toHaveLength(2))
+    expect(sentVersions()).toEqual([1, 2])
+    await waitFor(() => expect(toastText()).toBe('저장했어요'))
   })
 })
