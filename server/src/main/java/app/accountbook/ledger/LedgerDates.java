@@ -11,7 +11,7 @@ import java.time.ZoneId;
 public final class LedgerDates {
 
     /** DB의 ck_transaction_occurred_on_min, ck_account_opening_date_min과 같은 값이다. */
-    private static final LocalDate MIN_DATE = LocalDate.of(2000, 1, 1);
+    private static final LocalDate MIN_DATE = LocalDate.of(2000, 1, 2);
 
     private LedgerDates() {
     }

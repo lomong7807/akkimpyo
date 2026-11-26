@@ -27,7 +27,7 @@ public class AccountService {
     private static final String NAME_UNIQUE_CONSTRAINT = "uq_account_name";
 
     /** 시작 잔액 크기의 상한(P-201의 최대값, F-502). DB의 ck_account_opening_balance_range와 같은 값이다. */
-    private static final long MAX_OPENING_BALANCE = 9_999_999_999L;
+    private static final long MAX_OPENING_BALANCE = 9_999_999_998L;
 
     private final AccountRepository accountRepository;
     private final AccountUsage accountUsage;

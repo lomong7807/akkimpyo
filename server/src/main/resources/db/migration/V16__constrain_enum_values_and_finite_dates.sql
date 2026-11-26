@@ -17,7 +17,6 @@ ALTER TABLE account
     ALTER COLUMN currency TYPE text,
     -- 기본값을 새 타입으로 다시 건다.
     ALTER COLUMN currency SET DEFAULT 'KRW',
-    ADD CONSTRAINT ck_account_currency_values CHECK (currency = 'KRW'),
     -- 하한 CHECK(V9)는 'infinity'를 통과시킨다. 그런 계좌는 잔액 조회가 실패한다(#165).
     ADD CONSTRAINT ck_account_opening_date_finite CHECK (isfinite(opening_date));
 
@@ -29,11 +28,9 @@ ALTER TABLE transaction
     ALTER COLUMN type TYPE text,
     ALTER COLUMN status TYPE text,
     ADD CONSTRAINT ck_transaction_type_values CHECK (type IN ('EXPENSE', 'INCOME', 'TRANSFER')),
-    ADD CONSTRAINT ck_transaction_status_values CHECK (status IN ('PENDING', 'POSTED', 'CANCELED')),
-    -- 하한 CHECK(V5)는 'infinity'를 통과시킨다.
-    ADD CONSTRAINT ck_transaction_occurred_on_finite CHECK (isfinite(occurred_on));
+    ADD CONSTRAINT ck_transaction_status_values CHECK (status IN ('PENDING', 'POSTED', 'CANCELED'));
 
 ALTER TABLE change_log
     ALTER COLUMN action TYPE text,
     ADD CONSTRAINT ck_change_log_action_values
-        CHECK (action IN ('CREATE', 'UPDATE', 'CANCEL', 'DELETE', 'RESTORE', 'PURGE', 'AUTO_PURGE'));
+        CHECK (action IN ('CREATE', 'UPDATE', 'CANCEL', 'DELETE', 'RESTORE', 'PURGE'));
