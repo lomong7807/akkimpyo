@@ -48,16 +48,21 @@ const COMBINING_KEYCAP = '\u{20E3}'
 const skinTone = /^[\u{1F3FB}-\u{1F3FF}]$/u
 const keycapBase = /^[0-9#*]$/
 
+export interface UnusableCharacterOptions {
+  /** 메모는 줄바꿈(U+000A)을 더 받는다. */
+  allowLineFeed?: boolean
+}
+
 /**
  * 서버가 거부하는 글자가 있는지(P-214). 이모지를 이루는 자리의 U+200D와 U+FE0F만 받는다.
  * 서버처럼 앞뒤를 지우거나 조합형으로 맞추기 전의 값, 곧 쓴 그대로의 값에 부른다.
  */
-export function hasUnusableCharacter(text: string): boolean {
+export function hasUnusableCharacter(text: string, { allowLineFeed = false }: UnusableCharacterOptions = {}): boolean {
   const characters = [...text]
   return characters.some(
     (character, i) =>
       surrogate.test(character) ||
-      (forbidden.test(character) && !isPartOfEmoji(characters, i)),
+      (!(allowLineFeed && character === '\n') && forbidden.test(character) && !isPartOfEmoji(characters, i)),
   )
 }
 

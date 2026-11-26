@@ -153,6 +153,7 @@ describe('쓸 수 없는 글자(P-214)', () => {
   ])('서로게이트: %s', (_, text) => {
     expect(hasUnusableCharacter(text)).toBe(true)
     expect(hasUnusableCharacter(`앞${text}뒤`)).toBe(true)
+    expect(hasUnusableCharacter(text, { allowLineFeed: true })).toBe(true)
   })
 
   it('짝이 맞는 서로게이트는 글자 하나다', () => {
@@ -165,6 +166,21 @@ describe('쓸 수 없는 글자(P-214)', () => {
     expect([1, 2, 3].map(() => hasUnusableCharacter('가\u{200B}나'))).toEqual([true, true, true])
     expect([1, 2, 3].map(() => hasUnusableCharacter('\u{2764}\u{FE0F}'))).toEqual([false, false, false])
   })
+})
+
+describe('메모는 줄바꿈을 더 받는다(P-214)', () => {
+  it('U+000A만 받는다', () => {
+    expect(hasUnusableCharacter('점심\n저녁\n', { allowLineFeed: true })).toBe(false)
+    expect(hasUnusableCharacter('\n', { allowLineFeed: true })).toBe(false)
+    expect(hasUnusableCharacter('점심\n저녁')).toBe(true)
+  })
+
+  it.each(table(['\r', '\t', '\u{B}', '\u{C}', '\u{85}', '\u{2028}', '\u{2029}', '\u{200B}']))(
+    '%s는 메모에서도 쓸 수 없다',
+    (_, text) => {
+      expect(hasUnusableCharacter(`점심${text}저녁`, { allowLineFeed: true })).toBe(true)
+    },
+  )
 })
 
 describe('앞뒤의 공백류 글자(유니코드 Zs 17자)', () => {

@@ -77,7 +77,15 @@ export function normalizePayee(payee: string): string {
 
 /** 서버와 같이 조합형으로 맞춘 코드포인트를 센다. 메모는 공백을 지우지 않는다(P-214). */
 export function memoLength(memo: string): number {
-  return lengthOf(memo.normalize('NFC'))
+  return lengthOf(unifyLineBreaks(memo).normalize('NFC'))
+}
+
+/**
+ * 서버가 메모를 검사하기 전에 하듯 `\r\n`과 `\r`을 `\n`으로 바꾼다(P-214). 검사에만 쓰고 보내는 값은 바꾸지 않는다(서버가
+ * 바꾼다). 여러 줄 칸의 값에는 `\r`이 없어 화면에서는 바뀌는 것이 없다.
+ */
+function unifyLineBreaks(memo: string): string {
+  return memo.replace(/\r\n?/g, '\n')
 }
 
 export function payeeLength(payee: string): number {
@@ -97,7 +105,7 @@ export function validateTransaction(values: TransactionValues): FieldErrors<Tran
     toAccountId: transfer ? toAccountError(values) : undefined,
     occurredOn: values.occurredOn === '' ? dateRequired : undefined,
     occurredTime: values.occurredTime === '' || isValidTime(normalizeTime(values.occurredTime)) ? undefined : timeInvalid,
-    memo: memoLength(values.memo) > MEMO_MAX ? memoTooLong : undefined,
+    memo: memoError(values.memo),
   }
 }
 
@@ -105,6 +113,12 @@ export function validateTransaction(values: TransactionValues): FieldErrors<Tran
 function payeeError(payee: string): string | undefined {
   if (hasUnusableCharacter(payee)) return unusableCharacter
   if (payeeLength(payee) > PAYEE_MAX) return payeeTooLong
+}
+
+/** 메모는 줄바꿈(U+000A)을 더 받는다(P-214). 같은 문구를 미리 보인다(00-common 4.4, frontend 결정 #220). */
+function memoError(memo: string): string | undefined {
+  if (hasUnusableCharacter(unifyLineBreaks(memo), { allowLineFeed: true })) return unusableCharacter
+  if (memoLength(memo) > MEMO_MAX) return memoTooLong
 }
 
 function toAccountError({ accountId, toAccountId }: TransactionValues): string | undefined {

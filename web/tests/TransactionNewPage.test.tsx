@@ -614,6 +614,10 @@ describe('더 보기', () => {
       await user.click(memo())
       await user.paste('가'.repeat(501))
     }, memo, '500자까지 쓸 수 있어요'],
+    ['메모(쓸 수 없는 글자)', async (user: User) => {
+      await user.click(memo())
+      await user.paste('회식\t2차')
+    }, memo, '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'],
   ] as const)('접힌 %s에 오류가 있으면 저장할 때 펼치고 그 칸으로 초점을 옮긴다', async (_, edit, field, message) => {
     const { user } = await openForm()
     await user.click(moreButton())
@@ -635,6 +639,20 @@ describe('더 보기', () => {
     await user.keyboard('{Enter}')
     expect(screen.getByText('401/500')).toBeTruthy()
     expect(memo().value.endsWith('\n')).toBe(true)
+  })
+
+  // 서버와 같이 줄바꿈(U+000A) 밖의 거부 글자를 미리 알린다(00-common 4.4의 문구, frontend 결정 #220)
+  it('메모에 쓸 수 없는 글자가 있으면 칸을 벗어날 때 문구를 보이고, 줄바꿈은 받는다', async () => {
+    const { user } = await openForm()
+    await user.click(moreButton())
+    await user.click(memo())
+    await user.paste('회식\u{200B}')
+    await user.tab()
+    expect(errorOf(memo())).toBe('쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.')
+    await user.clear(memo())
+    await user.type(memo(), '회식{Enter}2차')
+    await user.tab()
+    expect(errorOf(memo())).toBeUndefined()
   })
 
   it('메모는 공백을 지우지 않고 보내며 빈 글자는 null이다', async () => {
