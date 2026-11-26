@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react'
 import { Button, ButtonLink } from './Button'
 import ErrorMessage from './ErrorMessage'
 import styles from './RetryMessage.module.css'
@@ -12,11 +13,14 @@ type RetryMessageProps = {
       /** 버튼의 글자. 없으면 "다시 시도"다. */
       actionLabel?: string
       to?: never
+      onClick?: never
     }
   | {
       /** 누르면 가는 주소. 버튼은 링크로 그린다. */
       to: string
       actionLabel: string
+      /** 링크를 누를 때. 화면이 가는 길을 정하려면 기본 동작을 막고 직접 간다. */
+      onClick?: (event: MouseEvent<HTMLAnchorElement>) => void
       onRetry?: never
     }
 )
@@ -25,7 +29,14 @@ type RetryMessageProps = {
  * 보내지 못했다는 문구와 글자 버튼 하나. 누른 버튼 바로 위에 둔다(화면설계서 00-common 4.3).
  * 버튼은 기본으로 "다시 시도"이고, 다른 동작이 맞는 실패는 그 동작을 준다.
  */
-export default function RetryMessage({ children, onRetry, actionLabel = '다시 시도', to, autoFocus }: RetryMessageProps) {
+export default function RetryMessage({
+  children,
+  onRetry,
+  actionLabel = '다시 시도',
+  to,
+  onClick,
+  autoFocus,
+}: RetryMessageProps) {
   return (
     <div className={styles.message}>
       <ErrorMessage role="alert">{children}</ErrorMessage>
@@ -35,7 +46,7 @@ export default function RetryMessage({ children, onRetry, actionLabel = '다시 
             {actionLabel}
           </Button>
         ) : (
-          <ButtonLink kind="text" to={to} autoFocus={autoFocus}>
+          <ButtonLink kind="text" to={to} autoFocus={autoFocus} onClick={onClick}>
             {actionLabel}
           </ButtonLink>
         )}

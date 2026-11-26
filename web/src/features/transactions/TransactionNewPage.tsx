@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type MouseEvent } from 'react'
 import { flushSync } from 'react-dom'
+import { useNavigate } from 'react-router'
 import { currentUserId } from '../../api/session'
 import { Button } from '../../components/Button'
 import FullScreenForm from '../../components/FullScreenForm'
@@ -34,6 +35,7 @@ export default function TransactionNewPage() {
   const showToast = useToast()
   const listMemory = useListMemory()
   const goBack = useGoBack(HOME)
+  const navigate = useNavigate()
   const creation = useCreateTransaction()
   const accounts = useAccounts()
   // 이 화면을 연 사용자. 기본 계좌를 고르고, 보내는 순간의 사용자와 같은지 본다
@@ -88,6 +90,17 @@ export default function TransactionNewPage() {
     submit()
   }
 
+  /**
+   * 앞서 저장한 거래를 보러 간다. 확인 창 없이 쓰던 입력을 버린다(planner 결정 2026-11-26, #102). 버린 입력 화면은
+   * 방문 기록에서 상세로 바꿔, 상세에서 뒤로 가면 입력을 연 화면이다.
+   */
+  function viewSaved(event: MouseEvent<HTMLAnchorElement>, path: string) {
+    // 새 탭이나 창으로 여는 누름은 브라우저에 맡긴다. 이 화면의 입력은 그대로 남는다
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    guard.leave(() => navigate(path, { replace: true }))
+  }
+
   function saveAsNew() {
     const next = uuidV7()
     setId(next)
@@ -108,7 +121,11 @@ export default function TransactionNewPage() {
             <RetryMessage onRetry={retry}>문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.</RetryMessage>
           )}
           {failure?.kind === 'saved-differently' && (
-            <RetryMessage to={`/transactions/${failure.savedId}`} actionLabel="저장된 거래 보기">
+            <RetryMessage
+              to={`/transactions/${failure.savedId}`}
+              actionLabel="저장된 거래 보기"
+              onClick={(event) => viewSaved(event, `/transactions/${failure.savedId}`)}
+            >
               앞서 저장한 거래와 내용이 달라 저장하지 못했어요. 내역에서 확인해 주세요.
             </RetryMessage>
           )}

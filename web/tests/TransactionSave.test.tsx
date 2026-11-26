@@ -34,6 +34,7 @@ import {
   type Opened,
   type User,
 } from './support/transactionScreen'
+import { startTransactionDetail } from './support/transactionDetail'
 import { savedOf, type Transactions } from './support/transactions'
 import { resetViewport } from './support/viewport'
 
@@ -446,15 +447,32 @@ describe('같은 id로 만들 수 없음(409 ID_CONFLICT)', () => {
     expect(document.activeElement).toBe(payee())
   })
 
-  it('"저장된 거래 보기"는 그 거래의 주소로 가고, 쓰던 내용이 있으면 먼저 버릴지 묻는다', async () => {
-    transactions.response = ({ body }) => problem(409, 'ID_CONFLICT', { current: savedOf({ ...body, id: savedId }) })
-    const opened = await openForm()
+  it('"저장된 거래 보기"는 쓰던 내용이 있어도 묻지 않고 입력을 버려 그 거래의 상세로 간다(planner #102)', async () => {
+    const detail = startTransactionDetail(server, backend)
+    transactions.response = ({ body }) => {
+      const current = savedOf({ ...body, id: savedId })
+      detail.put(current)
+      return problem(409, 'ID_CONFLICT', { current })
+    }
+    const opened = await openFromMore()
     await saveAmount(opened.user)
     await opened.user.click(await screen.findByRole('link', { name: '저장된 거래 보기' }))
-    expect(discardQuestion()).toBeTruthy()
-    await untilOpened()
-    await opened.user.click(screen.getByRole('button', { name: '버리기' }))
     await waitFor(() => expect(path(opened)).toBe(`/transactions/${savedId}`))
+    expect(discardQuestion()).toBeNull()
+    expect(await screen.findByRole('heading', { level: 1, name: '거래 상세' })).toBeTruthy()
+    expect(detail.requests.get.map(({ id }) => id)).toEqual([savedId])
+  })
+
+  it('버린 입력 화면은 방문 기록에서 상세로 바뀌어, 상세에서 뒤로 가면 입력을 연 화면이다', async () => {
+    startTransactionDetail(server, backend)
+    transactions.response = ({ body }) => problem(409, 'ID_CONFLICT', { current: savedOf({ ...body, id: savedId }) })
+    const opened = await openFromMore()
+    await saveAmount(opened.user)
+    await opened.user.click(await screen.findByRole('link', { name: '저장된 거래 보기' }))
+    await waitFor(() => expect(path(opened)).toBe(`/transactions/${savedId}`))
+    await act(() => opened.router.navigate(-1))
+    await waitFor(() => expect(path(opened)).toBe('/more'))
+    expect(discardQuestion()).toBeNull()
   })
 
   it('current가 없으면 문구와 "새 거래로 저장" 하나를 보이고, 누르면 새 id로 보낸다', async () => {
