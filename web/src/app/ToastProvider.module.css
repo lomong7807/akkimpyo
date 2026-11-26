@@ -10,9 +10,21 @@
   pointer-events: none;
 }
 
+/* 전체 화면 입력에 남은 되돌리기 토스트는 저장 자리 위 16px이다. 저장 자리의 윗선은 전체 화면 입력이 알린다 */
+.region[data-above-form] {
+  bottom: calc(var(--toast-above-form, 0px) + var(--space-16));
+}
+
+/*
+ * 버튼이 있으면 글 자리가 토스트 폭의 절반보다 좁아질 때(글자를 키운 때) 버튼이 글 아래 오른쪽으로 내려간다
+ * (designer 검토 2026-11-26). 내려간 버튼은 누르는 영역을 위로 12px 당겨 두므로 줄 사이를 12px 띄워 글과 겹치지 않게 한다
+ */
 .toast {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  column-gap: var(--space-8);
+  row-gap: var(--space-12);
   width: 100%;
   max-width: var(--width-content-narrow);
   min-height: var(--size-toast);
@@ -41,11 +53,44 @@
   opacity: 0;
 }
 
-/* 글이 길면 그만큼 늘어난다 */
+/* 글이 길면 그만큼 늘어난다. 글 자리는 토스트 폭의 절반보다 좁아지지 않고, 낱말보다 좁을 때만 낱말 안에서 끊는다 */
 .message {
+  flex: 1 1 50%;
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+/*
+ * 오른쪽 끝의 글자 버튼(되돌리기). 줄지 않아 글자가 한 줄이고, 글이 길면 문구 쪽이 줄을 바꾼다.
+ * 반전 바탕에 맞춘 동작 색이다. 누르는 영역 44px 가운데 본문 한 줄만 차지하게
+ * 위아래를 당겨 토스트 높이(56px)를 늘리지 않고, 안쪽 8px만큼 바깥으로 당겨 글자를 토스트 안쪽 선에 맞춘다
+ */
+.action {
+  flex: none;
+  min-width: var(--size-touch);
+  min-height: var(--size-touch);
+  margin-block: calc(-1 * var(--space-12));
+  margin-inline: auto calc(-1 * var(--space-8));
+  padding-block: 0;
+  padding-inline: var(--space-8);
+  border: 0;
+  border-radius: var(--radius-10);
+  background-color: transparent;
+  color: var(--color-inverse-action);
+  font: var(--text-body-strong);
+  cursor: pointer;
+  transition: transform var(--motion-press-duration);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.action:active {
+  transform: scale(var(--motion-press-scale));
+}
+
+/* 반전 바탕에서는 강조색 테두리가 잘 보이지 않아 버튼과 같은 색으로 그린다 */
+.action:focus-visible {
+  outline-color: var(--color-inverse-action);
 }
 
 @media (width >= 1024px) {

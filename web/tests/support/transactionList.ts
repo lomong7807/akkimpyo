@@ -108,7 +108,9 @@ export function startTransactionList(server: SetupServer, backend: Backend) {
       if (answered) return answered
       const month = sent.month ?? ''
       const start = sent.cursor === null ? 0 : Number(sent.cursor.split('|')[1])
-      const body = pageOf(month, list.months.get(month) ?? [], start, Number(sent.limit ?? 50), {
+      // 휴지통의 거래는 목록에 없다(#15)
+      const items = (list.months.get(month) ?? []).filter(({ deletedAt }) => deletedAt === null)
+      const body = pageOf(month, items, start, Number(sent.limit ?? 50), {
         totals: list.totals.get(month),
         days: list.days,
       })

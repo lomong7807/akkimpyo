@@ -253,3 +253,127 @@ describe('열린 채로', () => {
     expect(dialog()?.open).toBe(true)
   })
 })
+
+/* 처리 중과 실패(00-common 5.6, 4.3). 실행을 누르면 그 버튼에 처리 중 표시를 두고 닫히지 않는다. 실패하면 창이 남고 버튼
+ * 바로 위에 문구를 보이며 실행 버튼 글자를 바꾼다(글자는 화면이 정한다). */
+describe.each(layouts)('처리 중과 실패: %s', (_, width) => {
+  const onClose = vi.fn()
+  afterEach(() => onClose.mockClear())
+
+  type Failure = { message: string; focus: 'action' | 'close' }
+
+  function Working({ busy = false, failure }: { busy?: boolean; failure?: Failure }) {
+    return (
+      <ConfirmDialog
+        open
+        title="이 거래를 삭제할까요?"
+        description="휴지통으로 옮겨요. 30일 안에 복원할 수 있어요."
+        closeLabel="닫기"
+        actionLabel={failure ? '다시 시도' : '삭제'}
+        busy={busy}
+        failure={failure}
+        onClose={onClose}
+        onAction={onAction}
+      />
+    )
+  }
+
+  function open(props: { busy?: boolean; failure?: Failure } = {}) {
+    viewport.resizeTo(width)
+    const user = userEvent.setup()
+    const rendered = render(<Working {...props} />)
+    return { user, rerender: (next: typeof props) => rendered.rerender(<Working {...next} />) }
+  }
+
+  const closeButtons = () => within(dialog()!).getAllByRole('button', { name: '닫기' })
+  const action = (name = '삭제') => within(dialog()!).getByRole('button', { name })
+  const alert = () => within(dialog()!).queryByRole('alert')
+
+  it('처리 중에는 실행 버튼만 도는 표시를 두고, 모든 버튼을 누를 수 없다', async () => {
+    const { user } = open({ busy: true })
+    await untilOpened()
+    expect(action().getAttribute('aria-busy')).toBe('true')
+    for (const button of closeButtons()) {
+      expect(button.getAttribute('aria-busy')).toBeNull()
+      expect(button.getAttribute('aria-disabled')).toBe('true')
+      await user.click(button)
+    }
+    await user.click(action())
+    expect(onClose).not.toHaveBeenCalled()
+    expect(onAction).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['Esc', (user) => user.keyboard('{Escape}')],
+    ['가림막', (user) => user.click(dialog()!)],
+  ] as [string, (user: ReturnType<typeof userEvent.setup>) => Promise<unknown>][])(
+    '처리 중에는 %s로 닫히지 않는다',
+    async (__, close) => {
+      const { user } = open({ busy: true })
+      await untilOpened()
+      await close(user)
+      await act(async () => {})
+      expect(onClose).not.toHaveBeenCalled()
+      expect(dialog()?.open).toBe(true)
+    },
+  )
+
+  it('브라우저가 강제로 닫아도 처리 중이면 다시 연다', async () => {
+    open({ busy: true })
+    await untilOpened()
+    await act(async () => dialog()!.close())
+    expect(onClose).not.toHaveBeenCalled()
+    expect(dialog()?.open).toBe(true)
+  })
+
+  it('실패하면 버튼 바로 위에 경고 아이콘과 위험색 문구를 보인다', async () => {
+    open({ failure: { message: '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.', focus: 'action' } })
+    const message = alert()!
+    expect(message.textContent).toBe('문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.')
+    expect(message.querySelector('svg')).toBeTruthy()
+    expect(styleOf(message).color).toBe('var(--color-danger)')
+    expect(styleOf(message).font).toBe('var(--text-secondary)')
+    const slot = message.parentElement!
+    expect(styleOf(slot).marginTop).toBe('var(--space-24)')
+    const row = action('다시 시도').parentElement!.parentElement!
+    expect(slot.nextElementSibling).toBe(row)
+    expect(styleOf(row).marginTop).toBe('var(--space-8)')
+    expect(screen.getByText('휴지통으로 옮겨요. 30일 안에 복원할 수 있어요.').nextElementSibling).toBe(slot)
+  })
+
+  it('실패가 없으면 문구 자리가 없고 버튼은 설명 아래 24px이다', async () => {
+    open()
+    expect(alert()).toBeNull()
+    expect(styleOf(action().parentElement!.parentElement!).marginTop).toBe('var(--space-24)')
+  })
+
+  it('실패의 초점이 실행이면 바뀐 실행 버튼("다시 시도")으로 옮긴다', async () => {
+    const { rerender } = open({ busy: true })
+    act(() => closeButtons().at(-1)!.focus())
+    rerender({ failure: { message: '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.', focus: 'action' } })
+    await act(async () => {})
+    expect(document.activeElement).toBe(action('다시 시도'))
+  })
+
+  it('실패의 초점이 닫기면 "닫기"로 옮기고, 같은 문구로 또 실패해도 다시 옮긴다', async () => {
+    const conflict = () => ({ message: '다른 기기에서 먼저 고쳤어요', focus: 'close' as const })
+    const { rerender } = open({ busy: true })
+    rerender({ failure: conflict() })
+    await act(async () => {})
+    const close = closeButtons().at(-1)!
+    expect(document.activeElement).toBe(close)
+    act(() => action('다시 시도').focus())
+    rerender({ busy: true })
+    rerender({ failure: conflict() })
+    await act(async () => {})
+    expect(document.activeElement).toBe(close)
+  })
+
+  it('다시 누르면 문구를 둔 채 처리 중이 된다', async () => {
+    const failure = { message: '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.', focus: 'action' as const }
+    const { rerender } = open({ failure })
+    rerender({ busy: true, failure })
+    expect(alert()).toBeTruthy()
+    expect(action('다시 시도').getAttribute('aria-busy')).toBe('true')
+  })
+})

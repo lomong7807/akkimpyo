@@ -35,9 +35,11 @@ export function savedOf(body: Record<string, unknown>, user = 'user-1', changes:
     status: 'POSTED',
     version: 1,
     createdAt: '2026-11-26T03:15:00.123Z',
+    createdBy: person,
     updatedAt: '2026-11-26T03:15:00.123Z',
     updatedBy: person,
     deletedAt: null,
+    purgeAt: null,
     ...changes,
   }
 }
