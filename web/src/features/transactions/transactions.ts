@@ -1,11 +1,16 @@
 import { ApiError } from '../../api/apiError'
-import { requestForResponse } from '../../api/request'
+import { request, requestForResponse } from '../../api/request'
 import { currentUserId } from '../../api/session'
+import { isDate, monthOf } from '../../lib/calendarDate'
 import { deviceValueOf } from '../../lib/deviceValue'
+import { isValidTime } from '../../lib/timeText'
 import { isUuid } from '../../lib/uuid'
 import { ledgerPath } from '../me/ledgerPath'
 
-/* 거래 만들기의 경로, 헤더, 필드 이름(#14의 요청과 응답 계약)은 이 파일에만 있다. */
+/*
+ * 거래 만들기의 경로, 헤더, 필드 이름(#14의 요청과 응답 계약)과
+ * 거래 목록의 경로, 쿼리, 필드 이름(#15의 응답 계약)은 이 파일에만 있다.
+ */
 
 export const transactionTypes = ['EXPENSE', 'INCOME', 'TRANSFER'] as const
 
@@ -134,4 +139,117 @@ function isPerson(value: unknown): value is Person {
   if (typeof value !== 'object' || value === null) return false
   const person = value as Partial<Record<keyof Person, unknown>>
   return typeof person.id === 'string' && typeof person.displayName === 'string'
+}
+
+/** 목록에 보이는 거래의 공통 값(#15). 만들기 응답과 같은 모양에서 줄을 그리는 값을 더 본다. */
+interface ListedBase extends SavedTransaction {
+  /** `YYYY-MM-DD` */
+  occurredOn: string
+  /** `HH:mm`. 없으면 null */
+  occurredTime: string | null
+  /** 원 단위 양의 정수 */
+  amount: number
+}
+
+export interface ListedIncomeOrExpense extends ListedBase {
+  type: 'EXPENSE' | 'INCOME'
+  accountId: string
+  /** 미분류면 그 장부의 미분류 카테고리다. */
+  categoryId: string
+  payee: string | null
+}
+
+export interface ListedTransfer extends ListedBase {
+  type: 'TRANSFER'
+  fromAccountId: string
+  toAccountId: string
+}
+
+export type ListedTransaction = ListedIncomeOrExpense | ListedTransfer
+
+/** 수입·지출 합계(P-205: 이체, 취소, 삭제를 뺀다). 지출도 양수다. */
+export interface IncomeAndExpense {
+  income: number
+  expense: number
+}
+
+export interface DayTotal extends IncomeAndExpense {
+  /** `YYYY-MM-DD` */
+  date: string
+}
+
+/** 거래 목록의 한 쪽 */
+export interface TransactionPage {
+  /** 서버가 정한 순서(날짜 역순, 같은 날은 시각 있는 것이 시각 역순으로 먼저, 같으면 id 역순). 휴지통의 거래는 없다. */
+  items: ListedTransaction[]
+  /** 다음 쪽을 받을 글자. 해석하지 않고 그대로 보낸다. 마지막 쪽이면 null */
+  nextCursor: string | null
+  /** 그 달 전체의 합계. 첫 쪽에만 있다. */
+  totals: IncomeAndExpense | null
+  /** 이 쪽에 나온 날짜마다 그날 전체의 합계. 한 날이 두 쪽에 걸쳐도 같은 값이다. */
+  days: DayTotal[]
+}
+
+/** 한 번에 받는 거래 수(P-232) */
+export const PAGE_SIZE = 50
+
+/**
+ * 장부의 한 달 거래를 한 쪽 받는다. `cursor`가 null이면 첫 쪽이다. 실패하면 ApiError를 던진다.
+ * 약속과 다른 응답은 일부만 쓰지 않고 모두 받지 않는다. 빼고 보이면 합계와 줄이 어긋난다.
+ */
+export async function fetchTransactionPage(
+  ledgerId: string,
+  month: string,
+  cursor: string | null,
+): Promise<TransactionPage> {
+  const query = new URLSearchParams({ month, limit: String(PAGE_SIZE) })
+  if (cursor !== null) query.set('cursor', cursor)
+  const body = await request<unknown>(`${ledgerPath(ledgerId, 'transactions')}?${query}`)
+  if (!isTransactionPage(body, month, cursor === null)) throw ApiError.unreadable()
+  return body
+}
+
+function isTransactionPage(value: unknown, month: string, first: boolean): value is TransactionPage {
+  if (typeof value !== 'object' || value === null) return false
+  const { items, nextCursor, totals, days } = value as Partial<Record<keyof TransactionPage, unknown>>
+  if (!Array.isArray(items) || !Array.isArray(days)) return false
+  if (!items.every((item) => isListedTransaction(item) && monthOf(item.occurredOn) === month)) return false
+  if (!days.every((day) => isDayTotal(day) && monthOf(day.date) === month)) return false
+  const dates = new Set(days.map(({ date }) => date))
+  return (
+    items.every(({ occurredOn }) => dates.has(occurredOn)) &&
+    (nextCursor === null || (typeof nextCursor === 'string' && nextCursor !== '')) &&
+    (isIncomeAndExpense(totals) || (!first && totals === null))
+  )
+}
+
+function isListedTransaction(value: unknown): value is ListedTransaction {
+  if (!isSavedTransaction(value)) return false
+  const body = value as Partial<Record<keyof ListedIncomeOrExpense | keyof ListedTransfer, unknown>>
+  const shared =
+    isUuid(body.id) &&
+    typeof body.occurredOn === 'string' &&
+    isDate(body.occurredOn) &&
+    (body.occurredTime === null || (typeof body.occurredTime === 'string' && isValidTime(body.occurredTime))) &&
+    Number.isSafeInteger(body.amount) &&
+    (body.amount as number) >= 1
+  if (!shared) return false
+  if (body.type === 'TRANSFER') return typeof body.fromAccountId === 'string' && typeof body.toAccountId === 'string'
+  return (
+    typeof body.accountId === 'string' &&
+    typeof body.categoryId === 'string' &&
+    (body.payee === null || typeof body.payee === 'string')
+  )
+}
+
+function isIncomeAndExpense(value: unknown): value is IncomeAndExpense {
+  if (typeof value !== 'object' || value === null) return false
+  const { income, expense } = value as Partial<Record<keyof IncomeAndExpense, unknown>>
+  return [income, expense].every((amount) => Number.isSafeInteger(amount) && (amount as number) >= 0)
+}
+
+function isDayTotal(value: unknown): value is DayTotal {
+  if (!isIncomeAndExpense(value)) return false
+  const { date } = value as Partial<Record<keyof DayTotal, unknown>>
+  return typeof date === 'string' && isDate(date)
 }
