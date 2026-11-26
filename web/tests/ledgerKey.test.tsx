@@ -6,7 +6,7 @@ import { createQueryClient } from '../src/app/queryClient'
 import { useAccounts } from '../src/features/accounts/useAccounts'
 import { useCategories } from '../src/features/categories/useCategories'
 import { CurrentLedgerContext } from '../src/features/me/CurrentLedgerContext'
-import { ledgerKey } from '../src/features/me/ledgerKey'
+import { ledgerKey, ledgerScope } from '../src/features/me/ledgerKey'
 import { startMockServer } from './support/mockServer'
 import { recordDom } from './support/recordDom'
 
@@ -80,8 +80,13 @@ describe('장부에 속한 데이터의 캐시 키', () => {
     await waitFor(() => expect(requests).toHaveLength(4))
 
     requests = []
-    await act(() => queryClient.invalidateQueries({ queryKey: ['ledgers', 'first'] }))
+    await act(() => queryClient.invalidateQueries({ queryKey: ledgerScope('first') }))
     expect(requests.sort()).toEqual(['first accounts', 'first categories'])
+  })
+
+  it('앞부분은 자원 키의 앞부분과 같다', () => {
+    expect(ledgerScope('first')).toEqual(['ledgers', 'first'])
+    expect(ledgerKey('first', 'accounts').slice(0, 2)).toEqual(ledgerScope('first'))
   })
 
   it('한 자원을 무효로 만들면 그 장부의 그 자원만 다시 받는다', async () => {
