@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { holdKeyboard } from '../src/components/keyboardBridge'
-import { canWriteTransactions } from '../src/features/me/ledgerRole'
+import { canEdit } from '../src/features/me/me'
 import { meOf, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
 import { startMockServer } from './support/mockServer'
@@ -201,7 +201,7 @@ describe('권한', () => {
     ['모르는 권한', 'GUEST', false],
     ['빈 글자', '', false],
   ])('%s(%s)는 거래를 쓸 수 있다: %s', (_, role, expected) => {
-    expect(canWriteTransactions(role)).toBe(expected)
+    expect(canEdit({ id: 'ledger', name: '내 가계부', role })).toBe(expected)
   })
 
   it('보기 전용에게는 하단 탭의 칸도 사이드바 버튼도 없다', async () => {

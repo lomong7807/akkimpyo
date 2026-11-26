@@ -2,7 +2,7 @@ import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountOf, accountsBody, startAccounts, type Accounts } from './support/accounts'
-import { delayed, meOf, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, meOf, startBackend, type Backend } from './support/backend'
 import { startCategories } from './support/categories'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
@@ -50,7 +50,7 @@ const loginHeading = () => screen.findByRole('heading', { level: 1, name: '로�
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 const signedIn = () => void (backend.cookieUser = 'user-1')
 const withRole = (role: string) => () =>
-  HttpResponse.json({ ...meOf('user-1'), ledgers: [{ id: 'user-1-ledger', name: '내 가계부', role }] })
+  HttpResponse.json({ ...meOf('user-1'), ledgers: [{ id: ledgerIdOf('user-1'), name: '내 가계부', role }] })
 
 async function logIn(user: Opened['user']) {
   await user.type(await screen.findByLabelText('이메일'), 'name@example.com')
@@ -80,7 +80,7 @@ describe('로그인·가입 뒤', () => {
     expect(await welcome()).toBeTruthy()
     expect(address(opened)).toBe('/welcome')
     expect(opened.router.state.historyAction).toBe('REPLACE')
-    expect(accounts.requests).toEqual(['user-1-ledger'])
+    expect(accounts.requests).toEqual([ledgerIdOf('user-1')])
   })
 
   it('로그인했는데 계좌가 있으면 안내 없이 /home으로 간다', async () => {
@@ -208,7 +208,7 @@ describe('로그인한 채 앱을 열 때', () => {
     await open('/welcome')
     await welcome()
     await settle()
-    expect(accounts.requests).toEqual(['user-1-ledger'])
+    expect(accounts.requests).toEqual([ledgerIdOf('user-1')])
   })
 })
 

@@ -1,6 +1,6 @@
 import { logout } from '../api/session'
 import { useCurrentLedger } from '../features/me/CurrentLedgerContext'
-import { canWriteTransactions } from '../features/me/ledgerRole'
+import { canEdit } from '../features/me/me'
 import AppLayout from './AppLayout'
 import { navigation } from './navigation'
 
@@ -11,7 +11,7 @@ export default function LedgerLayout() {
     <AppLayout
       navigation={navigation}
       ledgerName={ledger.name}
-      canWrite={canWriteTransactions(ledger.role)}
+      canWrite={canEdit(ledger)}
       onLogout={logout}
     />
   )

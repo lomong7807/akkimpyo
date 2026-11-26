@@ -281,10 +281,10 @@ describe('이름 찾기', () => {
     expect(screen.getByText('카드')).toBeTruthy()
   })
 
-  it('맞는 것이 없으면 "찾는 이름이 없어요."를 읽어 준다', async () => {
+  it('맞는 것이 없으면 "찾는 이름이 없어요"를 읽어 준다', async () => {
     await find('없는 이름')
     expect(screen.queryByRole('listbox')).toBeNull()
-    expect(screen.getByRole('status').textContent).toBe('찾는 이름이 없어요.')
+    expect(screen.getByRole('status').textContent).toBe('찾는 이름이 없어요')
   })
 
   it('찾기 칸을 비우면 다시 모두 보인다', async () => {
