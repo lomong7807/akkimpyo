@@ -29,8 +29,9 @@ export default function LoginPage({ signIn, onSignedIn, sessionEnded, initialEma
     initialValues: { email: initialEmail, password: '' },
     validate: validateLogin,
   })
-  // 로그인 위의 "다시 시도" 문구. 다시 보내는 동안에도 남기고, 실패마다 올려 새로 그려 다시 읽히게 한다. 없으면 없다
-  const [failures, setFailures] = useState<number>()
+  // 로그인 위의 실패 문구. 다시 보내는 동안에도 새 결과가 올 때까지 남기고, 실패마다 count를 올려 새로 그려 다시
+  // 읽히게 한다. 없으면 없다
+  const [shown, setShown] = useState<{ failure: Failure; count: number }>()
   // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돌고 다른 버튼은 누를 수 없다(00-common 4.5, designer 규칙 #102)
   const [sender, setSender] = useState<Sender>('login')
 
@@ -40,16 +41,16 @@ export default function LoginPage({ signIn, onSignedIn, sessionEnded, initialEma
     if (busy) return
     if (!checkAll()) {
       login.reset()
-      setFailures(undefined)
+      setShown(undefined)
       return
     }
     setSender(from)
     login.mutate(values, { onSuccess: onSignedIn, onError: showFailure })
   }
 
-  // 맞지 않는 이메일·비밀번호는 "다시 시도" 없이 login.error로 보이고, 다시 보내는 동안 지운다(전과 같다)
   function showFailure(error: Error) {
-    setFailures((last) => (isWrongCredentials(error) ? undefined : (last ?? 0) + 1))
+    const failure = isWrongCredentials(error) ? 'refused' : 'retry'
+    setShown((last) => ({ failure, count: (last?.count ?? 0) + 1 }))
   }
 
   function handleSubmit(event: SubmitEvent) {
@@ -85,13 +86,15 @@ export default function LoginPage({ signIn, onSignedIn, sessionEnded, initialEma
           autoComplete="current-password"
           autoFocus={initialEmail !== ''}
         />
-        {login.isError && isWrongCredentials(login.error) && (
-          <ErrorMessage role="alert">이메일 또는 비밀번호가 맞지 않아요</ErrorMessage>
-        )}
         {/* 초점은 옮기지 않는다. 문구는 role="alert"로 읽힌다 */}
-        {failures !== undefined && (
+        {shown?.failure === 'refused' && (
+          <ErrorMessage key={shown.count} role="alert">
+            이메일 또는 비밀번호가 맞지 않아요
+          </ErrorMessage>
+        )}
+        {shown?.failure === 'retry' && (
           <RetryMessage
-            failures={failures}
+            failures={shown.count}
             onRetry={() => submit('retry')}
             busy={busy && sender === 'retry'}
             disabled={busy && sender === 'login'}
@@ -112,3 +115,9 @@ export default function LoginPage({ signIn, onSignedIn, sessionEnded, initialEma
 
 /** 로그인 버튼, 또는 실패 문구의 "다시 시도" */
 type Sender = 'login' | 'retry'
+
+type Failure =
+  /** 이메일이나 비밀번호가 맞지 않음(P-105). 고쳐서 다시 누르므로 "다시 시도"가 없다 */
+  | 'refused'
+  /** 서버 오류, 지연, 연결 실패. 같은 값으로 다시 보내는 "다시 시도"가 있다 */
+  | 'retry'

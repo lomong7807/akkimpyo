@@ -391,14 +391,17 @@ describe('처리 중', () => {
     expect(router.state.location.pathname).toBe('/signup')
   })
 
-  it('다시 보내는 동안 앞선 오류 문구를 지운다', async () => {
+  /* 거부 문구도 다시 보내는 동안 지우지 않고 새 결과가 올 때까지 남긴다(designer 검토 2026-11-26, #224) */
+  it('다시 보내는 동안 앞선 거부 문구를 남기고 로그인만 돈다', async () => {
     const answers = [Promise.resolve(problem(401, 'INVALID_CREDENTIALS')), new Promise<Response>(() => {})]
-    respondToLogin(() => answers.shift()!)
+    const bodies = respondToLogin(() => answers.shift()!)
     const { user } = openLogin()
     await fillAndSubmit(user)
     await screen.findByText(refused)
     await user.click(loginButton())
-    await vi.waitFor(() => expect(screen.queryByText(refused)).toBeNull())
+    await vi.waitFor(() => expect(bodies).toHaveLength(2))
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([refused])
+    expect(loginButton().getAttribute('aria-busy')).toBe('true')
   })
 })
 
@@ -445,6 +448,39 @@ describe('서버가 거부함', () => {
     await screen.findByText(refused)
     expect(bodies).toHaveLength(1)
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('칸을 고쳐도 거부 문구는 다시 보낼 때까지 남는다', async () => {
+    respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByText(refused)
+    await user.type(email(), 'm')
+    await user.type(password(), '5')
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([refused])
+  })
+
+  it('다시 보낸 것이 또 거부되면 문구를 새로 그려 다시 읽히게 한다', async () => {
+    respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    const first = await screen.findByRole('alert')
+    await user.click(loginButton())
+    await vi.waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([refused])
+    expect(loginButton().hasAttribute('aria-busy')).toBe(false)
+  })
+
+  it('다시 보낸 것이 서버 오류면 거부 문구를 "다시 시도" 문구로 바꾼다', async () => {
+    const answers = [problem(401, 'INVALID_CREDENTIALS'), problem(500, 'INTERNAL_ERROR')]
+    respondToLogin(() => answers.shift()!)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByText(refused)
+    await user.click(loginButton())
+    await screen.findByText(failed)
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([failed])
+    expect(retryButton()).toBeTruthy()
   })
 
   it('비운 채로 다시 누르면 앞선 거부 문구를 지우고 칸의 오류만 보인다', async () => {
