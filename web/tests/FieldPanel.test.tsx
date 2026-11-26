@@ -1,10 +1,11 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FieldPanel from '../src/components/FieldPanel'
 import { readCssRule } from './support/cssRule'
 import { untilOpened } from './support/dialog'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 
 const rule = (selector: string) => readCssRule('src/components/FieldPanel.module.css', selector)
 
@@ -50,8 +51,13 @@ function panelContent(height: number, room: () => number) {
   vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(() => Math.min(height, room()))
 }
 
+beforeEach(() => {
+  startGuardClock()
+})
+
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })

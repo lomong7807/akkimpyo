@@ -9,6 +9,7 @@ import { accountOf, startAccounts } from './accounts'
 import { ledgerIdOf, startBackend } from './backend'
 import { categoryWithChildren, startCategories } from './categories'
 import { untilOpened } from './dialog'
+import { stopGuardClock } from './guardClock'
 import { startTransactions } from './transactions'
 import { installLocks, createFakeLocks } from './webLocks'
 import { installMatchMedia } from './viewport'
@@ -144,10 +145,10 @@ export async function saveAmount(user: User, typed = '12000') {
   await user.click(saveButton())
 }
 
-/** 화면을 다 쓴 뒤 저장소와 가짜 시계를 되돌린다. */
+/** 화면을 다 쓴 뒤 저장소와 가짜 시계를 되돌린다. 화면에서 빠진 뒤의 덮개도 걷는다. */
 export function resetGlobals() {
   vi.restoreAllMocks()
-  vi.useRealTimers()
+  stopGuardClock()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 }

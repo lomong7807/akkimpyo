@@ -6,6 +6,7 @@ import DateField from '../src/components/DateField'
 import { TextField } from '../src/components/TextField'
 import { readCssRule } from './support/cssRule'
 import { shield, untilOpened, untilUnshielded } from './support/dialog'
+import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { installMatchMedia } from './support/viewport'
 
 const PHONE = 390
@@ -14,15 +15,15 @@ const WIDE = 1280
 let viewport: ReturnType<typeof installMatchMedia>
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12) })
+  startGuardClock(new Date(2026, 10, 26, 12))
   viewport = installMatchMedia(PHONE)
 })
 
 afterEach(() => {
   cleanup()
+  stopGuardClock()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
-  vi.useRealTimers()
 })
 
 type Props = Partial<ComponentProps<typeof DateField>>
