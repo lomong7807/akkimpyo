@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { currentUserId } from '../../api/session'
 import { keepCopiesOfLedgers } from '../../device/copies'
+import { now } from '../../lib/clock'
 import { fetchMe, type Me } from './me'
 import { keepMeCopy } from './meCopy'
 
@@ -22,6 +23,7 @@ async function fetchAndKeepMe(): Promise<Me> {
     void keepCopiesOfLedgers(
       user,
       me.ledgers.map(({ id }) => id),
+      now(),
     ).catch(() => {})
   }
   return me

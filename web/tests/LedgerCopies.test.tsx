@@ -1,7 +1,7 @@
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
-import { ledgerIdOf, meOf, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, meOf, type Backend } from './support/backend'
 import { goOnline } from './support/connection'
 import { copyKeys, ledgerCopy, meCopy, seedLedgerCopy, seedLogin, seedMeCopy } from './support/device'
 import { untilOpened, untilUnshielded } from './support/dialog'
@@ -99,8 +99,11 @@ function reconnect() {
   act(() => goOnline())
 }
 
+/** 그 장부의 사본 종류. 지운 때를 적은 줄(gone)은 사본이 아니라 뺀다 */
 const ledgerKinds = async (ledgerId: string) =>
-  (await copyKeys()).filter(([owner, scope]) => owner === 'user-1' && scope === ledgerId).map(([, , kind]) => kind)
+  (await copyKeys())
+    .filter(([owner, scope, kind]) => owner === 'user-1' && scope === ledgerId && kind !== 'gone')
+    .map(([, , kind]) => kind)
 
 const optionNames = () => within(screen.getByRole('listbox')).getAllByRole('option').map((option) => option.textContent)
 
@@ -151,8 +154,30 @@ describe('장부 단위로 지우는 때(security Q4)', () => {
     await openApp(path)
     await untilScreen()
     await waitFor(async () => expect(await ledgerKinds(LEDGER)).toEqual([]))
+    // 같이 보낸 다른 조회의 응답이 뒤에 와도 지운 사본이 다시 생기지 않는다(#251 worker가 찾은 경쟁)
+    await settle(600)
+    expect(await ledgerKinds(LEDGER)).toEqual([])
     expect(await ledgerKinds(OTHER_LEDGER)).toEqual(['accounts'])
     expect(await meCopy('user-1')).toBeDefined()
+  })
+
+  it('지운 뒤에 도착한, 지우기 전에 보낸 계좌·카테고리 응답은 사본을 다시 만들지 않는다(경쟁, #251 worker가 찾음)', async () => {
+    await seedDevice()
+    backend.cookieUser = 'user-1'
+    const lateAccounts = delayed()
+    const lateCategories = delayed()
+    accounts.response = lateAccounts.respond
+    categories.response = lateCategories.respond
+    list.response = () => problem(404, 'NOT_FOUND')
+    await openApp('/transactions?month=2026-11')
+    await lateAccounts.arrived
+    await lateCategories.arrived
+    // 목록 404로 그 장부의 사본이 지워진 뒤에
+    await waitFor(async () => expect(await ledgerKinds(LEDGER)).toEqual([]))
+    lateAccounts.answer(HttpResponse.json({ items: accountItems }))
+    lateCategories.answer(HttpResponse.json({ items: categoryItems }))
+    await settle(600)
+    expect(await ledgerKinds(LEDGER)).toEqual([])
   })
 
   it('지우는 코드를 따로 받을 수 없어도(배포 직후, 그 순간의 끊김) 404 뒤에 그 장부의 사본을 지운다(architect)', async () => {

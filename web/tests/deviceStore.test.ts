@@ -170,7 +170,7 @@ describe('마지막으로 확인한 로그인 기록', () => {
   it('다른 사용자로 기록을 쓰면 앞 사용자들의 사본을 지우고 그 사용자의 사본과 다른 사용자의 대기열·쓰던 값은 남긴다', async () => {
     const device = await openDevice()
     await device.copies.saveCopy('user-1', '', 'me', { name: 'user-1' }, AT)
-    await device.copies.saveCopy('user-3', 'ledger-3', 'accounts', [], AT)
+    await device.copies.saveCopy('user-3', 'ledger-3', 'accounts', [], AT, AT)
     await device.copies.saveCopy('user-2', '', 'me', { name: 'user-2' }, AT)
     await putRow(device, 'queue', { userId: 'user-1', id: 'tx-1', queuedAt: AT })
     await putRow(device, 'drafts', { userId: 'user-1', form: 'transaction-new' })
@@ -220,8 +220,8 @@ describe('마지막으로 확인한 로그인 기록', () => {
 describe('읽기용 사본', () => {
   it('받을 때마다 통째로 바꾸고 받은 시각을 남긴다', async () => {
     const device = await openDevice()
-    await device.copies.saveCopy('user-1', 'ledger-1', 'accounts', [{ id: 'a' }, { id: 'b' }], AT)
-    await device.copies.saveCopy('user-1', 'ledger-1', 'accounts', [{ id: 'c' }], AT + 1000)
+    await device.copies.saveCopy('user-1', 'ledger-1', 'accounts', [{ id: 'a' }, { id: 'b' }], AT, AT)
+    await device.copies.saveCopy('user-1', 'ledger-1', 'accounts', [{ id: 'c' }], AT + 1000, AT + 1000)
     expect(await device.copies.readCopy('user-1', 'ledger-1', 'accounts')).toEqual({
       data: [{ id: 'c' }],
       receivedAt: AT + 1000,
@@ -251,6 +251,60 @@ describe('읽기용 사본', () => {
     expect(await owners('copies')).toEqual(['user-2'])
     expect(await owners('queue')).toEqual(['user-2'])
     expect(await owners('drafts')).toEqual(['user-2'])
+  })
+
+  describe('장부를 볼 수 없게 되어 지운 뒤(경쟁)', () => {
+    const LEDGER = 'ledger-1'
+
+    it('지우기 전에 시작한 요청의 사본은 다른 탭이 지웠어도 남기지 않고, 지운 뒤 시작한 요청의 사본은 남긴다', async () => {
+      const here = await openDevice()
+      await here.copies.saveCopy('user-1', LEDGER, 'accounts', ['앞'], AT, AT)
+      const other = await openDevice()
+      await other.copies.forgetLedgerCopies('user-1', LEDGER, AT + 10)
+      await here.copies.saveCopy('user-1', LEDGER, 'accounts', ['지우기 전에 보낸 것'], AT + 20, AT + 5)
+      await here.copies.saveCopy('user-1', LEDGER, 'categories', ['같은 때'], AT + 20, AT + 10)
+      expect(await here.copies.readCopy('user-1', LEDGER, 'accounts')).toBeUndefined()
+      expect(await here.copies.readCopy('user-1', LEDGER, 'categories')).toBeUndefined()
+      await here.copies.saveCopy('user-1', LEDGER, 'accounts', ['지운 뒤 보낸 것'], AT + 30, AT + 11)
+      expect((await here.copies.readCopy('user-1', LEDGER, 'accounts'))?.data).toEqual(['지운 뒤 보낸 것'])
+    })
+
+    it('내 정보의 장부 목록에서 빠져 지운 장부도 같다', async () => {
+      const device = await openDevice()
+      await device.copies.saveCopy('user-1', LEDGER, 'accounts', ['앞'], AT, AT)
+      await device.copies.keepCopiesOfLedgers('user-1', ['ledger-2'], AT + 10)
+      await device.copies.saveCopy('user-1', LEDGER, 'accounts', ['늦게 온 것'], AT + 20, AT + 5)
+      expect(await device.copies.readCopy('user-1', LEDGER, 'accounts')).toBeUndefined()
+      await device.copies.saveCopy('user-1', LEDGER, 'accounts', ['다시 받은 것'], AT + 30, AT + 11)
+      expect((await device.copies.readCopy('user-1', LEDGER, 'accounts'))?.data).toEqual(['다시 받은 것'])
+    })
+
+    it('지운 표시는 다른 사용자와 다른 장부의 사본을 막지 않고, 내 정보 사본도 막지 않는다', async () => {
+      const device = await openDevice()
+      await device.copies.forgetLedgerCopies('user-1', LEDGER, AT + 10)
+      await device.copies.saveCopy('user-2', LEDGER, 'accounts', ['남의 것'], AT + 20, AT)
+      await device.copies.saveCopy('user-1', 'ledger-2', 'accounts', ['다른 장부'], AT + 20, AT)
+      await device.copies.saveCopy('user-1', '', 'me', { name: '나' }, AT + 20, AT)
+      expect(await device.copies.readCopy('user-2', LEDGER, 'accounts')).toBeDefined()
+      expect(await device.copies.readCopy('user-1', 'ledger-2', 'accounts')).toBeDefined()
+      expect(await device.copies.readCopy('user-1', '', 'me')).toBeDefined()
+    })
+
+    it('보낸 때 없이 남기려는 장부 사본은 지운 표시가 있으면 막는다', async () => {
+      const device = await openDevice()
+      await device.copies.forgetLedgerCopies('user-1', LEDGER, AT)
+      // 타입은 장부 사본에 보낸 때를 요구한다. 타입을 거치지 않은 호출도 막는 쪽인지 본다.
+      const untyped = device.copies.saveCopy as (...values: unknown[]) => Promise<void>
+      await untyped('user-1', LEDGER, 'accounts', ['보낸 때 모름'], AT + 20)
+      expect(await device.copies.readCopy('user-1', LEDGER, 'accounts')).toBeUndefined()
+    })
+
+    it('로그아웃은 지운 표시도 함께 지운다', async () => {
+      const device = await openDevice()
+      await device.copies.forgetLedgerCopies('user-1', LEDGER, AT)
+      await device.userData.forgetUserData('user-1')
+      expect(await rowsOf(device, 'copies')).toEqual([])
+    })
   })
 
   describe('마지막으로 확인한 로그인부터 30일', () => {
