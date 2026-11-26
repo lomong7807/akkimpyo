@@ -68,7 +68,8 @@ const inDialog = (name: string) => within(dialog()!).getAllByRole('button', { na
 const loginHeading = () => screen.findByRole('heading', { level: 1, name: '로그인' })
 
 async function pressLogout(user: Awaited<ReturnType<typeof open>>['user']) {
-  await user.click(within(screen.getByRole('main')).getByRole('button', { name: '로그아웃' }))
+  // 더보기는 따로 싣는 화면이라 그 코드를 받는 동안의 틀(#251)에는 버튼이 없다
+  await user.click(await waitFor(() => within(screen.getByRole('main')).getByRole('button', { name: '로그아웃' })))
 }
 
 describe('보내지 않은 입력이 없으면', () => {
