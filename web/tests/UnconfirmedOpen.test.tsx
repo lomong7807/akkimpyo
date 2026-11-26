@@ -116,7 +116,8 @@ describe('연결 없음과 같은 실패로 열면', () => {
     await expectFrame()
     await user.click(screen.getAllByRole('link', { name: '거래 입력' })[0])
     expect(await screen.findByRole('heading', { level: 1, name: '거래 입력' })).toBeTruthy()
-    expect(screen.getByLabelText('금액')).toBeTruthy()
+    // 화면 코드를 받는 동안의 틀(#251)에도 같은 제목이 있으므로 칸이 나오기를 기다린다
+    expect(await screen.findByLabelText('금액')).toBeTruthy()
   })
 
   it('확인되기 전(연결 없음)에는 저장해도 토큰 없이 보내지 않는다(기록의 사용자를 요청의 사용자로 쓰지 않는다)', async () => {
@@ -130,7 +131,7 @@ describe('연결 없음과 같은 실패로 열면', () => {
     await seedDevice()
     const { user } = await openWithRefresh(() => HttpResponse.error(), '/transactions/new')
     await screen.findByRole('heading', { level: 1, name: '거래 입력' })
-    await user.type(screen.getByLabelText('금액'), '12000')
+    await user.type(await screen.findByLabelText('금액'), '12000')
     await user.click(screen.getByRole('button', { name: '저장' }))
     await settle()
     expect(posted).toEqual([])
@@ -231,7 +232,7 @@ describe('확인하지 못한 로그인으로 연 뒤 연결이 돌아오면', (
     await seedDevice()
     const { user } = await openWithRefresh(() => HttpResponse.error(), '/transactions/new')
     await screen.findByRole('heading', { level: 1, name: '거래 입력' })
-    await user.type(screen.getByLabelText('금액'), '12000')
+    await user.type(await screen.findByLabelText('금액'), '12000')
     reconnectAs('user-1')
     await waitFor(() => expect(backend.requests.me).toEqual(['user-1']))
     await settle()
@@ -253,7 +254,7 @@ describe('확인하지 못한 로그인으로 연 뒤 연결이 돌아오면', (
     await seedDevice()
     const { user } = await openWithRefresh(() => HttpResponse.error(), '/transactions/new')
     await screen.findByRole('heading', { level: 1, name: '거래 입력' })
-    await user.type(screen.getByLabelText('금액'), '12000')
+    await user.type(await screen.findByLabelText('금액'), '12000')
     reconnectAs('user-1')
     // 확인된 뒤 계좌 목록을 다시 받아 기본 계좌가 채워진다
     await waitFor(() => expect(backend.requests.accounts).toContain('user-1'))
@@ -305,7 +306,7 @@ describe('확인하지 못한 로그인으로 연 탭에서', () => {
     backend.logoutResponse = () => HttpResponse.error()
     const { user } = await openWithRefresh(() => HttpResponse.error(), '/more')
     await expectFrame()
-    await user.click(screen.getByRole('button', { name: '로그아웃' }))
+    await user.click(await screen.findByRole('button', { name: '로그아웃' }))
     expect(await screen.findByRole('heading', { level: 1, name: '로그인' })).toBeTruthy()
     await settle()
     expect(await loginRecord()).toBeUndefined()

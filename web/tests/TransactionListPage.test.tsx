@@ -882,7 +882,8 @@ describe('거래가 없는 달(4.2)', () => {
     }
     await screen.findByRole('heading', { level: 1, name: '거래 입력' })
     expect(opened.router.state.location.pathname).toBe('/transactions/new')
-    expect(screen.getByRole('radio', { name: '지출' }).getAttribute('aria-checked')).toBe('true')
+    // 화면 코드를 받는 동안의 틀(#251)에도 같은 제목이 있으므로 칸이 나오기를 기다린다
+    expect((await screen.findByRole('radio', { name: '지출' })).getAttribute('aria-checked')).toBe('true')
   })
 
   it('보기 전용 구성원에게는 문장만 보이고 버튼이 없다', async () => {
