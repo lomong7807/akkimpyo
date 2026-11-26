@@ -86,7 +86,10 @@ class TransactionReadRaceTest {
                 conflict -> assertThat(conflict.current()).isEmpty());
     }
 
-    /** 고친 적 없는 거래(version 1)는 내용을 비교하는 줄이다. 비교할 라인이 비어 내용이 다르다고 보면 안 된다. */
+    /**
+     * 완전 삭제는 휴지통에서만 해서 version 1 거래가 지워지는 일은 기능으로는 없다. 내용을 비교하는 줄(version 1)에서
+     * 비어 읽힌 라인을 다른 내용으로 보지 않는지 보려고 둔다.
+     */
     @Test
     void 고친_적_없는_거래를_재전송_판정하는_사이_완전히_지워지면_쓸_수_없는_id다() {
         CompletableFuture<CreateResult> resent = readWhile(this::purge, this::resend);
