@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../src/api/apiError'
-import { rejectedFields } from '../src/features/accounts/accountRejection'
+import { accountAddMessages } from '../src/features/accounts/accountForm'
+import { isDuplicateName, rejectedFields } from '../src/features/accounts/accountRejection'
 
 const rejected = (...fieldErrors: [field: string, code: string][]) =>
   ApiError.response(400, {
@@ -61,5 +62,46 @@ describe('거부된 칸의 문구', () => {
     ['다른 예외', new Error('아님')],
   ])('%s이면 없다', (_, error) => {
     expect(rejectedFields(error)).toBeUndefined()
+  })
+})
+
+describe('화면이 정한 문구', () => {
+  const messages = {
+    ...accountAddMessages,
+    nameRequired: '계좌 이름을 입력해 주세요',
+    nameDuplicate: '같은 이름의 계좌가 있어요',
+    typeRequired: '종류를 골라 주세요',
+    dateRequired: '기준일을 골라 주세요',
+  }
+
+  it.each([
+    ['name', 'REQUIRED', '계좌 이름을 입력해 주세요'],
+    ['name', 'DUPLICATE', '같은 이름의 계좌가 있어요'],
+    ['type', 'REQUIRED', '종류를 골라 주세요'],
+    ['openingDate', 'REQUIRED', '기준일을 골라 주세요'],
+    ['openingBalance', 'OUT_OF_RANGE', '9,999,999,999원까지 입력할 수 있어요.'],
+  ])('%s %s', (field, code, message) => {
+    expect(rejectedFields(rejected([field, code]), messages)).toEqual({ [field]: message })
+  })
+
+  it('기준일이 범위 밖이면 계좌 추가와 같은 형식이다', () => {
+    vi.setSystemTime(new Date(2026, 10, 26, 12))
+    expect(rejectedFields(rejected(['openingDate', 'OUT_OF_RANGE']), messages)).toEqual({
+      openingDate: '2000년 1월 1일부터 2027년 11월 26일까지 고를 수 있어요.',
+    })
+  })
+})
+
+describe('같은 이름의 계좌', () => {
+  it.each([
+    ['이름이 겹침', rejected(['name', 'DUPLICATE']), true],
+    ['다른 칸과 함께 옴', rejected(['openingDate', 'REQUIRED'], ['name', 'DUPLICATE']), true],
+    ['이름의 다른 거부', rejected(['name', 'TOO_LONG']), false],
+    ['다른 칸의 DUPLICATE', rejected(['type', 'DUPLICATE']), false],
+    ['다른 code', ApiError.response(409, { code: 'INVALID_STATE', fieldErrors: [{ field: 'name', code: 'DUPLICATE' }] })],
+    ['서버 오류', ApiError.response(500), false],
+    ['다른 예외', new Error('아님'), false],
+  ] as [string, Error, boolean?][])('%s', (_, error, expected = false) => {
+    expect(isDuplicateName(error)).toBe(expected)
   })
 })

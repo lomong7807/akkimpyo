@@ -19,12 +19,29 @@ export type AccountField = keyof NewAccount
 /** 화면 위쪽부터 놓인 순서 */
 export const accountFields: AccountField[] = ['name', 'type', 'openingBalance', 'openingDate']
 
-// 서버가 같은 까닭으로 거부해도 쓰는 문구(화면설계서 G-02 입력값 오류)
-export const nameRequired = '이름을 입력해 주세요.'
-export const nameTooLong = '50자까지 쓸 수 있어요.'
-export const nameUnusable = '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'
-export const amountRequired = '금액을 입력해 주세요. 없으면 0을 적어요.'
-export const dateRequired = '기준일을 골라 주세요.'
+/** 칸의 오류 문구. 서버가 같은 까닭으로 거부해도 쓴다. 계좌를 만드는 화면마다 다른 문구만 바꾼다. */
+export interface AccountMessages {
+  nameRequired: string
+  nameTooLong: string
+  nameUnusable: string
+  /** 서버만 안다 */
+  nameDuplicate: string
+  /** 서버가 거부한 때만 나온다. 종류는 늘 하나가 골라져 있다. */
+  typeRequired: string
+  amountRequired: string
+  dateRequired: string
+}
+
+/** 계좌 추가(화면설계서 G-02 입력값 오류)의 문구 */
+export const accountAddMessages: AccountMessages = {
+  nameRequired: '이름을 입력해 주세요.',
+  nameTooLong: '50자까지 쓸 수 있어요.',
+  nameUnusable: '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.',
+  nameDuplicate: '같은 이름의 계좌가 있어요. 다른 이름을 써 주세요.',
+  typeRequired: '종류를 골라 주세요.',
+  amountRequired: '금액을 입력해 주세요. 없으면 0을 적어요.',
+  dateRequired: '기준일을 골라 주세요.',
+}
 
 export const ACCOUNT_NAME_MAX = 50
 
@@ -38,11 +55,14 @@ export function newAccountValues(): AccountValues {
 }
 
 /** 칸마다 오류 문구. 맞는 칸은 없다. 금액의 최대는 금액 칸이, 기준일의 범위는 달력이 막는다. */
-export function validateAccount({ name, openingBalance, openingDate }: AccountValues): FieldErrors<AccountField> {
+export function validateAccount(
+  { name, openingBalance, openingDate }: AccountValues,
+  messages: AccountMessages = accountAddMessages,
+): FieldErrors<AccountField> {
   return {
-    name: nameError(name),
-    openingBalance: openingBalance === undefined ? amountRequired : undefined,
-    openingDate: openingDate === '' ? dateRequired : undefined,
+    name: nameError(name, messages),
+    openingBalance: openingBalance === undefined ? messages.amountRequired : undefined,
+    openingDate: openingDate === '' ? messages.dateRequired : undefined,
   }
 }
 
@@ -54,9 +74,9 @@ export function toNewAccount({ name, type, openingBalance, negative, openingDate
   return { name: normalizeName(name), type, openingBalance: owed ? 0 - amount : amount, openingDate }
 }
 
-function nameError(value: string): string | undefined {
+function nameError(value: string, messages: AccountMessages): string | undefined {
   const name = normalizeName(value)
-  if (name === '') return nameRequired
-  if (hasUnusableCharacter(name)) return nameUnusable
-  if (accountNameLength(value) > ACCOUNT_NAME_MAX) return nameTooLong
+  if (name === '') return messages.nameRequired
+  if (hasUnusableCharacter(name)) return messages.nameUnusable
+  if (accountNameLength(value) > ACCOUNT_NAME_MAX) return messages.nameTooLong
 }

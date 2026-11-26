@@ -12,23 +12,41 @@ import styles from './AccountFields.module.css'
 
 const typeOptions = accountTypes.map((type) => ({ value: type, label: accountTypeNames[type] }))
 
+/** 칸의 이름, 예시, 도움말 가운데 계좌를 만드는 화면마다 다른 것 */
+export interface AccountFieldTexts {
+  nameLabel: string
+  /** 없으면 도움말을 두지 않는다 */
+  nameHelp?: string
+  namePlaceholder: string
+  dateHelp: string
+}
+
+/** 계좌 추가(화면설계서 G-02 (1)~(4))의 문구 */
+const accountAddTexts: AccountFieldTexts = {
+  nameLabel: '이름',
+  nameHelp: '1~50자',
+  namePlaceholder: '예: 국민은행 급여통장',
+  dateHelp: '이날부터의 거래가 잔액에 들어가요.',
+}
+
 interface AccountFieldsProps {
   form: AccountForm
   /** 보내는 중이라 바꿀 수 없다 */
   readOnly: boolean
+  texts?: AccountFieldTexts
 }
 
-/** 새 계좌의 이름, 종류, 시작 잔액, 기준일(화면설계서 G-02 (1)~(4)) */
-export default function AccountFields({ form, readOnly }: AccountFieldsProps) {
+/** 새 계좌의 이름, 종류, 시작 잔액, 기준일. 금액 칸과 종류를 바꿀 때의 안내는 어느 화면에서나 같다. */
+export default function AccountFields({ form, readOnly, texts = accountAddTexts }: AccountFieldsProps) {
   const { values, change, control, fieldProps, check } = form
   return (
     <>
       <TextField
         {...fieldProps('name')}
         readOnly={readOnly}
-        label="이름"
-        help="1~50자"
-        placeholder="예: 국민은행 급여통장"
+        label={texts.nameLabel}
+        help={texts.nameHelp}
+        placeholder={texts.namePlaceholder}
         count={{ current: accountNameLength(values.name), max: ACCOUNT_NAME_MAX }}
         autoComplete="off"
         autoCorrect="off"
@@ -51,7 +69,7 @@ export default function AccountFields({ form, readOnly }: AccountFieldsProps) {
         {...control('openingDate')}
         readOnly={readOnly}
         label="기준일"
-        help="이날부터의 거래가 잔액에 들어가요."
+        help={texts.dateHelp}
         onChange={(openingDate) => change({ openingDate })}
       />
     </>
@@ -64,7 +82,7 @@ function amountTexts(type: AccountType) {
   return { label: '시작 잔액', help: '마이너스 통장이면 -로 바꿔 적어요.' }
 }
 
-function TypeField({ form: { values, change, control }, readOnly }: AccountFieldsProps) {
+function TypeField({ form: { values, change, control }, readOnly }: Omit<AccountFieldsProps, 'texts'>) {
   const [meaningChanged, setMeaningChanged] = useState(false)
   const { error, ...choice } = control('type')
 
