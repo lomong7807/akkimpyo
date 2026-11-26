@@ -147,12 +147,11 @@ function forgetLedger(queryClient: QueryClient, ledgerId: string) {
   void forgetLedgerCopies(user, ledgerId, now()).catch(() => {})
 }
 
-const endedState = { sessionEnded: true }
-
 function LoginRedirect({ session }: { session: Session }) {
   const location = useLocation()
   useEffect(() => leaveAddress(session, location), [session, location])
-  return <Navigate to="/login" replace state={session.end === 'ended' ? endedState : null} />
+  const state = session.end === 'ended' ? { sessionEnded: true, draftKept: session.draftKept === true } : null
+  return <Navigate to="/login" replace state={state} />
 }
 
 /** 로그인한 뒤 돌아오도록 가려던 주소를 기억한다. 사용자가 로그아웃했으면 앞 사용자의 주소를 남기지 않는다. */

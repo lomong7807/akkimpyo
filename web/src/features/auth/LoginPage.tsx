@@ -17,12 +17,14 @@ interface LoginPageProps {
   onSignedIn: () => void
   /** 쓰던 로그인이 풀려 이 화면에 왔다 */
   sessionEnded: boolean
+  /** 로그인이 풀릴 때 열린 입력 화면의 쓰던 값을 이 기기에 남겼다(#234 C2) */
+  draftKept: boolean
   /** 가입 화면에서 넘어온 이메일. 없으면 빈 글자다. */
   initialEmail: string
 }
 
 /** A-02 로그인 */
-export default function LoginPage({ signIn, onSignedIn, sessionEnded, initialEmail }: LoginPageProps) {
+export default function LoginPage({ signIn, onSignedIn, sessionEnded, draftKept, initialEmail }: LoginPageProps) {
   const login = useLogin(signIn)
   const { values, fieldProps, checkAll } = useFormFields({
     fields: loginFields,
@@ -62,7 +64,9 @@ export default function LoginPage({ signIn, onSignedIn, sessionEnded, initialEma
     <div className={styles.page} onMouseDown={keepFocusInField}>
       {sessionEnded && (
         <div className={styles.notice}>
-          <Notice>로그인이 풀렸어요. 다시 로그인해 주세요.</Notice>
+          <Notice detail={draftKept ? '쓰던 내용은 이 기기에 남아 있어요.' : undefined}>
+            로그인이 풀렸어요. 다시 로그인해 주세요.
+          </Notice>
         </div>
       )}
       <h1>로그인</h1>

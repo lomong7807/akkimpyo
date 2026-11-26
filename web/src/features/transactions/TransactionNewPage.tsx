@@ -10,12 +10,15 @@ import { useGoBack } from '../../components/useGoBack'
 import { useLeaveGuard } from '../../components/useLeaveGuard'
 import { uuidV7 } from '../../lib/uuid'
 import { useConnection } from '../connection/useConnection'
+import { useKeepDraft } from '../drafts/keepDraft'
+import { useRestoredDraft } from '../drafts/restoreDraft'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { EntryCopiesContext, useEntryAccounts } from './entryLists'
 import { defaultAccountOf } from './formDefaults'
 import { useListMemory } from './listMemory'
 import { isConnectionLoss, QUEUE_FAILED, QUEUED_TOAST, queueNewTransaction } from './pendingTransactions'
 import TransactionFields from './TransactionFields'
+import { newTransactionDraftOf } from './transactionDraft'
 import { toNewTransaction, validateTransaction } from './transactionForm'
 import { rejectedFields } from './transactionRejection'
 import { idConflictOf, needsResendNotice, type CreateResult, type NewTransaction } from './transactions'
@@ -50,6 +53,16 @@ export default function TransactionNewPage() {
   const form = useTransactionForm(defaultAccountId ?? '')
   const [id, setId] = useState(uuidV7)
   const { moreOpen, setMoreOpen, unfoldFor } = useMoreFold(false)
+  // 로그인이 풀리면 쓰던 값과 거래 id를 이 기기에 남기고, 같은 계정으로 이 주소에 돌아오면 채운다(00-common 4.1, #234 C2).
+  // 저장은 사용자가 다시 누르고, 같은 id로 보낸다(앞 요청이 서버에 저장됐을 수 있다)
+  useKeepDraft('transaction-new', () => (form.changed ? { id, values: form.values } : undefined))
+  useRestoredDraft('transaction-new', (saved) => {
+    const draft = newTransactionDraftOf(saved)
+    if (!draft) return
+    setId(draft.id)
+    form.change(draft.values)
+    if (draft.values.memo !== '') setMoreOpen(true)
+  })
   // 저장 위의 실패. 다시 보내는 동안에도 남기고, 실패마다 count를 올려 새로 그려 다시 읽히게 한다
   const [shown, setShown] = useState<{ failure: Failure; count: number }>()
   // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돌고 다른 버튼은 누를 수 없다(00-common 4.5, designer 검토 2026-11-26)

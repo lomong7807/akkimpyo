@@ -62,6 +62,7 @@ let resending: Promise<void> | undefined
 export type SessionEnd = 'ended' | 'logged-out' | 'replaced' | 'replaced-after-logout'
 
 const endedListeners = new Set<(end: SessionEnd) => void>()
+const endingListeners = new Set<(userId: string) => void>()
 const confirmedListeners = new Set<() => void>()
 
 /** 실패하면 ApiError를 던진다. */
@@ -225,6 +226,17 @@ export function onSessionEnded(listener: (end: SessionEnd) => void): () => void 
   endedListeners.add(listener)
   return () => {
     endedListeners.delete(listener)
+  }
+}
+
+/**
+ * 이 탭에서 쓰던 로그인이 풀리기(ended) 직전에 그 로그인의 사용자(기기 데이터 주인)로 부른다. 화면이 아직 그대로라 열린 입력
+ * 화면의 쓰던 값을 꺼낼 수 있다(#234 C2). 사용자가 로그아웃했거나 다른 로그인으로 바뀐 때는 부르지 않는다. 돌려받은 함수로 끊는다.
+ */
+export function onSessionEnding(listener: (userId: string) => void): () => void {
+  endingListeners.add(listener)
+  return () => {
+    endingListeners.delete(listener)
   }
 }
 
@@ -466,6 +478,8 @@ function isSameLogin(seen: SeenMarks): boolean {
 
 function endSession(end: SessionEnd) {
   const wasSignedIn = accessToken !== undefined || unconfirmed !== undefined
+  const userId = sessionUserId()
+  if (end === 'ended' && userId !== undefined) endingListeners.forEach((notify) => notify(userId))
   accessToken = undefined
   unconfirmed = undefined
   if (wasSignedIn) endedListeners.forEach((notify) => notify(end))
