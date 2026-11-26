@@ -50,6 +50,17 @@ export async function passPressGuard() {
 }
 
 /**
+ * 테스트가 다른 가짜 시계를 다시 걸었으면 이 시계로 돌아온다. 그 시계에 남은 것은 버린다(진짜 시계로 돌아갈 때와 같다).
+ * 화면을 정리하기(cleanup) 전에 부른다. 화면에서 빠진 뒤의 덮개가 이 시계에 걸려야 stopGuardClock()이 걷는다.
+ * 다른 시계에서 정리하면 덮개의 진짜 rAF가 다음 테스트의 이 시계에 300ms를 걸고, 그 테스트가 시계를 다시 걸면 덮개가 남는다.
+ */
+export function resumeGuardClock() {
+  if (usesGuardClock()) return
+  stopGuardClock()
+  startGuardClock()
+}
+
+/**
  * 테스트를 끝낸다. 화면에서 빠진 뒤에도 남는 덮개를 걷고 진짜 시계로 돌아간다.
  * 남겨 두면 덮개의 시계가 다음 테스트나 jsdom을 정리한 뒤에 돈다. 진짜 시계로 돌아가면 가짜 시계에 걸린 것은 돌지 않는다.
  */
