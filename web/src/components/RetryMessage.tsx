@@ -7,11 +7,19 @@ type RetryMessageProps = {
   children: string
   /** 나타날 때 버튼에 초점을 둔다 */
   autoFocus?: boolean
+  /**
+   * 실패한 횟수. 바뀌면 문구만 새로 그려 같은 문구여도 다시 읽히게 한다. 버튼은 그대로 두어 초점을 잃지 않는다.
+   */
+  failures?: number
 } & (
   | {
       onRetry: () => void
       /** 버튼의 글자. 없으면 "다시 시도"다. */
       actionLabel?: string
+      /** 이 버튼으로 다시 보내는 중. 문구는 둔 채 버튼에 도는 표시를 둔다(확인 창과 같다). */
+      busy?: boolean
+      /** 다른 버튼으로 보내는 중이라 누를 수 없다. */
+      disabled?: boolean
       to?: never
       onClick?: never
     }
@@ -22,6 +30,8 @@ type RetryMessageProps = {
       /** 링크를 누를 때. 화면이 가는 길을 정하려면 기본 동작을 막고 직접 간다. */
       onClick?: (event: MouseEvent<HTMLAnchorElement>) => void
       onRetry?: never
+      busy?: never
+      disabled?: never
     }
 )
 
@@ -35,14 +45,19 @@ export default function RetryMessage({
   actionLabel = '다시 시도',
   to,
   onClick,
+  busy,
+  disabled,
   autoFocus,
+  failures,
 }: RetryMessageProps) {
   return (
     <div className={styles.message}>
-      <ErrorMessage role="alert">{children}</ErrorMessage>
+      <ErrorMessage key={failures} role="alert">
+        {children}
+      </ErrorMessage>
       <div className={styles.retry}>
         {to === undefined ? (
-          <Button kind="text" onClick={onRetry} autoFocus={autoFocus}>
+          <Button kind="text" onClick={onRetry} autoFocus={autoFocus} busy={busy} disabled={disabled}>
             {actionLabel}
           </Button>
         ) : (

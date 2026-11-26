@@ -712,30 +712,54 @@ describe('서버 오류와 지연', () => {
     expect(document.activeElement).toBe(stays())
   })
 
-  it('다시 시도한 것이 또 실패하면 초점이 저장에 남는다', async () => {
+  it('다시 시도한 것이 또 실패하면 문구를 새로 그려 다시 읽히게 하고 초점은 "다시 시도"에 남는다', async () => {
     const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
     accounts.addResponse = () => answers.shift()!()
     const { user } = await open()
     await fillAndSave(user)
-    await screen.findByRole('alert')
-    await user.click(retryButton())
+    const first = await screen.findByRole('alert')
+    // 키보드로 누른 버튼은 사라지지 않으므로 초점이 그대로 남는다
+    retryButton().focus()
+    await user.keyboard('{Enter}')
     await waitFor(() => expect(accounts.added).toHaveLength(2))
-    await screen.findByRole('alert')
-    expect(document.activeElement).toBe(saveButton())
+    await waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(document.activeElement).toBe(retryButton())
   })
 
-  it('"다시 시도"는 지금 화면의 값으로 다시 보내고 초점을 잃지 않는다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), delayed().respond]
+  /* 다시 보내는 동안 문구를 남기고 누른 버튼만 도는 표시다(designer 검토 2026-11-26, 확인 창과 같다) */
+  it('"다시 시도"는 지금 화면의 값으로 다시 보낸다. 그동안 문구를 둔 채 "다시 시도"만 돌고 저장은 누를 수 없으며 초점이 남는다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
     accounts.addResponse = () => answers.shift()!()
     const { user } = await open()
     await fillAndSave(user)
     await screen.findByRole('alert')
     await user.type(name(), '2')
     await user.click(retryButton())
-    await waitFor(() => expect(accounts.added).toHaveLength(2))
+    await answer.arrived
     expect(accounts.added[1].body.name).toBe('급여통장2')
-    expect(screen.queryByRole('alert')).toBeNull()
-    expect(document.activeElement).toBe(saveButton())
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect(saveButton().getAttribute('aria-busy')).toBeNull()
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true')
+    // 마우스로 누르면 쓰던 칸에 초점이 남는다(전체 화면 입력이 화면 키보드를 내리지 않게 한다)
+    expect(document.activeElement).toBe(name())
+  })
+
+  it('저장을 다시 누르면 문구를 둔 채 저장만 도는 표시이고 "다시 시도"는 누를 수 없다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await open()
+    await fillAndSave(user)
+    await screen.findByRole('alert')
+    await user.click(saveButton())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(saveButton().getAttribute('aria-busy')).toBe('true')
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    await user.click(retryButton())
+    expect(accounts.added).toHaveLength(2)
   })
 
   it('다시 시도할 때 칸이 틀렸으면 보내지 않고 문구를 지운 뒤 칸의 오류를 보인다', async () => {
