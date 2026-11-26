@@ -1,12 +1,31 @@
-import { screen } from '@testing-library/react'
+import { act, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse } from 'msw'
+import type { Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { startBackend, type Backend } from './support/backend'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 
 vi.stubGlobal('scrollTo', vi.fn())
+
+/**
+ * 앱이 만든 React 루트. 앱은 src/main이 createRoot로 그리므로 testing-library의 cleanup이 내리지 않는다. 내리지 않으면
+ * 앞 테스트의 앱이 다음 테스트와 파일이 끝난 뒤에도 돌아, 늦게 온 응답의 알림이 jsdom을 정리한 뒤에 화면을 고치려다
+ * 오류가 난다(#260 확인 중, 전체 실행 50번 중 3번 'window is not defined').
+ */
+const roots = vi.hoisted(() => [] as Root[])
+vi.mock(import('react-dom/client'), async (importOriginal) => {
+  const client = await importOriginal()
+  return {
+    ...client,
+    createRoot: (...args: Parameters<typeof client.createRoot>) => {
+      const root = client.createRoot(...args)
+      roots.push(root)
+      return root
+    },
+  }
+})
 
 const server = startMockServer()
 
@@ -23,6 +42,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  act(() => roots.splice(0).forEach((root) => root.unmount()))
   document.body.replaceChildren()
 })
 
