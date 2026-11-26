@@ -15,6 +15,11 @@ export function useMe({ enabled = true } = {}) {
 async function fetchAndKeepMe(): Promise<Me> {
   const user = currentUserId()
   const me = await fetchMe()
-  if (user !== undefined && currentUserId() === user) keepMeCopy(user, me)
+  if (user !== undefined && currentUserId() === user) {
+    keepMeCopy(user, me)
+    // 장부 목록에서 빠진 장부의 사본을 지운다(security Q4). 첫 화면 묶음에 넣지 않는다(planner, #251)
+    const ledgerIds = me.ledgers.map(({ id }) => id)
+    void import('../../device/ledgerCopies').then(({ keepCopiesOfLedgers }) => keepCopiesOfLedgers(user, ledgerIds)).catch(() => {})
+  }
   return me
 }

@@ -24,9 +24,14 @@ export interface Category extends SubCategory {
 /** 장부의 최상위 카테고리. 순서는 서버가 정한다. 실패하면 ApiError를 던진다. */
 export async function fetchCategories(ledgerId: string): Promise<Category[]> {
   const body = await request<{ items?: unknown } | null | undefined>(ledgerPath(ledgerId, 'categories'))
-  const items = body?.items
-  if (!Array.isArray(items) || !items.every(isCategory)) throw ApiError.unreadable()
+  const items = parseCategories(body?.items)
+  if (!items) throw ApiError.unreadable()
   return items
+}
+
+/** 약속(#34)대로인 카테고리 목록. 기기에 남긴 사본도 이것으로 읽는다(값은 믿지 않는다). 하나라도 읽을 수 없으면 없다. */
+export function parseCategories(items: unknown): Category[] | undefined {
+  return Array.isArray(items) && items.every(isCategory) ? items : undefined
 }
 
 function isCategory(value: Partial<Category> | null): value is Category {

@@ -8,8 +8,8 @@ import { useToast } from '../../components/ToastContext'
 import { useGoBack } from '../../components/useGoBack'
 import { useLeaveGuard } from '../../components/useLeaveGuard'
 import { uuidV7 } from '../../lib/uuid'
-import { useAccounts } from '../accounts/useAccounts'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
+import { EntryCopiesContext, useEntryAccounts } from './entryLists'
 import { defaultAccountOf } from './formDefaults'
 import { useListMemory } from './listMemory'
 import TransactionFields from './TransactionFields'
@@ -35,7 +35,8 @@ export default function TransactionNewPage() {
   const goBack = useGoBack(HOME)
   const navigate = useNavigate()
   const creation = useCreateTransaction()
-  const accounts = useAccounts()
+  // 기기에 있는 계좌로 바로 열고 서버의 목록이 오면 바꾼다(#234)
+  const accounts = useEntryAccounts(true)
   // 이 화면을 연 사용자(입력의 주인). 기본 계좌를 고르고, 보내는 순간의 사용자(토큰의 sub)와 같은지 요청 계층이 본다.
   // 확인하지 못한 로그인이면 기록의 사용자다. 같은 사용자로 확인돼야 보낸다(#234)
   const [owner] = useState(() => ({ userId: sessionUserId(), ledgerId: ledger.id }))
@@ -113,53 +114,55 @@ export default function TransactionNewPage() {
   const saveBusy = busy && sender === 'save'
 
   return (
-    <FullScreenForm
-      title="거래 입력"
-      guard={guard}
-      onSubmit={submit}
-      submitShortcut
-      bottom={
-        <>
-          {/* 초점은 옮기지 않는다. 문구는 role="alert"로 읽힌다 */}
-          {failure?.kind === 'retry' && (
-            <RetryMessage failures={shown?.count} onRetry={retry} busy={messageBusy} disabled={saveBusy}>
-              문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.
-            </RetryMessage>
-          )}
-          {failure?.kind === 'saved-differently' && (
-            <RetryMessage
-              failures={shown?.count}
-              to={`/transactions/${failure.savedId}`}
-              actionLabel="저장된 거래 보기"
-              onClick={(event) => viewSaved(event, `/transactions/${failure.savedId}`)}
-            >
-              앞서 저장한 거래와 내용이 달라 저장하지 못했어요. 내역에서 확인해 주세요.
-            </RetryMessage>
-          )}
-          {failure?.kind === 'id-unusable' && (
-            <RetryMessage
-              failures={shown?.count}
-              onRetry={saveAsNew}
-              actionLabel="새 거래로 저장"
-              busy={messageBusy}
-              disabled={saveBusy}
-            >
-              문제가 생겨 저장하지 못했어요. 새 거래로 저장해 주세요.
-            </RetryMessage>
-          )}
-          <Button kind="primary" type="submit" busy={saveBusy} disabled={messageBusy}>
-            저장
-          </Button>
-        </>
-      }
-    >
-      <TransactionFields
-        form={form}
-        readOnly={busy}
-        moreOpen={moreOpen}
-        onMoreOpenChange={setMoreOpen}
-      />
-    </FullScreenForm>
+    <EntryCopiesContext value>
+      <FullScreenForm
+        title="거래 입력"
+        guard={guard}
+        onSubmit={submit}
+        submitShortcut
+        bottom={
+          <>
+            {/* 초점은 옮기지 않는다. 문구는 role="alert"로 읽힌다 */}
+            {failure?.kind === 'retry' && (
+              <RetryMessage failures={shown?.count} onRetry={retry} busy={messageBusy} disabled={saveBusy}>
+                문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.
+              </RetryMessage>
+            )}
+            {failure?.kind === 'saved-differently' && (
+              <RetryMessage
+                failures={shown?.count}
+                to={`/transactions/${failure.savedId}`}
+                actionLabel="저장된 거래 보기"
+                onClick={(event) => viewSaved(event, `/transactions/${failure.savedId}`)}
+              >
+                앞서 저장한 거래와 내용이 달라 저장하지 못했어요. 내역에서 확인해 주세요.
+              </RetryMessage>
+            )}
+            {failure?.kind === 'id-unusable' && (
+              <RetryMessage
+                failures={shown?.count}
+                onRetry={saveAsNew}
+                actionLabel="새 거래로 저장"
+                busy={messageBusy}
+                disabled={saveBusy}
+              >
+                문제가 생겨 저장하지 못했어요. 새 거래로 저장해 주세요.
+              </RetryMessage>
+            )}
+            <Button kind="primary" type="submit" busy={saveBusy} disabled={messageBusy}>
+              저장
+            </Button>
+          </>
+        }
+      >
+        <TransactionFields
+          form={form}
+          readOnly={busy}
+          moreOpen={moreOpen}
+          onMoreOpenChange={setMoreOpen}
+        />
+      </FullScreenForm>
+    </EntryCopiesContext>
   )
 }
 
