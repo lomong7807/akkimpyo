@@ -19,6 +19,7 @@ import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.User;
 import app.accountbook.user.UserService;
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.boot.test.context.TestComponent;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -137,6 +138,22 @@ public class Fixtures {
                 insert into change_log (id, transaction_id, ledger_id, version, action, actor_id, created_at)
                 values (?, ?, ?, 3, ?, ?, now())
                 """, UUID.randomUUID(), transactionId, ledgerId, action.name(), actorId);
+    }
+
+    /**
+     * 완전 삭제(#9)가 한 트랜잭션에서 할 일을 DB에 바로 한다. 기능이 아직 없어서다. 그 거래의 이력과 거래를 지우고
+     * (라인은 거래와 같이 지워진다) 기록 한 행만 남긴다. 기록의 번호는 지우기 전 거래의 version + 1이다(ADR 007 결정 2, 7).
+     */
+    public void purge(UUID transactionId, UUID actorId) {
+        Map<String, Object> tx = jdbc.queryForMap("select ledger_id, version from transaction where id = ?",
+                transactionId);
+        jdbc.update("delete from change_log where transaction_id = ?", transactionId);
+        jdbc.update("delete from transaction where id = ?", transactionId);
+        jdbc.update("""
+                insert into change_log (id, transaction_id, ledger_id, version, action, actor_id, created_at)
+                values (?, ?, ?, ?, ?, ?, now())
+                """, UUID.randomUUID(), transactionId, tx.get("ledger_id"), (Long) tx.get("version") + 1,
+                ChangeAction.PURGE.name(), actorId);
     }
 
     private TransactionView entry(User actor, UUID ledgerId, TransactionType type, boolean refund, UUID accountId,
