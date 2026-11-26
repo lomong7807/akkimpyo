@@ -595,6 +595,56 @@ describe('되돌리기가 있는 토스트', () => {
     expect(onUndo).toHaveBeenCalledTimes(1)
   })
 
+  describe('모달이 열린 동안(architect 결정 2026-11-26, #102)', () => {
+    function openDialog() {
+      const dialog = document.createElement('dialog')
+      document.body.append(dialog)
+      dialog.showModal()
+      return dialog
+    }
+    // 모달이 열리고 닫히는 것은 MutationObserver가 알린다
+    const observe = () => act(async () => {})
+
+    afterEach(() => document.querySelectorAll('dialog').forEach((dialog) => dialog.remove()))
+
+    it('되돌리기 토스트는 시간이 멈추고, 닫히면 남은 시간부터 센다', async () => {
+      renderUndo()
+      press('삭제하기')
+      await pass(3000)
+      const dialog = openDialog()
+      await observe()
+      await pass(60_000)
+      expect(message()).not.toBe('')
+      dialog.close()
+      await observe()
+      await pass(UNDO_DURATION - 3000 - 1)
+      expect(message()).not.toBe('')
+      await pass(1)
+      expect(message()).toBe('')
+    })
+
+    it('모달이 닫힌 뒤에도 마우스가 올라가 있으면 멈춰 있다', async () => {
+      renderUndo()
+      press('삭제하기')
+      const dialog = openDialog()
+      await observe()
+      fireEvent.pointerEnter(toast()!)
+      dialog.close()
+      await observe()
+      await pass(60_000)
+      expect(message()).not.toBe('')
+    })
+
+    it('되돌리기가 없는 토스트는 모달과 상관없이 4초다', async () => {
+      renderUndo()
+      press('알리기')
+      openDialog()
+      await observe()
+      await pass(DURATION)
+      expect(message()).toBe('')
+    })
+  })
+
   describe('누르면 사라지는 버튼 대신 지금 화면의 제목(h1)으로 초점을 옮긴다(designer 검토 2026-11-26)', () => {
     function renderWithTitle(title = <h1>내역</h1>) {
       return renderScreen(

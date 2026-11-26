@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router'
-import { afterModals } from '../components/openModal'
+import { afterModals, isModalOpen } from '../components/openModal'
 import { ToastContext, type ToastAction } from '../components/ToastContext'
 import { useScreenHandle } from './useScreenHandle'
 import styles from './ToastProvider.module.css'
@@ -73,7 +73,9 @@ function Toast({ message, action, onClosed }: ToastProps) {
   const [hovered, setHovered] = useState(false)
   const [focused, setFocused] = useState(false)
   const remaining = useRef(action ? ACTION_DURATION_MS : DURATION_MS)
-  const paused = hovered || focused
+  // 모달은 최상위 층이라 그 밖의 버튼을 누를 수 없다. 되돌리기는 모달이 닫힐 때까지 시간을 멈춘다(architect 결정 2026-11-26, #102)
+  const modalOpen = useModalOpen(action !== undefined)
+  const paused = hovered || focused || modalOpen
   const swipeHandlers = useSwipeDown(() => setClosing(true))
 
   useEffect(() => {
@@ -127,6 +129,18 @@ function Toast({ message, action, onClosed }: ToastProps) {
       )}
     </div>
   )
+}
+
+/** 모달이 열려 있는지. `watch`가 아니면 보지 않고 늘 false다. */
+function useModalOpen(watch: boolean): boolean {
+  const [open, setOpen] = useState(() => watch && isModalOpen())
+  useEffect(() => {
+    if (!watch) return
+    const observer = new MutationObserver(() => setOpen(isModalOpen()))
+    observer.observe(document.body, { subtree: true, childList: true, attributeFilter: ['open'] })
+    return () => observer.disconnect()
+  }, [watch])
+  return open
 }
 
 /**
