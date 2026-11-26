@@ -60,7 +60,7 @@ class TransactionTextTest {
 
     @Test
     void payeeIsTrimmedAndComposedAndMemoLineEndingsAreConverted() {
-        Entry request = expense(UUID.randomUUID(), "　 " + nfd("김밥천국") + " ", nfd("점심") + "\r\n저녁\r");
+        Entry request = expense(UUID.randomUUID(), "\u3000 " + nfd("김밥천국") + "\u00A0", nfd("점심") + "\r\n저녁\r");
 
         TransactionView created = transactionService.create(owner.getId(), ledgerId, request, DEVICE);
 
@@ -72,9 +72,9 @@ class TransactionTextTest {
     @Test
     void memoIsNotTrimmed() {
         TransactionView created = transactionService.create(owner.getId(), ledgerId,
-                expense(UUID.randomUUID(), "김밥천국", "  점심 　"), DEVICE);
+                expense(UUID.randomUUID(), "김밥천국", "  점심 \u3000"), DEVICE);
 
-        assertThat(storedPayeeAndMemo(created.id())).containsExactly("김밥천국", "  점심 　");
+        assertThat(storedPayeeAndMemo(created.id())).containsExactly("김밥천국", "  점심 \u3000");
     }
 
     @Test
@@ -82,7 +82,7 @@ class TransactionTextTest {
         TransactionView empty = transactionService.create(owner.getId(), ledgerId,
                 expense(UUID.randomUUID(), "", ""), DEVICE);
         TransactionView blank = transactionService.create(owner.getId(), ledgerId,
-                expense(UUID.randomUUID(), "　  ", "   "), DEVICE);
+                expense(UUID.randomUUID(), "\u3000\u00A0 ", "   "), DEVICE);
 
         assertThat(storedPayeeAndMemo(empty.id())).containsExactly(null, null);
         assertThat(storedPayeeAndMemo(blank.id())).containsExactly(null, "   ");
@@ -118,10 +118,10 @@ class TransactionTextTest {
         UUID id = UUID.randomUUID();
         transactionService.create(owner.getId(), ledgerId, expense(id, "김밥천국", "점심"), DEVICE);
         TransactionView updated = transactionService.update(owner.getId(), id, 1,
-                expense(id, " " + nfd("분식집") + "　", "점심\r\n"), DEVICE);
+                expense(id, " " + nfd("분식집") + "\u3000", "점심\r\n"), DEVICE);
         assertThat(storedPayeeAndMemo(updated.id())).containsExactly("분식집", "점심\n");
         assertThat(rejection(() -> transactionService.update(owner.getId(), id, 2,
-                expense(id, "분식​집", null), DEVICE)))
+                expense(id, "분식\u200B집", null), DEVICE)))
                 .extracting(InvalidRequestException::field, InvalidRequestException::code)
                 .containsExactly("payee", FieldErrorCode.INVALID_FORMAT);
     }
@@ -159,7 +159,7 @@ class TransactionTextTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"김밥​천국", "김밥천국‍", "ㅤ", "김밥\n천국", "김밥\u0000천국", "‮국천밥김"})
+    @ValueSource(strings = {"김밥\u200B천국", "김밥천국\u200D", "\u3164", "김밥\n천국", "김밥\u0000천국", "\u202E국천밥김"})
     void payeeWithForbiddenCharacterIsRejected(String payee) {
         UUID id = UUID.randomUUID();
 
@@ -172,11 +172,11 @@ class TransactionTextTest {
 
     @Test
     void pairedEmojiIsStoredAsItIs() {
-        String family = "👨‍👩‍👧";
+        String family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
         TransactionView created = transactionService.create(owner.getId(), ledgerId,
-                expense(UUID.randomUUID(), "🍔 버거", family + "\n1️⃣"), DEVICE);
+                expense(UUID.randomUUID(), "\uD83C\uDF54 버거", family + "\n1\uFE0F\u20E3"), DEVICE);
 
-        assertThat(storedPayeeAndMemo(created.id())).containsExactly("🍔 버거", family + "\n1️⃣");
+        assertThat(storedPayeeAndMemo(created.id())).containsExactly("\uD83C\uDF54 버거", family + "\n1\uFE0F\u20E3");
     }
 
     /** 형식 검증이 같은 id 조회보다 먼저다(ADR 006 결정 4). 저장된 거래가 있어도 재전송이나 충돌이 아니라 형식 오류다. */
@@ -190,7 +190,7 @@ class TransactionTextTest {
         assertThat(rejection(() -> transactionService.createOrReplay(owner.getId(), ledgerId,
                 expense(id, "김밥천국\uD800", "점심"), DEVICE)).field()).isEqualTo("payee");
         assertThat(rejection(() -> transactionService.createOrReplay(owner.getId(), ledgerId,
-                expense(id, "김밥천국", "점심 "), DEVICE)).field()).isEqualTo("memo");
+                expense(id, "김밥천국", "점심\u2028"), DEVICE)).field()).isEqualTo("memo");
         assertThat(transactionService.get(owner.getId(), id)).isEqualTo(stored);
     }
 
@@ -199,7 +199,7 @@ class TransactionTextTest {
     @Test
     void resendOfTheSameRawRequestIsReplayEvenThoughStoredValueWasAligned() {
         UUID id = UUID.randomUUID();
-        Entry raw = expense(id, " " + nfd("김밥천국") + "　", nfd("점심") + "\r\n");
+        Entry raw = expense(id, " " + nfd("김밥천국") + "\u3000", nfd("점심") + "\r\n");
         CreateResult first = transactionService.createOrReplay(owner.getId(), ledgerId, raw, DEVICE);
         flushAndClear();
 
@@ -220,7 +220,7 @@ class TransactionTextTest {
 
         assertThat(transactionService.createOrReplay(owner.getId(), ledgerId, expense(id, null, ""), DEVICE))
                 .isEqualTo(new CreateResult(first.transaction(), false));
-        assertThat(transactionService.createOrReplay(owner.getId(), ledgerId, expense(id, "　", null), DEVICE))
+        assertThat(transactionService.createOrReplay(owner.getId(), ledgerId, expense(id, "\u3000", null), DEVICE))
                 .isEqualTo(new CreateResult(first.transaction(), false));
     }
 
@@ -231,9 +231,9 @@ class TransactionTextTest {
     @Test
     void resendOfTransactionStoredBeforeTheRuleComparesAlignedStoredValues() {
         UUID id = UUID.randomUUID();
-        Entry request = expense(id, " " + nfd("김밥천국") + " ", nfd("점심") + "\r\n");
+        Entry request = expense(id, " " + nfd("김밥천국") + "\u00A0", nfd("점심") + "\r\n");
         transactionService.create(owner.getId(), ledgerId, expense(id, "김밥천국", "점심"), DEVICE);
-        storeAsBeforeTheRule(id, " " + nfd("김밥천국") + " ", nfd("점심") + "\r\n");
+        storeAsBeforeTheRule(id, " " + nfd("김밥천국") + "\u00A0", nfd("점심") + "\r\n");
         TransactionView stored = transactionService.get(owner.getId(), id);
         assertThat(stored.payee()).isNotEqualTo("김밥천국");
 
@@ -266,11 +266,11 @@ class TransactionTextTest {
         UUID id = UUID.randomUUID();
         transactionService.create(owner.getId(), ledgerId, expense(id, "김밥천국", "점심"), DEVICE);
         // U+200B(Cf)는 앱 검사만 막는다(DB CHECK에 걸지 않는 글자).
-        storeAsBeforeTheRule(id, "김밥​천국", "점심");
+        storeAsBeforeTheRule(id, "김밥\u200B천국", "점심");
         TransactionView stored = transactionService.get(owner.getId(), id);
 
         assertThat(rejection(() -> transactionService.createOrReplay(owner.getId(), ledgerId,
-                expense(id, "김밥​천국", "점심"), DEVICE)).field()).isEqualTo("payee");
+                expense(id, "김밥\u200B천국", "점심"), DEVICE)).field()).isEqualTo("payee");
         assertThat(catchThrowableOfType(IdConflictException.class, () -> transactionService.createOrReplay(
                 owner.getId(), ledgerId, expense(id, "김밥천국", "점심"), DEVICE)).current()).contains(stored);
     }

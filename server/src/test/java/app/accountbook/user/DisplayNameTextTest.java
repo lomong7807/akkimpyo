@@ -45,19 +45,19 @@ class DisplayNameTextTest {
 
     @Test
     void spacesAroundAreTrimmed() {
-        User user = userService.createUser("trim@example.com", PASSWORD, "　 아낌 표 ");
+        User user = userService.createUser("trim@example.com", PASSWORD, "\u3000\u00A0아낌 표\u2003");
 
         assertThat(storedDisplayName(user)).isEqualTo("아낌 표");
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {" ", "　", "　   "})
+    @ValueSource(strings = {"\u00A0", "\u3000", "\u3000\u00A0 \u2009"})
     void displayNameOfOnlySpacesIsRequired(String displayName) {
         assertRejected("blank@example.com", displayName, FieldErrorCode.REQUIRED);
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"아낌​이", "아낌이‍", "아낌이️", "ㅤ", "아낌‮이", "아낌\t이",
+    @ValueSource(strings = {"아낌\u200B이", "아낌이\u200D", "아낌이\uFE0F", "\u3164", "아낌\u202E이", "아낌\t이",
             "아낌\u0000이", "아낌\uD800이", "\uDC00아낌이"})
     void forbiddenCharactersAndUnpairedSurrogatesAreRejected(String displayName) {
         assertRejected("bad@example.com", displayName, FieldErrorCode.INVALID_FORMAT);
@@ -65,7 +65,7 @@ class DisplayNameTextTest {
 
     @Test
     void emojiIsKept() {
-        String family = "👨‍👩‍👧";
+        String family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67";
 
         assertThat(storedDisplayName(userService.createUser("emoji@example.com", PASSWORD, "아낌 " + family)))
                 .isEqualTo("아낌 " + family);

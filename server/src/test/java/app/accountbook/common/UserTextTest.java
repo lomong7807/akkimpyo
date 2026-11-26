@@ -24,10 +24,10 @@ class UserTextTest {
     private static final int MEMO_MAX = 500;
     private static final String FIELD = "name";
 
-    private static final String ZWJ = "‍";
-    private static final String VS16 = "️";
-    private static final String KEYCAP = "⃣";
-    private static final String FAMILY = "👨" + ZWJ + "👩" + ZWJ + "👧";
+    private static final String ZWJ = "\u200D";
+    private static final String VS16 = "\uFE0F";
+    private static final String KEYCAP = "\u20E3";
+    private static final String FAMILY = "\uD83D\uDC68" + ZWJ + "\uD83D\uDC69" + ZWJ + "\uD83D\uDC67";
 
     /** 보이지 않는 글자(P-214)의 목록 그대로. 범위는 끝을 포함한다. */
     private static final List<int[]> INVISIBLE = List.of(
@@ -57,10 +57,10 @@ class UserTextTest {
 
     @Test
     void lengthIsCountedInCodePoints() {
-        String twentyEmoji = "😀".repeat(20);
+        String twentyEmoji = "\uD83D\uDE00".repeat(20);
 
         assertThat(UserText.name(twentyEmoji, NAME_MAX, FIELD)).isEqualTo(twentyEmoji);
-        assertRejected(() -> UserText.name("😀".repeat(21), NAME_MAX, FIELD), FieldErrorCode.TOO_LONG);
+        assertRejected(() -> UserText.name("\uD83D\uDE00".repeat(21), NAME_MAX, FIELD), FieldErrorCode.TOO_LONG);
     }
 
     // ---------------------------------------------------------------- 거부 글자
@@ -99,7 +99,7 @@ class UserTextTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"‍", "️", "ㅤ"})
+    @ValueSource(strings = {"\u200D", "\uFE0F", "\u3164"})
     void nameEndingWithInvisibleCharacterIsRejected(String invisible) {
         assertRejected(() -> UserText.name("식비" + invisible, NAME_MAX, FIELD), FieldErrorCode.INVALID_FORMAT);
     }
@@ -107,14 +107,14 @@ class UserTextTest {
     @Test
     void nameOfOnlyHangulFillerIsRejected() {
         // U+3164는 strip()으로 비지 않는 글자라 지우지 않고 거부한다.
-        assertRejected(() -> UserText.name("ㅤ", NAME_MAX, FIELD), FieldErrorCode.INVALID_FORMAT);
-        assertRejected(() -> UserText.name("ㅤㅤ", NAME_MAX, FIELD), FieldErrorCode.INVALID_FORMAT);
+        assertRejected(() -> UserText.name("\u3164", NAME_MAX, FIELD), FieldErrorCode.INVALID_FORMAT);
+        assertRejected(() -> UserText.name("\u3164\u3164", NAME_MAX, FIELD), FieldErrorCode.INVALID_FORMAT);
     }
 
     @Test
     void rejectionDoesNotEchoTheInput() {
         InvalidRequestException e = catchThrowableOfType(InvalidRequestException.class,
-                () -> UserText.name("비밀이름​", NAME_MAX, "displayName"));
+                () -> UserText.name("비밀이름\u200B", NAME_MAX, "displayName"));
 
         assertThat(e.field()).isEqualTo("displayName");
         assertThat(e.code()).isEqualTo(FieldErrorCode.INVALID_FORMAT);
@@ -127,13 +127,13 @@ class UserTextTest {
     @ValueSource(strings = {
             FAMILY,                                             // 가족: 이모지 U+200D 이모지 U+200D 이모지
             "1" + VS16 + KEYCAP, "#" + VS16 + KEYCAP, "*" + VS16 + KEYCAP, "0" + VS16 + KEYCAP, "9" + VS16 + KEYCAP,
-            "❤" + VS16,                                    // ❤️ 이모지 바로 뒤의 U+FE0F
-            "❤" + VS16 + ZWJ + "🔥",             // ❤️‍🔥 U+FE0F가 붙은 이모지 뒤의 U+200D
-            "🧑🏽" + ZWJ + "💻",  // 🧑🏽‍💻 피부색이 붙은 이모지 뒤의 U+200D
-            "🏳" + VS16 + ZWJ + "🌈",       // 🏳️‍🌈
-            "🏃🏽" + ZWJ + "♂" + VS16, // 🏃🏽‍♂️ 피부색 뒤 U+200D, 이모지 뒤 U+FE0F
-            "👍🏽",                         // 👍🏽 피부색만
-            "🇰🇷",                         // 🇰🇷 국기(지역 표시 글자 둘)
+            "\u2764" + VS16,                                    // 빨간 하트: 이모지 바로 뒤의 U+FE0F
+            "\u2764" + VS16 + ZWJ + "\uD83D\uDD25",             // 불붙은 하트: U+FE0F가 붙은 이모지 뒤의 U+200D
+            "\uD83E\uDDD1\uD83C\uDFFD" + ZWJ + "\uD83D\uDCBB",  // 노트북 쓰는 사람(피부색): 피부색이 붙은 이모지 뒤의 U+200D
+            "\uD83C\uDFF3" + VS16 + ZWJ + "\uD83C\uDF08",       // 무지개 깃발
+            "\uD83C\uDFC3\uD83C\uDFFD" + ZWJ + "\u2642" + VS16, // 달리는 남자(피부색): 피부색 뒤 U+200D, 이모지 뒤 U+FE0F
+            "\uD83D\uDC4D\uD83C\uDFFD",                         // 엄지(피부색): 피부색만
+            "\uD83C\uDDF0\uD83C\uDDF7",                         // 태극기: 지역 표시 글자 둘
             "1" + KEYCAP})                                      // U+FE0F 없는 키캡
     void emojiSequencesAreKept(String emoji) {
         assertThat(UserText.name("가족 " + emoji, NAME_MAX, FIELD)).isEqualTo("가족 " + emoji);
@@ -144,20 +144,20 @@ class UserTextTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            ZWJ + "😀",                    // 앞이 없다
-            "😀" + ZWJ,                    // 뒤가 없다
-            "식" + ZWJ + "😀",             // 앞이 이모지가 아니다
-            "😀" + ZWJ + "식",             // 뒤가 이모지가 아니다
-            "😀" + ZWJ + ZWJ + "😀",       // 겹친 U+200D
-            "😀" + VS16 + VS16,            // 겹친 U+FE0F
+            ZWJ + "\uD83D\uDE00",                    // 앞이 없다
+            "\uD83D\uDE00" + ZWJ,                    // 뒤가 없다
+            "식" + ZWJ + "\uD83D\uDE00",             // 앞이 이모지가 아니다
+            "\uD83D\uDE00" + ZWJ + "식",             // 뒤가 이모지가 아니다
+            "\uD83D\uDE00" + ZWJ + ZWJ + "\uD83D\uDE00",       // 겹친 U+200D
+            "\uD83D\uDE00" + VS16 + VS16,            // 겹친 U+FE0F
             "식" + VS16,                   // 이모지가 아닌 글자 뒤
             "1" + VS16,                    // 키캡이 아닌 숫자 뒤
             "a" + VS16 + KEYCAP,           // 0-9 # * 가 아닌 글자와 U+20E3 사이
-            "👍🏽" + VS16, // 피부색 뒤의 U+FE0F
-            "❤︎",                // 글자 모양 선택자(U+FE0E)는 이모지 뒤여도 거부한다
-            "😀" + VS16 + "︁",         // 다른 변형 선택자
+            "\uD83D\uDC4D\uD83C\uDFFD" + VS16, // 피부색 뒤의 U+FE0F
+            "\u2764\uFE0E",                // 글자 모양 선택자(U+FE0E)는 이모지 뒤여도 거부한다
+            "\uD83D\uDE00" + VS16 + "\uFE01",         // 다른 변형 선택자
             // 잉글랜드 깃발: 태그 문자(Cf)라 거부한다(받아들임, security)
-            "🏴󠁧󠁢󠁥󠁮󠁧󠁿"})
+            "\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67\uDB40\uDC7F"})
     void joinerAndSelectorOutsideEmojiAreRejected(String text) {
         assertRejected(() -> UserText.name(text, NAME_MAX, FIELD), FieldErrorCode.INVALID_FORMAT);
         assertRejected(() -> UserText.payee(text, PAYEE_MAX), FieldErrorCode.INVALID_FORMAT);
@@ -188,9 +188,9 @@ class UserTextTest {
 
     @Test
     void pairedSurrogatesAreKept() {
-        assertThat(UserText.name("😀식비", NAME_MAX, FIELD)).isEqualTo("😀식비");
-        assertThat(UserText.payee("a😀b", PAYEE_MAX)).isEqualTo("a😀b");
-        assertThat(UserText.memo("a😀b", MEMO_MAX)).isEqualTo("a😀b");
+        assertThat(UserText.name("\uD83D\uDE00식비", NAME_MAX, FIELD)).isEqualTo("\uD83D\uDE00식비");
+        assertThat(UserText.payee("a\uD83D\uDE00b", PAYEE_MAX)).isEqualTo("a\uD83D\uDE00b");
+        assertThat(UserText.memo("a\uD83D\uDE00b", MEMO_MAX)).isEqualTo("a\uD83D\uDE00b");
     }
 
     // ---------------------------------------------------------------- 앞뒤 공백류
@@ -201,7 +201,7 @@ class UserTextTest {
                 .filter(cp -> Character.getType(cp) == Character.SPACE_SEPARATOR)
                 .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).toString();
 
-        assertThat(UserText.TRIMMED_SPACES).isEqualTo(spaceSeparators).hasSize(17).contains(" ", "　");
+        assertThat(UserText.TRIMMED_SPACES).isEqualTo(spaceSeparators).hasSize(17).contains("\u00A0", "\u3000");
     }
 
     @Test
@@ -216,8 +216,8 @@ class UserTextTest {
     @Test
     void nameOfOnlySpacesIsRequired() {
         assertRejected(() -> UserText.name(UserText.TRIMMED_SPACES, NAME_MAX, FIELD), FieldErrorCode.REQUIRED);
-        assertRejected(() -> UserText.name(" ", NAME_MAX, FIELD), FieldErrorCode.REQUIRED);
-        assertRejected(() -> UserText.name("　　", NAME_MAX, FIELD), FieldErrorCode.REQUIRED);
+        assertRejected(() -> UserText.name("\u00A0", NAME_MAX, FIELD), FieldErrorCode.REQUIRED);
+        assertRejected(() -> UserText.name("\u3000\u3000", NAME_MAX, FIELD), FieldErrorCode.REQUIRED);
         assertRejected(() -> UserText.name("", NAME_MAX, FIELD), FieldErrorCode.REQUIRED);
         assertRejected(() -> UserText.name(null, NAME_MAX, FIELD), FieldErrorCode.REQUIRED);
     }
@@ -232,14 +232,14 @@ class UserTextTest {
 
     @Test
     void lengthIsCountedAfterTrimming() {
-        assertThat(UserText.name("　" + "가".repeat(20) + " ", NAME_MAX, FIELD)).isEqualTo("가".repeat(20));
+        assertThat(UserText.name("\u3000" + "가".repeat(20) + "\u00A0", NAME_MAX, FIELD)).isEqualTo("가".repeat(20));
     }
 
     // ---------------------------------------------------------------- 가맹점
 
     @Test
     void payeeIsTrimmedAndComposed() {
-        assertThat(UserText.payee("　 " + nfd("김밥천국") + " ", PAYEE_MAX)).isEqualTo("김밥천국");
+        assertThat(UserText.payee("\u3000 " + nfd("김밥천국") + "\u00A0", PAYEE_MAX)).isEqualTo("김밥천국");
         assertThat(UserText.payee("김밥 천국", PAYEE_MAX)).isEqualTo("김밥 천국");
     }
 
@@ -269,7 +269,7 @@ class UserTextTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"\t", "\n", "\r", "\u0000", "\u0085", " ", "​", "‮", "ㅤ"})
+    @ValueSource(strings = {"\t", "\n", "\r", "\u0000", "\u0085", "\u2028", "\u200B", "\u202E", "\u3164"})
     void payeeRejectsTheSameCharactersAsNames(String forbidden) {
         assertRejected(() -> UserText.payee("김밥" + forbidden + "천국", PAYEE_MAX), FieldErrorCode.INVALID_FORMAT);
     }
@@ -286,7 +286,7 @@ class UserTextTest {
 
     @Test
     void memoIsNotTrimmed() {
-        assertThat(UserText.memo("  점심 　", MEMO_MAX)).isEqualTo("  점심 　");
+        assertThat(UserText.memo("  점심 \u3000", MEMO_MAX)).isEqualTo("  점심 \u3000");
         assertThat(UserText.memo("   ", MEMO_MAX)).isEqualTo("   ");
         assertThat(UserText.memo("\n점심\n", MEMO_MAX)).isEqualTo("\n점심\n");
     }
@@ -310,8 +310,8 @@ class UserTextTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"\t", "\u000B", "\u000C", "\u0000", "\u007F", "\u0085", " ", " ", "​",
-            "‎", "﻿", "ㅤ", "⠀", "︀"})
+    @ValueSource(strings = {"\t", "\u000B", "\u000C", "\u0000", "\u007F", "\u0085", "\u2028", "\u2029", "\u200B",
+            "\u200E", "\uFEFF", "\u3164", "\u2800", "\uFE00"})
     void memoAllowsOnlyLineFeedBeyondNames(String forbidden) {
         InvalidRequestException e = catchThrowableOfType(InvalidRequestException.class,
                 () -> UserText.memo("점심" + forbidden + "저녁", MEMO_MAX));
@@ -325,12 +325,12 @@ class UserTextTest {
 
     @Test
     void storedPayeeIsAlignedTheSameWayWithoutRejecting() {
-        assertThat(UserText.comparablePayee(" " + nfd("김밥천국") + " ")).isEqualTo("김밥천국");
+        assertThat(UserText.comparablePayee(" " + nfd("김밥천국") + "\u00A0")).isEqualTo("김밥천국");
         assertThat(UserText.comparablePayee("")).isNull();
-        assertThat(UserText.comparablePayee("　")).isNull();
+        assertThat(UserText.comparablePayee("\u3000")).isNull();
         assertThat(UserText.comparablePayee(null)).isNull();
         // 이 규칙 전에 저장된 거부 글자는 지우지 않고 그대로 둔다. 비교에서 다른 값이 될 뿐 오류가 아니다.
-        assertThat(UserText.comparablePayee("김밥​천국")).isEqualTo("김밥​천국");
+        assertThat(UserText.comparablePayee("김밥\u200B천국")).isEqualTo("김밥\u200B천국");
     }
 
     @Test
