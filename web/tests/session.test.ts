@@ -197,6 +197,8 @@ describe('access token이 머무는 곳', () => {
     // 로그인했음을 다른 화면이 아는, 뜻이 없는 임의 값 하나만 남는다
     expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f]{32}$/) })
     expect(sessionStorage.length).toBe(0)
+    // localStorage와 sessionStorage의 어느 값에도 토큰이 없다(security 검토, #234)
+    expect(JSON.stringify([{ ...localStorage }, { ...sessionStorage }])).not.toMatch(/token-|eyJ/)
     // IndexedDB에는 토큰 없는 마지막 로그인 기록만 남는다(#234)
     await new Promise((resolve) => setTimeout(resolve, 30))
     const [loginRecords, ...rest] = await deviceContents()
