@@ -1,6 +1,6 @@
 import { useState, type MouseEvent, type ReactNode } from 'react'
 import { useParams } from 'react-router'
-import { currentUserId } from '../../api/session'
+import { sessionUserId } from '../../api/session'
 import { Button } from '../../components/Button'
 import FullScreenForm from '../../components/FullScreenForm'
 import LoadFailure from '../../components/LoadFailure'
@@ -101,8 +101,9 @@ function EditForm({ id, opened, waiting, onGone }: EditFormProps) {
   const showToast = useToast()
   const goBack = useGoBack(detailPath)
   const updating = useUpdateTransaction(id)
-  // 이 화면을 연 사용자. 보내는 순간의 사용자와 같은지 본다(거래 입력과 같다)
-  const [user] = useState(currentUserId)
+  // 이 화면을 연 사용자(동작의 주인). 보내는 순간의 사용자(토큰의 sub)와 같은지 요청 계층이 본다(거래 입력과 같다).
+  // 확인하지 못한 로그인이면 기록의 사용자이고, 같은 사용자로 확인돼야 보낸다(#234)
+  const [user] = useState(sessionUserId)
   const form = useTransactionForm('')
   const [filled, setFilled] = useState(false)
   if (opened && !filled) {

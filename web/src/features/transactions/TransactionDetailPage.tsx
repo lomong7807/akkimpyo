@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import { ApiError } from '../../api/apiError'
-import { currentUserId } from '../../api/session'
+import { sessionUserId } from '../../api/session'
 import Amount from '../../components/Amount'
 import { Button, ButtonLink } from '../../components/Button'
 import ConfirmDialog, { type ConfirmFailure } from '../../components/ConfirmDialog'
@@ -243,8 +243,9 @@ function DeleteAction({ transaction }: { transaction: TransactionDetail }) {
   const deletion = useDeleteTransaction(transaction.id)
   const offerUndo = useOfferUndo()
   const goBack = useGoBack(PARENT)
-  // 이 화면을 연 사용자. 보내는 순간의 사용자와 같은지 본다(거래 입력과 같다)
-  const [user] = useState(currentUserId)
+  // 이 화면을 연 사용자(동작의 주인). 보내는 순간의 사용자(토큰의 sub)와 같은지 요청 계층이 본다(거래 입력과 같다).
+  // 확인하지 못한 로그인이면 기록의 사용자이고, 같은 사용자로 확인돼야 보낸다(#234)
+  const [user] = useState(sessionUserId)
   const [asking, setAsking] = useState(false)
   const [failed, setFailed] = useState<DeleteFailure>()
   // 상태가 바뀌어 그려지기 전에 또 눌러도 요청은 하나다
