@@ -12,6 +12,7 @@ import { recordDom } from './support/recordDom'
 import { holdClock, passTime } from './support/testClock'
 import { createFakeLocks, installLocks, removeLocks } from './support/webLocks'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
+import { toastRegion } from './support/toast'
 
 const nameRequired = '이름을 입력해 주세요'
 const nameTooLong = '50자까지 쓸 수 있어요'
@@ -346,7 +347,7 @@ describe('저장', () => {
       '급여통장350,000원',
     ])
     expect(screen.getByText('자산 합계').parentElement!.textContent).toBe('자산 합계1,350,000원')
-    expect(screen.getByRole('status').textContent).toBe("'급여통장' 계좌를 추가했어요")
+    expect(toastRegion().textContent).toBe("'급여통장' 계좌를 추가했어요")
     expect(path(opened)).toBe('/accounts')
     expect(accounts.added).toEqual([
       {
@@ -422,7 +423,7 @@ describe('저장', () => {
     accounts.addResponse = () => HttpResponse.json(accountOf('맞춘 이름', 'BANK', 1), { status: 201 })
     const { user } = await openFromList()
     await fillAndSave(user)
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe("'맞춘 이름' 계좌를 추가했어요"))
+    await waitFor(() => expect(toastRegion().textContent).toBe("'맞춘 이름' 계좌를 추가했어요"))
   })
 
   it.each([
@@ -873,7 +874,7 @@ describe('닫기', () => {
     await opened.user.click(screen.getByRole('button', { name: '버리기' }))
     expect(await screen.findByText('자산 합계')).toBeTruthy()
     expect(accounts.added).toEqual([])
-    expect(screen.getByRole('status').textContent).toBe('')
+    expect(toastRegion().textContent).toBe('')
   })
 
   it('날짜를 고르는 시트의 Esc는 시트만 닫는다', async () => {
@@ -989,7 +990,7 @@ describe('막지 않는 경우', () => {
   it('토스트가 보이는 동안 로그아웃하면 이름이 남지 않는다', async () => {
     const opened = await openFromList()
     await fillAndSave(opened.user)
-    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('급여통장'))
+    await waitFor(() => expect(toastRegion().textContent).toContain('급여통장'))
     await logOutElsewhere()
     await loginHeading()
     expect(document.body.textContent).not.toContain('급여통장')

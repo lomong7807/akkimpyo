@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { ButtonLink } from '../components/Button'
 import Icon from '../components/Icon'
 import { holdKeyboard } from '../components/keyboardBridge'
@@ -12,10 +13,12 @@ interface SidebarProps {
   /** "거래 입력" 버튼이 여는 곳. 없으면(보기 전용) 버튼을 두지 않는다. */
   quickEntry?: NavigationItem
   onLogout: () => void
+  /** 맨 아래 묶음(보내지 않은 입력 줄, 마지막으로 맞춘 시각, 6.1). 창 높이가 모자라도 늘 보이게 붙여 둔다 */
+  bottom?: ReactNode
 }
 
 /** 로그아웃은 1A 동안 여기에 둔다. 프로필(M-02)이 들어오면 그 화면으로 옮긴다. */
-export default function Sidebar({ items, current, ledgerName, quickEntry, onLogout }: SidebarProps) {
+export default function Sidebar({ items, current, ledgerName, quickEntry, onLogout, bottom }: SidebarProps) {
   return (
     <div className={styles.sidebar}>
       {ledgerName && <p className={styles.ledgerName}>{ledgerName}</p>}
@@ -60,6 +63,7 @@ export default function Sidebar({ items, current, ledgerName, quickEntry, onLogo
           </button>
         </div>
       </nav>
+      {bottom && <div className={styles.bottom}>{bottom}</div>}
     </div>
   )
 }

@@ -16,6 +16,7 @@ import layout from './layout.module.css'
 import { isModalOpen } from './openModal'
 import { usePressShield } from './pressGuard'
 import { shellRiseElapsed, ShellShownContext } from './shellShown'
+import { ShellContext } from './ShellContext'
 import type { LeaveGuard } from './useLeaveGuard'
 import styles from './FullScreenForm.module.css'
 
@@ -48,6 +49,8 @@ export default function FullScreenForm({
 }: FullScreenFormProps) {
   const screen = useRef<HTMLDivElement>(null)
   const bottomArea = useRef<HTMLDivElement>(null)
+  // 연결 없음 띠는 머리 바로 아래(00-common 6.1). 동기화 상태 표시(B-04)는 전체 화면 입력에 없다
+  const { band } = use(ShellContext)
   useVisibleArea(screen, bottomArea)
   useRiseAfterShell(screen)
   useEscape(guard.close)
@@ -79,6 +82,7 @@ export default function FullScreenForm({
         </div>
         <h1 className={styles.title}>{title}</h1>
       </header>
+      {band}
       <main className={styles.main}>
         <form className={styles.form} noValidate onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
           <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>

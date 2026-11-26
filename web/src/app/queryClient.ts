@@ -1,5 +1,6 @@
-import { QueryCache, QueryClient, type QueryKey, type QueryMeta } from '@tanstack/react-query'
+import { onlineManager, QueryCache, QueryClient, type QueryKey, type QueryMeta } from '@tanstack/react-query'
 import { ApiError } from '../api/apiError'
+import { connection, onConnectionChange } from '../api/connection'
 
 // 다시 시도는 사용자가 누른다. 브라우저의 연결 신호를 보고 요청을 미뤄 두었다가 저절로 보내지도 않는다.
 const requestOnce = { retry: false, networkMode: 'always' } as const
@@ -21,7 +22,9 @@ export function createQueryClient({ onLedgerGone }: QueryClientOptions = {}): Qu
         if (ledgerId) onLedgerGone(ledgerId)
       },
     }),
-    defaultOptions: { queries: requestOnce, mutations: requestOnce },
+    // networkMode 'always'이면 TanStack이 refetchOnReconnect를 끄므로 조회에만 다시 켠다. 연결이 돌아오면 보이는 화면의 오래됐거나
+    // 실패한 조회를 다시 받는다(F-908, refetchOnReconnect 함수 참고). 동작(mutation)은 다시 하지 않는다
+    defaultOptions: { queries: { ...requestOnce, refetchOnReconnect: true }, mutations: requestOnce },
   })
 }
 
@@ -31,4 +34,17 @@ function goneLedgerOf(error: unknown, queryKey: QueryKey, meta: QueryMeta | unde
   if (error.status === 403 && error.code === 'NO_LONGER_MEMBER') return ledgerId
   if (error.status === 404 && meta?.ledgerList === true) return ledgerId
   return undefined
+}
+
+/**
+ * 연결이 돌아오면(api/connection의 판단) 보이는 화면의 조회를 다시 받는다(F-908, 00-common 4.3, architect #235 G). 브라우저 신호만이
+ * 아니라 확인 요청이나 X-Request-Id 응답으로 돌아온 연결에도 다시 받는다. 실패한 동작(mutation)은 저절로 다시 하지 않는다(retry false).
+ * 앱이 열려 있는 동안 한 번 부른다. 돌려받은 함수로 멈춘다.
+ */
+export function refetchOnReconnect(): () => void {
+  onlineManager.setEventListener((setOnline) => {
+    setOnline(connection() === 'online')
+    return onConnectionChange((next) => setOnline(next === 'online'))
+  })
+  return () => onlineManager.setEventListener(() => undefined)
 }

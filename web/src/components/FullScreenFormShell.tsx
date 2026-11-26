@@ -1,8 +1,9 @@
-import { useLayoutEffect, type ReactNode } from 'react'
+import { use, useLayoutEffect, type ReactNode } from 'react'
 import { Button } from './Button'
 import layout from './layout.module.css'
 import { usePressShield } from './pressGuard'
 import { markShellRise } from './shellShown'
+import { ShellContext } from './ShellContext'
 import { useGoBack } from './useGoBack'
 import styles from './FullScreenForm.module.css'
 
@@ -20,6 +21,7 @@ interface FullScreenFormShellProps {
  */
 export default function FullScreenFormShell({ title, parent, children }: FullScreenFormShellProps) {
   const goBack = useGoBack(parent)
+  const { band } = use(ShellContext)
   // 닫기는 앞 화면의 "뒤로"와 같은 자리다(FullScreenForm과 같다)
   usePressShield(true)
   useLayoutEffect(markShellRise, [])
@@ -31,6 +33,7 @@ export default function FullScreenFormShell({ title, parent, children }: FullScr
         </div>
         <h1 className={styles.title}>{title}</h1>
       </header>
+      {band}
       <main className={styles.main}>
         <div className={styles.form}>
           <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>{children}</div>

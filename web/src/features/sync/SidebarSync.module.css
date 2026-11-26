@@ -1,0 +1,26 @@
+/* 2-4: "보내지 않은 입력 {N}건"(color-text-secondary), 보낼 수 없음이 있으면 아랫줄(color-danger). 줄 자리 44px 이상 */
+.counts {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--size-touch);
+  padding-inline: var(--space-8);
+}
+
+.count {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+}
+
+.rejected {
+  color: var(--color-danger);
+}
+
+/* 2-3: "{시각}에 맞춤"(text-caption, color-text-secondary) */
+.time {
+  margin: 0;
+  padding-inline: var(--space-8);
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}

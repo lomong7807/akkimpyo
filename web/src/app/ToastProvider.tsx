@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router'
 import { afterModals, isModalOpen } from '../components/openModal'
-import { ToastContext, type ToastAction } from '../components/ToastContext'
+import { ToastContext, type ToastAction, type ToastOptions } from '../components/ToastContext'
 import { useScreenHandle } from './useScreenHandle'
 import styles from './ToastProvider.module.css'
 
@@ -18,6 +18,8 @@ interface ShownToast {
   id: number
   message: string
   action?: ToastAction
+  /** 이것이 끝나면 이어 보일 알림(behindAction) */
+  next?: string
 }
 
 /**
@@ -37,12 +39,21 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
     if (formPath !== undefined && !toast?.action) setToast(undefined)
   }
 
-  // 모달은 화면 전체를 덮고 그 밖은 읽히지 않으므로, 닫힌 뒤에 알린다
-  const showToast = useCallback((message: string, action?: ToastAction) => {
-    afterModals(() => setToast((last) => ({ id: (last?.id ?? 0) + 1, message, action })))
+  // 모달은 화면 전체를 덮고 그 밖은 읽히지 않으므로, 닫힌 뒤에 알린다.
+  // behindAction이면 되돌리기 토스트를 걷지 않고 그 뒤에 이어 보인다. 기다리는 알림은 새 토스트가 와도 이어 간다
+  const showToast = useCallback((message: string, action?: ToastAction, options?: ToastOptions) => {
+    afterModals(() =>
+      setToast((last) => {
+        if (options?.behindAction && last?.action) return { ...last, next: message }
+        return { id: (last?.id ?? 0) + 1, message, action, next: last?.next }
+      }),
+    )
   }, [])
 
-  const removeToast = useCallback(() => setToast(undefined), [])
+  const removeToast = useCallback(
+    () => setToast((last) => (last?.next === undefined ? undefined : { id: last.id + 1, message: last.next })),
+    [],
+  )
 
   return (
     <ToastContext value={showToast}>

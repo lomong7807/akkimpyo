@@ -6,7 +6,15 @@ export interface ToastAction {
   onAction: () => void
 }
 
-type ShowToast = (message: string, action?: ToastAction) => void
+export interface ToastOptions {
+  /**
+   * 되돌리기가 있는 토스트가 떠 있으면 걷지 않고 그것이 끝난 뒤에 보인다(되돌릴 기회를 빼앗지 않게). 사용자가 누른 동작이 아니라
+   * 저절로 끝난 일의 알림(자동 보내기의 200 알림, designer #235 Q1)에 쓴다.
+   */
+  behindAction?: boolean
+}
+
+type ShowToast = (message: string, action?: ToastAction, options?: ToastOptions) => void
 
 /** 토스트를 보이는 함수. 앱의 ToastProvider가 넘긴다. */
 export const ToastContext = createContext<ShowToast | undefined>(undefined)

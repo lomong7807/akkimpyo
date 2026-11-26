@@ -2,6 +2,7 @@ import { use, type ReactNode } from 'react'
 import { Button } from './Button'
 import layout from './layout.module.css'
 import { LedgerNameContext } from './LedgerNameContext'
+import { ShellContext } from './ShellContext'
 import { useGoBack } from './useGoBack'
 import styles from './Screen.module.css'
 
@@ -14,12 +15,15 @@ interface MainScreenProps {
 /** 주 화면: 탭의 첫 화면과 N 그룹. 상단 바에 장부 이름을 둔다. */
 export function MainScreen({ children, fullWidth = false }: MainScreenProps) {
   const ledgerName = use(LedgerNameContext)
+  const { band, syncStatus } = use(ShellContext)
   const width = fullWidth ? `${layout.contentWidth} ${layout.fullWidth}` : layout.contentWidth
   return (
     <>
       <header className={`${layout.contentWidth} ${styles.topBar} ${styles.ledgerBar}`}>
         {ledgerName && <p className={styles.ledgerName}>{ledgerName}</p>}
+        {syncStatus && <div className={styles.sync}>{syncStatus}</div>}
       </header>
+      {band}
       <main className={`${width} ${styles.content}`}>{children}</main>
     </>
   )
@@ -46,13 +50,19 @@ export function SubScreen({ children, ...titleBarProps }: TitleBarProps & { chil
 /** 하위 화면의 상단 바. 내용의 배치가 다른 화면은 이것만 쓴다. */
 export function TitleBar({ title, parent, action }: TitleBarProps) {
   const goBack = useGoBack(parent)
+  const { band, syncStatus } = use(ShellContext)
   return (
-    <header className={`${layout.contentWidth} ${styles.topBar} ${styles.titleBar}`}>
-      <div className={styles.back}>
-        <Button kind="icon" icon="CaretLeft" aria-label="뒤로" onClick={goBack} />
-      </div>
-      <h1 className={styles.title}>{title}</h1>
-      {action && <div className={styles.action}>{action}</div>}
-    </header>
+    <>
+      <header className={`${layout.contentWidth} ${styles.topBar} ${styles.titleBar}`}>
+        <div className={styles.back}>
+          <Button kind="icon" icon="CaretLeft" aria-label="뒤로" onClick={goBack} />
+        </div>
+        <h1 className={styles.title}>{title}</h1>
+        {/* 화면별 버튼의 왼쪽(6.1). 넓은 화면에서는 사이드바에 있다 */}
+        {syncStatus && <div className={`${styles.sync} ${styles.subSync}`}>{syncStatus}</div>}
+        {action && <div className={styles.action}>{action}</div>}
+      </header>
+      {band}
+    </>
   )
 }
