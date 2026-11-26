@@ -1,0 +1,15 @@
+/*
+ * 보이지 않고 누를 수 없지만 초점은 받는 칸. 글자가 16px보다 작으면 iPhone이 초점을 줄 때 화면을 키우므로 본문 글자를 쓴다.
+ */
+.bridge {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font: var(--text-body);
+  pointer-events: none;
+}

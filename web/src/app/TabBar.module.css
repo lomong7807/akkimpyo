@@ -53,3 +53,22 @@
     display: none;
   }
 }
+
+/* 칸 가운데에 놓는다. 그림자와 글자는 없다(owner 결정 11) */
+.quickEntry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  place-self: center;
+  width: var(--size-quick-entry);
+  height: var(--size-quick-entry);
+  border-radius: var(--radius-10);
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+  transition: transform var(--motion-press-duration);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.quickEntry:active {
+  transform: scale(var(--motion-press-scale));
+}
