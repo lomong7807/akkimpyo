@@ -5,7 +5,6 @@ import { delayed, type Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
 import { goOffline, goOnline } from './support/connection'
 import { untilOpened } from './support/dialog'
-import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { startTransactionDetail, type TransactionDetailServer } from './support/transactionDetail'
@@ -44,7 +43,6 @@ let detail: TransactionDetailServer
 
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   detail = startTransactionDetail(server, backend)

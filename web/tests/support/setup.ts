@@ -3,7 +3,8 @@ import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { afterAll, beforeEach, vi } from 'vitest'
 import { DEFAULT_NOW, setDeviceClock } from './clock'
-import { installDialog, untilUnshielded } from './dialog'
+import { installDialog } from './dialogElement'
+import { failOnLeftShields, watchShields } from './shieldCheck'
 
 // 테스트마다 기기 저장소를 비운다. 한 테스트 안에서 여는 탭들은 같은 저장소를 함께 쓴다
 beforeEach(() => {
@@ -36,8 +37,10 @@ if (typeof Element !== 'undefined') {
   }
 
   // 화면에서 빠진 뒤에도 덮개(pressGuard)는 시간이 다 될 때까지 남는다. 파일이 끝난 뒤 jsdom을 정리하고 나서 그 시계가
-  // 돌면 없어진 cancelAnimationFrame을 부르다 오류가 난다(PR #210 CI). 파일을 끝내기 전에 걷힐 때까지 기다린다.
-  afterAll(untilUnshielded)
+  // 돌면 없어진 cancelAnimationFrame을 부르다 오류가 난다(PR #210 CI). 파일을 끝내기 전에 남은 덮개를 확인한다.
+  // 기다리지 않는다. 가짜 시계면 보내 걷고, 그래도 남으면 남긴 테스트의 이름을 담아 바로 실패한다(8절 4)
+  watchShields()
+  afterAll(failOnLeftShields)
 }
 
 /**

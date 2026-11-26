@@ -1,5 +1,4 @@
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { createBrowserRouter, Link, useNavigate, type RouteObject } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -10,8 +9,8 @@ import { TextField } from '../src/components/TextField'
 import { useLeaveGuard } from '../src/components/useLeaveGuard'
 import { readCssRule } from './support/cssRule'
 import { shield, untilOpened, untilUnshielded } from './support/dialog'
-import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { recordDom } from './support/recordDom'
+import { setupUser } from './support/testClock'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
@@ -66,14 +65,12 @@ const routes: RouteObject[] = [
 let router: ReturnType<typeof createBrowserRouter>
 
 beforeEach(() => {
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   installMatchMedia(390)
 })
 
 afterEach(() => {
   cleanup()
-  stopGuardClock()
   router?.dispose()
   resetViewport()
   onSubmit.mockClear()
@@ -86,7 +83,7 @@ function openAt(path: string) {
   window.history.replaceState(null, '', path)
   router = createBrowserRouter(routes)
   render(<RouterProvider router={router} />)
-  return userEvent.setup()
+  return setupUser()
 }
 
 async function openFromList() {
@@ -103,7 +100,7 @@ const path = () => router.state.location.pathname
 const toggleBusy = () => fireEvent.click(screen.getByText('처리 바꾸기'))
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
-type User = ReturnType<typeof userEvent.setup>
+type User = ReturnType<typeof setupUser>
 
 /** 닫는 세 가지 길 */
 const ways: [string, (user: User) => Promise<unknown>][] = [

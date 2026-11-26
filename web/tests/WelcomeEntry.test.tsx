@@ -7,6 +7,7 @@ import { startCategories } from './support/categories'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
+import { holdClock, passTime, releaseClock } from './support/testClock'
 import { recordDom } from './support/recordDom'
 import { installMatchMedia } from './support/viewport'
 import { createFakeLocks, installLocks, removeLocks } from './support/webLocks'
@@ -33,7 +34,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  vi.useRealTimers()
   cleanup()
   removeLocks()
   vi.restoreAllMocks()
@@ -262,12 +262,12 @@ describe('정하는 동안', () => {
   /** 시계를 멈춘다. 요청은 흐른다. */
   function stopClock() {
     elapsed = 0
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
   }
 
   async function pass(ms: number) {
     elapsed += ms
-    await act(() => vi.advanceTimersByTimeAsync(ms))
+    await passTime(ms)
   }
 
   /** 시계를 멈춘 채로 `check`가 될 때까지 기다린다. 시계는 한 번에 1ms씩만 흐른다. */
@@ -296,7 +296,7 @@ describe('정하는 동안', () => {
     await pass(1)
     expect(document.body.textContent).toBe(loading)
     answer.answer(accountsBody())
-    vi.useRealTimers()
+    releaseClock()
     await welcome()
     expect(dom.sawText('최근 거래')).toBe(false)
     expect(dom.sawElement('nav')).toBe(false)
@@ -316,7 +316,7 @@ describe('정하는 동안', () => {
     await until(() => expect(accounts.requests).toHaveLength(1))
     expect(screen.getByText(loading)).toBe(text)
     list.answer(accountsBody(accountOf('통장', 'BANK', 0)))
-    vi.useRealTimers()
+    releaseClock()
     await home()
   })
 

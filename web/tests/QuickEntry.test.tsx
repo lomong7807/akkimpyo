@@ -6,8 +6,8 @@ import { canEdit } from '../src/features/me/me'
 import { meOf, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
 import { setDeviceClock } from './support/clock'
-import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
+import { passTime } from './support/testClock'
 import { readWebFile } from './support/webFile'
 import {
   amount,
@@ -29,7 +29,6 @@ let transactions: Transactions
 
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   localStorage.clear()
@@ -253,11 +252,10 @@ describe('키보드 올려 두기', () => {
     expect(bridge()).toBeNull()
   })
 
-  it('아무도 초점을 가져가지 않으면 잠시 뒤 걷는다', () => {
-    vi.useFakeTimers({ toFake: ['setTimeout'] })
+  it('아무도 초점을 가져가지 않으면 잠시 뒤 걷는다', async () => {
     holdKeyboard(new MouseEvent('click') as never)
     expect(bridge()).toBeTruthy()
-    vi.advanceTimersByTime(1000)
+    await passTime(1000)
     expect(bridge()).toBeNull()
   })
 

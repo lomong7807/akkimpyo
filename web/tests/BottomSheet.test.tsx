@@ -1,11 +1,10 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { StrictMode, useState } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import BottomSheet from '../src/components/BottomSheet'
 import { readCssRule } from './support/cssRule'
 import { untilOpened } from './support/dialog'
-import { startGuardClock, stopGuardClock } from './support/guardClock'
+import { setupUser } from './support/testClock'
 
 const overlayRule = (selector: string) => readCssRule('src/components/Overlay.module.css', selector)
 const rule = (selector: string) => readCssRule('src/components/BottomSheet.module.css', selector)
@@ -31,19 +30,14 @@ const dialog = () => screen.queryByRole<HTMLDialogElement>('dialog')
 const opener = () => screen.getByText('열기')
 
 async function openSheet() {
-  const user = userEvent.setup()
+  const user = setupUser()
   render(<Sample />)
   await user.click(opener())
   return user
 }
 
-beforeEach(() => {
-  startGuardClock()
-})
-
 afterEach(() => {
   cleanup()
-  stopGuardClock()
   vi.restoreAllMocks()
 })
 
@@ -65,7 +59,7 @@ describe('여는 것', () => {
   })
 
   it('두 번 그리는 개발 모드에서도 열린 채로 있다', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(
       <StrictMode>
         <Sample />
@@ -85,7 +79,7 @@ describe('닫는 것', () => {
     ['안의 동작', async (user) => user.click(screen.getByRole('button', { name: '고르기' }))],
     // 브라우저가 cancel을 막지 못하게 하고 닫는 경우(사용자 동작 없이 Esc를 두 번 누른 때)
     ['브라우저', async () => act(async () => dialog()!.close())],
-  ] as [string, (user: ReturnType<typeof userEvent.setup>) => Promise<unknown>][])(
+  ] as [string, (user: ReturnType<typeof setupUser>) => Promise<unknown>][])(
     '%s로 닫으면 사라지고 초점이 연 버튼으로 돌아간다',
     async (_, close) => {
       const user = await openSheet()
@@ -127,7 +121,7 @@ describe('닫는 것', () => {
   })
 
   it('열린 채 화면에서 빠져도 초점이 연 버튼으로 돌아간다', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     function Leaving() {
       const [left, setLeft] = useState(false)
       return (

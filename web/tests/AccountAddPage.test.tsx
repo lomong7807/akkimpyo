@@ -5,11 +5,11 @@ import { accountOf, accountsBody, startAccounts, type Accounts } from './support
 import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { untilOpened, untilUnshielded } from './support/dialog'
 import { setDeviceClock } from './support/clock'
-import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { holdClock, passTime } from './support/testClock'
 import { createFakeLocks, installLocks, removeLocks } from './support/webLocks'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { toastRegion } from './support/toast'
@@ -32,7 +32,6 @@ let accounts: Accounts
 
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:00:00+09:00')
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   installMatchMedia(390)
   installLocks(createFakeLocks())
@@ -47,7 +46,6 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
-  stopGuardClock()
   resetViewport()
   removeLocks()
   vi.restoreAllMocks()
@@ -791,11 +789,11 @@ describe('서버 오류와 지연', () => {
     accounts.addResponse = delayed().respond
     const { user } = await open()
     await fill(user)
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
     fireEvent.click(saveButton())
-    await act(() => vi.advanceTimersByTimeAsync(14_900))
+    await passTime(14_900)
     expect(screen.queryByRole('alert')).toBeNull()
-    await act(() => vi.advanceTimersByTimeAsync(200))
+    await passTime(200)
     expect(screen.getByRole('alert').textContent).toBe(failed)
   })
 

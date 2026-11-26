@@ -8,9 +8,9 @@ import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backe
 import { categoryOf, defaultExpenses, defaultIncomes, startCategories, type Categories } from './support/categories'
 import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
+import { holdClock, passTime, releaseClock } from './support/testClock'
 import { readWebFile } from './support/webFile'
 import { shield, untilOpened, untilUnshielded } from './support/dialog'
-import { resumeGuardClock, startGuardClock, stopGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -45,12 +45,11 @@ let backend: Backend
 let accounts: Accounts
 let categories: Categories
 
-/** 기기의 지금(서울). 시계를 다시 거는 테스트는 라이브러리의 시계(Date)도 이때에 둔다. */
+/** 기기의 지금(서울) */
 const NOW = '2026-11-26T12:00:00+09:00'
 
 beforeEach(() => {
   setDeviceClock(NOW)
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   installMatchMedia(390)
   installLocks(createFakeLocks())
@@ -64,10 +63,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  // 시계를 다시 건 테스트(불러오는 중, 15초)도 덮개 시계에서 화면을 정리해 빠진 뒤의 덮개를 걷는다
-  resumeGuardClock()
   cleanup()
-  stopGuardClock()
   resetViewport()
   removeLocks()
   vi.restoreAllMocks()
@@ -249,7 +245,7 @@ function primaryClass(): string {
 }
 
 describe('첫 장을 불러오는 중', () => {
-  const pass = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+  const pass = passTime
   // 진행 표시의 "1/2"(span)도 화면 읽기에서 감춘 것이라 뼈대 자리(div)만 고른다
   const skeletons = () => [...document.querySelectorAll('main div[aria-hidden="true"]')]
 
@@ -259,7 +255,7 @@ describe('첫 장을 불러오는 중', () => {
     categories.response = answer.respond
     const opened = await openApp('/welcome?step=2')
     await secondHeading()
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: Date.parse(NOW) })
+    holdClock()
     await act(() => opened.router.navigate('/welcome'))
     return { ...opened, answer }
   }
@@ -314,7 +310,7 @@ describe('첫 장을 불러오는 중', () => {
     const { answer } = await openLoading()
     await pass(300)
     answer.answer(HttpResponse.json({ items: [categoryOf('EXPENSE', '식비'), categoryOf('INCOME', '급여')] }))
-    vi.useRealTimers()
+    releaseClock()
     await screen.findByText('식비')
     expect(skeletons()).toEqual([])
     expect(screen.queryByText(loading)).toBeNull()
@@ -324,7 +320,7 @@ describe('첫 장을 불러오는 중', () => {
     const { answer } = await openLoading()
     const dom = recordDom()
     answer.answer(HttpResponse.json({ items: [categoryOf('EXPENSE', '식비')] }))
-    vi.useRealTimers()
+    releaseClock()
     await screen.findByText('식비')
     expect(dom.sawText(loading)).toBe(false)
   })
@@ -961,11 +957,11 @@ describe('서버 오류와 지연', () => {
     accounts.addResponse = delayed().respond
     const { user } = await openSecond()
     await fill(user)
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: Date.parse(NOW) })
+    holdClock()
     fireEvent.click(createButton())
-    await act(() => vi.advanceTimersByTimeAsync(14_900))
+    await passTime(14_900)
     expect(screen.queryByRole('alert')).toBeNull()
-    await act(() => vi.advanceTimersByTimeAsync(200))
+    await passTime(200)
     expect(screen.getByRole('alert').textContent).toBe(failed)
     expect(document.activeElement).toBe(retryButton())
   })

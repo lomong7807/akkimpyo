@@ -1,6 +1,7 @@
 import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { startAccounts } from './support/accounts'
 import { delayed, ledgerNameOf, startBackend, type Backend } from './support/backend'
 import { itemOf, listOf, listScreen, startList, type List } from './support/listScreen'
 import { startMockServer } from './support/mockServer'
@@ -369,6 +370,8 @@ describe('로그인하는 동안 다른 탭에서 로그아웃하면', () => {
 
 describe('가입하는 동안 다른 탭에서 로그아웃하면', () => {
   it('들어가지 않고 다시 시도할 수 있다', async () => {
+    // 막 가입한 사람의 장부에는 계좌가 없다. 다시 시도해 들어가면 첫 실행 안내에 머문다
+    startAccounts(server, backend)
     const signup = delayed()
     backend.signupResponse = signup.respond
     const opened = await open('/signup')

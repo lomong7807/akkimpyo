@@ -4,7 +4,6 @@ import type { Accounts } from './support/accounts'
 import { ledgerIdOf, type Backend } from './support/backend'
 import { untilOpened, untilUnshielded } from './support/dialog'
 import { setDeviceClock } from './support/clock'
-import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import {
@@ -45,7 +44,6 @@ let transactions: Transactions
 
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts, transactions } = startServer(server))
   localStorage.clear()
