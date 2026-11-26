@@ -10,6 +10,9 @@
 
 export type Connection = 'online' | 'offline'
 
+/** 연결 없음이 된 까닭. request는 요청이 응답 없이 실패했다(띠를 바로 띄운다), signal은 브라우저의 신호다(2초 뒤, #235) */
+export type OfflineCause = 'request' | 'signal'
+
 /** 우리 프록시가 만들고 서버가 응답에 싣는 헤더(ADR 005 결정 7, ADR 002 4절) */
 const REQUEST_ID = 'X-Request-Id'
 
@@ -21,6 +24,7 @@ const PROBE_TIMEOUT_MS = 10_000
 
 /** 앱을 열 때의 브라우저 신호에서 시작해, 그 뒤로는 신호와 요청 결과로 바꾼다. */
 let state: Connection = browserOffline() ? 'offline' : 'online'
+let cause: OfflineCause | undefined = state === 'offline' ? 'signal' : undefined
 const listeners = new Set<(next: Connection) => void>()
 
 /** 지켜보는 중인지. 확인 요청은 이때만 보낸다 */
@@ -34,7 +38,15 @@ export function connection(): Connection {
   return state
 }
 
-/** 연결이 바뀔 때마다 부른다. 돌려받은 함수로 끊는다. */
+/**
+ * 연결이 없으면 그 까닭(00-common 6.1 (6)). 신호로 없음인 동안 요청이 실패하면 request로 바뀐다. 연결이 있으면 없다.
+ * 화면은 연결 없음 띠를 바로 띄울지 2초 뒤에 띄울지 정하는 데 쓴다(architect #235 G).
+ */
+export function offlineCause(): OfflineCause | undefined {
+  return cause
+}
+
+/** 연결이나 없음의 까닭이 바뀔 때마다 부른다. 돌려받은 함수로 끊는다. */
 export function onConnectionChange(listener: (next: Connection) => void): () => void {
   listeners.add(listener)
   return () => {
@@ -44,7 +56,7 @@ export function onConnectionChange(listener: (next: Connection) => void): () => 
 
 /** 요청이 응답 없이 실패했다(http.ts만 부른다). */
 export function reportNoResponse(): void {
-  set('offline')
+  set('offline', 'request')
   if (watching && !browserOffline()) startProbing()
 }
 
@@ -64,7 +76,7 @@ export function watchConnection(): () => void {
   window.addEventListener(
     'offline',
     () => {
-      set('offline')
+      set('offline', 'signal')
       stopProbing()
     },
     { signal },
@@ -95,9 +107,12 @@ export function watchConnection(): () => void {
   }
 }
 
-function set(next: Connection) {
-  if (state === next) return
+/** 요청이 실패한 것은 신호보다 앞선다(이미 request면 신호로 바꾸지 않는다) */
+function set(next: Connection, why?: OfflineCause) {
+  const nextCause = next === 'online' ? undefined : cause === 'request' ? 'request' : why
+  if (state === next && cause === nextCause) return
   state = next
+  cause = nextCause
   listeners.forEach((notify) => notify(next))
 }
 

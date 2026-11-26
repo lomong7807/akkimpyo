@@ -666,7 +666,8 @@ describe('모양', () => {
   it('칸만 스크롤하고 저장 자리는 맨 아래다. 낮은 화면에서도 칸 하나는 보인다', () => {
     openAt('/new')
     const main = screen.getByRole('main')
-    expect(styleOf(main.parentElement!).getPropertyValue('grid-template-rows')).toBe('auto minmax(0, 1fr)')
+    // 머리, 연결 없음 띠(공통 틀 안에서만, 없으면 높이 0, #235), 칸
+    expect(styleOf(main.parentElement!).getPropertyValue('grid-template-rows')).toBe('auto auto minmax(0, 1fr)')
     expect(styleOf(main).getPropertyValue('grid-template-rows')).toBe('minmax(0, 1fr)')
     expect(styleOf(main).overflowY).toBe('auto')
     const form = styleOf(name().closest('form')!)

@@ -39,8 +39,9 @@ const apiInternals = {
 // 화면은 연결 상태를 읽기만 한다. 상태는 api 안의 요청 결과(http)와 앱 시작(app)이 바꾼다(4.3, architect #234 B).
 const connectionWrites = {
   regex: '^\\.\\.?/(.*/)?api/connection(\\.ts)?$',
-  allowImportNames: ['connection', 'onConnectionChange', 'Connection'],
-  message: '화면은 api의 connection에서 connection, onConnectionChange, Connection만 쓴다. 연결 상태는 api가 바꾼다.',
+  allowImportNames: ['connection', 'onConnectionChange', 'offlineCause', 'Connection', 'OfflineCause'],
+  message:
+    '화면은 api의 connection에서 connection, onConnectionChange, offlineCause와 그 타입만 쓴다. 연결 상태는 api가 바꾼다.',
 }
 
 const deviceInternals = {
