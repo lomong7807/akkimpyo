@@ -882,6 +882,65 @@ describe('거래가 없는 달(4.2)', () => {
   })
 })
 
+describe('받아 둔 목록을 다시 받는 때', () => {
+  /** 기기의 시계를 `seconds`초 앞으로 보낸다. 캐시가 오래됐는지는 이 시계로 정한다. */
+  const advance = (seconds: number) => vi.setSystemTime(Date.now() + seconds * 1000)
+
+  async function openTwoPages() {
+    list.months.set('2026-11', manyItems(51))
+    const opened = await openList()
+    await intersection.show()
+    await waitFor(() => expect(allRows()).toHaveLength(51))
+    await act(() => opened.router.navigate('/more'))
+    return opened
+  }
+
+  it('받은 지 30초 안에 돌아오면 다시 받지 않는다', async () => {
+    const opened = await openTwoPages()
+    const before = pageRequests().length
+    advance(29)
+    await act(() => opened.router.navigate('/transactions?month=2026-11'))
+    await settle(100)
+    expect(allRows()).toHaveLength(51)
+    expect(pageRequests()).toHaveLength(before)
+  })
+
+  it('30초가 지나 돌아오면 불러온 쪽을 모두 차례로 다시 받는다', async () => {
+    const opened = await openTwoPages()
+    const before = pageRequests().length
+    advance(31)
+    await act(() => opened.router.navigate('/transactions?month=2026-11'))
+    await waitFor(() => expect(pageRequests()).toHaveLength(before + 2))
+    expect(pageRequests().slice(before).map(({ cursor }) => cursor)).toEqual([null, '2026-11|50'])
+  })
+
+  // 창에 다시 초점이 오면(탭으로 돌아오면) 브라우저가 visibilitychange를 보낸다
+  it('30초가 지난 뒤 창에 초점이 오면 다시 받고, 30초 안이면 받지 않는다', async () => {
+    putNovember()
+    await openList()
+    const before = pageRequests().length
+    advance(29)
+    await act(async () => window.dispatchEvent(new Event('visibilitychange')))
+    await settle(100)
+    expect(pageRequests()).toHaveLength(before)
+    advance(2)
+    await act(async () => window.dispatchEvent(new Event('visibilitychange')))
+    await waitFor(() => expect(pageRequests()).toHaveLength(before + 1))
+  })
+
+  it('30초 안이어도 거래를 저장하면(장부 무효화) 다시 받는다', async () => {
+    putNovember()
+    const opened = await openList()
+    const before = pageRequests().length
+    await opened.user.click(within(screen.getByRole('navigation', { name: '주 메뉴' })).getByRole('link', { name: '거래 입력' }))
+    await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+    await waitFor(() => expect(accountField().textContent).not.toBe(''))
+    await saveAmount(opened.user)
+    await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-11'))
+    await waitFor(() => expect(pageRequests().length).toBeGreaterThan(before))
+  })
+})
+
 describe('상세에서 뒤로 돌아오면', () => {
   it('달과 불러온 줄이 그대로이고 뼈대를 거치지 않는다', async () => {
     list.months.set('2026-10', manyItems(51, () => '2026-10-15'))
