@@ -1,7 +1,8 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import Skeleton, { SkeletonBar } from '../src/components/Skeleton'
+import Skeleton, { LoadingStatus, SkeletonBar, SkeletonSpace } from '../src/components/Skeleton'
+import { useLoadingMessage } from '../src/components/useLoadingMessage'
 import { recordDom } from './support/recordDom'
 import { readWebFile } from './support/webFile'
 
@@ -106,5 +107,42 @@ describe('뼈대 막대', () => {
 
   it('멈춰 있다', () => {
     expect(readWebFile('src/components/Skeleton.module.css')).not.toMatch(/animation|transition|gradient|@keyframes/)
+  })
+})
+
+describe('실제 내용 사이에 나뉜 뼈대', () => {
+  function Split() {
+    const message = useLoadingMessage()
+    return (
+      <main>
+        <LoadingStatus message={message} />
+        <h2>지출</h2>
+        <SkeletonSpace shown={message !== undefined}>
+          <span>막대</span>
+        </SkeletonSpace>
+        <h2>수입</h2>
+        <SkeletonSpace shown={message !== undefined}>
+          <span>막대</span>
+        </SkeletonSpace>
+      </main>
+    )
+  }
+  const spaces = () => screen.getAllByText('막대').map((bar) => bar.parentElement!)
+
+  it('300ms 전에도 자리를 차지하되 보이지 않고, 그 뒤 모두 함께 보인다', () => {
+    render(<Split />)
+    expect(spaces().map((space) => getComputedStyle(space).visibility)).toEqual(['hidden', 'hidden'])
+    pass(299)
+    expect(spaces().map((space) => getComputedStyle(space).visibility)).toEqual(['hidden', 'hidden'])
+    pass(1)
+    expect(spaces().map((space) => getComputedStyle(space).visibility)).not.toContain('hidden')
+  })
+
+  it('알림은 한 곳에서 한 번이고 뼈대는 읽히지 않는다. 소제목은 그대로 읽힌다', () => {
+    render(<Split />)
+    pass(300)
+    expect(screen.getAllByRole('status').map((status) => status.textContent)).toEqual([loading])
+    expect(spaces().every((space) => space.getAttribute('aria-hidden') === 'true')).toBe(true)
+    expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['지출', '수입'])
   })
 })
