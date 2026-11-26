@@ -43,8 +43,7 @@ export default function FullScreenForm({
 }: FullScreenFormProps) {
   const screen = useRef<HTMLDivElement>(null)
   const bottomArea = useRef<HTMLDivElement>(null)
-  useVisibleArea(screen)
-  useToastAboveBottom(screen, bottomArea)
+  useVisibleArea(screen, bottomArea)
   useEscape(guard.close)
   // 닫기는 앞 화면의 "뒤로", 저장은 하단 탭과 같은 자리다
   usePressShield(true)
@@ -119,21 +118,32 @@ function isComposing(event: KeyboardEvent): boolean {
   return event.isComposing || event.keyCode === 229
 }
 
+/** 저장 자리의 윗선을 화면 아래에서 잰 거리. 토스트(ToastProvider)가 이 화면에 남으면 그 위 16px에 놓인다. */
+const TOAST_ABOVE_FORM = '--toast-above-form'
+
 /**
  * 화면 키보드가 올라오면 화면을 보이는 영역에 맞춘다. 브라우저는 키보드가 올라와도 화면 높이(dvh)를 줄이지 않는다.
  * 다른 화면의 배치까지 바꾸는 viewport의 interactive-widget은 쓰지 않는다.
+ *
+ * 되돌리기가 있는 토스트는 이 화면을 열어도 걷지 않고 저장 자리 위에 남는다(00-common 5.7, designer 결정 2026-11-26).
+ * 토스트는 이 화면 밖에 있어 저장 자리의 윗선을 문서의 맨 위 요소에 알린다. 저장 자리는 화면 아래에 붙어 있으므로
+ * 저장 자리의 높이에 보이는 영역 아래의 틈(화면 키보드)을 더해 센다. 화면이 올라오는 움직임(translate) 중에도 맞다.
+ * 저장 자리의 높이는 오류 문구와 글자 크기에 따라 바뀌므로 크기가 바뀔 때마다 다시 잰다.
  */
-function useVisibleArea(screen: RefObject<HTMLElement | null>) {
+function useVisibleArea(screen: RefObject<HTMLElement | null>, bottom: RefObject<HTMLElement | null>) {
   useLayoutEffect(() => {
     const viewport = window.visualViewport
-    if (!viewport) return
     const element = screen.current!
+    const area = bottom.current!
+    const root = document.documentElement
 
     function fit() {
       // 두 손가락으로 확대해 보는 것은 키보드가 아니다
-      const zoomed = Math.round(viewport!.scale * 100) !== 100
-      element.style.setProperty('--visible-top', zoomed ? null : `${viewport!.offsetTop}px`)
-      element.style.setProperty('--visible-height', zoomed ? null : `${viewport!.height}px`)
+      const zoomed = !viewport || Math.round(viewport.scale * 100) !== 100
+      element.style.setProperty('--visible-top', zoomed ? null : `${viewport.offsetTop}px`)
+      element.style.setProperty('--visible-height', zoomed ? null : `${viewport.height}px`)
+      const gap = zoomed ? 0 : Math.max(0, root.clientHeight - viewport.offsetTop - viewport.height)
+      root.style.setProperty(TOAST_ABOVE_FORM, `${area.offsetHeight + gap}px`)
     }
 
     function fitAndReveal() {
@@ -146,38 +156,14 @@ function useVisibleArea(screen: RefObject<HTMLElement | null>) {
     }
 
     fit()
-    viewport.addEventListener('resize', fitAndReveal)
-    viewport.addEventListener('scroll', fit)
-    return () => {
-      viewport.removeEventListener('resize', fitAndReveal)
-      viewport.removeEventListener('scroll', fit)
-    }
-  }, [screen])
-}
-
-/** 저장 자리의 윗선을 화면 아래에서 잰 거리. 토스트(ToastProvider)가 이 화면에 남으면 그 위 16px에 놓인다. */
-const TOAST_ABOVE_FORM = '--toast-above-form'
-
-/**
- * 되돌리기가 있는 토스트는 이 화면을 열어도 걷지 않고 저장 자리 위에 남는다(00-common 5.7, designer 결정 2026-11-26).
- * 저장 자리의 높이는 오류 문구와 글자 크기에 따라, 자리는 화면 키보드에 따라 바뀌므로 둘의 크기가 바뀔 때마다 다시 잰다.
- * 토스트는 이 화면 밖에 있어 화면의 요소가 아니라 문서의 맨 위 요소에 알린다.
- */
-function useToastAboveBottom(screen: RefObject<HTMLElement | null>, bottom: RefObject<HTMLElement | null>) {
-  useLayoutEffect(() => {
-    const root = document.documentElement
-    const area = bottom.current!
-
-    function place() {
-      root.style.setProperty(TOAST_ABOVE_FORM, `${root.clientHeight - area.getBoundingClientRect().top}px`)
-    }
-
-    place()
-    const observer = new ResizeObserver(place)
-    observer.observe(screen.current!)
+    const observer = new ResizeObserver(fit)
     observer.observe(area)
+    viewport?.addEventListener('resize', fitAndReveal)
+    viewport?.addEventListener('scroll', fit)
     return () => {
       observer.disconnect()
+      viewport?.removeEventListener('resize', fitAndReveal)
+      viewport?.removeEventListener('scroll', fit)
       root.style.removeProperty(TOAST_ABOVE_FORM)
     }
   }, [screen, bottom])

@@ -508,12 +508,12 @@ describe('화면 키보드', () => {
 describe('남은 토스트의 자리', () => {
   const resized: (() => void)[] = []
   const observed: Element[] = []
-  let saveTop = 772
+  let bottomHeight = 72
 
   beforeEach(() => {
     resized.length = 0
     observed.length = 0
-    saveTop = 772
+    bottomHeight = 72
     vi.stubGlobal(
       'ResizeObserver',
       class {
@@ -530,27 +530,55 @@ describe('남은 토스트의 자리', () => {
     )
     vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(844)
     // 저장 자리는 양식의 마지막 칸이다
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      const isBottom = this.parentElement?.tagName === 'FORM' && this.parentElement.lastElementChild === this
-      return { top: isBottom ? saveTop : 0 } as DOMRect
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.parentElement?.tagName === 'FORM' && this.parentElement.lastElementChild === this ? bottomHeight : 0
     })
   })
+
+  function installVisualViewport(height: number) {
+    const viewport = Object.assign(new EventTarget(), { height, offsetTop: 0, scale: 1 })
+    vi.stubGlobal('visualViewport', viewport)
+    return (next: Partial<{ height: number; offsetTop: number; scale: number }>, type = 'resize') => {
+      Object.assign(viewport, next)
+      act(() => void viewport.dispatchEvent(new Event(type)))
+    }
+  }
 
   const offset = () => document.documentElement.style.getPropertyValue('--toast-above-form')
   const bottomArea = () => screen.getByRole('button', { name: '저장' }).parentElement!
 
-  it('저장 자리의 윗선을 화면 아래에서 잰 거리로 알린다', () => {
+  it('저장 자리의 높이를 알린다. 화면이 올라오는 움직임과 상관없다', () => {
+    vi.stubGlobal('visualViewport', null)
     openAt('/new')
     expect(offset()).toBe('72px')
   })
 
-  it('저장 자리나 화면의 크기가 바뀌면(오류 문구, 화면 키보드) 다시 잰다', () => {
+  it('화면 키보드가 올라오면 보이는 영역 아래의 틈을 더한다', () => {
+    const change = installVisualViewport(844)
     openAt('/new')
-    expect(observed).toContain(bottomArea())
-    expect(observed).toContain(screen.getByRole('main').parentElement)
-    saveTop = 700
+    expect(offset()).toBe('72px')
+    change({ height: 508 })
+    expect(offset()).toBe(`${72 + 844 - 508}px`)
+    change({ offsetTop: 120 }, 'scroll')
+    expect(offset()).toBe(`${72 + 844 - 508 - 120}px`)
+    change({ height: 844, offsetTop: 0 })
+    expect(offset()).toBe('72px')
+  })
+
+  it('두 손가락으로 확대해 보는 동안에는 틈을 더하지 않는다', () => {
+    const change = installVisualViewport(844)
+    openAt('/new')
+    change({ height: 422, scale: 2 })
+    expect(offset()).toBe('72px')
+  })
+
+  it('저장 자리의 크기가 바뀌면(오류 문구, 글자 크기) 다시 잰다', () => {
+    vi.stubGlobal('visualViewport', null)
+    openAt('/new')
+    expect(observed).toEqual([bottomArea()])
+    bottomHeight = 120
     act(() => resized.forEach((callback) => callback()))
-    expect(offset()).toBe('144px')
+    expect(offset()).toBe('120px')
   })
 
   it('화면을 떠나면 지우고 더 재지 않는다', async () => {
