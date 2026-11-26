@@ -2,7 +2,10 @@ import { createElement, useEffect, useState, type ComponentType, type ReactNode 
 import LoadFailure from '../components/LoadFailure'
 import { ShellShownContext } from '../components/shellShown'
 
-/** 화면 코드를 받지 못해 새로고침했다는 이 탭의 표시. 새로고침은 한 탭에서 한 번만 하고, 화면 코드를 받으면 지운다(architect #251). */
+/**
+ * 화면 코드를 받지 못해 새로고침했다는 이 탭의 표시. 새로고침은 한 탭에서 한 번만 하고, 열린 화면이 자기 코드를 받으면 지운다
+ * (architect #251). 미리 받기가 다른 화면의 코드를 받은 것으로는 지우지 않는다. 지우면 받지 못하는 화면에서 새로고침이 되풀이된다.
+ */
 const RELOADED = 'akkimpyo-screen-reload'
 
 export interface ScreenShell {
@@ -38,11 +41,7 @@ export function lazyScreen(load: () => Promise<{ default: ComponentType }>, shel
 
   function fetchScreen(): Promise<ComponentType> {
     loading ??= load().then(
-      (module) => {
-        loaded = module.default
-        forgetReload()
-        return loaded
-      },
+      (module) => (loaded = module.default),
       (error: unknown) => {
         // 실패는 남기지 않는다. 다음에 열거나 다시 시도하면 새로 받는다
         loading = undefined
@@ -59,24 +58,23 @@ export function lazyScreen(load: () => Promise<{ default: ComponentType }>, shel
     const [failed, setFailed] = useState(false)
     const [retrying, setRetrying] = useState(false)
 
+    function arrive(component: ComponentType) {
+      forgetReload()
+      setScreen(() => component)
+    }
+
     useEffect(() => {
       if (screen) return
-      fetchScreen().then(
-        (component) => setScreen(() => component),
-        () => setFailed(true),
-      )
+      fetchScreen().then(arrive, () => setFailed(true))
     }, [screen])
 
     function retry() {
       setRetrying(true)
-      fetchScreen().then(
-        (component) => setScreen(() => component),
-        () => {
-          // 연결이 있는데도 또 받지 못하면 배포로 파일이 바뀐 것으로 본다
-          if (navigator.onLine !== false && reloadOnce()) return
-          setRetrying(false)
-        },
-      )
+      fetchScreen().then(arrive, () => {
+        // 연결이 있는데도 또 받지 못하면 배포로 파일이 바뀐 것으로 본다. WebKit은 MIME이 틀려 실패한 모듈을 다시 받지 않는다
+        if (navigator.onLine !== false && reloadOnce()) return
+        setRetrying(false)
+      })
     }
 
     if (screen) {

@@ -194,7 +194,23 @@ describe('화면 코드를 받지 못하면', () => {
     expect(reload).not.toHaveBeenCalled()
   })
 
-  it('받으면 새로고침 표시를 지운다', async () => {
+  it('미리 받기가 받은 것으로는 새로고침 표시를 지우지 않는다(받지 못하는 화면에서 되풀이하지 않게)', async () => {
+    sessionStorage.setItem(RELOADED, '1')
+    const other = screenCode()
+    lazyScreen(other.load, shell).preload()
+    await other.arrive()
+    expect(sessionStorage.getItem(RELOADED)).not.toBeNull()
+    const user = userEvent.setup()
+    const code = screenCode()
+    const { Screen } = lazyScreen(code.load, shell)
+    render(<Screen />)
+    await code.fail()
+    await user.click(retryButton())
+    await code.fail()
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('열린 화면이 자기 코드를 받으면 새로고침 표시를 지운다', async () => {
     sessionStorage.setItem(RELOADED, '1')
     const code = screenCode()
     const { Screen } = lazyScreen(code.load, shell)
