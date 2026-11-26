@@ -14,6 +14,7 @@ const files: Record<IconName, string> = {
   Eye: 'eye',
   EyeSlash: 'eye-slash',
   Info: 'info',
+  ListBullets: 'list-bullets',
   MagnifyingGlass: 'magnifying-glass',
   Plus: 'plus',
   SignOut: 'sign-out',
