@@ -5,7 +5,7 @@ import Field, { type FieldLabels } from './Field'
 import styles from './AmountField.module.css'
 
 /** 최대 자릿수(P-201)를 넘는 입력을 막을 때의 문구 */
-export const amountTooLarge = '9,999,999,999원까지 입력할 수 있어요.'
+export const amountTooLarge = '9,999,999,999원까지 입력할 수 있어요'
 
 interface AmountFieldProps extends FieldLabels {
   /** 부호를 뺀 금액(원). 비었으면 없다. */

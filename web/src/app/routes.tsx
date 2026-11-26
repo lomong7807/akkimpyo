@@ -14,6 +14,7 @@ import SessionProvider from './SessionProvider'
 import SignedInArea from './SignedInArea'
 import SignedOutArea from './SignedOutArea'
 import SignupRoute from './SignupRoute'
+import WelcomeRoute from './WelcomeRoute'
 
 /** 주소는 화면설계서 00-common 12절을 따른다. 화면을 만드는 이슈가 자기 주소를 더한다. */
 export const routes: RouteObject[] = [
@@ -41,6 +42,8 @@ export const routes: RouteObject[] = [
         element: <SignedInArea />,
         children: [
           { path: '/', element: <Navigate to="/home" replace /> },
+          // 공통 틀이 없다(가입 A-03과 같은 틀)
+          { path: '/welcome', element: <WelcomeRoute /> },
           {
             element: <LedgerLayout />,
             children: [

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { accountNameLength, newAccountValues, toNewAccount, validateAccount } from '../src/features/accounts/accountForm'
+import {
+  accountAddMessages,
+  accountNameLength,
+  newAccountValues,
+  toNewAccount,
+  validateAccount,
+} from '../src/features/accounts/accountForm'
 
 const values = { name: '급여통장', type: 'BANK', openingBalance: 350000, negative: false, openingDate: '2026-11-26' } as const
 
@@ -25,10 +31,10 @@ describe('검사', () => {
   })
 
   it.each([
-    ['비었음', '', '이름을 입력해 주세요.'],
-    ['공백류뿐', ' \u{A0}\u{3000}', '이름을 입력해 주세요.'],
-    ['51자', '가'.repeat(51), '50자까지 쓸 수 있어요.'],
-    ['코드포인트로 센 51자', '\u{1F600}'.repeat(51), '50자까지 쓸 수 있어요.'],
+    ['비었음', '', '이름을 입력해 주세요'],
+    ['공백류뿐', ' \u{A0}\u{3000}', '이름을 입력해 주세요'],
+    ['51자', '가'.repeat(51), '50자까지 쓸 수 있어요'],
+    ['코드포인트로 센 51자', '\u{1F600}'.repeat(51), '50자까지 쓸 수 있어요'],
     ['보이지 않는 글자', '급여\u{200B}통장', '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'],
     ['제어 문자', '급여\u{0007}통장', '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'],
     ['쓸 수 없는 글자가 있는 51자', '\u{200B}' + '가'.repeat(50), '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'],
@@ -54,7 +60,7 @@ describe('검사', () => {
   })
 
   it('기준일이 비었으면 거부한다', () => {
-    expect(validateAccount({ ...values, openingDate: '' }).openingDate).toBe('기준일을 골라 주세요.')
+    expect(validateAccount({ ...values, openingDate: '' }).openingDate).toBe('기준일을 골라 주세요')
   })
 
   it('이름의 글자 수는 앞뒤의 공백류를 빼고 조합형으로 센다', () => {
@@ -89,5 +95,38 @@ describe('보낼 값', () => {
       openingBalance: 350000,
       openingDate: '2026-11-26',
     })
+  })
+})
+
+describe('화면이 정한 문구', () => {
+  // 첫 실행 안내(C-02)처럼 같은 검사를 다른 문구로 쓰는 화면
+  const messages = {
+    ...accountAddMessages,
+    nameRequired: '계좌 이름을 입력해 주세요',
+    nameTooLong: '50자까지 쓸 수 있어요',
+    dateRequired: '기준일을 골라 주세요',
+  }
+
+  it.each([
+    ['빈 이름', { name: '' }, 'name', '계좌 이름을 입력해 주세요'],
+    ['51자', { name: '가'.repeat(51) }, 'name', '50자까지 쓸 수 있어요'],
+    ['바꾸지 않은 문구', { name: '급여\u{200B}통장' }, 'name', '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'],
+    ['빈 금액', { openingBalance: undefined }, 'openingBalance', '금액을 입력해 주세요. 없으면 0을 적어요.'],
+    ['빈 기준일', { openingDate: '' }, 'openingDate', '기준일을 골라 주세요'],
+  ] as const)('%s', (_, changed, field, message) => {
+    expect(validateAccount({ ...values, ...changed }, messages)[field]).toBe(message)
+  })
+
+  it('주지 않으면 계좌 추가(G-02)의 문구다', () => {
+    expect(validateAccount({ ...values, name: '' }).name).toBe('이름을 입력해 주세요')
+  })
+})
+
+describe('계좌 추가 칸 오류의 마침표(00-common 3.1)', () => {
+  // 한 문장짜리에는 찍지 않고, 두 문장 이상이면 문장마다 찍는다
+  it.each(Object.entries(accountAddMessages))('%s: %s', (_, message) => {
+    const sentences = message.split('. ')
+    if (sentences.length === 1) expect(message.endsWith('.')).toBe(false)
+    else expect(message.endsWith('.')).toBe(true)
   })
 })

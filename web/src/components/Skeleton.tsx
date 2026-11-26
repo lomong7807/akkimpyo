@@ -10,11 +10,33 @@ export default function Skeleton({ children }: { children: ReactNode }) {
   const message = useLoadingMessage()
   return (
     <>
-      <p role="status" className={styles.announcement}>
-        {message}
-      </p>
+      <LoadingStatus message={message} />
       {message && <div aria-hidden="true">{children}</div>}
     </>
+  )
+}
+
+/**
+ * 화면 읽기에만 "불러오고 있어요."를 알리는 곳. 뼈대가 실제 내용(소제목 등) 사이에 나뉜 화면은
+ * useLoadingMessage의 글을 이것 하나에 넘기고 뼈대는 SkeletonSpace로 나눠 둔다.
+ */
+export function LoadingStatus({ message }: { message: string | undefined }) {
+  return (
+    <p role="status" className={styles.announcement}>
+      {message}
+    </p>
+  )
+}
+
+/**
+ * 아래에 다른 내용이 있는 뼈대 자리. 300ms 전에도 같은 자리를 비워 두어, 뼈대가 나타날 때 아래 내용이 밀리지 않는다.
+ * `shown`은 useLoadingMessage의 글이 있는지다.
+ */
+export function SkeletonSpace({ shown, children }: { shown: boolean; children: ReactNode }) {
+  return (
+    <div aria-hidden="true" className={shown ? undefined : styles.reserved}>
+      {children}
+    </div>
   )
 }
 

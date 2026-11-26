@@ -9,6 +9,11 @@
   white-space: nowrap;
 }
 
+/* 300ms 전에는 자리만 차지하고 보이지 않는다 */
+.reserved {
+  visibility: hidden;
+}
+
 .name,
 .amount {
   flex: none;

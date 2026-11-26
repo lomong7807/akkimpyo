@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { ledgerKey } from '../me/ledgerKey'
 import { fetchAccounts } from './accounts'
@@ -8,8 +8,13 @@ export function accountsKey(ledgerId: string) {
   return ledgerKey(ledgerId, 'accounts')
 }
 
+/** 장부의 계좌 목록을 받는 법. 현재 장부를 정하기 전(장부에 속한 화면의 문)에도 같은 캐시를 쓰도록 나눠 둔다. */
+export function accountsQuery(ledgerId: string) {
+  return queryOptions({ queryKey: accountsKey(ledgerId), queryFn: () => fetchAccounts(ledgerId) })
+}
+
 /** 현재 장부의 계좌 목록 */
 export function useAccounts() {
   const ledger = useCurrentLedger()
-  return useQuery({ queryKey: accountsKey(ledger.id), queryFn: () => fetchAccounts(ledger.id) })
+  return useQuery(accountsQuery(ledger.id))
 }

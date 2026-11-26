@@ -1,0 +1,138 @@
+/*
+ * 휴대폰 배치에서는 내용만 스크롤하고 버튼을 화면 맨 아래에 고정한다. 고정한 영역은 가입(A-03 (7))과 같다.
+ * 화면 키보드가 올라와도 키보드 위로 올리지 않는다(dvh는 키보드로 줄지 않는다).
+ * 화면이 낮고 글자가 커도 내용 자리를 남긴다. 그래도 넘치면 화면 전체를 스크롤한다.
+ */
+.screen {
+  display: grid;
+  grid-template-rows: minmax(calc(2 * var(--size-field)), 1fr) auto;
+  height: 100dvh;
+}
+
+.content {
+  padding-block: calc(var(--space-24) + env(safe-area-inset-top)) var(--space-24);
+  overflow-y: auto;
+}
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding-block: var(--space-12) calc(var(--space-12) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.progress {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}
+
+/* 화면 읽기에만 읽힌다 */
+.spoken {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.title {
+  margin-top: var(--space-8);
+}
+
+.group {
+  margin-top: var(--space-24);
+}
+
+.groupTitle {
+  margin-bottom: var(--space-8);
+  font: var(--text-label);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 칩 자리의 뼈대: 64x24 막대 다섯 개씩 두 줄. 좁은 화면에서도 두 줄을 지키도록 막대가 줄어든다 */
+.chipBars {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, calc(2 * var(--space-32))));
+  gap: var(--space-8);
+}
+
+.chipBar {
+  height: var(--size-chip);
+  border-radius: var(--radius-full);
+  background-color: var(--color-border);
+}
+
+.note {
+  margin-top: var(--space-24);
+  margin-bottom: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}
+
+.description {
+  margin-top: var(--space-8);
+  margin-bottom: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  margin-top: var(--space-24);
+}
+
+/* 설명은 "건너뛰기"의 누르는 영역(44px) 바로 아래에 붙인다 */
+.skip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.skipNote {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  text-align: center;
+}
+
+/* 넓은 화면: 폭 480px로 가운데, 위 40px. 버튼은 내용 아래 24px에 면과 선 없이 둔다 */
+@media (width >= 1024px) {
+  .page {
+    width: 100%;
+    /* 좌우 여백 24px을 뺀 내용 폭이 480px이다 */
+    max-width: calc(var(--width-welcome) + 2 * var(--space-24));
+    margin-inline: auto;
+    padding-block: calc(var(--space-40) + env(safe-area-inset-top)) calc(var(--space-24) + env(safe-area-inset-bottom));
+  }
+
+  .screen {
+    display: block;
+    height: auto;
+  }
+
+  .content {
+    padding-block: 0;
+    overflow-y: visible;
+  }
+
+  .bottom {
+    padding-top: var(--space-24);
+    padding-bottom: 0;
+    border-top: 0;
+    background-color: transparent;
+  }
+}

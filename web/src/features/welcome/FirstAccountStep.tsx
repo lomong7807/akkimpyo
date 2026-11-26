@@ -1,0 +1,64 @@
+import { useId, type Ref } from 'react'
+import { Button } from '../../components/Button'
+import RetryMessage from '../../components/RetryMessage'
+import AccountFields, { type AccountFieldTexts } from '../accounts/AccountFields'
+import type { FirstAccount } from './useFirstAccount'
+import WelcomeStep from './WelcomeStep'
+import styles from './Welcome.module.css'
+
+/** C-02 (8), (11)의 문구. 종류와 시작 잔액은 계좌 추가(G-02)와 같다(planner 결정 #102). */
+const firstAccountTexts: AccountFieldTexts = {
+  nameLabel: '계좌 이름',
+  namePlaceholder: '예: 국민은행 통장',
+  dateHelp: '이날부터의 거래가 잔액에 반영돼요.',
+}
+
+interface FirstAccountStepProps {
+  heading: Ref<HTMLHeadingElement>
+  account: FirstAccount
+}
+
+/** 둘째 장: 첫 계좌 만들기(C-02 (7)~(13)) */
+export default function FirstAccountStep({ heading, account }: FirstAccountStepProps) {
+  const { form, busy, pressed, failed, create, skip, retry, createButton, skipButton } = account
+  const skipNoteId = useId()
+  return (
+    <WelcomeStep
+      step={2}
+      title="첫 계좌를 만들어 주세요"
+      heading={heading}
+      onSubmit={create}
+      bottom={
+        <>
+          {/* 초점은 옮기지 않는다(가입 A-03과 같다). 문구는 role="alert"로 읽힌다 */}
+          {failed && (
+            <RetryMessage onRetry={retry}>문제가 생겨 계좌를 만들지 못했어요. 잠시 후 다시 시도해 주세요.</RetryMessage>
+          )}
+          <Button ref={createButton} kind="primary" type="submit" busy={busy && pressed === 'create'} disabled={busy}>
+            계좌 만들기
+          </Button>
+          <div className={styles.skip}>
+            <Button
+              ref={skipButton}
+              kind="text"
+              busy={busy && pressed === 'skip'}
+              disabled={busy}
+              aria-describedby={skipNoteId}
+              onClick={skip}
+            >
+              건너뛰기
+            </Button>
+            <p id={skipNoteId} className={styles.skipNote}>
+              &quot;현금&quot; 계좌를 만들고 시작해요.
+            </p>
+          </div>
+        </>
+      }
+    >
+      <p className={styles.description}>자주 쓰는 통장이나 카드 하나면 돼요. 나머지는 나중에 더할 수 있어요.</p>
+      <div className={styles.fields}>
+        <AccountFields form={form} readOnly={busy} texts={firstAccountTexts} />
+      </div>
+    </WelcomeStep>
+  )
+}
