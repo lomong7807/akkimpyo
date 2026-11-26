@@ -816,18 +816,41 @@ describe('서버 오류와 지연', () => {
     expect(path(opened)).toBe('/welcome?step=2')
   })
 
+  // 아래 고정 영역을 화면 키보드 위로 올리지 않으므로 가입(A-03)과 같이 "다시 시도"로 옮긴다(designer 결정 #102)
   it.each([
-    ['계좌 만들기', createButton],
-    ['건너뛰기', skipButton],
-  ])('"%s"가 실패해도 초점을 옮기지 않는다', async (_, press) => {
-    accounts.addResponse = () => problem(500, 'INTERNAL_ERROR')
+    ['서버 오류', '계좌 만들기', () => problem(500, 'INTERNAL_ERROR'), createButton],
+    ['연결 오류', '계좌 만들기', () => HttpResponse.error(), createButton],
+    ['서버 오류', '건너뛰기', () => problem(500, 'INTERNAL_ERROR'), skipButton],
+    ['연결 오류', '건너뛰기', () => HttpResponse.error(), skipButton],
+  ])('%s로 "%s"가 실패하면 초점이 "다시 시도"로 간다', async (_, __, respond, press) => {
+    accounts.addResponse = respond
     const { user } = await openSecond()
     await fill(user)
     press().focus()
     await user.keyboard('{Enter}')
     await screen.findByRole('alert')
-    await settle()
-    expect(document.activeElement).toBe(press())
+    expect(document.activeElement).toBe(retryButton())
+  })
+
+  it('칸에서 엔터로 만들다 실패하면 초점이 "다시 시도"로 가서 화면 키보드가 내려간다', async () => {
+    accounts.addResponse = () => problem(500, 'INTERNAL_ERROR')
+    const { user } = await openSecond()
+    await fill(user)
+    await user.type(name(), '{Enter}')
+    await screen.findByRole('alert')
+    expect(document.activeElement).toBe(retryButton())
+  })
+
+  it('다시 실패해도 초점이 "다시 시도"로 간다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await openSecond()
+    await fill(user)
+    await user.click(createButton())
+    await screen.findByRole('alert')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(accounts.added).toHaveLength(2))
+    await waitFor(() => expect(document.activeElement).toBe(retryButton()))
   })
 
   it('"계좌 만들기"의 "다시 시도"는 지금 화면의 값으로 다시 만들고 초점을 잃지 않는다', async () => {
@@ -872,7 +895,7 @@ describe('서버 오류와 지연', () => {
     expect(accounts.added).toHaveLength(1)
   })
 
-  it('15초 동안 응답이 없으면 같은 문구를 보인다', async () => {
+  it('15초 동안 응답이 없으면 같은 문구를 보이고 초점이 "다시 시도"로 간다', async () => {
     accounts.addResponse = delayed().respond
     const { user } = await openSecond()
     await fill(user)
@@ -882,6 +905,7 @@ describe('서버 오류와 지연', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     await act(() => vi.advanceTimersByTimeAsync(200))
     expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(document.activeElement).toBe(retryButton())
   })
 
   it('저절로 다시 보내지 않는다', async () => {
