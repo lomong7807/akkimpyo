@@ -41,6 +41,7 @@ class TransactionServiceTest {
     static final String DEVICE = "iphone.safari";
 
     @Autowired TransactionService transactionService;
+    @Autowired TransactionTrashQuery transactionTrashQuery;
     @Autowired TransactionRepository transactionRepository;
     @Autowired AccountService accountService;
     @Autowired CategoryService categoryService;
@@ -449,13 +450,13 @@ class TransactionServiceTest {
         TransactionView deleted = transactionService.delete(owner.getId(), id, 1, DEVICE);
         assertThat(deleted.deleted()).isTrue();
         assertThat(deleted.version()).isEqualTo(2);
-        assertThat(transactionService.listDeleted(owner.getId(), ledgerId)).extracting(TransactionView::id)
+        assertThat(transactionTrashQuery.page(owner.getId(), ledgerId, null).items()).extracting(TransactionView::id)
                 .containsExactly(id);
 
         TransactionView restored = transactionService.restore(owner.getId(), id, 2, DEVICE);
         assertThat(restored.deleted()).isFalse();
         assertThat(restored.version()).isEqualTo(3);
-        assertThat(transactionService.listDeleted(owner.getId(), ledgerId)).isEmpty();
+        assertThat(transactionTrashQuery.page(owner.getId(), ledgerId, null).items()).isEmpty();
         flushAndClear();
         assertThat(transactionService.get(owner.getId(), id).lines()).extracting(Line::amount)
                 .containsExactly(-12_000L);
@@ -495,7 +496,7 @@ class TransactionServiceTest {
         TransactionView stored = transactionService.get(owner.getId(), id);
         assertThat(stored.deleted()).isFalse();
         assertThat(stored.version()).isEqualTo(2);
-        assertThat(transactionService.listDeleted(owner.getId(), ledgerId)).isEmpty();
+        assertThat(transactionTrashQuery.page(owner.getId(), ledgerId, null).items()).isEmpty();
     }
 
     @Test
