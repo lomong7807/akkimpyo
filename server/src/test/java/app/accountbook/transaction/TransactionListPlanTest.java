@@ -57,6 +57,13 @@ class TransactionListPlanTest {
     private static final UUID BIG_OWNER = id(USER, 1);
     private static final UUID BIG_LEDGER = id(LEDGER, 1);
     private static final String INDEX_BACKWARD = "Index Scan Backward using ix_transaction_ledger_occurred_on";
+    /**
+     * 그 달의 거래(약 160건)와 라인을 잇는 계획은 이 데이터에서 둘로 갈린다. 거래마다 라인을 거래 id의 인덱스로 찾는
+     * Nested Loop(비용 약 1,480)와 라인 테이블(약 3만 행)을 통째로 읽는 Hash Join(약 1,365)의 비용이 비슷해, 통계와 행 수가
+     * 같아도 앞선 테스트가 넣고 지운 라인의 빈자리로 라인 테이블의 쪽 수가 달라지면(CI에서 462쪽과 1,387쪽) 계획이 바뀐다.
+     * 운영 크기에서는 라인 테이블이 커서 Nested Loop다(큰 데이터의 확인은 #171). 그래서 이 노드만 읽은 행 상한에서 뺀다.
+     */
+    private static final String LINE_SEQ_SCAN = "Seq Scan on transaction_line";
     private static final Pattern BIND = Pattern.compile("binding parameter \\((\\d+):[^)]*\\) <- \\[(.*)]");
     private static final AtomicInteger PREPARED = new AtomicInteger();
 
@@ -146,8 +153,8 @@ class TransactionListPlanTest {
     }
 
     /**
-     * 달력의 날짜별 합계(#66)는 그 달만 읽는다. 큰 장부의 11월(1일~27일)은 약 150건이고, 어느 훑기도 그보다 크게
-     * 늘지 않는다. 라인은 거래 id의 인덱스로 거래마다 찾는다.
+     * 달력의 날짜별 합계(#66)는 그 달만 읽는다. 큰 장부의 11월(1일~27일)은 약 150건이다. 거래는 장부·날짜 인덱스로 그 달만
+     * 읽고, 라인 테이블의 Seq Scan({@link #LINE_SEQ_SCAN})을 뺀 어느 훑기도 그보다 크게 늘지 않는다.
      */
     @Test
     void 날짜별_합계는_큰_장부에서_그_달의_거래만_읽는다() {
@@ -156,14 +163,16 @@ class TransactionListPlanTest {
 
         Statement sums = pick(daily, Kind.MONTH_DAYS);
         String custom = explain(sums, "force_custom_plan");
-        assertThat(custom).contains("ix_transaction_ledger_occurred_on").doesNotContain("Seq Scan");
-        assertThat(mostRowsReadByAScan(custom)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG).isLessThan(500);
+        assertThat(custom).contains("ix_transaction_ledger_occurred_on");
+        assertThat(mostRowsReadExceptLineSeqScan(custom)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG)
+                .isLessThan(500);
         assertThat(explain(sums, "force_generic_plan")).doesNotContain("Seq Scan");
     }
 
     /**
      * 월별 통계(#16)도 그 달만 읽는다. 달의 구간 조건이 날짜별 합계와 같다. 카테고리에 장부 조건을 걸면 카테고리부터 읽어
-     * 그 카테고리의 라인 2만 건을 모두 읽었다. 그 계획을 여기서 막는다.
+     * 그 카테고리의 라인 2만 건을 라인의 카테고리 인덱스로 모두 읽었다. 그 계획은 읽은 행 상한이 막는다(라인 테이블의
+     * Seq Scan만 상한에서 빠진다, {@link #LINE_SEQ_SCAN}).
      */
     @Test
     void 월별_통계는_큰_장부에서_그_달의_거래만_읽는다() {
@@ -172,14 +181,15 @@ class TransactionListPlanTest {
 
         Statement sums = pick(monthly, Kind.TOTALS);
         String custom = explain(sums, "force_custom_plan");
-        assertThat(custom).contains("ix_transaction_ledger_occurred_on").doesNotContain("Seq Scan");
-        assertThat(mostRowsReadByAScan(custom)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG).isLessThan(500);
+        assertThat(custom).contains("ix_transaction_ledger_occurred_on");
+        assertThat(mostRowsReadExceptLineSeqScan(custom)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG)
+                .isLessThan(500);
         assertThat(explain(sums, "force_generic_plan")).doesNotContain("Seq Scan");
     }
 
     /**
-     * 중복 경고(#59)는 장부와 날짜로 그날의 거래만 읽고(큰 장부의 하루는 약 6건), 라인은 거래 id로 찾는다. 새 인덱스 없이
-     * 장부·날짜 인덱스로 좁힌다. 그날의 거래에 가맹점을 넣어 라인까지 읽게 한다.
+     * 중복 경고(#59)는 새 인덱스 없이 장부·날짜 인덱스로 그날의 거래만 읽는다(큰 장부의 하루는 약 6건). 그날의 거래에
+     * 가맹점을 넣어 라인까지 읽게 한다. 읽은 행 상한은 날짜별 합계와 같은 방식이다({@link #LINE_SEQ_SCAN}).
      */
     @Test
     void 중복_경고는_큰_장부에서_그날의_거래만_읽는다() {
@@ -190,9 +200,9 @@ class TransactionListPlanTest {
 
         Statement duplicates = pick(found, Kind.DUPLICATES);
         String custom = explain(duplicates, "force_custom_plan");
-        assertThat(custom).contains("ix_transaction_ledger_occurred_on", "ix_transaction_line_transaction")
-                .doesNotContain("Seq Scan");
-        assertThat(mostRowsReadByAScan(custom)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG).isLessThan(100);
+        assertThat(custom).contains("ix_transaction_ledger_occurred_on");
+        assertThat(mostRowsReadExceptLineSeqScan(custom)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG)
+                .isLessThan(100);
         assertThat(explain(duplicates, "force_generic_plan")).doesNotContain("Seq Scan");
     }
 
@@ -278,10 +288,11 @@ class TransactionListPlanTest {
     }
 
     /**
-     * 훑기 노드마다 실제로 읽은 행(내놓은 행과 조건으로 거른 행을 더해 loops를 곱한 값) 가운데 가장 큰 값.
-     * 장부 전체를 읽는 계획이면 Seq Scan이 아니어도 여기서 큰 장부의 거래 수만큼 나온다.
+     * 훑기 노드마다 실제로 읽은 행(내놓은 행과 조건으로 거른 행을 더해 loops를 곱한 값) 가운데 가장 큰 값. 라인 테이블의
+     * Seq Scan({@link #LINE_SEQ_SCAN})은 뺀다. 거래를 장부 전체로 읽거나 라인을 거래 id가 아닌 인덱스(카테고리 등)로 많이
+     * 읽는 계획이면 Seq Scan이 아니어도 여기서 큰 장부의 거래 수만큼 나온다.
      */
-    private static long mostRowsReadByAScan(String plan) {
+    private static long mostRowsReadExceptLineSeqScan(String plan) {
         Pattern node = Pattern.compile("actual time=\\S+ rows=(\\d+)(?:\\.\\d+)? loops=(\\d+)");
         Pattern removed = Pattern.compile("Rows Removed by (?:Filter|Index Recheck): (\\d+)");
         long most = 0;
@@ -291,7 +302,7 @@ class TransactionListPlanTest {
             Matcher read = node.matcher(line);
             Matcher filtered = removed.matcher(line);
             if (read.find()) {
-                boolean scan = line.contains("Scan");
+                boolean scan = line.contains("Scan") && !line.contains(LINE_SEQ_SCAN);
                 rows = scan ? Long.parseLong(read.group(1)) : 0;
                 loops = scan ? Long.parseLong(read.group(2)) : 0;
             } else if (filtered.find()) {
