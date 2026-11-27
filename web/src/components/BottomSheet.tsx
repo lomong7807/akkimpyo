@@ -1,6 +1,7 @@
 import { useId, useRef, type ReactNode } from 'react'
 import { Button } from './Button'
 import { useDragDown } from './dragDown'
+import { X } from './icons'
 import Overlay from './Overlay'
 import styles from './BottomSheet.module.css'
 
@@ -11,6 +12,10 @@ interface BottomSheetProps {
   closeDisabled?: boolean
   /** 안의 내용이 제목에 초점을 줄 수 있게 한다(tabindex=-1, 탭 순서에는 없다). 00-common 5.4 */
   titleFocusable?: boolean
+  /**
+   * 닫을 때 움직임 없이 그 처리 안에서 뺀다(Overlay). 닫은 처리 안에서 뒤 화면의 입력칸에 초점을 줘야 할 때 쓴다(D-05 저장)
+   */
+  instantClose?: boolean
   onClose: () => void
   children: ReactNode
 }
@@ -21,6 +26,7 @@ export default function BottomSheet({
   title,
   closeDisabled = false,
   titleFocusable = false,
+  instantClose = false,
   onClose,
   children,
 }: BottomSheetProps) {
@@ -28,7 +34,7 @@ export default function BottomSheet({
   const sheet = useRef<HTMLDivElement>(null)
   const dragHandlers = useDragDown(sheet, onClose)
   return (
-    <Overlay open={open} aria-labelledby={titleId} scrim onClose={onClose}>
+    <Overlay open={open} instantClose={instantClose} aria-labelledby={titleId} scrim onClose={onClose}>
       <div ref={sheet} className={styles.sheet}>
         <div className={styles.head} {...dragHandlers}>
           <div className={styles.handle} aria-hidden="true" />
@@ -36,7 +42,7 @@ export default function BottomSheet({
             <h2 id={titleId} className={styles.title} tabIndex={titleFocusable ? -1 : undefined}>
               {title}
             </h2>
-            <Button kind="icon" icon="X" aria-label="닫기" disabled={closeDisabled} onClick={onClose} />
+            <Button kind="icon" icon={X} aria-label="닫기" disabled={closeDisabled} onClick={onClose} />
           </div>
         </div>
         <div className={styles.content}>{children}</div>

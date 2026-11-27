@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { MonthNavigationSpace } from '../../components/MonthNavigation'
+import { MonthNavigationSpace } from '../../components/MonthNavigationSpace'
 import Skeleton, { LoadingStatus, SkeletonBar } from '../../components/Skeleton'
 import { useLoadingMessage } from '../../components/useLoadingMessage'
 import { isSelectableMonth, monthOf, monthWeeks, selectableMonths, today, WEEKDAYS } from '../../lib/calendarDate'

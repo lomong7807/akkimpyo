@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../src/api/apiError'
-import { fetchTransactionPage } from '../src/features/transactions/transactions'
+import { fetchTransactionPage } from '../src/features/transactions/transactionPages'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { expenseOf, incomeOf, pageOf, transferOf } from './support/transactionList'

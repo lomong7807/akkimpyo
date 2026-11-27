@@ -1,10 +1,11 @@
 import { useId, useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router'
 import Amount from '../../components/Amount'
 import { Button, ButtonLink } from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
 import Icon from '../../components/Icon'
+import { CaretRight } from '../../components/icons'
 import { holdKeyboard } from '../../components/keyboardBridge'
+import { Link } from '../../components/Link'
 import { MainScreen } from '../../components/Screen'
 import { LoadingStatus, SkeletonBar, SkeletonSpace } from '../../components/Skeleton'
 import { useLoadingMessage } from '../../components/useLoadingMessage'
@@ -33,14 +34,14 @@ import {
   usePendingTransactions,
   withPendingDays,
 } from '../transactions/pendingTransactions'
-import { DayHeadSkeleton, RowsSkeleton } from '../transactions/TransactionListSkeleton'
-import { RECENT_COUNT, type IncomeAndExpense, type RecentTransactions } from '../transactions/transactions'
 import {
   monthTotalsKey,
   recentTransactionsKey,
   useMonthTotals,
   useRecentTransactions,
-} from '../transactions/useTransactionList'
+} from '../transactions/transactionListQueries'
+import { DayHeadSkeleton, RowsSkeleton } from '../transactions/TransactionListSkeleton'
+import { RECENT_COUNT, type IncomeAndExpense, type RecentTransactions } from '../transactions/transactions'
 import OneLineInput from './OneLineInput'
 import styles from './Home.module.css'
 
@@ -340,7 +341,7 @@ function AccountBalances({ accounts, basis, state, queries, skeletonShown }: Acc
             </h2>
             {basis !== undefined && <BasisTime at={basis} className={styles.basis} />}
             <span className={styles.caret}>
-              <Icon name="CaretRight" size={20} />
+              <Icon icon={CaretRight} size={20} />
             </span>
           </div>
           <Balances accounts={accounts!} total={total} />
@@ -462,7 +463,7 @@ function AllTransactionsLink() {
       <ButtonLink kind="text" to="/transactions">
         <span className={styles.actionLabel}>
           모두 보기
-          <Icon name="CaretRight" size={20} />
+          <Icon icon={CaretRight} size={20} />
         </span>
       </ButtonLink>
     </div>

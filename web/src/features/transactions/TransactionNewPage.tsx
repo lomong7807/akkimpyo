@@ -7,7 +7,7 @@ import { useToast } from '../../components/ToastContext'
 import { useGoBack } from '../../components/useGoBack'
 import { useLeaveGuard } from '../../components/useLeaveGuard'
 import { clampDate, isDate, selectableRange, today as todayOfDevice } from '../../lib/calendarDate'
-import { useKeepDraft } from '../drafts/keepDraft'
+import { useKeepDraft } from '../drafts/useKeepDraft'
 import { useRestoredDraft } from '../drafts/restoreDraft'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { useCategorySuggestion } from './categorySuggestion'
@@ -18,7 +18,7 @@ import { entryHandoffOf, returnToOneLine } from './oneLineHandoff'
 import TransactionFields from './TransactionFields'
 import { newTransactionDraftOf } from './transactionDraft'
 import { newTransactionValues } from './transactionForm'
-import { SaveChoiceDialog, SaveFailureMessages } from './SaveParts'
+import { DuplicateWarningDialog, SaveChoiceDialog, SaveFailureMessages } from './SaveParts'
 import { useNewTransactionSave } from './useNewTransactionSave'
 import { useMoreFold, useTransactionForm } from './useTransactionForm'
 
@@ -27,7 +27,7 @@ const HOME = '/home'
 
 /**
  * D-04 거래 입력(새 입력). 빠른 입력(B-03)과 사이드바의 "거래 입력"이 지출 유형으로 연다.
- * 저장(같은 id 다시 보내기, 기기에 쌓기, 선택 판)은 useNewTransactionSave가 한다. 이 화면은 저장을 마치면 이전 화면으로 떠나고,
+ * 저장(중복 경고, 같은 id 다시 보내기, 기기에 쌓기, 선택 판)은 useNewTransactionSave가 한다. 이 화면은 저장을 마치면 이전 화면으로 떠나고,
  * 보내는 동안에는 떠나는 길을 막는다(useLeaveGuard).
  * 홈의 한 줄 입력(D-05의 "자세히", 해석 실패의 "자세히 입력")이 열면 넘긴 값으로 채우고 더 보기를 펼친 채 연다(#233). 떠나면 홈의
  * 한 줄 입력칸에 글을 되돌리고, 저장했으면 비운다(D-04 (1)과 성공 뒤 표).
@@ -134,6 +134,7 @@ export default function TransactionNewPage() {
         />
       </FullScreenForm>
       <SaveChoiceDialog save={save} form={form} />
+      <DuplicateWarningDialog save={save} />
     </EntryCopiesContext>
   )
 }

@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { moveMonth } from '../lib/calendarDate'
 import { Button } from './Button'
+import { CaretLeft, CaretRight } from './icons'
 import styles from './MonthNavigation.module.css'
 
 interface MonthNavigationProps {
@@ -46,19 +47,14 @@ export default function MonthNavigation({
   return (
     <div className={styles.navigation}>
       <span>
-        {month > first && <Button ref={previous} kind="icon" icon="CaretLeft" aria-label="이전 달" onClick={() => move(-1)} />}
+        {month > first && <Button ref={previous} kind="icon" icon={CaretLeft} aria-label="이전 달" onClick={() => move(-1)} />}
       </span>
       <Heading id={headingId} className={`${styles.month} tabular-nums`} aria-live="polite">
         {label}
       </Heading>
       <span>
-        {month < last && <Button ref={next} kind="icon" icon="CaretRight" aria-label="다음 달" onClick={() => move(1)} />}
+        {month < last && <Button ref={next} kind="icon" icon={CaretRight} aria-label="다음 달" onClick={() => move(1)} />}
       </span>
     </div>
   )
-}
-
-/** 달 이동을 그리기 전의 자리(#251). 같은 높이를 비워 두어 달 이동이 나타날 때 아래 내용이 밀리지 않는다. */
-export function MonthNavigationSpace() {
-  return <div aria-hidden="true" className={styles.navigation} />
 }

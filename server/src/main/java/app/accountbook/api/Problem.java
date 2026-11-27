@@ -45,6 +45,7 @@ record Problem(String type, String title, int status, String detail, ErrorCode c
                 case NOT_FOUND -> "가리킨 대상이 없다";
                 case TOO_DEEP -> "더 깊이 둘 수 없다";
                 case KIND_MISMATCH -> "상위와 구분(kind)이 다르다";
+                case INCORRECT -> "저장된 값과 맞지 않는다";
             };
         }
     }

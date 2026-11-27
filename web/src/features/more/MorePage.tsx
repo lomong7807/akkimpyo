@@ -1,3 +1,4 @@
+import { SignOut, Tag, Wallet } from '../../components/icons'
 import { ListButton, ListGroup, ListLink } from '../../components/ListRow'
 import { MainScreen } from '../../components/Screen'
 import SyncedTime from '../sync/SyncedTime'
@@ -9,15 +10,15 @@ export default function MorePage({ onLogout }: { onLogout: () => void }) {
     <MainScreen>
       <div className={styles.groups}>
         <ListGroup>
-          <ListLink icon="Wallet" to="/accounts">
+          <ListLink icon={Wallet} to="/accounts">
             계좌
           </ListLink>
-          <ListLink icon="Tag" to="/categories">
+          <ListLink icon={Tag} to="/categories">
             카테고리
           </ListLink>
         </ListGroup>
         <ListGroup>
-          <ListButton icon="SignOut" onClick={onLogout}>
+          <ListButton icon={SignOut} onClick={onLogout}>
             로그아웃
           </ListButton>
         </ListGroup>

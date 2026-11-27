@@ -11,6 +11,7 @@ import app.accountbook.account.AccountService;
 import app.accountbook.account.AccountType;
 import app.accountbook.category.Category;
 import app.accountbook.category.CategoryCommand;
+import app.accountbook.auth.PasswordChangeService;
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
 import app.accountbook.common.AccountHasTransactionsException;
@@ -25,6 +26,7 @@ import app.accountbook.ledger.LedgerService;
 import app.accountbook.stats.BalanceQuery;
 import app.accountbook.stats.MonthlyStatsQuery;
 import app.accountbook.stats.MonthlySummary;
+import app.accountbook.stats.YearlyStatsQuery;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.transaction.CategorySuggestionQuery;
@@ -34,6 +36,7 @@ import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
 import app.accountbook.transaction.TransactionExportQuery;
+import app.accountbook.transaction.TransactionFilter;
 import app.accountbook.transaction.TransactionHistoryQuery;
 import app.accountbook.transaction.TransactionListQuery;
 import app.accountbook.transaction.TransactionPage.DayTotals;
@@ -49,6 +52,7 @@ import app.accountbook.user.UserProfile;
 import app.accountbook.user.UserService;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.YearMonth;
 import java.util.HashSet;
 import java.util.List;
@@ -108,9 +112,11 @@ class CrossLedgerAccessTest {
     @Autowired TransactionExportQuery transactionExportQuery;
     @Autowired BalanceQuery balanceQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
+    @Autowired YearlyStatsQuery yearlyStatsQuery;
     @Autowired LedgerAccess ledgerAccess;
     @Autowired LedgerService ledgerService;
     @Autowired UserService userService;
+    @Autowired PasswordChangeService passwordChangeService;
     @Autowired Fixtures fixtures;
     @Autowired EntityManager entityManager;
     @Autowired JdbcTemplate jdbc;
@@ -197,9 +203,11 @@ class CrossLedgerAccessTest {
         transactionExportQuery = recorded(transactionExportQuery);
         balanceQuery = recorded(balanceQuery);
         monthlyStatsQuery = recorded(monthlyStatsQuery);
+        yearlyStatsQuery = recorded(yearlyStatsQuery);
         ledgerAccess = recorded(ledgerAccess);
         ledgerService = recorded(ledgerService);
         userService = recorded(userService);
+        passwordChangeService = recorded(passwordChangeService);
     }
 
     @TestFactory
@@ -209,6 +217,7 @@ class CrossLedgerAccessTest {
                 Stream.of(
                         dynamicTest("구성원 확인: 예외 없이 답하는 isMember", this::verifyIsMember),
                         dynamicTest("내 정보: 대상 없이 호출자의 것만 답한다", this::verifyOwnInfo),
+                        dynamicTest("표시 이름 바꾸기: 대상 없이 호출자의 것만 바꾼다", this::verifyOwnDisplayName),
                         dynamicTest("표가 호출자를 받는 공개 메서드를 모두 다룬다", this::verifyTableCoversInventory)));
     }
 
@@ -233,6 +242,25 @@ class CrossLedgerAccessTest {
         assertThat(ledgers.toString()).doesNotContain(secretsOfB);
         assertThat(ledgerService.memberships(b)).as("대조: B는 자기 장부").extracting(LedgerMembership::ledgerId)
                 .containsExactly(ledgerB);
+        // 비밀번호 바꾸기(#31)도 대상 없이 호출자의 것만 본다. 틀린 현재 비밀번호로는 아무것도 바꾸지 않는다.
+        assertThat(asA(() -> userService.checkPasswordChange(a, "password1", "password2")).userId()).isEqualTo(a);
+        assertThat(asA(() -> catchThrowable(() -> passwordChangeService.changePassword(a, "wrong-pass1", "password2",
+                null)))).isInstanceOf(InvalidRequestException.class);
+        assertThat(snapshot()).isEqualTo(baseline);
+    }
+
+    /**
+     * 표시 이름 바꾸기(#68)도 대상 id를 받지 않는다. A가 부르면 A의 이름만 바뀌고 돌려준 값에 B의 것이 없다.
+     * 바꾼 것은 SAVEPOINT로 되돌린다.
+     */
+    void verifyOwnDisplayName() {
+        Throwable failure = rolledBack(() -> {
+            UserProfile profile = asA(() -> userService.changeDisplayName(a, "A새이름"));
+            assertThat(profile).isEqualTo(new UserProfile("a@example.com", "A새이름"));
+            assertThat(jdbc.queryForList("select display_name from users where id in (?, ?) order by email",
+                    String.class, a, b)).containsExactly("A새이름", "b");
+        });
+        assertThat(failure).isNull();
         assertThat(snapshot()).isEqualTo(baseline);
     }
 
@@ -279,7 +307,7 @@ class CrossLedgerAccessTest {
         assertThat(categoryService.list(a, ledgerA)).extracting(Category::getLedgerId).containsOnly(ledgerA);
         assertThat(transactionTrashQuery.page(a, ledgerA, null).items()).extracting(TransactionView::id)
                 .containsExactly(aDeleted.id());
-        assertThat(transactionListQuery.page(a, ledgerA, new WholeLedger(), null, 50).items())
+        assertThat(transactionListQuery.page(a, ledgerA, new WholeLedger(), TransactionFilter.NONE, null, 50).items())
                 .extracting(TransactionView::id).containsExactlyInAnyOrder(aExpense.id(), aTransfer.id());
         // 100,000 - 지출 1,100 - 이체 2,200. 삭제한 3,300은 빠진다.
         assertThat(balanceQuery.balances(a, ledgerA))
@@ -289,6 +317,8 @@ class CrossLedgerAccessTest {
         assertThat(summary.expense()).isEqualTo(1_100);
         assertThat(summary.income()).isZero();
         assertThat(summary.categories()).extracting(total -> total.categoryId()).containsExactly(aFood);
+        assertThat(yearlyStatsQuery.yearly(a, ledgerA, Year.of(2026)).categories())
+                .extracting(total -> total.categoryId()).containsExactly(aFood);
     }
 
     // ---------------------------------------------------------------- 표
@@ -324,11 +354,18 @@ class CrossLedgerAccessTest {
                 denied("조회: 휴지통", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionTrashQuery.page(actor, ledger, null)),
                 denied("조회: 거래 목록(달)", NotLedgerMemberException.class, ledgerB,
-                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 50)),
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
+                                TransactionFilter.NONE, null, 50)),
                 denied("조회: 거래 목록(하루)", NotLedgerMemberException.class, ledgerB,
-                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Day(DAY), null, 50)),
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Day(DAY),
+                                TransactionFilter.NONE, null, 50)),
                 denied("조회: 거래 목록(장부 전체)", NotLedgerMemberException.class, ledgerB,
-                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new WholeLedger(), null, 50)),
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new WholeLedger(),
+                                TransactionFilter.NONE, null, 50)),
+                denied("조회: 거래 목록(필터)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
+                                new TransactionFilter(Set.of(bBank), Set.of(bFood), Set.of(TransactionType.EXPENSE),
+                                        null), null, 50)),
                 denied("조회: 중복 경고", NotLedgerMemberException.class, ledgerB, (actor, ledger) ->
                         transactionListQuery.duplicates(actor, ledger, DAY, 73_100, "B단골식당", null)),
                 denied("조회: 가맹점의 최근 카테고리 제안", NotLedgerMemberException.class, ledgerB,
@@ -343,6 +380,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> balanceQuery.balances(actor, ledger)),
                 denied("조회: 월 통계", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, NOVEMBER)),
+                denied("조회: 연 통계", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> yearlyStatsQuery.yearly(actor, ledger, Year.of(2026))),
                 denied("구성원 확인: B의 장부", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> ledgerAccess.requireMember(actor, ledger)),
                 denied("소유자 확인: B의 장부", NotLedgerOwnerException.class, ledgerB,
@@ -414,7 +453,13 @@ class CrossLedgerAccessTest {
                                 transfer(aTransfer.id(), account, aCash, 2_200), DEVICE)),
                 foreign("수정: A의 이체에서 받는 계좌를 B의 계좌로", invalid, bBank, aCash,
                         (actor, account) -> transactionService.update(actor, aTransfer.id(), aTransfer.version(),
-                                transfer(aTransfer.id(), aBank, account, 2_200), DEVICE)));
+                                transfer(aTransfer.id(), aBank, account, 2_200), DEVICE)),
+                foreign("조회: A의 거래 목록을 B의 계좌로 거름", invalid, bBank, aCash,
+                        (actor, account) -> transactionListQuery.page(actor, ledgerA, new Month(NOVEMBER),
+                                new TransactionFilter(Set.of(account), Set.of(), Set.of(), null), null, 50)),
+                foreign("조회: A의 거래 목록을 B의 카테고리(하위가 있는)로 거름", invalid, bFood, aFood,
+                        (actor, category) -> transactionListQuery.page(actor, ledgerA, new Month(NOVEMBER),
+                                new TransactionFilter(Set.of(), Set.of(category), Set.of(), null), null, 50)));
     }
 
     /** 수정·취소. version은 지금 값이고 요청 내용은 B가 보내면 통과하는 것이다. */
@@ -510,8 +555,16 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, null)),
                 denied("순서: B의 장부 월 통계를 범위 밖 달로", notMember, ledgerB, invalid,
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, YearMonth.of(1999, 12))),
+                denied("순서: B의 장부 연 통계를 해 없이", notMember, ledgerB, invalid,
+                        (actor, ledger) -> yearlyStatsQuery.yearly(actor, ledger, null)),
+                denied("순서: B의 장부 연 통계를 범위 밖 해로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> yearlyStatsQuery.yearly(actor, ledger, Year.of(1999))),
                 denied("순서: B의 장부 거래 목록을 범위 밖 limit으로", notMember, ledgerB, invalid,
-                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 0)),
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
+                                TransactionFilter.NONE, null, 0)),
+                denied("순서: B의 장부 거래 목록을 없는 계좌로 거름", notMember, ledgerB, invalid,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
+                                new TransactionFilter(Set.of(missing), Set.of(), Set.of(), null), null, 50)),
                 denied("순서: B의 장부에 101자 가맹점으로 중복 경고", notMember, ledgerB, invalid, (actor, ledger) ->
                         transactionListQuery.duplicates(actor, ledger, DAY, 73_100, "가".repeat(101), null)),
                 denied("순서: B의 장부에 101자 가맹점으로 카테고리 제안", notMember, ledgerB, invalid,

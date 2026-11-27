@@ -3,6 +3,7 @@ import { Link, type RouteObject } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AppLayout from '../src/app/AppLayout'
 import type { MainNavigationItem, Navigation, NavigationItem } from '../src/app/navigation'
+import { Check, Eye, Info, Plus } from '../src/components/icons'
 import { MainScreen, SubScreen } from '../src/components/Screen'
 import { readCssRule } from './support/cssRule'
 import { renderRoutes } from './support/renderRoutes'
@@ -11,9 +12,9 @@ import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
 // 틀이 쓰는 모양만 확인하려고 넣은 항목이다. 실제 항목은 각 화면 이슈가 app/navigation.ts에 더한다.
-const home: MainNavigationItem = { label: '홈', to: '/home', icon: 'Eye' }
-const transactions: MainNavigationItem = { label: '내역', to: '/transactions', icon: 'Check' }
-const more: MainNavigationItem = { label: '더보기', to: '/more', icon: 'Plus' }
+const home: MainNavigationItem = { label: '홈', to: '/home', icon: Eye }
+const transactions: MainNavigationItem = { label: '내역', to: '/transactions', icon: Check }
+const more: MainNavigationItem = { label: '더보기', to: '/more', icon: Plus }
 const accounts: NavigationItem = { label: '계좌', to: '/accounts' }
 const trash: NavigationItem = { label: '휴지통', to: '/trash' }
 
@@ -408,7 +409,7 @@ describe('하단 탭', () => {
   })
 
   it('칸 수가 달라도(1B의 다섯 칸) 모든 칸이 같은 폭의 같은 컨테이너다', () => {
-    const stats: MainNavigationItem = { label: '통계', to: '/stats', icon: 'Info' }
+    const stats: MainNavigationItem = { label: '통계', to: '/stats', icon: Info }
     const five: Navigation = { ...navigation, tabs: [home, transactions, 'quick-entry', stats, more], quickEntry: accounts }
     renderRoutes(
       [{ element: <AppLayout navigation={five} canWrite onLogout={onLogout} />, children: [{ path: '/home', element: <MainScreen>내용</MainScreen> }] }],
