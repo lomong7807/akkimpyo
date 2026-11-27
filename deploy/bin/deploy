@@ -378,7 +378,7 @@ check_app_env() {
 # --- 이미지 ---
 
 pull() {
-  docker image inspect "$1" >/dev/null 2>&1 || docker pull --quiet "$1" >&2
+  docker image inspect "$1" >/dev/null 2>&1 || docker pull --quiet "$1" >/dev/null
 }
 
 revision_of() {
@@ -573,8 +573,10 @@ rollback() {
 # --- 결과 ---
 
 describe() {
+  local pr_text='없음(커밋 제목에 (#번호)가 없다)'
+  [[ -z $pr ]] || pr_text=#$pr
   printf '커밋: %s %s\nPR: %s\n서버: %s → %s\n웹: %s → %s\nSW_DISABLE: %s → %s' \
-    "${file_commit:0:12}" "$file_subject" "${pr:+#$pr}${pr:-없음(커밋 제목에 (#번호)가 없다)}" \
+    "${file_commit:0:12}" "$file_subject" "$pr_text" \
     "$(digest_of "$P_SERVER")" "$(digest_of "$D_SERVER")" "$(digest_of "$P_WEB")" "$(digest_of "$D_WEB")" \
     "${P_SW:-없음}" "$D_SW"
 }
