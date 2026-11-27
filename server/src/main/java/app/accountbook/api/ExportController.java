@@ -29,10 +29,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 장부 거래 내보내기(F-701, P-228, #57 요청 계약). 성공은 파일이고 오류만 problem+json이라(ADR 002 1절) {@code produces}를
- * 적지 않는다. 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 조회가 한 번 더 한다.
- *
- * <p>파일을 다 만든 뒤 응답을 시작한다. 만드는 중에 실패하면 반쯤 쓴 파일 대신 오류 응답이 나간다. 거래는 한 문장으로 읽고,
- * 이름(장부, 계좌, 카테고리, 작성자)은 그 뒤에 각 모듈에서 따로 읽는다(ADR 004 결정 6의 시점 차이).
+ * 적지 않는다. 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 조회가 한 번 더 한다. 파일을 다 만든 뒤 응답을
+ * 시작한다. 만드는 중에 실패하면 반쯤 쓴 파일 대신 오류 응답이 나간다. 거래는 한 문장으로 읽고, 이름(장부, 계좌, 카테고리,
+ * 작성자)은 그 뒤에 각 모듈에서 따로 읽는다(ADR 004 결정 6의 시점 차이).
  */
 @RestController
 class ExportController {
