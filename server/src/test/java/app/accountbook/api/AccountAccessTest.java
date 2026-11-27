@@ -31,7 +31,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #34, #44, #14, #36, #38, #62). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
+ * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #43, #34, #44, #14, #36, #38, #62). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
  * 없는 id와 같은 404이고, 응답에 B의 값이 없으며, DB가 그대로다. 대조로 B 자신은 같은 요청이 열린다(틀린 본문이면 400).
  * 틀린 본문과 B가 이미 쓰는 이름도 404라, 장부가 있는지와 그 안의 이름을 알 수 없다. B의 거래 id로 만들어도 409가 아니라 404다.
  */
@@ -116,6 +116,11 @@ class AccountAccessTest {
                 // B의 계좌와 같은 내용이라 대조가 B의 계좌를 바꾸지 않는다.
                 new Case("계좌 고치기(같은 내용)", (client, ledger) -> putAccount(client, ledger, bBankAsIs), 200),
                 new Case("계좌 고치기(틀린 본문)", (client, ledger) -> putAccount(client, ledger, "{\"name\":1}"), 400),
+                // 대조가 B의 계좌를 바꾸지 않는다: 이미 보이는 계좌를 보이게 하고, 거래가 있는 계좌라 지워지지 않는다.
+                new Case("계좌 다시 보이기(같은 상태)", (client, ledger) -> client.send("PUT", accounts(ledger) + "/" + bBank
+                        + "/visibility", "{\"hidden\":false}", "Content-Type", "application/json"), 200),
+                new Case("계좌 지우기(거래가 있음)", (client, ledger) ->
+                        client.send("DELETE", accounts(ledger) + "/" + bBank, null), 409),
                 new Case("카테고리 목록", (client, ledger) -> client.get(categories(ledger)), 200),
                 new Case("카테고리 추가", (client, ledger) ->
                         client.postJson(categories(ledger), "{\"kind\":\"EXPENSE\",\"name\":\"새 분류\"}"), 201),

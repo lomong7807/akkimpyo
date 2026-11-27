@@ -249,7 +249,7 @@ class TransactionCreateSameIdTest {
         TransactionView updated = transactionService.update(owner.getId(), id, 1,
                 expense(id, bank, null, 12_000, null), DEVICE);
         entityManager.flush();
-        accountService.delete(owner.getId(), cash);
+        accountService.delete(owner.getId(), ledgerId, cash);
         categoryService.delete(owner.getId(), food);
 
         assertThat(createAs(owner, first)).isEqualTo(new CreateResult(updated, false));

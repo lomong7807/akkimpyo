@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.assertj.core.api.Assertions.tuple;
 
+import app.accountbook.account.AccountService;
 import app.accountbook.account.AccountType;
 import app.accountbook.category.CategoryCommand;
 import app.accountbook.category.CategoryKind;
@@ -48,6 +49,7 @@ class TransactionListFilterTest {
 
     @Autowired TransactionListQuery listQuery;
     @Autowired TransactionService transactionService;
+    @Autowired AccountService accountService;
     @Autowired CategoryService categoryService;
     @Autowired StoppedClock clock;
     @Autowired Fixtures fixtures;
@@ -84,7 +86,8 @@ class TransactionListFilterTest {
     }
 
     @Test
-    void 계좌를_고르면_그_계좌의_거래와_그_계좌가_보내거나_받은_이체가_나오고_합계도_그_결과다() {
+    void 숨긴_계좌도_고를_수_있고_그_계좌의_거래와_그_계좌가_보내거나_받은_이체가_나오며_합계도_그_결과다() {
+        accountService.setHidden(owner.getId(), ledgerId, cash, true);
         TransactionPage byCash = page(filter(Set.of(cash), Set.of(), Set.of(), null));
 
         assertThat(ids(byCash)).containsExactlyInAnyOrder(lunchByCash, transfer, canceled);

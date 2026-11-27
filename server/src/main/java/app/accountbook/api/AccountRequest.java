@@ -93,6 +93,31 @@ record AccountRequest(JsonNode name, JsonNode type, JsonNode openingBalance, Jso
     }
 
     /**
+     * 숨기기·다시 보이기 요청의 본문(#43). {@code hidden}만 읽는다. JSON 참거짓만 받는다(글자 {@code "true"}와
+     * 숫자는 아니다). 읽을 수 없는 값은 값 없음으로 넘겨, 경로의 계좌가 이 장부에 없으면 본문이 틀려도 404가 먼저 나가게 한다
+     * (계좌 고치기와 같다).
+     */
+    record Visibility(JsonNode hidden) {
+
+        Read read() {
+            if (isAbsent(hidden)) {
+                return new Read(null, false);
+            }
+            return hidden.isBoolean() ? new Read(hidden.booleanValue(), false) : new Read(null, true);
+        }
+
+        /** @param unreadable 참거짓이 아니었다. 서비스가 {@code REQUIRED}로 거부하면 {@code INVALID_FORMAT}으로 바꾼다 */
+        record Read(Boolean hidden, boolean unreadable) {
+
+            InvalidRequestException explain(InvalidRequestException rejected) {
+                return unreadable && "hidden".equals(rejected.field()) && rejected.code() == FieldErrorCode.REQUIRED
+                        ? new InvalidRequestException("hidden", FieldErrorCode.INVALID_FORMAT, "읽을 수 없는 값입니다.")
+                        : rejected;
+            }
+        }
+    }
+
+    /**
      * @param command    서비스에 넘길 값. 읽지 못한 입력란은 {@code null}이라 서비스가 반드시 거부한다
      * @param unreadable 읽지 못한 입력란과 그 까닭
      */
