@@ -14,15 +14,15 @@ import jakarta.persistence.Tuple;
 import java.math.BigInteger;
 import java.time.Clock;
 import java.time.YearMonth;
-import java.util.Comparator;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 월별 수입·지출과 최상위 카테고리별 합계(F-301, P-205). 대상은 occurred_on이 그 달이고, 삭제·취소되지 않았으며,
- * 카테고리가 있는(= 이체가 아닌) 라인이다. 계좌 기준일과 무관하다. 하위 카테고리의 라인은 상위 카테고리에 더한다.
- * 카테고리별 합계는 DB가 계산한다. 합계가 long을 넘으면 틀린 값 대신 {@link ArithmeticException}이 난다
+ * 월별 수입·지출과 최상위 카테고리별 합계(F-301, F-302, P-205). 대상은 occurred_on이 그 달이고, 삭제·취소되지 않았으며,
+ * 카테고리가 있는(= 이체가 아닌) 라인이다. 계좌 기준일과 무관하다. 하위 카테고리의 라인은 상위 카테고리에 더하고, 하위별
+ * 금액은 그 상위의 {@link CategoryTotal#children()}에 둔다. DB가 한 문장으로 라인의 카테고리별 합계를 내고, 최상위로 모으는
+ * 것은 {@link CategoryTotal#rollUp}이다. 합계가 long을 넘으면 틀린 값 대신 {@link ArithmeticException}이 난다
  * (BigInteger로 읽는 이유는 {@link BalanceQuery}).
  *
  * <p>달의 범위와 구간 조건은 거래 목록(#15)·날짜별 합계(#66)와 같다. 라인과 거래에 장부 조건을 각각 건다
@@ -59,8 +59,8 @@ public class MonthlyStatsQuery {
         }
         LedgerDates.requireMonthInRange("month", month, clock,
                 ledgerRepository.findById(ledgerId).map(Ledger::zoneId).orElseThrow(NotFoundException::new));
-        return MonthlySummary.of(entityManager.createQuery("""
-                        select coalesce(c.parentId, c.id), c.kind, cast(sum(l.amount) as BigInteger)
+        return MonthlySummary.of(CategoryTotal.rollUp(entityManager.createQuery("""
+                        select coalesce(c.parentId, c.id), c.id, c.kind, cast(sum(l.amount) as BigInteger)
                           from TransactionLine l
                           join l.transaction t
                           join Category c on c.id = l.categoryId
@@ -69,7 +69,7 @@ public class MonthlyStatsQuery {
                            and t.occurredOn >= :from and t.occurredOn < :until
                            and t.deletedAt is null
                            and t.status <> :canceled
-                         group by coalesce(c.parentId, c.id), c.kind
+                         group by c.parentId, c.id, c.kind
                         having sum(l.amount) <> 0
                         """, Tuple.class)
                 .setParameter("ledgerId", ledgerId)
@@ -77,10 +77,8 @@ public class MonthlyStatsQuery {
                 .setParameter("until", month.plusMonths(1).atDay(1))
                 .setParameter("canceled", TransactionStatus.CANCELED)
                 .getResultList().stream()
-                .map(row -> CategoryTotal.of(row.get(0, UUID.class), row.get(1, CategoryKind.class),
-                        row.get(2, BigInteger.class).longValueExact()))
-                .sorted(Comparator.comparing(CategoryTotal::kind)
-                        .thenComparing(CategoryTotal::total, Comparator.reverseOrder()))
-                .toList());
+                .map(row -> CategoryTotal.ofLine(row.get(0, UUID.class), row.get(1, UUID.class),
+                        row.get(2, CategoryKind.class), row.get(3, BigInteger.class).longValueExact()))
+                .toList()));
     }
 }

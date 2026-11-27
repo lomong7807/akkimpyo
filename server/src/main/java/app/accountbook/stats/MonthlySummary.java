@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * 월별 수입·지출 합계와 최상위 카테고리별 합계. 지출은 양수로 표시하고, 환불이 더 크면 음수 그대로다(P-205, F-302).
  *
- * @param categories 합계가 0이 아닌 최상위 카테고리. 하위 카테고리는 상위에 들어 있다
+ * @param categories 합계가 0이 아닌 최상위 카테고리. 하위 카테고리는 상위에 들어 있고 하위별 금액은 children이다
  */
 public record MonthlySummary(long income, long expense, List<CategoryTotal> categories) {
 
