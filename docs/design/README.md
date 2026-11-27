@@ -1,7 +1,7 @@
 # 디자인 기준
 
 - 작성일: 2026-11-23
-- 상태: designer가 조사하고 owner가 2026-11-23에 확정한 결정, frontend와 합의한 구현 방식을 옮겼다. 이 폴더가 스스로 정한 값은 없다. 2026-11-24에 owner가 시안으로 고른 배치 결정 3건(결정 10~12)과, 홈 시안을 화면설계서에 맞게 바로잡으며 designer가 정한 결정 5건(결정 13~17)을 [layout-decisions.md](layout-decisions.md)에 더했다.
+- 상태: designer가 조사하고 owner가 2026-11-23에 확정한 결정, frontend와 합의한 구현 방식을 옮겼다. 이 폴더가 스스로 정한 값은 없다. 2026-11-24에 owner가 시안으로 고른 배치 결정 3건(결정 10~12)과, 홈 시안을 화면설계서에 맞게 바로잡으며 designer가 정한 결정 5건(결정 13~17)을 [layout-decisions.md](layout-decisions.md)에 더했다. 2026-11-27에 2026-11-25~27의 designer 결정([이슈 #102](https://github.com/lomong7807/akkimpyo/issues/102))과 tokens.css의 변수 이름을 [tokens.md](tokens.md), [components.md](components.md), [layout-decisions.md](layout-decisions.md) 6절에 옮기고, 앱 아이콘 원본을 [assets/](assets/)에 두었다.
 - 근거 문서: [화면설계서 공통](../planning/05-screen-spec/00-common.md) 2~5장, [와이어프레임 공통](../planning/04-wireframes/00-common.md) 4절, [화면설계서 02](../planning/05-screen-spec/02-transactions-stats-events.md) D-04
 
 ## 1. 이 폴더의 목적
@@ -14,8 +14,9 @@
 |------|-----------|
 | README.md | 목적, 기준의 우선순서, owner 결정과 designer 결정, 구현 방식, 기준을 바꾸는 절차, 검토 방법, 넣지 않는 것, slop 점검표 |
 | [tokens.md](tokens.md) | 색, 글자, 간격, 모서리, 그림자, 요소 크기, 화면 폭, 아이콘, 움직임, 그래프, 초점, 층, 안전 영역 |
-| [components.md](components.md) | 공통 컴포넌트와 공통 상태의 구현 점검표 |
-| [layout-decisions.md](layout-decisions.md) | 배치 결정(owner 결정 10~12, designer 결정 13~17)의 수치, 버린 안과 이유, 확인 필요 |
+| [components.md](components.md) | 공통 컴포넌트와 공통 상태의 구현 점검표, 앱 아이콘(11절) |
+| [layout-decisions.md](layout-decisions.md) | 배치 결정(owner 결정 10~12, designer 결정 13~17)의 수치, 버린 안과 이유, 확인 필요, 화면별 designer 결정(6절) |
+| [assets/](assets/) | 앱 아이콘 원본 그림 2장(PNG, 1024x1024). `icon-A.png`는 홈 화면 아이콘, `favicon-A.png`는 파비콘이다. 모양 정의는 [components.md](components.md) 11절 (#102, #91) |
 | [drafts/](drafts/) | 홈 시안 그림 2장(PNG, 390x844와 1280x800). designer가 2026-11-24에 화면설계서에 맞게 바로잡은 것이다. 참고이고 기준은 layout-decisions.md의 수치다 |
 | [mockup-differences.md](mockup-differences.md) | 목업이 화면설계서와 다른 곳 14건과 따를 값 |
 
@@ -26,14 +27,15 @@
 3. 목업(`docs/planning/mockup/index.html`).
 
 - 화면설계서와 이 폴더가 어긋나면 화면설계서가 맞다. 어긋난 곳은 어느 쪽도 고치지 않고 owner에게 질문한다.
-- 예외: owner나 designer(4절)가 설계서와 다르게 정했거나 설계서 안의 어긋남을 한쪽으로 정했으면 그 결정을 따른다. 지금은 결정 9(전체 화면 입력의 화면 이름 자리), 결정 11(빠른 입력 버튼), 결정 14(홈의 이번 달 합계), 결정 16(거래 입력 칸이 보이는 범위), [layout-decisions.md](layout-decisions.md) 5절 L-13(홈의 720px 제한)과 L-15(홈의 거래 줄)이다. 결정 10은 결정 13과 15로 설계서를 따르게 되어 예외가 아니다. 설계서 쪽에서 고칠 곳은 [components.md](components.md) 10절 C-9와 [layout-decisions.md](layout-decisions.md) 5절에 적었다.
+- 예외: owner나 designer(4절)가 설계서와 다르게 정했거나 설계서 안의 어긋남을 한쪽으로 정했으면 그 결정을 따른다. 지금은 결정 9(전체 화면 입력의 화면 이름 자리), 결정 11(빠른 입력 버튼), 결정 14(홈의 이번 달 합계), 결정 16(거래 입력 칸이 보이는 범위), [layout-decisions.md](layout-decisions.md) 5절 L-13(홈의 720px 제한), L-15(홈의 거래 줄), L-18 (3)(넓은 화면 홈의 거래 줄 좌우 여백 0. 설계서 2.4의 목록 줄 "좌우 16px"과 다르다) (#102, PR #105)이다. 2026-11-25 이후 designer 결정 가운데 설계서와 다른 것은 [components.md](components.md) 10절 C-11에 모았다(누르기 막기 300ms, 하위 화면 제목 두 줄, D-05 머리의 닫기). 결정 10은 결정 13과 15로 설계서를 따르게 되어 예외가 아니다. 설계서 쪽에서 고칠 곳은 [components.md](components.md) 10절 C-9와 [layout-decisions.md](layout-decisions.md) 5절에 적었다.
 - 목업과 화면설계서가 다르면 화면설계서 값을 따른다(owner 결정 1). 목업 CSS를 옮겨 쓰지 않는다. 다른 곳은 [mockup-differences.md](mockup-differences.md)에 모았다.
 - 각 문서 끝의 "확인 필요"는 이 폴더를 쓰며 설계서에서 정의를 찾지 못했거나 문서끼리 어긋난 곳이다. owner가 답하기 전에는 구현에서 임의로 정하지 않는다.
 
 ## 4. owner 결정과 designer 결정
 
 - 1~12는 owner 결정이다(1~9는 2026-11-23, 10~12는 2026-11-24, 확정).
-- 13~17은 designer 결정이다(2026-11-24). owner에게 묻지 않고 정해 [이슈 #102](https://github.com/lomong7807/akkimpyo/issues/102)에 기록했고, owner가 나중에 뒤집을 수 있다. 세부 8건([layout-decisions.md](layout-decisions.md) 5절 L-11~L-17)도 같다.
+- 13~17은 designer 결정이다(2026-11-24). owner에게 묻지 않고 정해 [이슈 #102](https://github.com/lomong7807/akkimpyo/issues/102)에 기록했고, owner가 나중에 뒤집을 수 있다. 세부([layout-decisions.md](layout-decisions.md) 5절 L-11~L-18)도 같다.
+- 2026-11-25 이후의 designer 결정은 번호를 붙이지 않고 쓰는 곳에 바로 적었다. 공통 컴포넌트는 [components.md](components.md), 토큰은 [tokens.md](tokens.md), 화면별 값은 [layout-decisions.md](layout-decisions.md) 6절이다. 문장 끝의 괄호가 근거다(#102, 관련 이슈·PR).
 
 | # | 결정 | 반영한 곳 |
 |---|------|-----------|
@@ -78,7 +80,7 @@
 2. 승인되면 이 폴더에 먼저 추가하고, 그다음에 코드에서 쓴다.
 3. 기존 값을 바꿀 때는 모든 화면에 같이 적용할 방법을 함께 낸다. 옛 값과 새 값이 한 화면에 섞이지 않게 한다.
 4. 화면 모양, 색, 배치, 간격은 designer가 화면설계서와 이 폴더의 기준으로 정하고, 시안 이미지(390x844, 1280x800)를 owner에게 보여 준 뒤 이 폴더에 반영한다. 정한 것은 GitHub [이슈 #102](https://github.com/lomong7807/akkimpyo/issues/102)에 한 줄로 남긴다(무엇을 정했나, 이유, 버린 안, 관련 이슈·PR). owner가 바꾸라고 하면 그때 고친다(owner 2026-11-24).
-5. owner에게 먼저 물어야 하는 것은 기획 범위를 바꾸는 것(기능 추가·삭제, 단계 이동)이다. 이슈 #102 본문에 적힌 다른 것도 먼저 묻는다. 설계서(`docs/planning`)와 다르게 정한 값은 설계서를 고치지 않고 "설계서 수정 필요" 목록([layout-decisions.md](layout-decisions.md) 5절 L-2, L-3, [components.md](components.md) 10절 C-9)에 올린다.
+5. owner에게 먼저 물어야 하는 것은 기획 범위를 바꾸는 것(기능 추가·삭제, 단계 이동)이다. 이슈 #102 본문에 적힌 다른 것도 먼저 묻는다. 설계서(`docs/planning`)와 다르게 정한 값은 설계서를 고치지 않고 "설계서 수정 필요" 목록([layout-decisions.md](layout-decisions.md) 5절 L-2, L-3, [components.md](components.md) 10절 C-9, C-11)에 올린다.
 
 ## 7. 검토 방법
 
