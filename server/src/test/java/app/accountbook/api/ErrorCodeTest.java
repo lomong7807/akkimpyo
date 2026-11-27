@@ -10,8 +10,8 @@ class ErrorCodeTest {
 
     @ParameterizedTest
     @CsvSource({
-            "400, MALFORMED_REQUEST", "404, NOT_FOUND", "405, METHOD_NOT_ALLOWED", "415, UNSUPPORTED_MEDIA_TYPE",
-            "500, INTERNAL_ERROR",
+            "400, MALFORMED_REQUEST", "401, UNAUTHENTICATED", "403, FORBIDDEN", "404, NOT_FOUND",
+            "405, METHOD_NOT_ALLOWED", "415, UNSUPPORTED_MEDIA_TYPE", "500, INTERNAL_ERROR",
             // 목록에 code가 없는 상태. 406 줄 수 없는 형식, 417 모르는 기대, 501 모르는 전송 방식, 505 모르는 HTTP 버전
             "406, MALFORMED_REQUEST", "417, MALFORMED_REQUEST", "431, MALFORMED_REQUEST",
             "501, MALFORMED_REQUEST", "505, MALFORMED_REQUEST",
