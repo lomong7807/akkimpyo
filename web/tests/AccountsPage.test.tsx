@@ -521,7 +521,7 @@ describe('이미 불러온 뒤', () => {
     expect(rowsOf('은행')).toEqual(['급여통장3,210,000원', '비상금1,000,000원'])
     expect(screen.queryByText(failed)).toBeNull()
     expect(content().queryByRole('button')).toBeNull()
-    expect(totalRow().textContent).toContain('12:00 기준')
+    expect(totalRow().previousElementSibling!.textContent).toBe('12:00 기준')
   })
 
   it('30초가 지나 다시 불러온 것이 약속과 달라도 있던 내용을 그대로 보인다', async () => {
@@ -532,7 +532,8 @@ describe('이미 불러온 뒤', () => {
     await waitFor(() => expect(accounts.requests).toHaveLength(2))
     await settle()
     // 새로 불러오지 못했으므로 그 값을 받은 시각을 붙인다(N-03 (5), #238)
-    expect(totalRow().textContent).toBe('자산 합계12:00 기준3,682,600원')
+    expect(totalRow().textContent).toBe('자산 합계3,682,600원')
+    expect(totalRow().previousElementSibling!.textContent).toBe('12:00 기준')
   })
 
   it('30초가 지나 다시 불러오는 동안 뼈대로 바꾸지 않고, 받으면 합계를 다시 계산한다', async () => {

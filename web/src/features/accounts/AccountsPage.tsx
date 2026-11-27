@@ -17,7 +17,7 @@ import styles from './Accounts.module.css'
 /**
  * G-01 계좌 목록. 1A에서 계좌 줄은 눌리지 않는다. 계좌 상세(G-03)가 들어오면 맞춘다.
  * 기기에 남긴 계좌 목록이 있으면 받는 동안 먼저 보이고(00-common 4.5), 연결이 없거나 받지 못하면 그것을 읽기 전용으로 보이며
- * 자산 합계 옆에 기준 시각을 붙인다(F-908).
+ * 자산 합계 위에 기준 시각을 붙인다(F-908).
  */
 export default function AccountsPage() {
   return (
@@ -38,7 +38,7 @@ function Accounts() {
   return <AccountsSkeleton />
 }
 
-/** 계좌 목록. `basis`가 있으면 (2) 자산 합계 옆에 기준 시각을 붙인다(F-908). */
+/** 계좌 목록. `basis`가 있으면 (2) 자산 합계 줄 바로 위에 기준 시각을 붙인다(F-908). */
 function AccountList({ accounts, basis }: { accounts: Account[]; basis: number | undefined }) {
   if (accounts.length === 0) {
     return (
@@ -49,9 +49,14 @@ function AccountList({ accounts, basis }: { accounts: Account[]; basis: number |
   }
   return (
     <div className={styles.accounts}>
+      {/* 기준 시각은 자산 합계 줄 바로 위 오른쪽 한 줄이다(내역의 합계와 같다, designer #238) */}
+      {basis !== undefined && (
+        <p className={styles.basis}>
+          <BasisTime at={basis} />
+        </p>
+      )}
       <p className={`${styles.row} ${styles.total}`}>
         <span className={styles.name}>자산 합계</span>
-        {basis !== undefined && <BasisTime at={basis} className={styles.basis} />}
         <Balance value={sumOf(accounts)} />
       </p>
       {accountTypes.map((type) => (

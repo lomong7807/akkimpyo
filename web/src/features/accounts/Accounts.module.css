@@ -48,16 +48,20 @@
   font: var(--text-title);
 }
 
-/* 연결이 없거나 새로 불러오지 못했을 때 자산 합계 금액 옆의 "10:42 기준"(G-01 네트워크 오류, 보조 글자 13px) */
+/*
+ * 연결이 없거나 새로 불러오지 못했을 때 자산 합계 줄 바로 위 오른쪽의 "10:42 기준"(G-01 네트워크 오류, 보조 글자 13px).
+ * 내역의 합계와 같은 자리다: 위 8px, 합계 줄과 4px(designer #238).
+ */
 .basis {
-  flex: none;
-  margin-inline-start: auto;
+  margin: var(--space-8) 0 0;
+  padding-inline: var(--bleed);
   color: var(--color-text-secondary);
   font: var(--text-caption);
+  text-align: end;
 }
 
-.basis + .amount {
-  margin-inline-start: 0;
+.basis + .total {
+  padding-top: var(--space-4);
 }
 
 .group {

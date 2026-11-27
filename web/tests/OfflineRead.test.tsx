@@ -316,7 +316,9 @@ describe('계좌 목록(G-01)과 카테고리(H-01)', () => {
     await seedDevice()
     await openOffline('/accounts')
     expect(await screen.findByText('사본의 통장')).toBeTruthy()
-    expect(totalRow().textContent).toBe(`자산 합계${receivedBasis}5,000원`)
+    // 기준 시각은 자산 합계 줄 바로 위 한 줄이고 합계 줄은 연결이 있을 때와 같다(designer #238)
+    expect(totalRow().textContent).toBe('자산 합계5,000원')
+    expect(totalRow().previousElementSibling!.textContent).toBe(receivedBasis)
   })
 
   it('연결이 있으면 받는 동안 기기의 계좌 목록을 먼저 보이고(4.5) 받으면 바꾼다', async () => {
