@@ -36,6 +36,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 읽는 문장에서 그 커밋을 기다린다. PostgreSQL은 잠금을 얻은 뒤에 그 문장의 스냅숏을 잡으므로 그 문장은 커밋 뒤의 값을
  * 본다. 거래를 그보다 앞의 문장에서 따로 읽었다면 거래는 커밋 전, 라인은 커밋 뒤의 값이 된다. 두 트랜잭션이 실제로
  * 겹쳐야 하므로 테스트 트랜잭션 없이 돌고, 커밋한 데이터는 끝날 때 지운다.
+ *
+ * <p>수정 충돌의 {@code current}도 같다(#36). 고치는 쪽이 거래를 읽은 뒤 다른 트랜잭션이 먼저 고치거나 지우면, 조건부
+ * UPDATE가 그 커밋을 기다린 뒤 0행이 된다. 그때 이미 읽어 둔 낡은 거래가 아니라 새로 읽은 거래로 답한다.
  */
 @IntegrationTest
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -127,18 +130,49 @@ class TransactionReadRaceTest {
         assertThat(outcome(read)).isEqualTo(updated);
     }
 
+    // ---------------------------------------------------------------- 수정 충돌
+
+    @Test
+    void 고치는_사이_다른_요청이_먼저_고치면_충돌의_current는_그_고친_거래다() {
+        CompletableFuture<TransactionView> late = whileUncommitted(this::update,
+                () -> transactionService.update(owner.getId(), id, 1, expense(20_000), DEVICE));
+
+        TransactionView updated = stored();
+        assertThat(updated.version()).isEqualTo(2);
+        assertThat(outcome(late)).isInstanceOfSatisfying(StaleVersionException.class,
+                stale -> assertThat(stale.current()).isEqualTo(updated));
+    }
+
+    @Test
+    void 복원하는_사이_완전히_지워지면_없는_거래다() {
+        transactionService.delete(owner.getId(), id, 1, DEVICE);
+
+        CompletableFuture<TransactionView> restoring = whileUncommitted(this::purge,
+                () -> transactionService.restore(owner.getId(), id, 2, DEVICE));
+
+        assertThat(outcome(restoring)).isInstanceOf(NotFoundException.class);
+    }
+
     // ---------------------------------------------------------------- 도우미
 
-    /**
-     * 라인 표를 잠근 트랜잭션에서 change를 하고, 커밋하기 전에 다른 스레드에서 read를 시작한다. read가 그 잠금을 기다리게
-     * 된 것을 본 뒤 커밋한다.
-     */
+    /** 라인 표를 잠근 채로 {@link #whileUncommitted}. read는 라인을 읽는 문장에서 기다린다. */
     private <T> CompletableFuture<T> readWhile(Runnable change, Supplier<T> read) {
-        return transactionTemplate.execute(status -> {
+        return whileUncommitted(() -> {
             jdbc.execute("lock table transaction_line in access exclusive mode");
             change.run();
+        }, read);
+    }
+
+    /**
+     * 한 트랜잭션에서 change를 하고, 커밋하기 전에 다른 스레드에서 other를 시작한다. other가 그 트랜잭션의 잠금을
+     * 기다리게 된 것을 본 뒤 커밋한다. 라인 표를 잠그지 않으면 other는 거래를 고치기 전 값으로 읽고, 거래 행을 고치는
+     * 문장(조건부 UPDATE)에서 기다린다.
+     */
+    private <T> CompletableFuture<T> whileUncommitted(Runnable change, Supplier<T> other) {
+        return transactionTemplate.execute(status -> {
+            change.run();
             entityManager.flush();
-            CompletableFuture<T> reading = CompletableFuture.supplyAsync(read)
+            CompletableFuture<T> reading = CompletableFuture.supplyAsync(other)
                     .orTimeout(2 * TIMEOUT.toSeconds(), TimeUnit.SECONDS);
             // 같은 스레드에서 물어야 이 트랜잭션의 연결(pg_backend_pid)을 기준으로 본다.
             await().pollInSameThread().atMost(TIMEOUT).until(() -> jdbc.queryForObject("""

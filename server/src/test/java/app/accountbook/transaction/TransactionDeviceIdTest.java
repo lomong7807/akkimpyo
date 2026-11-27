@@ -7,7 +7,6 @@ import static org.assertj.core.util.Throwables.getStackTrace;
 
 import app.accountbook.account.AccountType;
 import app.accountbook.common.InvalidRequestException;
-import app.accountbook.common.StaleVersionException;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.transaction.TransactionCommand.Entry;
@@ -141,7 +140,9 @@ class TransactionDeviceIdTest {
     void 기기_값이_없는_변경은_비운_채로_이력에_남는다() {
         UUID id = UUID.randomUUID();
         transactionService.create(owner, ledgerId, expense(id), null);
-        transactionService.update(owner, id, 1, expense(id), null);
+        // 같은 내용으로 고치면 아무것도 바꾸지 않으므로(#36) 금액을 바꾼다.
+        transactionService.update(owner, id, 1,
+                new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, 16_000, false, "김밥천국", null, null), null);
         transactionService.cancel(owner, id, 2, null);
         transactionService.delete(owner, id, 3, null);
         transactionService.restore(owner, id, 4, null);
