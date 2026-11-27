@@ -6,6 +6,8 @@ public enum ChangeAction {
     CREATE,
     UPDATE,
     CANCEL,
+    /** 승인취소 되돌리기(F-226). 상태가 취소에서 취소 직전 상태로 돌아간다. */
+    UNCANCEL,
     DELETE,
     RESTORE,
     /** 사람이 휴지통에서 완전히 지웠다(F-231). */
