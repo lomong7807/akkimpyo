@@ -8,6 +8,10 @@ export interface FieldLabels {
   optional?: boolean
   help?: string
   error?: string
+  /**
+   * 이름을 화면 읽기에만 둔다. 칸 여럿을 한 이름 아래에 나란히 둘 때 쓴다(D-05 (8) "날짜·시각"). 묶음의 이름은 부르는 쪽이 보인다.
+   */
+  labelHidden?: boolean
 }
 
 interface FieldProps extends FieldLabels {
@@ -20,7 +24,16 @@ interface FieldProps extends FieldLabels {
 }
 
 /** 입력칸의 틀(화면설계서 00-common 5.2). 이름, 칸, 도움말, 오류 문구를 놓는다. */
-export default function Field({ label, optional = false, help, error, group = false, count, children }: FieldProps) {
+export default function Field({
+  label,
+  optional = false,
+  help,
+  error,
+  labelHidden = false,
+  group = false,
+  count,
+  children,
+}: FieldProps) {
   const id = useId()
   const labelId = `${id}-label`
   const helpId = `${id}-help`
@@ -31,14 +44,15 @@ export default function Field({ label, optional = false, help, error, group = fa
   const describedBy = [help && helpId, shownCount && countId, error && errorId].filter(Boolean).join(' ')
   const className = error ? `${styles.control} ${styles.invalid}` : styles.control
   const name = optional ? `${label} (선택)` : label
+  const labelClass = labelHidden ? styles.hiddenLabel : styles.label
   return (
     <div className={styles.field}>
       {group ? (
-        <span id={labelId} className={styles.label}>
+        <span id={labelId} className={labelClass}>
           {name}
         </span>
       ) : (
-        <label id={labelId} htmlFor={id} className={styles.label}>
+        <label id={labelId} htmlFor={id} className={labelClass}>
           {name}
         </label>
       )}

@@ -10,7 +10,7 @@ const IDLE_TIMEOUT_MS = 2000
  * 자주 가는 화면의 코드를 브라우저가 한가할 때 미리 받아, 처음 옮겨 갈 때 뼈대 없이 바로 그린다(#251).
  * 연결이 없으면 연결될 때까지 기다리고, 데이터 절약을 켰으면 받지 않는다(architect #251). 돌려주는 함수로 취소한다.
  */
-export function preloadWhenIdle(screens: LazyScreen[]): () => void {
+export function preloadWhenIdle(screens: Pick<LazyScreen, 'preload'>[]): () => void {
   if (savesData()) return () => {}
   let cancel = () => {}
 
