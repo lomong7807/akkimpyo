@@ -136,3 +136,19 @@
     background-color: transparent;
   }
 }
+
+/* 들어올 때 연결이 없으면 안내 대신 화면 가운데의 한 줄(C-02 네트워크 오류). 데이터 없음의 설명과 같은 글자다(00-common 4.2) */
+.waiting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding-inline: var(--space-16);
+}
+
+.waitingText {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  text-align: center;
+}

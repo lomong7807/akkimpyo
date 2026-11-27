@@ -1,7 +1,7 @@
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { startAccounts } from './support/accounts'
-import { delayed, ledgerNameOf, startBackend, type Backend } from './support/backend'
+import { delayed, ledgerIdOf, ledgerNameOf, startBackend, type Backend } from './support/backend'
 import { startCategories, type Categories } from './support/categories'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
@@ -36,7 +36,12 @@ const failed = '문제가 생겨 가입하지 못했어요. 잠시 후 다시 �
 const open = (path: string) => openApp(path, addScreens([{ path: '/secret', element: <main>{secret}</main> }]))
 type User = Awaited<ReturnType<typeof open>>['user']
 
-const signupHeading = () => screen.findByRole('heading', { level: 1, name: '가입' })
+/** 가입 화면. 화면 코드를 받는 동안의 틀에도 같은 제목이 있으므로 칸이 나오기를 기다린다(#251). */
+async function signupHeading() {
+  const heading = await screen.findByRole('heading', { level: 1, name: '가입' })
+  await screen.findByLabelText('표시 이름')
+  return heading
+}
 const loginHeading = () => screen.findByRole('heading', { level: 1, name: '로그인' })
 const welcome = () => screen.findByRole('heading', { level: 1, name: '기본 카테고리를 넣어 두었어요' })
 const email = () => screen.getByLabelText<HTMLInputElement>('이메일')
@@ -95,7 +100,7 @@ describe('가입하면', () => {
     expect(router.state.location.pathname).toBe('/welcome')
     expect(router.state.historyAction).toBe('REPLACE')
     expect(router.state.location.state).toBeNull()
-    await waitFor(() => expect(categories.requests).toEqual(['new-user-ledger']))
+    await waitFor(() => expect(categories.requests).toEqual([ledgerIdOf('new-user')]))
     expect(backend.requests.me).toEqual(['new-user'])
     expect(backend.requests.refresh).toHaveLength(1)
   })
@@ -145,7 +150,7 @@ describe('가입하면', () => {
     await welcome()
     expect(router.state.location.pathname).toBe('/welcome')
     // 안내에는 공통 틀이 없어 장부 이름이 보이지 않는다. 새 사용자의 장부를 받았는지로 본다
-    await waitFor(() => expect(categories.requests).toEqual(['new-user-ledger']))
+    await waitFor(() => expect(categories.requests).toEqual([ledgerIdOf('new-user')]))
     expect(dom.sawText(ledgerNameOf('user-1'))).toBe(false)
     expect(dom.sawText(secret)).toBe(false)
   })
@@ -213,6 +218,7 @@ describe('로그인 화면과 이메일을 주고받기', () => {
 
   it('가입에서 쓴 이메일이 로그인에 채워지고 비밀번호에 초점이 간다. 다른 값은 넘기지 않는다', async () => {
     const { router, user } = await open('/signup')
+    await signupHeading()
     await user.type(email(), 'name@example.com')
     await user.type(password(), 'pass1234')
     await user.type(screen.getByLabelText('표시 이름'), '이서연')

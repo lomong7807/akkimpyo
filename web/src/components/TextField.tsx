@@ -21,9 +21,13 @@ export function TextField(props: TextFieldProps) {
   return <InputField {...props} type="text" />
 }
 
-/** 칸 오른쪽 끝의 버튼으로 값을 보거나 가린다. */
+/**
+ * 칸 오른쪽 끝의 버튼으로 값을 보거나 가린다. 한 화면에 칸이 여럿이어도 구분되게
+ * 버튼 이름은 칸 이름에서 만든다: "{칸 이름} 보기", "{칸 이름} 숨기기"(화면설계서 A-02 (3)).
+ */
 export function PasswordField(props: FieldProps) {
   const [visible, setVisible] = useState(false)
+  const { label } = props
   return (
     <InputField
       {...props}
@@ -36,7 +40,7 @@ export function PasswordField(props: FieldProps) {
         <Button
           kind="icon"
           icon={visible ? 'EyeSlash' : 'Eye'}
-          aria-label={visible ? '비밀번호 숨기기' : '비밀번호 보기'}
+          aria-label={visible ? `${label} 숨기기` : `${label} 보기`}
           onClick={() => setVisible(!visible)}
         />
       }
@@ -44,8 +48,10 @@ export function PasswordField(props: FieldProps) {
   )
 }
 
-function InputField({
+/** 칸 오른쪽 끝에 버튼을 둘 수 있는 한 줄 칸. 종류(type)는 부르는 칸이 정한다. */
+export function InputField({
   label,
+  optional,
   help,
   error,
   count,
@@ -54,7 +60,7 @@ function InputField({
 }: TextFieldProps & { type: string; action?: ReactNode }) {
   const className = action ? `${styles.input} ${styles.withAction}` : styles.input
   return (
-    <Field label={label} help={help} error={error} count={count}>
+    <Field label={label} optional={optional} help={help} error={error} count={count}>
       {(control) => (
         <>
           <input

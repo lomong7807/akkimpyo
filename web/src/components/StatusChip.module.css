@@ -21,3 +21,10 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+/* 오류 칩("보낼 수 없음"). 테두리까지 높이 24px이다 */
+.danger {
+  border: 1px solid var(--color-danger);
+  background-color: var(--color-surface);
+  color: var(--color-danger);
+}

@@ -1,8 +1,9 @@
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../src/api/apiError'
-import { send } from '../src/api/http'
+import { send, sendForResponse } from '../src/api/http'
 import { startMockServer } from './support/mockServer'
+import { reconnectStaticApp } from './support/staticConnection'
 import { problem } from './support/problem'
 import { watchAppTimers } from './support/timers'
 
@@ -97,6 +98,52 @@ describe('요청', () => {
     const requests = captureRequest()
     await send(path)
     expect(requests[0].headers.has('X-Akkimpyo-Client')).toBe(false)
+  })
+
+  it('요청마다 정한 헤더를 붙인다', async () => {
+    const requests = captureRequest()
+    await send('/ledgers/1/transactions', { method: 'POST', body: {}, headers: { 'X-Akkimpyo-Device': 'mac.safari' } })
+    expect(requests[0].headers.get('X-Akkimpyo-Device')).toBe('mac.safari')
+  })
+
+  it('access token이 없으면 부르는 쪽이 넘긴 Authorization도 보내지 않는다', async () => {
+    const requests = captureRequest()
+    await send('/ledgers', { method: 'POST', body: {}, headers: { Authorization: 'Bearer stolen', authorization: 'x' } })
+    expect(requests[0].headers.has('Authorization')).toBe(false)
+  })
+
+  it('본문이 없으면 부르는 쪽이 넘긴 Content-Type도 보내지 않는다', async () => {
+    const requests = captureRequest()
+    await send('/ledgers', { method: 'POST', headers: { 'Content-Type': 'text/plain' } })
+    expect(requests[0].headers.has('Content-Type')).toBe(false)
+  })
+
+  it('전용 헤더가 붙지 않는 경로에 부르는 쪽이 넘긴 X-Akkimpyo-Client는 보내지 않는다', async () => {
+    const requests = captureRequest()
+    await send('/me', { headers: { 'X-Akkimpyo-Client': 'web' } })
+    expect(requests[0].headers.has('X-Akkimpyo-Client')).toBe(false)
+  })
+
+  it('정한 헤더로 Authorization, Content-Type, 전용 헤더를 덮어쓸 수 없다', async () => {
+    const requests = captureRequest()
+    const headers = { Authorization: 'Bearer other', 'content-type': 'text/plain', 'X-Akkimpyo-Client': 'app' }
+    await send('/auth/login', { method: 'POST', body: {}, accessToken: 'token-1', headers })
+    expect(requests[0].headers.get('Authorization')).toBe('Bearer token-1')
+    expect(requests[0].headers.get('Content-Type')).toBe('application/json')
+    expect(requests[0].headers.get('X-Akkimpyo-Client')).toBe('web')
+  })
+})
+
+describe('응답 상태', () => {
+  it.each([200, 201])('성공한 응답의 상태(%d)와 본문을 함께 받을 수 있다', async (status) => {
+    respondWith(() => HttpResponse.json({ id: 'a' }, { status }))
+    expect(await sendForResponse('/ledgers', { method: 'POST' })).toEqual({ status, body: { id: 'a' } })
+  })
+
+  it('오류는 send와 같이 던진다', async () => {
+    respondWith(() => problem(409, 'ID_CONFLICT'))
+    const error = await errorOf(sendForResponse('/ledgers', { method: 'POST' }))
+    expect(error).toMatchObject({ kind: 'rejected', status: 409, code: 'ID_CONFLICT' })
   })
 })
 
@@ -225,6 +272,9 @@ describe('오류 응답', () => {
 })
 
 describe('다른 주소로 보내는 응답', () => {
+  // 연결 오류를 일부러 내므로 끝에서 연결 판단을 되돌린다(tests/support/setup)
+  afterEach(reconnectStaticApp)
+
   it.each([301, 302, 307, 308])('%d을 따라가지 않아 본문과 토큰이 다른 곳으로 가지 않는다', async (status) => {
     const followed = vi.fn(() => HttpResponse.json({}))
     server.use(
@@ -238,6 +288,9 @@ describe('다른 주소로 보내는 응답', () => {
 })
 
 describe('응답을 받지 못함', () => {
+  // 연결 오류를 일부러 내므로 끝에서 연결 판단을 되돌린다(tests/support/setup)
+  afterEach(reconnectStaticApp)
+
   it('서버에 닿지 못하면 연결 오류다', async () => {
     respondWith(() => HttpResponse.error())
     const error = await errorOf(send('/ledgers'))

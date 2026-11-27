@@ -172,6 +172,40 @@ describe('비밀번호 보기', () => {
     expect(screen.getByRole('button', { name: '비밀번호 보기' })).toBeTruthy()
   })
 
+  it('버튼 이름은 칸 이름에서 만든 "{칸 이름} 보기"이고, 누르면 "{칸 이름} 숨기기"다', async () => {
+    const user = userEvent.setup()
+    render(<PasswordField label="비밀번호 확인" />)
+    expect(screen.queryByRole('button', { name: '비밀번호 보기' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 확인 보기' }))
+    expect(screen.getByLabelText<HTMLInputElement>('비밀번호 확인').type).toBe('text')
+    expect(screen.queryByRole('button', { name: '비밀번호 확인 보기' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 확인 숨기기' }))
+    expect(screen.getByLabelText<HTMLInputElement>('비밀번호 확인').type).toBe('password')
+  })
+
+  it('칸이 둘이면 버튼은 칸 이름으로 따로 찾히고 따로 움직인다', async () => {
+    const user = userEvent.setup()
+    render(
+      <>
+        <PasswordField label="비밀번호" />
+        <PasswordField label="비밀번호 확인" />
+      </>,
+    )
+    const first = screen.getByLabelText<HTMLInputElement>('비밀번호')
+    const second = screen.getByLabelText<HTMLInputElement>('비밀번호 확인')
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 확인 보기' }))
+    expect([first.type, second.type]).toEqual(['password', 'text'])
+    expect(screen.getByRole('button', { name: '비밀번호 보기' })).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 보기' }))
+    expect([first.type, second.type]).toEqual(['text', 'text'])
+    expect(screen.getByRole('button', { name: '비밀번호 숨기기' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '비밀번호 확인 숨기기' })).toBeTruthy()
+  })
+
   it('키보드로 누를 수 있고 초점이 버튼에 남는다', async () => {
     const user = userEvent.setup()
     render(<PasswordField label="비밀번호" />)

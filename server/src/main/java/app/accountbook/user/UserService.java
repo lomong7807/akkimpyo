@@ -8,6 +8,7 @@ import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.ledger.LedgerRole;
+import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -43,14 +44,14 @@ public class UserService {
      * 중간에 실패하면 아무것도 남지 않는다(F-002).
      * 이메일은 맞춘 값({@link EmailNormalizer})으로 저장하고 중복을 검사한다(P-101).
      * 같은 이메일로 동시에 가입하면 한 건만 성공하고 나머지는 {@link DuplicateEmailException}이다.
-     * 표시 이름은 앞뒤 공백을 지운 1~{@value User#DISPLAY_NAME_MAX_LENGTH}자다(P-101).
+     * 표시 이름은 P-214의 글자 규칙({@link Names})으로 맞춘 1~{@value User#DISPLAY_NAME_MAX_LENGTH}자다(P-101).
      * 비밀번호는 NFKC로 맞춘 값으로 규칙({@link PasswordPolicy})을 보고 Argon2id 해시로만 저장한다.
      * 해시는 비싸므로 입력 검사와 중복 확인이 끝난 뒤에 한다(ADR 001 결정 7).
      * 해시와 그 자리를 기다리는 동안 DB 연결을 잡지 않도록 저장만 트랜잭션으로 한다. 이 메서드를 트랜잭션 안에서 부르지 않는다.
      */
     public User createUser(String rawEmail, String rawPassword, String rawDisplayName) {
         String email = EmailNormalizer.normalize(rawEmail);
-        String displayName = Names.normalize(rawDisplayName, User.DISPLAY_NAME_MAX_LENGTH);
+        String displayName = Names.normalize(rawDisplayName, User.DISPLAY_NAME_MAX_LENGTH, "displayName");
         // 해시할 때도 같은 규칙을 본다. 여기서는 DB 조회와 해시보다 먼저 떨어뜨리려고 부른다.
         PasswordPolicy.normalizeAndValidate(rawPassword);
         if (userRepository.existsByEmail(email)) {
@@ -59,6 +60,11 @@ public class UserService {
         String passwordHash = passwordHasher.hash(rawPassword);
         return transactionTemplate.execute(status ->
                 saveWithPersonalLedger(User.of(email, passwordHash, displayName)));
+    }
+
+    /** 이 id의 사용자가 있는가. 토큰의 사용자가 탈퇴로 지워졌는지 요청마다 본다(ADR 001 결정 1). 사용자의 값은 내주지 않는다. */
+    public boolean exists(UUID userId) {
+        return userRepository.existsById(userId);
     }
 
     private User saveWithPersonalLedger(User newUser) {

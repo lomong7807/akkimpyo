@@ -23,13 +23,15 @@ describe('ESLint', () => {
   })
 })
 
-describe('의존 방향: app → features → components, api와 lib', () => {
+describe('의존 방향: app → features → components, api → device, 그리고 lib', () => {
   const feature = 'src/features/sample/sample.ts'
   const component = 'src/components/sample.ts'
   const nestedComponent = 'src/components/sample/sample.ts'
   const api = 'src/api/sample.ts'
   const lib = 'src/lib/sample.ts'
   const nestedLib = 'src/lib/sample/sample.ts'
+  const device = 'src/device/sample.ts'
+  const app = 'src/app/sample.ts'
 
   const value = (from: string) => `import { a } from '${from}'\nexport const b = a`
   const type = (from: string) => `import type { A } from '${from}'\nexport type B = A`
@@ -67,6 +69,12 @@ describe('의존 방향: app → features → components, api와 lib', () => {
     ['features에서 이름이 비슷한 api 모듈', feature, value('../../api/sessionStore')],
     ['features에서 api 폴더', feature, value('../../api')],
     ['features 안쪽 폴더에서 api의 http', 'src/features/sample/deep/sample.ts', value('../../../api/http')],
+    // 화면은 연결 상태를 읽기만 한다. 바꾸는 것은 api 안의 요청 결과다(4.3, architect #234 B)
+    ['features에서 api의 connection의 reportResponse', feature, `import { reportResponse } from '../../api/connection'\nexport const b = reportResponse`],
+    ['features에서 api의 connection의 reportNoResponse', feature, `import { reportNoResponse } from '../../api/connection'\nexport const b = reportNoResponse`],
+    ['features에서 api의 connection의 watchConnection', feature, `import { watchConnection } from '../../api/connection'\nexport const b = watchConnection`],
+    ['features에서 api의 connection 전체', feature, `import * as connection from '../../api/connection'\nexport const b = connection`],
+    ['features에서 api의 connection의 reportResponse 다시 내보내기', feature, `export { reportResponse } from '../../api/connection'`],
     ['앱 코드에서 msw', feature, value('msw')],
     ['api에서 msw', api, value('msw/node')],
     ['components에서 msw', component, value('msw')],
@@ -90,6 +98,33 @@ describe('의존 방향: app → features → components, api와 lib', () => {
     ['lib에서 TanStack Query', lib, value('@tanstack/react-query')],
     ['lib에서 다른 TanStack 패키지', lib, value('@tanstack/query-core')],
     ['lib에서 msw', lib, value('msw')],
+    ['lib에서 device', lib, value('../device/copies')],
+    ['device에서 app', device, value('../app/routes')],
+    ['device에서 features', device, value('../features/me/me')],
+    ['device에서 features의 타입', device, type('../features/me/me')],
+    ['device에서 components', device, value('../components/Button')],
+    ['device에서 api', device, value('../api/session')],
+    ['device에서 api의 타입', device, type('../api/apiError')],
+    ['device에서 React', device, value('react')],
+    ['device에서 TanStack Query', device, value('@tanstack/react-query')],
+    ['device에서 msw', device, value('msw')],
+    ['components에서 device', component, value('../device/copies')],
+    ['components 안쪽 폴더에서 device', nestedComponent, type('../../device/loginRecord')],
+    // service worker는 따로 묶이는 classic script라 sw 밖을 부르지 않는다(#234 C)
+    ['sw에서 lib', 'src/sw/sample.ts', value('../lib/calendarDate')],
+    ['sw에서 api', 'src/sw/sample.ts', value('../api/session')],
+    ['sw에서 device', 'src/sw/sample.ts', type('../device/copies')],
+    ['sw에서 app', 'src/sw/sample.ts', value('../app/registerServiceWorker')],
+    ['sw에서 features', 'src/sw/sample.ts', value('../features/me/useMe')],
+    ['sw에서 components', 'src/sw/sample.ts', value('../components/Button')],
+    ['sw에서 React', 'src/sw/sample.ts', value('react')],
+    ['sw에서 패키지', 'src/sw/sample.ts', value('some-package')],
+    ['features에서 device의 deviceDb', feature, value('../../device/deviceDb')],
+    ['features에서 확장자를 적은 device의 deviceDb', feature, value('../../device/deviceDb.ts')],
+    ['features에서 device의 deviceDb 다시 내보내기', feature, reExport('../../device/deviceDb')],
+    ['app에서 device의 deviceDb', app, value('../device/deviceDb')],
+    ['api에서 device의 deviceDb', api, value('../device/deviceDb')],
+    ['main에서 device의 deviceDb', 'src/main.ts', value('./device/deviceDb')],
   ])('막는다: %s', async (_, path, code) => {
     expect(await ruleIdsFor(code, path)).toEqual(['no-restricted-imports'])
   })
@@ -107,6 +142,12 @@ describe('의존 방향: app → features → components, api와 lib', () => {
     ['features에서 api의 session', feature, value('../../api/session')],
     ['features에서 api의 apiError', feature, value('../../api/apiError')],
     ['features에서 api의 apiError의 타입', feature, type('../../api/apiError')],
+    [
+      'features에서 api의 connection의 읽기',
+      feature,
+      `import { connection, onConnectionChange, type Connection } from '../../api/connection'\nexport const b: [() => Connection, typeof onConnectionChange] = [connection, onConnectionChange]`,
+    ],
+    ['features에서 api의 connection의 타입', feature, `import type { Connection } from '../../api/connection'\nexport type B = Connection`],
     ['features에서 확장자를 적은 api의 request', feature, value('../../api/request.ts')],
     ['features 안쪽 폴더에서 api의 session', 'src/features/sample/deep/sample.ts', value('../../../api/session')],
     ['app에서 api', 'src/app/sample.ts', value('../api/session')],
@@ -123,6 +164,14 @@ describe('의존 방향: app → features → components, api와 lib', () => {
     ['components에서 lib', component, value('../lib/amountText')],
     ['components 안쪽 폴더에서 lib', nestedComponent, type('../../lib/calendarDate')],
     ['테스트에서 lib', 'tests/sample.test.ts', value('../src/lib/calendarDate')],
+    ['sw에서 sw', 'src/sw/sample.ts', value('./swRoutes')],
+    ['api에서 device', api, value('../device/loginRecord')],
+    ['features에서 device', feature, value('../../device/copies')],
+    ['features 안쪽 폴더에서 device', 'src/features/sample/deep/sample.ts', type('../../../device/copies')],
+    ['app에서 device', app, value('../device/userData')],
+    ['device에서 device', device, value('./deviceDb')],
+    ['device에서 lib', device, value('../lib/clock')],
+    ['테스트에서 device의 deviceDb', 'tests/sample.test.ts', value('../src/device/deviceDb')],
   ])('막지 않는다: %s', async (_, path, code) => {
     expect(await ruleIdsFor(code, path)).toEqual([])
   })

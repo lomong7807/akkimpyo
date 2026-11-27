@@ -17,6 +17,10 @@ describe('금액의 색과 부호(00-common 2.2)', () => {
     ['이체', <Amount kind="transfer" value={500000} />, '500,000원', 'var(--color-text-secondary)'],
     ['잔액과 합계', <Amount kind="balance" value={85000} />, '85,000원', 'var(--color-text)'],
     ['음수인 잔액과 합계', <Amount kind="balance" value={-120000} />, '-120,000원', 'var(--color-text)'],
+    // 차액은 본문 글자색이고 부호를 늘 붙인다(화면설계서 01 작성자 판단 37). 0원은 부호가 없다
+    ['양수인 차액', <Amount kind="difference" value={1954700} />, '+1,954,700원', 'var(--color-text)'],
+    ['음수인 차액', <Amount kind="difference" value={-120000} />, '-120,000원', 'var(--color-text)'],
+    ['0원인 차액', <Amount kind="difference" value={0} />, '0원', 'var(--color-text)'],
   ])('%s', (_, amount, text, color) => {
     const shown = show(amount)
     expect(shown.text).toBe(text)

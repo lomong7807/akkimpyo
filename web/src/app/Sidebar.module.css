@@ -79,3 +79,32 @@
 .row[aria-current] {
   color: var(--color-accent);
 }
+
+/* 버튼이 사이드바 폭에서 좌우 16px을 뺀 폭을 다 쓴다 */
+.quickEntry {
+  display: grid;
+  flex: none;
+}
+
+.quickEntryLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/*
+ * 맨 아래 묶음(6.1 [판단 55]). 짧으면 맨 아래로 밀고, 창 높이가 모자라 사이드바 안에서 스크롤해도 아래에 붙어 늘 보인다.
+ * 스크롤되는 메뉴가 뒤로 지나가므로 바탕을 칠하고 메뉴와 1px 선으로 나눈다(메뉴 묶음 사이 선과 같다).
+ */
+.bottom {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: auto;
+  padding-block: var(--space-8);
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}

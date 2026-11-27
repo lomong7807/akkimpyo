@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useToast } from '../../components/ToastContext'
 import { today } from '../../lib/calendarDate'
@@ -9,6 +9,8 @@ import type { NewAccount } from '../accounts/accounts'
 import { accountsKey } from '../accounts/useAccounts'
 import { useAccountForm } from '../accounts/useAccountForm'
 import { useCreateAccount } from '../accounts/useCreateAccount'
+import { CREATE_ACCOUNT, failureTextOf, isConnectionLost } from '../connection/offlineAction'
+import { useConnection } from '../connection/useConnection'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 
 /** 안내를 마치고 가는 곳. 로그인하기 전에 가려던 주소(복귀 주소)는 쓰지 않는다. */
@@ -28,6 +30,9 @@ function cashAccount(): NewAccount {
 
 type Action = 'create' | 'skip'
 
+/** 보내는 동안 도는 표시를 둘 버튼: 누른 동작의 버튼, 또는 실패 문구의 "다시 시도" */
+type Sender = Action | 'retry'
+
 export type FirstAccount = ReturnType<typeof useFirstAccount>
 
 /**
@@ -41,14 +46,19 @@ export function useFirstAccount() {
   const showToast = useToast()
   const form = useAccountForm(firstAccountMessages)
   const creation = useCreateAccount()
-  const [pressed, setPressed] = useState<Action>('create')
-  const createButton = useRef<HTMLButtonElement>(null)
-  const skipButton = useRef<HTMLButtonElement>(null)
+  // 두 동작 모두 계좌를 만드는 요청이라 연결이 없으면 누를 수 없다(C-02 네트워크 오류)
+  const online = useConnection() === 'online'
+  // 마지막으로 보낸 동작. "다시 시도"가 이것을 다시 한다
+  const [action, setAction] = useState<Action>('create')
+  // 누른 버튼만 돌고 다른 버튼은 누를 수 없다(00-common 4.5, designer 규칙 #102)
+  const [sender, setSender] = useState<Sender>('create')
+  // 버튼 위의 실패 문구. 다시 보내는 동안에도 남기고, 실패마다 올려 새로 그려 다시 읽히게 한다. 없으면 없다.
+  // 칸에 보인 거부와, 계좌가 생긴 것으로 보는 거부는 실패가 아니다
+  const [failure, setFailure] = useState<{ count: number; text: string; lost: boolean }>()
 
   const busy = creation.isPending || creation.isSuccess
-  // 칸에 보인 거부와, 계좌가 생긴 것으로 보는 거부는 실패가 아니다
-  const failed =
-    creation.isError && !(pressed === 'create' ? rejectedOnFields(creation.error) : isDuplicateName(creation.error))
+  // 연결이 끊기면 안내 줄이 앞선 실패 문구를 대신하고 다시 연결돼도 되살리지 않는다. 한 버튼 위에는 한 줄만(designer #238)
+  if (!online && failure && !failure.lost) setFailure(undefined)
 
   // 안내를 떠난 뒤에 온 응답으로는 불리지 않는다
   function finish(message?: string) {
@@ -56,27 +66,45 @@ export function useFirstAccount() {
     navigate(HOME, { replace: true })
   }
 
-  function create() {
-    setPressed('create')
+  /** 실패 문구를 새로 그린다. 연결이 끊긴 것과 그 밖을 나눈다(00-common 4.3) */
+  function fail(error: Error) {
+    const text = failureTextOf(error, CREATE_ACCOUNT)
+    setFailure((last) => ({ count: (last?.count ?? 0) + 1, text, lost: isConnectionLost(error) }))
+  }
+
+  function create(from: Sender = 'create') {
+    // 엔터로 보내는 길도 막는다(버튼은 누를 수 없게만 둔다)
+    if (busy || !online) return
     if (!form.checkAll()) {
       creation.reset()
+      setFailure(undefined)
       return
     }
+    setAction('create')
+    setSender(from)
     creation.mutate(toNewAccount(form.values), {
       onSuccess: () => finish('계좌를 만들었어요'),
       onError: (error) => {
         const rejected = rejectedFields(error, firstAccountMessages)
-        if (rejected) form.reject(rejected)
+        if (rejected) {
+          form.reject(rejected)
+          setFailure(undefined)
+        } else fail(error)
       },
     })
   }
 
-  function skip() {
-    setPressed('skip')
+  function skip(from: Sender = 'skip') {
+    if (busy || !online) return
+    setAction('skip')
+    setSender(from)
     creation.mutate(cashAccount(), {
       onSuccess: () => finish('현금 계좌를 만들었어요'),
       onError: (error) => {
-        if (!isDuplicateName(error)) return
+        if (!isDuplicateName(error)) {
+          fail(error)
+          return
+        }
         // 다른 구성원이 먼저 "현금"을 만들었다. 장부에 계좌가 생겼으므로 안내를 마친다. 이 사람이 만든 것이 아니므로 토스트는 없다
         void queryClient.invalidateQueries({ queryKey: accountsKey(ledger.id) })
         finish()
@@ -84,20 +112,12 @@ export function useFirstAccount() {
     })
   }
 
-  /** 실패한 동작을 지금 화면의 값으로 다시 한다. 그동안 "다시 시도"는 사라지므로 그 동작의 버튼으로 초점을 옮긴다. */
+  /** 실패한 동작을 지금 화면의 값으로 다시 한다. 그동안 문구는 남고 "다시 시도"만 돈다. */
   function retry() {
-    if (pressed === 'create') {
-      createButton.current?.focus()
-      create()
-    } else {
-      skipButton.current?.focus()
-      skip()
-    }
+    if (action === 'create') create('retry')
+    else skip('retry')
   }
 
-  return { form, busy, pressed, failed, create, skip, retry, createButton, skipButton }
-}
-
-function rejectedOnFields(error: Error): boolean {
-  return rejectedFields(error, firstAccountMessages) !== undefined
+  // 누른 버튼의 이벤트가 보낸 버튼(from)으로 들어가지 않게 감싼다
+  return { form, busy, online, sender, failure, create: () => create(), skip: () => skip(), retry }
 }

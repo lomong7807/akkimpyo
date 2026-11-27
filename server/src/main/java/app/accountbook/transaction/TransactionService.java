@@ -10,6 +10,7 @@ import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.StaleVersionException;
 import app.accountbook.common.Times;
+import app.accountbook.common.UserText;
 import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerAccess;
 import app.accountbook.ledger.LedgerRepository;
@@ -303,6 +304,7 @@ public class TransactionService {
 
     /**
      * 형식 검증(필수 항목, 형식, 범위)과 비교 전의 값 맞추기. 계좌와 카테고리가 장부에 있는지는 보지 않는다.
+     * 가맹점과 메모의 글자 규칙(P-214, {@link UserText})도 여기서 본다. 같은 id 조회보다 앞이다(ADR 006 결정 4).
      * 돌려주는 값은 저장할 내용이고 재전송 비교에도 쓴다.
      */
     private Content normalize(UUID ledgerId, TransactionCommand cmd, UUID defaultPaidBy) {
@@ -324,8 +326,8 @@ public class TransactionService {
         if (entry.refund() && entry.type() == TransactionType.INCOME) {
             throw new InvalidRequestException("환불은 지출에만 표시할 수 있습니다.");
         }
-        requireMaxLength(entry.payee(), PAYEE_MAX_LENGTH, "가맹점/내용");
-        requireMaxLength(entry.memo(), MEMO_MAX_LENGTH, "메모");
+        String payee = UserText.payee(entry.payee(), PAYEE_MAX_LENGTH);
+        String memo = UserText.memo(entry.memo(), MEMO_MAX_LENGTH);
         requireAccountGiven(entry.accountId());
         UUID categoryId = entry.categoryId() == null
                 ? categoryService.uncategorized(ledgerId, categoryKind(entry)).getId()
@@ -334,7 +336,7 @@ public class TransactionService {
         boolean increasesBalance = entry.type() == TransactionType.INCOME || entry.refund();
         long amount = increasesBalance ? entry.amount() : -entry.amount();
         return new Content(entry.id(), entry.type(), entry.occurredOn(),
-                Transaction.storableTime(entry.occurredTime()), entry.payee(), entry.memo(), paidBy,
+                Transaction.storableTime(entry.occurredTime()), payee, memo, paidBy,
                 List.of(new Line(entry.accountId(), categoryId, amount)));
     }
 
@@ -343,14 +345,14 @@ public class TransactionService {
         requireHeader(transfer.id(), transfer.occurredOn());
         requireDateInRange(ledgerId, transfer.occurredOn());
         TransactionLimits.requireAmountInRange(transfer.amount());
-        requireMaxLength(transfer.memo(), MEMO_MAX_LENGTH, "메모");
+        String memo = UserText.memo(transfer.memo(), MEMO_MAX_LENGTH);
         requireAccountGiven(transfer.fromAccountId());
         requireAccountGiven(transfer.toAccountId());
         if (transfer.fromAccountId().equals(transfer.toAccountId())) {
             throw new InvalidRequestException("같은 계좌로는 이체할 수 없습니다.");
         }
         return new Content(transfer.id(), TransactionType.TRANSFER, transfer.occurredOn(),
-                Transaction.storableTime(transfer.occurredTime()), null, transfer.memo(), null,
+                Transaction.storableTime(transfer.occurredTime()), null, memo, null,
                 List.of(new Line(transfer.fromAccountId(), null, -transfer.amount()),
                         new Line(transfer.toAccountId(), null, transfer.amount())));
     }
@@ -404,12 +406,6 @@ public class TransactionService {
         TransactionLimits.requireDateInRange(occurredOn, clock, ledgerZone);
     }
 
-    private static void requireMaxLength(String text, int maxLength, String label) {
-        if (text != null && text.codePointCount(0, text.length()) > maxLength) {
-            throw new InvalidRequestException(label + "은(는) " + maxLength + "자까지 쓸 수 있습니다.");
-        }
-    }
-
     private void requireAccountInLedger(UUID ledgerId, UUID accountId) {
         boolean inLedger = accountRepository.findById(accountId)
                 .map(Account::getLedgerId)
@@ -439,9 +435,14 @@ public class TransactionService {
     private record Content(UUID id, TransactionType type, LocalDate occurredOn, LocalTime occurredTime,
                            String payee, String memo, UUID paidBy, List<Line> lines) {
 
+        /**
+         * 저장된 거래를 요청과 같은 값 맞추기(P-214)에 통과시킨 내용. 이 규칙 전에 다듬지 않고 저장된 가맹점과 메모
+         * (앞뒤 공백, 분해형, 빈 문자열)의 재전송이 다른 내용으로 보이지 않게 한다(ADR 006 결정 3). 저장된 값은 거부하지 않는다.
+         */
         static Content of(Transaction tx) {
-            return new Content(tx.getId(), tx.getType(), tx.getOccurredOn(), tx.getOccurredTime(), tx.getPayee(),
-                    tx.getMemo(), tx.getPaidBy(), tx.getLines().stream().map(Line::of).toList());
+            return new Content(tx.getId(), tx.getType(), tx.getOccurredOn(), tx.getOccurredTime(),
+                    UserText.comparablePayee(tx.getPayee()), UserText.comparableMemo(tx.getMemo()), tx.getPaidBy(),
+                    tx.getLines().stream().map(Line::of).toList());
         }
 
         /** 같은 내용: type, 날짜, 시각, payee, memo, paidBy와 라인 (계좌, 카테고리, 금액)의 다중집합이 같다. */

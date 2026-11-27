@@ -11,12 +11,18 @@ export function ledgerNameOf(user: string): string {
   return `${user}의 장부`
 }
 
+/** 사용자마다 다른 장부 id. 서버처럼 UUID다. 앞자리로 어느 사용자의 장부인지 알아본다. */
+export function ledgerIdOf(user: string): string {
+  const hex = [...new TextEncoder().encode(user)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `1ed9e700-0000-4000-8000-${hex.padStart(12, '0').slice(-12)}`
+}
+
 export function meOf(user: string) {
   return {
     id: user,
     email: `${user}@example.com`,
     displayName: `${user}의 이름`,
-    ledgers: [{ id: `${user}-ledger`, name: ledgerNameOf(user), role: 'OWNER' }],
+    ledgers: [{ id: ledgerIdOf(user), name: ledgerNameOf(user), role: 'OWNER' }],
   }
 }
 
@@ -24,6 +30,7 @@ export function meOf(user: string) {
  * 로그인, 가입, 갱신, 로그아웃, 내 정보가 되는 가짜 서버. 로그인하지 않은 기기에서 시작한다.
  * 사용자는 이미 계좌가 있어, 들어올 때 계좌 목록을 받아도 첫 실행 안내(C-02)로 가지 않는다.
  * 계좌를 다루는 테스트는 startAccounts가 이 계좌 목록을 덮는다.
+ * 홈(C-01)이 받는 거래 목록(#15)과 카테고리(#34)는 비어 있다. 다루는 테스트는 startTransactionList, startCategories가 덮는다.
  */
 export function startBackend(server: SetupServer) {
   const tokens = new Map<string, string>()
@@ -98,6 +105,17 @@ export function startBackend(server: SetupServer) {
       backend.requests.accounts.push(user ?? '만료')
       if (!user) return problem(401, 'UNAUTHENTICATED')
       return HttpResponse.json({ items: [{ id: `${user}-account`, name: '통장', type: 'BANK', balance: 0 }] })
+    }),
+    http.get('/api/v1/ledgers/:ledgerId/transactions', ({ request }) => {
+      if (!backend.userOf(request)) return problem(401, 'UNAUTHENTICATED')
+      // 달이 있으면 그 달의 합계가 있고, 없으면(장부 전체) 합계가 없다
+      const month = new URL(request.url).searchParams.get('month')
+      const totals = month === null ? null : { income: 0, expense: 0 }
+      return HttpResponse.json({ items: [], nextCursor: null, totals, days: [] })
+    }),
+    http.get('/api/v1/ledgers/:ledgerId/categories', ({ request }) => {
+      if (!backend.userOf(request)) return problem(401, 'UNAUTHENTICATED')
+      return HttpResponse.json({ items: [] })
     }),
   )
   return backend

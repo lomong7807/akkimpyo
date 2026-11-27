@@ -1,0 +1,16 @@
+[Unit]
+Description=아낌표 DB 백업 점검 (26시간 넘게 새 백업이 없으면 알림)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/akkimpyo/bin/backup-check
+TimeoutStartSec=5min
+UMask=0077
+StateDirectory=akkimpyo-backup
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes

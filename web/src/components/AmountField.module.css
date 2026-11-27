@@ -29,3 +29,9 @@
   font: var(--text-body);
   pointer-events: none;
 }
+
+/* 값만 키운다. "원"은 text-body(16px) 그대로이므로 비우는 폭은 값의 글자 크기(em)가 아니라 16px로 센다 */
+.title {
+  padding-inline-end: calc(var(--space-12) + 0.875 * var(--space-16) + var(--space-8));
+  font: var(--text-title);
+}

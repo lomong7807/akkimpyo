@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useBlocker } from 'react-router'
+import { startNextScreenAtTop } from './startAtTop'
 import { useGoBack } from './useGoBack'
 
 interface LeaveGuardOptions {
@@ -51,5 +52,12 @@ export function useLeaveGuard({ parent, changed, busy }: LeaveGuardOptions) {
       leave(blocker.state === 'blocked' ? blocker.proceed : goBack)
     },
     leave,
+    /** 저장에 성공해 묻지 않고 떠난다. 돌아간 화면은 앞서 보던 위치가 아니라 맨 위에서 시작한다(#245). */
+    leaveAfterSave(go: () => void) {
+      leave(() => {
+        startNextScreenAtTop()
+        go()
+      })
+    },
   }
 }
