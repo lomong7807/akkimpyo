@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -127,7 +128,7 @@ public class TransactionService {
             return new CreateResult(replay(existing.get(), actorId, ledgerId, content), false);
         }
         requireNotPurged(content.id());
-        requireReferences(ledgerId, cmd);
+        requireReferences(ledgerId, cmd, Set.of());
         Transaction tx = Transaction.of(content.id(), ledgerId, content.type(), content.occurredOn(),
                 content.occurredTime(), content.payee(), content.memo(), actorId, content.paidBy());
         content.lines().forEach(line -> tx.addLine(line.accountId(), line.categoryId(), line.amount()));
@@ -174,7 +175,7 @@ public class TransactionService {
         }
         requireVersion(tx, expectedVersion);
         requireNotDeleted(tx, "삭제된 거래는 수정할 수 없습니다.");
-        requireReferences(tx.getLedgerId(), cmd);
+        requireReferences(tx.getLedgerId(), cmd, accountIdsOf(tx));
         if (Content.of(tx).sameAs(content)) {
             return view(tx);
         }
@@ -225,15 +226,6 @@ public class TransactionService {
     @Transactional(readOnly = true)
     public TransactionView get(UUID actorId, UUID txId) {
         return view(loadAccessible(actorId, txId));
-    }
-
-    /** 휴지통: 최근에 지운 순. 고친 사람을 거래마다 한 번씩 읽는다. 목록을 API로 낼 때(#15, #38) 한 번에 읽게 고친다. */
-    @Transactional(readOnly = true)
-    public List<TransactionView> listDeleted(UUID actorId, UUID ledgerId) {
-        ledgerAccess.requireMember(actorId, ledgerId);
-        return transactionRepository.findByLedgerIdAndDeletedAtIsNotNullOrderByDeletedAtDesc(ledgerId).stream()
-                .map(this::view)
-                .toList();
     }
 
     /** 거래의 변경 이력, 오래된 순(version 순). */
@@ -407,11 +399,13 @@ public class TransactionService {
     /**
      * 참조 검증: 계좌와 카테고리가 이 장부에 있는지, 카테고리의 수입·지출 구분이 맞는지, 결제한 사람이 구성원인지.
      * {@link #normalize}를 통과한 요청에만 쓴다. 없거나 다른 장부의 것은 구분하지 않고 그 입력란의 {@code NOT_FOUND}다.
+     * 숨긴 계좌는 그 입력란의 {@code NOT_ALLOWED}다(P-220). 단 고치는 거래가 이미 쓰는 계좌({@code keptAccountIds})는 숨겼어도
+     * 된다. 숨기기 전의 거래를 계좌를 바꾸지 않고 고칠 수 있게 한다.
      */
-    private void requireReferences(UUID ledgerId, TransactionCommand cmd) {
+    private void requireReferences(UUID ledgerId, TransactionCommand cmd, Set<UUID> keptAccountIds) {
         switch (cmd) {
             case Entry entry -> {
-                requireAccountInLedger(ledgerId, "accountId", entry.accountId());
+                requireAccountInLedger(ledgerId, "accountId", entry.accountId(), keptAccountIds);
                 if (entry.categoryId() != null) {
                     requireCategoryInLedger(ledgerId, categoryKind(entry), entry.categoryId());
                 }
@@ -420,8 +414,8 @@ public class TransactionService {
                 }
             }
             case Transfer transfer -> {
-                requireAccountInLedger(ledgerId, "fromAccountId", transfer.fromAccountId());
-                requireAccountInLedger(ledgerId, "toAccountId", transfer.toAccountId());
+                requireAccountInLedger(ledgerId, "fromAccountId", transfer.fromAccountId(), keptAccountIds);
+                requireAccountInLedger(ledgerId, "toAccountId", transfer.toAccountId(), keptAccountIds);
             }
         }
     }
@@ -453,14 +447,17 @@ public class TransactionService {
         TransactionLimits.requireDateInRange(occurredOn, clock, ledgerZone);
     }
 
-    private void requireAccountInLedger(UUID ledgerId, String field, UUID accountId) {
-        boolean inLedger = accountRepository.findById(accountId)
-                .map(Account::getLedgerId)
-                .filter(ledgerId::equals)
-                .isPresent();
-        if (!inLedger) {
-            throw new InvalidRequestException(field, FieldErrorCode.NOT_FOUND, "장부에 없는 계좌입니다.");
+    private void requireAccountInLedger(UUID ledgerId, String field, UUID accountId, Set<UUID> keptAccountIds) {
+        Account account = accountRepository.findById(accountId)
+                .filter(found -> found.getLedgerId().equals(ledgerId))
+                .orElseThrow(() -> new InvalidRequestException(field, FieldErrorCode.NOT_FOUND, "장부에 없는 계좌입니다."));
+        if (account.isHidden() && !keptAccountIds.contains(accountId)) {
+            throw new InvalidRequestException(field, FieldErrorCode.NOT_ALLOWED, "숨긴 계좌로는 거래를 입력할 수 없습니다.");
         }
+    }
+
+    private static Set<UUID> accountIdsOf(Transaction tx) {
+        return tx.getLines().stream().map(TransactionLine::getAccountId).collect(Collectors.toUnmodifiableSet());
     }
 
     private void requireCategoryInLedger(UUID ledgerId, CategoryKind kind, UUID categoryId) {

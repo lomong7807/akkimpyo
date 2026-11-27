@@ -21,6 +21,18 @@ record CategoryResponse(UUID id, CategoryKind kind, String name, boolean system,
     record Child(UUID id, String name) {
     }
 
+    /**
+     * 만들었거나 이름을 바꾼 카테고리 하나(#44). 하위 카테고리도 목록의 최상위 항목과 같은 모양이고 {@code children}이 비어 있다.
+     * {@code categories}는 {@code CategoryService.list}의 결과이고 그 가운데 이 카테고리의 하위를 받은 순서대로 담는다.
+     */
+    static CategoryResponse of(Category category, List<Category> categories) {
+        return new CategoryResponse(category.getId(), category.getKind(), category.getName(), category.isSystem(),
+                categories.stream()
+                        .filter(child -> category.getId().equals(child.getParentId()))
+                        .map(child -> new Child(child.getId(), child.getName()))
+                        .toList());
+    }
+
     /** 카테고리 목록. 최상위만 담고 하위는 그 상위의 {@code children}에 넣는다. 나누지 않고 전부 담는다(ADR 002 3절). */
     record Items(List<CategoryResponse> items) {
 

@@ -44,6 +44,7 @@
 - auth → user
 - stats → account, category, ledger, transaction (읽기 전용)
 - api → account, auth, category, ledger, stats, transaction, user
+- demo → account, category, ledger, transaction, user (local 프로파일 전용 데모 데이터, #349). 어떤 모듈도 demo를 참조하지 않는다.
 
 위에 없는 방향은 금지한다. stats와 auth를 참조할 수 있는 것은 api뿐이다.
 api와 auth는 아직 없는 패키지이고 첫 API 이슈(#12)에서 생긴다.

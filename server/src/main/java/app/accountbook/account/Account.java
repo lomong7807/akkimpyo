@@ -37,6 +37,10 @@ public class Account extends BaseEntity {
     @Column(name = "currency", nullable = false)
     private String currency;
 
+    /** 숨긴 계좌는 새 거래에 고를 수 없고, 과거 거래와 잔액·통계에는 남는다(P-220). */
+    @Column(name = "hidden", nullable = false)
+    private boolean hidden;
+
     protected Account() {
     }
 
@@ -62,6 +66,10 @@ public class Account extends BaseEntity {
         this.openingDate = openingDate;
     }
 
+    void setHidden(boolean hidden) {
+        this.hidden = hidden;
+    }
+
     public UUID getLedgerId() {
         return ledgerId;
     }
@@ -84,5 +92,9 @@ public class Account extends BaseEntity {
 
     public String getCurrency() {
         return currency;
+    }
+
+    public boolean isHidden() {
+        return hidden;
     }
 }

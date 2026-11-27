@@ -10,6 +10,8 @@ import { ledgerIdOf, startBackend } from './backend'
 import { categoryWithChildren, startCategories, startCategorySuggestions } from './categories'
 import { untilOpened } from './dialog'
 import { preloadLoginScreen } from './openApp'
+import { fetchScreenCodeFirst } from './screenCode'
+import { withShownLocation } from './shownScreen'
 import { enableTestClock, setupUser } from './testClock'
 import { startTransactions } from './transactions'
 import { installLocks, createFakeLocks } from './webLocks'
@@ -19,6 +21,8 @@ import { installMatchMedia } from './viewport'
 
 // 앱을 그리는 테스트는 공용 시계 하나로 돈다(docs/qa/test-strategy.md 8절 1)
 enableTestClock()
+// 파일의 첫 테스트가 화면 코드를 받는 시간을 테스트 밖에서 먼저 쓴다(#291)
+fetchScreenCodeFirst()
 
 export const id = {
   salary: '11111111-1111-4111-8111-111111111111',
@@ -82,7 +86,7 @@ export async function openApp(path: string) {
   const { routes } = await import('../../src/app/routes')
   const { createQueryClient } = await import('../../src/app/queryClient')
   await preloadLoginScreen()
-  const router = createBrowserRouter(routes)
+  const router = withShownLocation(routes, createBrowserRouter)
   render(
     <QueryClientProvider client={createQueryClient()}>
       <RouterProvider router={router} />

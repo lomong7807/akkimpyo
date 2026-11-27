@@ -1,7 +1,6 @@
 package app.accountbook.transaction;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -24,9 +23,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
             """)
     int advanceVersion(@Param("id") UUID id, @Param("expectedVersion") long expectedVersion,
                        @Param("updatedAt") Instant updatedAt);
-
-    @EntityGraph(attributePaths = "lines")
-    List<Transaction> findByLedgerIdAndDeletedAtIsNotNullOrderByDeletedAtDesc(UUID ledgerId);
 
     /**
      * 거래와 라인을 한 문장으로 읽는다. 한 문장은 한 시점의 값을 보므로, 거래와 라인을 따로 읽을 때처럼 그사이 커밋된
