@@ -51,8 +51,8 @@ export async function queueNewTransaction({ userId, ledgerId }: Owner, transacti
  */
 
 /**
- * 목록에 보이는 거래. 기기에 쌓여 아직 서버에 없는 줄은 pending이고(눌리지 않는다, 1B 임시 #236), 그 가운데 서버가 거부한 줄은
- * rejected다(칩 "보낼 수 없음", D-01 (11), #235).
+ * 목록에 보이는 거래. 기기에 쌓여 아직 서버에 없는 줄은 pending이고(누르면 보내지 않은 입력 목록 B-05, 0.4, #236), 그 가운데
+ * 서버가 거부한 줄은 rejected다(칩 "보낼 수 없음", D-01 (11), #235).
  */
 export type ShownTransaction = ListedTransaction & { pending?: true; rejected?: true }
 
@@ -65,6 +65,14 @@ const NONE: PendingTransaction[] = []
 
 /** 이 탭의 기기 데이터 주인이 이 기기에 쌓은 모든 장부의 항목(대기와 보낼 수 없음). 동기화 상태 표시(B-04)가 센다 */
 export function useAllPending(): PendingTransaction[] {
+  return usePendingRead() ?? NONE
+}
+
+/**
+ * useAllPending과 같은 항목. 읽기 전이면 없다(보내지 않은 입력 목록 B-05가 읽기 전에 '데이터 없음'을 그리지 않게). 기기 저장소를
+ * 읽지 못했으면 쌓을 수도 없었으므로 빈 목록이다.
+ */
+export function usePendingRead(): PendingTransaction[] | undefined {
   const user = sessionUserId()
   const query = useQuery({
     queryKey: pendingKey(user),
@@ -72,7 +80,7 @@ export function useAllPending(): PendingTransaction[] {
     enabled: user !== undefined,
     staleTime: Infinity,
   })
-  return query.data ?? NONE
+  return query.isError ? NONE : query.data
 }
 
 /** 이 장부에 쌓은 항목(대기와 보낼 수 없음, #235) */

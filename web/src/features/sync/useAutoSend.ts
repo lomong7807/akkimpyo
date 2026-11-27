@@ -11,6 +11,11 @@ import { ledgerScope } from '../me/ledgerKey'
  * 보내는 코드(sendQueue)는 첫 계기에 따로 받는다(architect #235 A).
  */
 
+/** 보낸 입력이 200이고 알릴 것(ADR 006 결정 3)이 있을 때의 토스트(designer #235 Q1). 지금 보내기(B-05)도 쓴다 */
+export function resendNoticeText(count: number): string {
+  return `보낸 입력 ${count}건은 이미 저장된 거래라 저장된 내용으로 두었어요`
+}
+
 /** 열려 있는 동안 보내는 간격 */
 export const SEND_EVERY_MS = 60_000
 

@@ -16,7 +16,7 @@ import { resetViewport } from './support/viewport'
  * 쌓은 거래의 "보내지 않음" 표시(C-01 (9)(10), D-01 (4)(8)(11), F-103, #234 B). 홈 최근 거래와 내역에 서버 거래와 같은 순서
  * 규칙으로 섞이고 셋째 줄에 표시 칩이 붙는다(0.4, "취소"와 같은 자리, designer #234 B). 내역 합계와 날짜 묶음 머리의 그날
  * 합계에는 더하고, 홈의 이번 달 합계와 계좌 잔액에는 더하지 않는다(작성자 판단 43, planner Q5). 대신 홈 합계 아래에 합계에
- * 없는 건수를 알린다(designer #234 B). 1B 임시로 보내지 않음 줄은 눌리지 않는다(#236).
+ * 없는 건수를 알린다(designer #234 B). 보내지 않음 줄은 누르면 보내지 않은 입력 목록(B-05)으로 간다(0.4, #236).
  */
 
 const server = startMockServer()
@@ -144,10 +144,13 @@ describe('내역(D-01)', () => {
     expect(chipIn(row)!.closest('[class*="_status_"]')!.textContent).toBe('보내지 않음')
   })
 
-  it('보내지 않음 줄은 눌리지 않는다(1B 임시, #236)', async () => {
+  it('보내지 않음 줄은 거래 상세 대신 보내지 않은 입력 목록(B-05)으로 가는 링크이고 이름에 칩을 넣는다(0.4, #236)', async () => {
     await seedPending(pendingExpense({ payee: '대기' }))
     await openHistory()
-    expect(within(rowOf('대기')).queryByRole('link')).toBeNull()
+    const link = within(rowOf('대기')).getByRole('link')
+    expect(link.getAttribute('href')).toBe('/pending')
+    expect(link.textContent).toContain('보내지 않음')
+    expect(screen.getByRole('link', { name: /^대기 5,000원 11월 26일 \(목\) .*보내지 않음$/ })).toBe(link)
   })
 
   it('수입·지출 합계에 그 달의 보내지 않은 입력을 더한다(이체는 빼고)', async () => {
@@ -174,7 +177,7 @@ describe('내역(D-01)', () => {
   })
 
   describe('보낼 수 없음(D-01 (11), #235)', () => {
-    it('서버가 거부한 입력의 줄에는 오류 칩 "보낼 수 없음"이 붙고 눌리지 않는다', async () => {
+    it('서버가 거부한 입력의 줄에는 오류 칩 "보낼 수 없음"이 붙고 누르면 B-05로 간다(#236)', async () => {
       await seedPending(pendingExpense({ payee: '대기' }))
       await seedRejected(pendingExpense({ payee: '거부됨' }))
       await openHistory()
@@ -182,7 +185,7 @@ describe('내역(D-01)', () => {
       expect(rejectedChipIn(row)).not.toBeNull()
       expect(chipIn(row)).toBeNull()
       expect(rejectedChipIn(rowOf('대기'))).toBeNull()
-      expect(within(row).queryByRole('link')).toBeNull()
+      expect(within(row).getByRole('link').getAttribute('href')).toBe('/pending')
       // 셋째 줄, 다른 칩과 같은 자리
       expect(rejectedChipIn(row)!.closest('[class*="_status_"]')).not.toBeNull()
     })
@@ -303,7 +306,7 @@ describe('홈 최근 거래(C-01)', () => {
     expect(recentTitles()).toEqual(['오늘의 대기'])
   })
 
-  it('보낼 수 없음 줄도 섞고 내역과 같은 오류 칩을 셋째 줄에 붙인다. 눌리지 않는다(designer #235 Q2)', async () => {
+  it('보낼 수 없음 줄도 섞고 내역과 같은 오류 칩을 셋째 줄에 붙인다. 누르면 B-05로 간다(designer #235 Q2, #236)', async () => {
     await seedPending(pendingExpense({ occurredOn: '2026-11-26', payee: '대기' }))
     await seedRejected(pendingExpense({ occurredOn: '2026-11-26', occurredTime: '09:00', payee: '거부됨' }))
     await openHome()
@@ -311,7 +314,7 @@ describe('홈 최근 거래(C-01)', () => {
     const row = rowOf('거부됨')
     expect(rejectedChipIn(row)!.closest('[class*="_status_"]')).not.toBeNull()
     expect(chipIn(row)).toBeNull()
-    expect(within(row).queryByRole('link')).toBeNull()
+    expect(within(row).getByRole('link').getAttribute('href')).toBe('/pending')
   })
 
   it('이번 달 합계와 계좌 잔액에는 더하지 않는다(작성자 판단 43)', async () => {

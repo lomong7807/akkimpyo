@@ -14,7 +14,7 @@ import { CurrentLedgerContext } from '../features/me/CurrentLedgerContext'
 import { deviceKey } from '../features/me/deviceKey'
 import { useLedgerCopy } from '../features/me/ledgerCopy'
 import { useMeCopy } from '../features/me/meCopy'
-import { useAutoSend } from '../features/sync/useAutoSend'
+import { resendNoticeText, useAutoSend } from '../features/sync/useAutoSend'
 import { pendingKey } from '../features/transactions/pendingTransactions'
 import { now } from '../lib/clock'
 import { useMe } from '../features/me/useMe'
@@ -160,9 +160,7 @@ function Gate() {
  */
 function AutoSend({ signedIn }: { signedIn: boolean }) {
   const showToast = useToast()
-  useAutoSend(signedIn, (count) =>
-    showToast(`보낸 입력 ${count}건은 이미 저장된 거래라 저장된 내용으로 두었어요`, undefined, { behindAction: true }),
-  )
+  useAutoSend(signedIn, (count) => showToast(resendNoticeText(count), undefined, { behindAction: true }))
   return null
 }
 
