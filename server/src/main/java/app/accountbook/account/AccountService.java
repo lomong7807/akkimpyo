@@ -70,13 +70,24 @@ public class AccountService {
     @Transactional
     public Account update(UUID actorId, UUID ledgerId, UUID accountId, AccountCommand cmd) {
         ledgerAccess.requireMember(actorId, ledgerId);
-        Account account = accountRepository.findById(accountId)
-                .filter(found -> found.getLedgerId().equals(ledgerId))
-                .orElseThrow(NotLedgerMemberException::new);
+        Account account = loadInLedger(ledgerId, accountId);
         String name = validateAndNormalizeName(ledgerId, cmd);
         requireUniqueName(account, name);
         account.update(name, cmd.type(), cmd.openingBalance(), cmd.openingDate());
         return saveUnlessDuplicate(account);
+    }
+
+    /**
+     * 숨기기({@code hidden=true}, F-506)와 다시 보이기({@code false}, F-507). 이미 그 상태여도 그대로 돌려준다. 거래가 있는
+     * 계좌도 숨길 수 있다(P-220). 숨긴 계좌는 새 거래에 고를 수 없고 과거 거래와 잔액·통계에는 남는다. version은 없고
+     * 나중 저장이 덮어쓴다(P-217, {@link #update}와 같다). 그 장부의 계좌가 아니면 구성원이 아닌 것과 같은 예외다.
+     */
+    @Transactional
+    public Account setHidden(UUID actorId, UUID ledgerId, UUID accountId, boolean hidden) {
+        ledgerAccess.requireMember(actorId, ledgerId);
+        Account account = loadInLedger(ledgerId, accountId);
+        account.setHidden(hidden);
+        return account;
     }
 
     /** 라인이 참조하는 계좌(소프트 삭제된 거래 포함)는 지울 수 없다. */
@@ -100,6 +111,13 @@ public class AccountService {
         Account account = accountRepository.findById(accountId).orElseThrow(NotLedgerMemberException::new);
         ledgerAccess.requireMember(actorId, account.getLedgerId());
         return account;
+    }
+
+    /** 내가 구성원인 다른 장부의 계좌와 없는 계좌는 구성원이 아닌 것과 같은 예외다. 구성원 확인 뒤에 부른다. */
+    private Account loadInLedger(UUID ledgerId, UUID accountId) {
+        return accountRepository.findById(accountId)
+                .filter(found -> found.getLedgerId().equals(ledgerId))
+                .orElseThrow(NotLedgerMemberException::new);
     }
 
     /** 자기 자신과는 겹치지 않는 것으로 본다. 이름은 글자 그대로 비교한다(대소문자, 가운데 공백 구분). */
