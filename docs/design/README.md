@@ -1,22 +1,22 @@
 # 디자인 기준
 
 - 작성일: 2026-11-23
-- 상태: designer가 조사하고 owner가 2026-11-23에 확정한 결정, frontend와 합의한 구현 방식을 옮겼다. 이 폴더가 스스로 정한 값은 없다. 2026-11-24에 owner가 시안으로 고른 배치 결정 3건(결정 10~12)을 [layout-decisions.md](layout-decisions.md)에 더했다.
+- 상태: designer가 조사하고 owner가 2026-11-23에 확정한 결정, frontend와 합의한 구현 방식을 옮겼다. 이 폴더가 스스로 정한 값은 없다. 2026-11-24에 owner가 시안으로 고른 배치 결정 3건(결정 10~12)과, 홈 시안을 화면설계서에 맞게 바로잡으며 designer가 정한 결정 5건(결정 13~17)을 [layout-decisions.md](layout-decisions.md)에 더했다.
 - 근거 문서: [화면설계서 공통](../planning/05-screen-spec/00-common.md) 2~5장, [와이어프레임 공통](../planning/04-wireframes/00-common.md) 4절, [화면설계서 02](../planning/05-screen-spec/02-transactions-stats-events.md) D-04
 
 ## 1. 이 폴더의 목적
 
-화면을 만들 때 쓰는 시각 값과 컴포넌트 규칙을 구현하기 쉬운 형태로 한곳에 모은다. 값의 출처는 화면설계서 00-common 2~5장이다. 이 폴더는 그 값을 구현용으로 정리하고, owner가 2026-11-23에 확정한 추가와 차이만 더한다.
+화면을 만들 때 쓰는 시각 값과 컴포넌트 규칙을 구현하기 쉬운 형태로 한곳에 모은다. 값의 출처는 화면설계서 00-common 2~5장이다. 이 폴더는 그 값을 구현용으로 정리하고, owner가 확정한 추가와 차이, designer 결정(4절)만 더한다.
 
 ## 2. 문서 목록
 
 | 파일 | 다루는 것 |
 |------|-----------|
-| README.md | 목적, 기준의 우선순서, owner 결정, 구현 방식, 기준을 바꾸는 절차, 검토 방법, 넣지 않는 것, slop 점검표 |
+| README.md | 목적, 기준의 우선순서, owner 결정과 designer 결정, 구현 방식, 기준을 바꾸는 절차, 검토 방법, 넣지 않는 것, slop 점검표 |
 | [tokens.md](tokens.md) | 색, 글자, 간격, 모서리, 그림자, 요소 크기, 화면 폭, 아이콘, 움직임, 그래프, 초점, 층, 안전 영역 |
 | [components.md](components.md) | 공통 컴포넌트와 공통 상태의 구현 점검표 |
-| [layout-decisions.md](layout-decisions.md) | owner가 시안으로 고른 배치 결정(결정 10~12)의 수치, 버린 안과 이유, 확인 필요 |
-| [drafts/](drafts/) | owner가 고른 시안 그림(PNG). 참고이고 기준은 layout-decisions.md의 수치다 |
+| [layout-decisions.md](layout-decisions.md) | 배치 결정(owner 결정 10~12, designer 결정 13~17)의 수치, 버린 안과 이유, 확인 필요 |
+| [drafts/](drafts/) | 홈 시안 그림 2장(PNG, 390x844와 1280x800). designer가 2026-11-24에 화면설계서에 맞게 바로잡은 것이다. 참고이고 기준은 layout-decisions.md의 수치다 |
 | [mockup-differences.md](mockup-differences.md) | 목업이 화면설계서와 다른 곳 14건과 따를 값 |
 
 ## 3. 기준의 우선순서
@@ -26,11 +26,14 @@
 3. 목업(`docs/planning/mockup/index.html`).
 
 - 화면설계서와 이 폴더가 어긋나면 화면설계서가 맞다. 어긋난 곳은 어느 쪽도 고치지 않고 owner에게 질문한다.
-- 예외: owner가 설계서와 다르게 정했거나 설계서 안의 어긋남을 한쪽으로 정했으면 그 결정을 따른다. 지금은 결정 9(전체 화면 입력의 화면 이름 자리), 결정 10(넓은 화면 홈과 사이드바), 결정 11(빠른 입력 버튼)이다. 설계서 쪽에서 고칠 곳은 [components.md](components.md) 10절 C-9와 [layout-decisions.md](layout-decisions.md) 4절에 적었다.
+- 예외: owner나 designer(4절)가 설계서와 다르게 정했거나 설계서 안의 어긋남을 한쪽으로 정했으면 그 결정을 따른다. 지금은 결정 9(전체 화면 입력의 화면 이름 자리), 결정 11(빠른 입력 버튼), 결정 14(홈의 이번 달 합계), 결정 16(거래 입력 칸이 보이는 범위), [layout-decisions.md](layout-decisions.md) 5절 L-13(홈의 720px 제한)과 L-15(홈의 거래 줄)이다. 결정 10은 결정 13과 15로 설계서를 따르게 되어 예외가 아니다. 설계서 쪽에서 고칠 곳은 [components.md](components.md) 10절 C-9와 [layout-decisions.md](layout-decisions.md) 5절에 적었다.
 - 목업과 화면설계서가 다르면 화면설계서 값을 따른다(owner 결정 1). 목업 CSS를 옮겨 쓰지 않는다. 다른 곳은 [mockup-differences.md](mockup-differences.md)에 모았다.
 - 각 문서 끝의 "확인 필요"는 이 폴더를 쓰며 설계서에서 정의를 찾지 못했거나 문서끼리 어긋난 곳이다. owner가 답하기 전에는 구현에서 임의로 정하지 않는다.
 
-## 4. owner 결정 (1~9는 2026-11-23, 10~12는 2026-11-24, 확정)
+## 4. owner 결정과 designer 결정
+
+- 1~12는 owner 결정이다(1~9는 2026-11-23, 10~12는 2026-11-24, 확정).
+- 13~17은 designer 결정이다(2026-11-24). owner에게 묻지 않고 정해 [이슈 #102](https://github.com/lomong7807/akkimpyo/issues/102)에 기록했고, owner가 나중에 뒤집을 수 있다. 세부 8건([layout-decisions.md](layout-decisions.md) 5절 L-11~L-17)도 같다.
 
 | # | 결정 | 반영한 곳 |
 |---|------|-----------|
@@ -43,9 +46,14 @@
 | 7 | 유형 고르기(설계서의 "세 칸 고르기", "두 칸 고르기". D-04의 지출·수입·이체 등)의 모양은 칸을 나눈 상자다. 새 값 없이 기존 토큰만 쓴다. 상자는 높이 48px(입력칸과 같음), 1px `color-border-strong` 테두리, 모서리 10px, `color-surface` 바탕이고 칸은 같은 폭이다. 고른 칸은 `color-accent-weak` 바탕, `color-accent` 글자, `text-body-strong`(16px, 600)이고, 고르지 않은 칸은 `color-text-secondary` 글자, `text-body`(16px, 400)다. 색만으로 구분하지 않도록 굵기 차이와 `aria-checked`를 함께 쓴다(`role="radiogroup"`, 칸은 `role="radio"`). 누르는 영역은 칸마다 44px 이상, 키보드 초점은 설계서 2.6을 따르고, 동작과 비활성 조건은 화면별 설계서(02 D-04 (2) 등)를 따른다. `color-accent-weak`의 두 번째 확정 쓰임이다 | [tokens.md](tokens.md) 1.2, [components.md](components.md) 4절, 9절, 10절 C-1 |
 | 8 | D-04 (3) 금액 칸의 "20px 굵게"는 `text-title`(20px, 700, 28px)을 그대로 쓴다. 새 글자 단계는 만들지 않는다. D-06 (2)의 같은 표현도 같다 | [tokens.md](tokens.md) 2절, [components.md](components.md) 4절, 9절, 10절 C-2 |
 | 9 | 전체 화면 입력의 화면 이름은 가운데에 둔다(02의 D-04 (1), F-02 (1)과 목업이 맞다). 00-common 5.5의 "X 오른쪽"은 설계서 쪽을 고쳐야 할 곳이다 | [components.md](components.md) 6절, 8절, 10절 C-6, C-9, [mockup-differences.md](mockup-differences.md) 10번 |
-| 10 | 넓은 화면(1024px 이상)의 홈은 왼쪽 사이드바 240px, 맨 위 전체 폭 한 줄 입력, 그 아래 왼쪽(나머지 폭)과 오른쪽(440px) 두 칸의 카드로 둔다(시안으로 고름) | [layout-decisions.md](layout-decisions.md) 1절, [components.md](components.md) 2절, 10절 C-8 |
+| 10 | 넓은 화면(1024px 이상)의 홈은 왼쪽 사이드바 240px, 맨 위 전체 폭 한 줄 입력, 그 아래 왼쪽(나머지 폭)과 오른쪽(440px) 두 칸의 카드로 둔다(시안으로 고름). 카드는 결정 13으로, 오른쪽 440px과 사이드바 수치는 결정 15로 바뀌었다 | [layout-decisions.md](layout-decisions.md) 1절, [components.md](components.md) 2절, 10절 C-8 |
 | 11 | 휴대폰 배치의 빠른 입력 버튼은 떠 있지 않고 하단 탭의 한 칸이다(44x44px, 시안으로 고름) | [layout-decisions.md](layout-decisions.md) 2절, [components.md](components.md) 2절, 6절, [tokens.md](tokens.md) 3절, 5~8절 |
-| 12 | 휴대폰 배치에서 묶음 사이는 24px이고 묶음은 좌우 끝까지 닿는 모서리 0의 면이다(시안으로 고름) | [layout-decisions.md](layout-decisions.md) 3절 |
+| 12 | 휴대폰 배치에서 묶음 사이는 24px이고 묶음은 좌우 끝까지 닿는 모서리 0의 면이다(시안으로 고름). 24px은 그대로이고, 홈의 묶음을 면으로 두는 부분은 결정 13으로 바뀌었다 | [layout-decisions.md](layout-decisions.md) 3절 |
+| 13 | (designer 결정, 이슈 #102) 홈의 구역은 상자로 감싸지 않고 구분선과 여백으로 나눈다(화면설계서 01 C-01). 구역 사이에 1px `color-border` 선, 선 위아래에 각각 여백 24px, 구역 안 요소 사이 12px. 선은 휴대폰에서 화면 좌우 끝까지, 넓은 화면에서 칸의 폭이다. 휴대폰 좌우 여백 16px, 넓은 화면 내용 영역 여백 24px | [layout-decisions.md](layout-decisions.md) 3절, 4.1, 5절 L-11, [tokens.md](tokens.md) 3절 |
+| 14 | (designer 결정, 이슈 #102) 홈의 이번 달 합계는 지출만 큰 숫자(`text-hero`, 왼쪽 정렬, 위에 "지출" 레이블 `text-secondary`)이고 그 아래 수입과 차액은 줄이다. 큰 숫자는 줄바꿈하지 않고 칸 폭을 넘으면 `text-title` 크기로 내린다. 화면설계서 01 C-01 (2)의 세 줄과 다르다 | [layout-decisions.md](layout-decisions.md) 4.2, 5절 L-12, [tokens.md](tokens.md) 2절 |
+| 15 | (designer 결정, 이슈 #102) 넓은 화면(1024px 이상)의 홈은 상단 바가 없고 내용 영역 맨 위에 화면 이름 "홈"(`text-title`), 그 아래 전체 폭 한 줄 입력, 그 아래 두 칸이다. 왼쪽 칸은 내용 폭의 40%(화면설계서 01 C-01), 오른쪽은 나머지, 칸 사이 24px(안쪽 폭에서 24px을 뺀 나머지를 2:3으로 나눈다). 사이드바는 화면설계서 00-common 6.1~6.7 수치를 따르고 설계서에 없는 값은 L-14로 정했다. 지금 화면 줄은 색만 `color-accent`로 바꾸고 굵기는 바꾸지 않는다 | [layout-decisions.md](layout-decisions.md) 1절, 5절 L-13, L-14, [components.md](components.md) 2절, 10절 C-8, [tokens.md](tokens.md) 7절 |
+| 16 | (designer 결정, 이슈 #102) 하단 탭의 거래 입력 칸은 하단 탭이 보이는 모든 화면에서 보이고 보기 전용 구성원에게만 숨긴다. 권한을 아직 모를 때는 칸의 자리를 비워 둔다 | [layout-decisions.md](layout-decisions.md) 2절, 5절 L-16, [components.md](components.md) 2절 |
+| 17 | (designer 결정, 이슈 #102) 홈의 예산 막대 채움은 `color-accent`, 초과하면 `color-danger`다(화면설계서 01 C-01 (3)). 공통편 2.6의 "지출 막대는 `color-text-secondary`"는 통계 그래프에 적용한다 | [layout-decisions.md](layout-decisions.md) 4.3, [components.md](components.md) 5절, [tokens.md](tokens.md) 8절, [mockup-differences.md](mockup-differences.md) 11번 |
 
 ## 5. 구현 방식 (frontend와 합의)
 
@@ -69,8 +77,8 @@
 1. 새 색, 새 글자 크기, 새 간격 값, 새 컴포넌트 변형이 필요하면 이유를 적어 owner에게 묻는다.
 2. 승인되면 이 폴더에 먼저 추가하고, 그다음에 코드에서 쓴다.
 3. 기존 값을 바꿀 때는 모든 화면에 같이 적용할 방법을 함께 낸다. 옛 값과 새 값이 한 화면에 섞이지 않게 한다.
-4. 설계서(`docs/planning`)와 다른 값이 필요하면 설계서를 고치지 않고 owner에게 질문한다(레포 CLAUDE.md).
-5. 모양, 색, 배치, 간격을 정하거나 바꿀 때는 시안 이미지(390x844, 1280x800)로 owner가 고른 뒤에 이 폴더에 반영한다. 버린 안과 이유를 한 줄로 남긴다.
+4. 화면 모양, 색, 배치, 간격은 designer가 화면설계서와 이 폴더의 기준으로 정하고, 시안 이미지(390x844, 1280x800)를 owner에게 보여 준 뒤 이 폴더에 반영한다. 정한 것은 GitHub [이슈 #102](https://github.com/lomong7807/akkimpyo/issues/102)에 한 줄로 남긴다(무엇을 정했나, 이유, 버린 안, 관련 이슈·PR). owner가 바꾸라고 하면 그때 고친다(owner 2026-11-24).
+5. owner에게 먼저 물어야 하는 것은 기획 범위를 바꾸는 것(기능 추가·삭제, 단계 이동)이다. 이슈 #102 본문에 적힌 다른 것도 먼저 묻는다. 설계서(`docs/planning`)와 다르게 정한 값은 설계서를 고치지 않고 "설계서 수정 필요" 목록([layout-decisions.md](layout-decisions.md) 5절 L-2, L-3, [components.md](components.md) 10절 C-9)에 올린다.
 
 ## 7. 검토 방법
 

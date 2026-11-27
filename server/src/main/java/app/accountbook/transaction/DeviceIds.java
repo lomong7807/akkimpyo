@@ -1,5 +1,6 @@
 package app.accountbook.transaction;
 
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -14,6 +15,9 @@ final class DeviceIds {
 
     static final String UNKNOWN = "unknown";
 
+    /** 형식 오류를 알리는 입력란. 서비스 메서드의 인자 이름이다. */
+    static final String FIELD = "deviceId";
+
     /** 저장하는 값의 목록: 기기 7가지와 브라우저 6가지의 조합(#21). 글자 그대로 비교한다. */
     static final Set<String> KNOWN = Stream.of("iphone", "ipad", "mac", "windows", "android", "linux", "unknown")
             .flatMap(device -> Stream.of("safari", "chrome", "edge", "firefox", "samsung", "unknown")
@@ -26,10 +30,14 @@ final class DeviceIds {
     private DeviceIds() {
     }
 
-    /** 요청의 형식 검증 단계에서 부른다. null은 기기 값이 없는 것이라 통과한다. 빈 문자열은 형식 오류다. */
+    /**
+     * 요청의 형식 검증 단계에서 부른다. null은 기기 값이 없는 것이라 통과한다. 빈 문자열은 형식 오류다.
+     * 입력란은 {@value #FIELD}이고, API가 기기 값을 받은 자리(헤더)의 이름으로 바꿔 알린다.
+     */
     static void requireValidFormat(String deviceId) {
         if (deviceId != null && !FORMAT.matcher(deviceId).matches()) {
-            throw new InvalidRequestException("기기 값은 영문, 숫자와 . _ : - 만 쓴 1~64자여야 합니다.");
+            throw new InvalidRequestException(FIELD, FieldErrorCode.INVALID_FORMAT,
+                    "기기 값은 영문, 숫자와 . _ : - 만 쓴 1~64자여야 합니다.");
         }
     }
 

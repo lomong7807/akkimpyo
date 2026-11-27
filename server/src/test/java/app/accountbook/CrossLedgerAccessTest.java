@@ -15,24 +15,35 @@ import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.common.NotLedgerOwnerException;
-import app.accountbook.common.StaleVersionException;
 import app.accountbook.ledger.LedgerAccess;
+import app.accountbook.ledger.LedgerMembership;
+import app.accountbook.ledger.LedgerService;
 import app.accountbook.stats.BalanceQuery;
 import app.accountbook.stats.MonthlyStatsQuery;
 import app.accountbook.stats.MonthlySummary;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
+import app.accountbook.transaction.CategorySuggestionQuery;
 import app.accountbook.transaction.IdConflictException;
+import app.accountbook.transaction.StaleVersionException;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
+import app.accountbook.transaction.TransactionListQuery;
+import app.accountbook.transaction.TransactionPage.DayTotals;
+import app.accountbook.transaction.TransactionScope.Day;
+import app.accountbook.transaction.TransactionScope.Month;
+import app.accountbook.transaction.TransactionScope.WholeLedger;
 import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionType;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.User;
+import app.accountbook.user.UserProfile;
+import app.accountbook.user.UserService;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -87,9 +98,13 @@ class CrossLedgerAccessTest {
     @Autowired AccountService accountService;
     @Autowired CategoryService categoryService;
     @Autowired TransactionService transactionService;
+    @Autowired TransactionListQuery transactionListQuery;
+    @Autowired CategorySuggestionQuery categorySuggestionQuery;
     @Autowired BalanceQuery balanceQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
     @Autowired LedgerAccess ledgerAccess;
+    @Autowired LedgerService ledgerService;
+    @Autowired UserService userService;
     @Autowired Fixtures fixtures;
     @Autowired EntityManager entityManager;
     @Autowired JdbcTemplate jdbc;
@@ -167,9 +182,13 @@ class CrossLedgerAccessTest {
         accountService = recorded(accountService);
         categoryService = recorded(categoryService);
         transactionService = recorded(transactionService);
+        transactionListQuery = recorded(transactionListQuery);
+        categorySuggestionQuery = recorded(categorySuggestionQuery);
         balanceQuery = recorded(balanceQuery);
         monthlyStatsQuery = recorded(monthlyStatsQuery);
         ledgerAccess = recorded(ledgerAccess);
+        ledgerService = recorded(ledgerService);
+        userService = recorded(userService);
     }
 
     @TestFactory
@@ -178,6 +197,7 @@ class CrossLedgerAccessTest {
                 rows().map(row -> dynamicTest(row.label(), () -> verify(row))),
                 Stream.of(
                         dynamicTest("구성원 확인: 예외 없이 답하는 isMember", this::verifyIsMember),
+                        dynamicTest("내 정보: 대상 없이 호출자의 것만 답한다", this::verifyOwnInfo),
                         dynamicTest("표가 호출자를 받는 공개 메서드를 모두 다룬다", this::verifyTableCoversInventory)));
     }
 
@@ -186,6 +206,22 @@ class CrossLedgerAccessTest {
         assertThat(asA(() -> ledgerAccess.isMember(a, ledgerB))).as("A가 B의 장부").isFalse();
         assertThat(ledgerAccess.isMember(a, missing)).as("A가 없는 장부").isFalse();
         assertThat(ledgerAccess.isMember(b, ledgerB)).as("대조: B가 자기 장부").isTrue();
+        assertThat(snapshot()).isEqualTo(baseline);
+    }
+
+    /**
+     * 내 정보와 내 장부 목록(#30)은 대상 id를 받지 않아 표의 줄 모양에 맞지 않는다. 호출자 말고 다른 사람을
+     * 가리킬 길이 없으므로, A가 부른 결과가 A의 것뿐이고 B의 값이 없는지를 값으로 본다.
+     */
+    void verifyOwnInfo() {
+        UserProfile profile = asA(() -> userService.profile(a));
+        assertThat(profile.email()).isEqualTo("a@example.com");
+        assertThat(profile.toString()).doesNotContain(secretsOfB);
+        List<LedgerMembership> ledgers = asA(() -> ledgerService.memberships(a));
+        assertThat(ledgers).extracting(LedgerMembership::ledgerId).containsExactly(ledgerA);
+        assertThat(ledgers.toString()).doesNotContain(secretsOfB);
+        assertThat(ledgerService.memberships(b)).as("대조: B는 자기 장부").extracting(LedgerMembership::ledgerId)
+                .containsExactly(ledgerB);
         assertThat(snapshot()).isEqualTo(baseline);
     }
 
@@ -232,9 +268,12 @@ class CrossLedgerAccessTest {
         assertThat(categoryService.list(a, ledgerA)).extracting(Category::getLedgerId).containsOnly(ledgerA);
         assertThat(transactionService.listDeleted(a, ledgerA)).extracting(TransactionView::id)
                 .containsExactly(aDeleted.id());
+        assertThat(transactionListQuery.page(a, ledgerA, new WholeLedger(), null, 50).items())
+                .extracting(TransactionView::id).containsExactlyInAnyOrder(aExpense.id(), aTransfer.id());
         // 100,000 - 지출 1,100 - 이체 2,200. 삭제한 3,300은 빠진다.
         assertThat(balanceQuery.balances(a, ledgerA))
                 .containsOnly(Map.entry(aBank, 96_700L), Map.entry(aCash, 2_200L));
+        assertThat(transactionListQuery.dailyTotals(a, ledgerA, NOVEMBER)).containsExactly(new DayTotals(DAY, 0, 1_100));
         MonthlySummary summary = monthlyStatsQuery.monthly(a, ledgerA, NOVEMBER);
         assertThat(summary.expense()).isEqualTo(1_100);
         assertThat(summary.income()).isZero();
@@ -269,6 +308,16 @@ class CrossLedgerAccessTest {
                         (actor, tx) -> transactionService.history(actor, tx)),
                 denied("조회: 휴지통", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionService.listDeleted(actor, ledger)),
+                denied("조회: 거래 목록(달)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 50)),
+                denied("조회: 거래 목록(하루)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Day(DAY), null, 50)),
+                denied("조회: 거래 목록(장부 전체)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new WholeLedger(), null, 50)),
+                denied("조회: 가맹점의 최근 카테고리 제안", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> categorySuggestionQuery.suggest(actor, ledger, "B단골식당")),
+                denied("조회: 날짜별 합계(달력)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, NOVEMBER)),
                 denied("조회: 계좌 잔액", NotLedgerMemberException.class, bBank,
                         (actor, account) -> balanceQuery.balance(actor, account)),
                 denied("조회: 장부의 모든 잔액", NotLedgerMemberException.class, ledgerB,
@@ -278,7 +327,9 @@ class CrossLedgerAccessTest {
                 denied("구성원 확인: B의 장부", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> ledgerAccess.requireMember(actor, ledger)),
                 denied("소유자 확인: B의 장부", NotLedgerOwnerException.class, ledgerB,
-                        (actor, ledger) -> ledgerAccess.requireOwner(actor, ledger)));
+                        (actor, ledger) -> ledgerAccess.requireOwner(actor, ledger)),
+                denied("조회: 구성원의 표시 이름", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> userService.memberDisplayNames(actor, ledger)));
     }
 
     /** 생성: B의 장부에 만들기. 요청 내용은 B가 보내면 그대로 통과하는 것이다. */
@@ -395,6 +446,7 @@ class CrossLedgerAccessTest {
         Class<NotLedgerMemberException> notMember = NotLedgerMemberException.class;
         Class<NotFoundException> notFound = NotFoundException.class;
         Class<InvalidRequestException> invalid = InvalidRequestException.class;
+        Class<InvalidStateException> state = InvalidStateException.class;
         return Stream.of(
                 denied("순서: 거래가 있는 B의 계좌 삭제", notMember, bBank, InUseException.class,
                         (actor, account) -> accountService.delete(actor, account)),
@@ -416,18 +468,26 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionService.create(actor, ledger, null, DEVICE)),
                 denied("순서: B의 장부 월 통계를 달 없이", notMember, ledgerB, invalid,
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, null)),
+                denied("순서: B의 장부 월 통계를 범위 밖 달로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, YearMonth.of(1999, 12))),
+                denied("순서: B의 장부 거래 목록을 범위 밖 limit으로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 0)),
+                denied("순서: B의 장부에 101자 가맹점으로 카테고리 제안", notMember, ledgerB, invalid,
+                        (actor, ledger) -> categorySuggestionQuery.suggest(actor, ledger, "가".repeat(101))),
+                denied("순서: B의 장부 날짜별 합계를 범위 밖 달로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, YearMonth.of(1999, 12))),
                 denied("순서: B의 지출을 낡은 version으로 취소", notFound, bExpense.id(), StaleVersionException.class,
                         (actor, tx) -> transactionService.cancel(actor, tx, bExpense.version() + 1, DEVICE)),
                 denied("순서: B의 지출을 빈 요청으로 수정", notFound, bExpense.id(), invalid,
                         (actor, tx) -> transactionService.update(actor, tx, bExpense.version(), null, DEVICE)),
-                denied("순서: B의 취소한 거래를 다시 취소", notFound, bCanceled.id(), invalid,
+                denied("순서: B의 취소한 거래를 다시 취소", notFound, bCanceled.id(), state,
                         (actor, tx) -> transactionService.cancel(actor, tx, bCanceled.version(), DEVICE)),
-                denied("순서: B의 삭제한 거래를 수정", notFound, bDeleted.id(), invalid,
+                denied("순서: B의 삭제한 거래를 수정", notFound, bDeleted.id(), state,
                         (actor, tx) -> transactionService.update(actor, tx, bDeleted.version(),
                                 entry(tx, bBank, bFood, 1), DEVICE)),
-                denied("순서: B의 삭제한 거래를 다시 삭제", notFound, bDeleted.id(), invalid,
+                denied("순서: B의 삭제한 거래를 다시 삭제", notFound, bDeleted.id(), state,
                         (actor, tx) -> transactionService.delete(actor, tx, bDeleted.version(), DEVICE)),
-                denied("순서: B의 삭제하지 않은 거래를 복원", notFound, bExpense.id(), invalid,
+                denied("순서: B의 삭제하지 않은 거래를 복원", notFound, bExpense.id(), state,
                         (actor, tx) -> transactionService.restore(actor, tx, bExpense.version(), DEVICE)),
                 denied("순서: B의 장부에 형식이 틀린 기기 값으로 지출", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionService.create(actor, ledger,

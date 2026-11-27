@@ -1,6 +1,7 @@
 package app.accountbook.category;
 
 import app.accountbook.common.DuplicateCategoryNameException;
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
@@ -50,10 +51,11 @@ public class CategoryService {
     public Category create(UUID actorId, UUID ledgerId, CategoryCommand cmd) {
         ledgerAccess.requireMember(actorId, ledgerId);
         if (cmd == null) {
-            throw new InvalidRequestException("카테고리 정보가 없습니다.");
+            throw new InvalidRequestException(InvalidRequestException.WHOLE_BODY, FieldErrorCode.REQUIRED,
+                    "카테고리 정보가 없습니다.");
         }
         if (cmd.kind() == null) {
-            throw new InvalidRequestException("수입·지출 구분이 없습니다.");
+            throw new InvalidRequestException("kind", FieldErrorCode.REQUIRED, "수입·지출 구분이 없습니다.");
         }
         String name = Names.normalize(cmd.name(), Category.NAME_MAX_LENGTH);
         if (cmd.parentId() != null) {
@@ -88,10 +90,14 @@ public class CategoryService {
         categoryRepository.delete(category);
     }
 
+    /**
+     * 장부의 모든 카테고리(최상위와 하위, 지출과 수입). 미분류(system)가 뒤, 다음은 만든 시각, 같으면 id 순이다.
+     * 그래서 구분별로 보면 미분류가 맨 뒤다(F-509, dba 메모 PR #136). 조회는 한 번이다.
+     */
     @Transactional(readOnly = true)
     public List<Category> list(UUID actorId, UUID ledgerId) {
         ledgerAccess.requireMember(actorId, ledgerId);
-        return categoryRepository.findByLedgerIdOrderByCreatedAtAsc(ledgerId);
+        return categoryRepository.findByLedgerIdOrderBySystemAscCreatedAtAscIdAsc(ledgerId);
     }
 
     /** 그 장부의 {@code 미분류}. 장부를 만들 때 kind마다 하나씩 만들어지므로 없으면 데이터 이상이다. */
@@ -105,12 +111,14 @@ public class CategoryService {
     private void requireValidParent(UUID ledgerId, CategoryKind kind, UUID parentId) {
         Category parent = categoryRepository.findById(parentId)
                 .filter(candidate -> candidate.getLedgerId().equals(ledgerId))
-                .orElseThrow(() -> new InvalidRequestException("상위 분류를 찾을 수 없습니다."));
+                .orElseThrow(() -> new InvalidRequestException("parentId", FieldErrorCode.NOT_FOUND,
+                        "상위 분류를 찾을 수 없습니다."));
         if (!parent.isTopLevel()) {
-            throw new InvalidRequestException("카테고리는 2단계까지만 만들 수 있습니다.");
+            throw new InvalidRequestException("parentId", FieldErrorCode.NOT_ALLOWED, "카테고리는 2단계까지만 만들 수 있습니다.");
         }
         if (parent.getKind() != kind) {
-            throw new InvalidRequestException("상위 분류와 수입·지출 구분이 같아야 합니다.");
+            throw new InvalidRequestException("parentId", FieldErrorCode.NOT_ALLOWED,
+                    "상위 분류와 수입·지출 구분이 같아야 합니다.");
         }
     }
 
@@ -138,9 +146,11 @@ public class CategoryService {
         }
     }
 
+    /** 어느 입력란의 잘못도 아니어서 본문 전체의 오류로 알린다. 지금까지와 같은 응답이다. */
     private static void requireNotSystem(Category category) {
         if (category.isSystem()) {
-            throw new InvalidRequestException("기본 카테고리(미분류)는 바꾸거나 지울 수 없습니다.");
+            throw new InvalidRequestException(InvalidRequestException.WHOLE_BODY, FieldErrorCode.NOT_ALLOWED,
+                    "기본 카테고리(미분류)는 바꾸거나 지울 수 없습니다.");
         }
     }
 

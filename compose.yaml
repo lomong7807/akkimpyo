@@ -7,7 +7,8 @@ services:
       POSTGRES_PASSWORD: accountbook
     ports:
       # 호스트의 5432는 다른 PostgreSQL이 쓰고 있어 5433으로 연다.
-      - "5433:5432"
+      # 127.0.0.1을 붙여 이 컴퓨터 안에서만 접속되게 한다(없으면 같은 망의 다른 기기에도 열린다).
+      - "127.0.0.1:5433:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
 

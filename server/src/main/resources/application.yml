@@ -2,9 +2,11 @@ spring:
   application:
     name: account-book
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5433/accountbook}
-    username: ${DB_USERNAME:accountbook}
-    password: ${DB_PASSWORD:accountbook}
+    # 기본값을 두지 않는다. 셋 중 하나라도 없으면 기동하지 않는다(RequiredDbSettings).
+    # 로컬 개발용 기본값은 application-local.yml(local 프로파일)에 있다.
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     hikari:
       data-source-properties:
         # 제약 위반의 상세에는 그 행의 값(이메일, 비밀번호 해시, 이름, 메모 등)이 들어 있다. 예외와 로그에 싣지 않는다(#20).
@@ -24,6 +26,17 @@ spring:
     multipart:
       # 파일을 받는 API가 아직 없다. 켜 두면 모든 경로에서 본문을 읽고 깨진 본문이 415가 아니라 500이 된다.
       enabled: false
+management:
+  endpoint:
+    health:
+      probes:
+        # 공개하는 것은 /actuator/health 하나다. 쓰지 않는 하위 경로(liveness, readiness)를 만들지 않는다.
+        enabled: false
+  endpoints:
+    web:
+      discovery:
+        # 로그인한 사람에게도 /actuator의 주소 목록을 주지 않는다.
+        enabled: false
 logging:
   pattern:
     # 요청 id(ADR 005). 요청 밖의 로그에서는 빈칸이다.
