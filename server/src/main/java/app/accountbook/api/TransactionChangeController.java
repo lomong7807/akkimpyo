@@ -1,5 +1,6 @@
 package app.accountbook.api;
 
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.transaction.StaleVersionException;
@@ -8,18 +9,23 @@ import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.UserService;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 장부의 거래 하나를 고친다(F-208, #36). 만들기와 조회({@link TransactionController})와 같은 경로 아래이고, 기기 값 헤더와
- * 응답의 거래 모양이 같다. 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가 한 번 더 한다.
+ * 장부의 거래 하나를 고치고(F-208, #36) 휴지통에 넣고 되살린다(F-227, F-230, #38). 만들기와 조회({@link TransactionController})와
+ * 같은 경로 아래이고, 기기 값 헤더와 응답의 거래 모양이 같다. 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가
+ * 한 번 더 한다.
  *
  * <p>검사 순서: 구성원과 경로의 장부의 거래인지(404) → 형식(400) → version(409 {@code STALE_VERSION}) →
  * 상태(409 {@code INVALID_STATE}) → 참조(400). 응답할 수 없는 {@code Accept}, JSON이 아닌 본문, 읽을 수 없는 JSON은
@@ -29,6 +35,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping(path = "/api/v1/ledgers/{ledgerId}/transactions/{transactionId}",
         produces = MediaType.APPLICATION_JSON_VALUE)
 class TransactionChangeController {
+
+    /** 쿼리의 version. ASCII 숫자로 쓴 정수이고 부호는 빼기만 붙을 수 있다. */
+    private static final Pattern VERSION_TEXT = Pattern.compile("-?[0-9]{1,19}");
 
     private final TransactionService transactionService;
     private final UserService userService;
@@ -49,6 +58,32 @@ class TransactionChangeController {
         TransactionUpdateRequest.Change change = request.change(transactionId);
         return changed(actorId, ledgerId, () -> transactionService.update(actorId, transactionId, change.version(),
                 change.command(), deviceOf(device)));
+    }
+
+    /** 휴지통에 넣는다. 200이고 본문은 바뀐 거래({@code deletedAt}, {@code purgeAt}, version+1)다. 본문은 읽지 않는다. */
+    @DeleteMapping
+    TransactionResponse delete(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                               @PathVariable UUID transactionId,
+                               @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false)
+                               String device,
+                               @RequestParam(name = "version", required = false) String version) {
+        requireInLedger(actorId, ledgerId, transactionId);
+        long expectedVersion = queryVersion(version);
+        return changed(actorId, ledgerId, () -> transactionService.delete(actorId, transactionId, expectedVersion,
+                deviceOf(device)));
+    }
+
+    /** 휴지통에서 되살린다(삭제 직후의 "되돌리기"가 부른다). 200이고 본문은 바뀐 거래다. */
+    @PostMapping(path = "/restore", consumes = MediaType.APPLICATION_JSON_VALUE)
+    TransactionResponse restore(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                                @PathVariable UUID transactionId,
+                                @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false)
+                                String device,
+                                @RequestBody TransactionRestoreRequest request) {
+        requireInLedger(actorId, ledgerId, transactionId);
+        long expectedVersion = request.expectedVersion();
+        return changed(actorId, ledgerId, () -> transactionService.restore(actorId, transactionId, expectedVersion,
+                deviceOf(device)));
     }
 
     /**
@@ -77,6 +112,24 @@ class TransactionChangeController {
 
     private TransactionResponse response(UUID actorId, UUID ledgerId, TransactionView tx) {
         return TransactionResponse.of(tx, userService.memberDisplayNames(actorId, ledgerId));
+    }
+
+    /**
+     * 쿼리의 {@code version}(ADR 002 4절: 쿼리의 오류도 그 이름의 입력란 오류다). 빠지거나 비면 {@code REQUIRED}, 정수가
+     * 아니면(소수, 16진수, 공백, 여러 번 보냄, long 밖) {@code INVALID_FORMAT}이다.
+     */
+    private static long queryVersion(String text) {
+        if (text == null || text.isEmpty()) {
+            throw new InvalidRequestException("version", FieldErrorCode.REQUIRED, "값이 없습니다.");
+        }
+        if (VERSION_TEXT.matcher(text).matches()) {
+            try {
+                return Long.parseLong(text);
+            } catch (NumberFormatException e) {
+                // long 밖이다. 아래에서 형식 오류로 알린다.
+            }
+        }
+        throw new InvalidRequestException("version", FieldErrorCode.INVALID_FORMAT, "읽을 수 없는 값입니다.");
     }
 
     private static String deviceOf(String header) {
