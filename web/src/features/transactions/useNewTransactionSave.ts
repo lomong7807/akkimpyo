@@ -89,6 +89,8 @@ interface NewTransactionSaveOptions {
   /** 선택 판의 비교에 쓰는 계좌와 카테고리. 없으면 선택 판 대신 "저장된 거래 보기"다 */
   accounts: Account[] | undefined
   categories: Category[] | undefined
+  /** 되살린 쓰던 값의 거래 id(ADR 006). 없으면 새로 만든다 */
+  initialId?: string
   /** 보일 오류가 접힌 칸에 있으면 먼저 펼친다(D-04 더 보기) */
   unfoldFor?: (errors: FieldErrors<TransactionField>) => void
   /**
@@ -110,13 +112,14 @@ export function useNewTransactionSave({
   owner,
   accounts,
   categories,
+  initialId,
   unfoldFor,
   onSending,
   onDone,
   onFailed,
 }: NewTransactionSaveOptions) {
   const creation = useCreateTransaction()
-  const [id, setId] = useState(uuidV7)
+  const [id, setId] = useState(() => initialId ?? uuidV7())
   // "내 입력으로 고치기"는 같은 id의 거래를 고친다
   const updating = useUpdateTransaction(id)
   // 저장 위의 실패. 다시 보내는 동안에도 남기고, 실패마다 count를 올려 새로 그려 다시 읽히게 한다

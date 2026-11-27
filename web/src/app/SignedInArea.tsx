@@ -18,6 +18,7 @@ import { resendNoticeText, useAutoSend } from '../features/sync/useAutoSend'
 import { pendingKey } from '../features/transactions/pendingTransactions'
 import { now } from '../lib/clock'
 import { useMe } from '../features/me/useMe'
+import { forgetOneLineHandoff } from '../features/transactions/oneLineHandoff'
 import ListMemoryProvider from './ListMemoryProvider'
 import Loading from './Loading'
 import PlainLayout from './PlainLayout'
@@ -49,8 +50,14 @@ export default function SignedInArea() {
 function SessionData({ children }: { children: ReactNode }) {
   const { resumed, status } = useSession().session
   const [queryClient] = useState(createSessionQueryClient)
-  // 비우면 진행 중인 요청의 결과도 버린다
-  useEffect(() => () => queryClient.clear(), [queryClient])
+  // 비우면 진행 중인 요청의 결과도 버린다. 한 줄 입력이 거래 입력에 넘기던 글과 값도 버린다(security #233)
+  useEffect(
+    () => () => {
+      queryClient.clear()
+      forgetOneLineHandoff()
+    },
+    [queryClient],
+  )
   // 대기열이 바뀌면(이 탭, 다른 탭) 읽어 둔 대기 항목을 버린다. 그 화면이 내려가 있어도 다시 그릴 때 새로 읽는다
   useEffect(
     () => onPendingChanged(() => void queryClient.invalidateQueries({ queryKey: pendingKey(sessionUserId()) })),

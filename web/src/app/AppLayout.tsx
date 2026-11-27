@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react'
+import { useSyncExternalStore, type ReactNode } from 'react'
 import { Outlet } from 'react-router'
 import { LedgerNameContext } from '../components/LedgerNameContext'
 import { ShellContext, type ShellParts } from '../components/ShellContext'
+import { keyboardShown, onKeyboardChange } from '../components/visibleArea'
 import { QUICK_ENTRY, type MainNavigationItem, type Navigation } from './navigation'
 import Sidebar from './Sidebar'
 import TabBar from './TabBar'
@@ -25,6 +26,7 @@ interface AppLayoutProps {
 /**
  * 공통 틀. 하단 탭(휴대폰 배치)과 사이드바(넓은 화면)를 그린다.
  * 상단 바의 형태는 안쪽 화면이 MainScreen이나 SubScreen으로 고른다.
+ * 휴대폰 배치에서 화면 키보드가 올라오면 하단 탭을 숨기고 내려가면 다시 보인다(00-common 6.2, 홈의 한 줄 입력 #233).
  */
 export default function AppLayout({ navigation, ledgerName, canWrite = false, onLogout, shell = {} }: AppLayoutProps) {
   const { band, syncStatus, sidebarBottom } = shell
@@ -32,8 +34,9 @@ export default function AppLayout({ navigation, ledgerName, canWrite = false, on
   const screenTabs = navigation.tabs.filter((tab): tab is MainNavigationItem => tab !== QUICK_ENTRY)
   const currentTab = useCurrentTab({ tabs: screenTabs, fallbackTab: navigation.fallbackTab }, screenItem)
   const quickEntry = canWrite ? navigation.quickEntry : undefined
+  const tabs = !fullScreen && !useSyncExternalStore(onKeyboardChange, keyboardShown)
   return (
-    <div className={fullScreen ? styles.frame : `${styles.frame} ${styles.withTabs}`}>
+    <div className={tabs ? `${styles.frame} ${styles.withTabs}` : styles.frame}>
       <Sidebar
         items={navigation.sidebar}
         current={screenItem}
@@ -49,7 +52,7 @@ export default function AppLayout({ navigation, ledgerName, canWrite = false, on
           </ShellContext>
         </LedgerNameContext>
       </div>
-      {!fullScreen && <TabBar tabs={navigation.tabs} current={currentTab} quickEntry={quickEntry} />}
+      {tabs && <TabBar tabs={navigation.tabs} current={currentTab} quickEntry={quickEntry} />}
     </div>
   )
 }

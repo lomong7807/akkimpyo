@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { Button } from './Button'
 import ConfirmDialog from './ConfirmDialog'
+import { useDragDown } from './dragDown'
 import { keepFocusInField } from './keepFocusInField'
 import layout from './layout.module.css'
 import { isModalOpen } from './openModal'
@@ -18,12 +19,13 @@ import { usePressShield } from './pressGuard'
 import { shellRiseElapsed, ShellShownContext } from './shellShown'
 import { ShellContext } from './ShellContext'
 import type { LeaveGuard } from './useLeaveGuard'
+import { visibleArea } from './visibleArea'
 import styles from './FullScreenForm.module.css'
 
 interface FullScreenFormProps {
   title: string
-  /** 떠나는 길. useLeaveGuard가 준다. */
-  guard: LeaveGuard
+  /** 떠나는 길. useLeaveGuard가 준다. 주소가 없는 입력(D-05)은 묻지 않고 닫는 길을 준다 */
+  guard: Pick<LeaveGuard, 'busy' | 'asking' | 'close' | 'keep' | 'discard'>
   onSubmit: () => void
   /** 맨 아래에 고정하는 저장 버튼과 그 위의 문구. 없으면 저장 자리를 숨긴다(수정할 거래를 받는 동안, D-04 상태). */
   bottom?: ReactNode
@@ -33,6 +35,8 @@ interface FullScreenFormProps {
   noticeDanger?: boolean
   /** Ctrl+엔터(Mac은 Cmd+엔터)를 어느 칸에서나 저장으로 받는다(D-04 (16)). 한글을 조합하는 중과 판이 열린 동안은 받지 않는다. */
   submitShortcut?: boolean
+  /** 머리를 아래로 끌어내리면 닫는다(guard.close, D-05 (1)) */
+  dragToClose?: boolean
   children: ReactNode
 }
 
@@ -48,10 +52,12 @@ export default function FullScreenForm({
   notice,
   noticeDanger = false,
   submitShortcut = false,
+  dragToClose = false,
   children,
 }: FullScreenFormProps) {
   const screen = useRef<HTMLDivElement>(null)
   const bottomArea = useRef<HTMLDivElement>(null)
+  const drag = useDragDown(screen, guard.close)
   // 연결 없음 띠는 머리 바로 아래(00-common 6.1). 동기화 상태 표시(B-04)는 전체 화면 입력에 없다
   const { band } = use(ShellContext)
   useVisibleArea(screen, bottomArea)
@@ -79,7 +85,10 @@ export default function FullScreenForm({
       aria-busy={guard.busy || undefined}
       onMouseDown={keepFocusInField}
     >
-      <header className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.head}`}>
+      <header
+        className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.head}${dragToClose ? ` ${styles.dragHandle}` : ''}`}
+        {...(dragToClose && drag)}
+      >
         <div className={styles.close}>
           <Button kind="icon" icon="X" aria-label="닫기" onClick={guard.close} />
         </div>
@@ -176,12 +185,10 @@ function useVisibleArea(screen: RefObject<HTMLElement | null>, bottom: RefObject
     const root = document.documentElement
 
     function fit() {
-      // 두 손가락으로 확대해 보는 것은 키보드가 아니다
-      const zoomed = !viewport || Math.round(viewport.scale * 100) !== 100
-      element.style.setProperty('--visible-top', zoomed ? null : `${viewport.offsetTop}px`)
-      element.style.setProperty('--visible-height', zoomed ? null : `${viewport.height}px`)
-      const gap = zoomed ? 0 : Math.max(0, root.clientHeight - viewport.offsetTop - viewport.height)
-      root.style.setProperty(TOAST_ABOVE_FORM, `${area.offsetHeight + gap}px`)
+      const visible = visibleArea()
+      element.style.setProperty('--visible-top', visible ? `${visible.top}px` : null)
+      element.style.setProperty('--visible-height', visible ? `${visible.height}px` : null)
+      root.style.setProperty(TOAST_ABOVE_FORM, `${area.offsetHeight + (visible?.keyboard ?? 0)}px`)
     }
 
     function fitAndReveal() {
