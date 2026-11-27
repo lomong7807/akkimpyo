@@ -228,15 +228,6 @@ public class TransactionService {
         return view(loadAccessible(actorId, txId));
     }
 
-    /** 휴지통: 최근에 지운 순. 고친 사람을 거래마다 한 번씩 읽는다. 목록을 API로 낼 때(#15, #38) 한 번에 읽게 고친다. */
-    @Transactional(readOnly = true)
-    public List<TransactionView> listDeleted(UUID actorId, UUID ledgerId) {
-        ledgerAccess.requireMember(actorId, ledgerId);
-        return transactionRepository.findByLedgerIdAndDeletedAtIsNotNullOrderByDeletedAtDesc(ledgerId).stream()
-                .map(this::view)
-                .toList();
-    }
-
     /** 거래의 변경 이력, 오래된 순(version 순). */
     @Transactional(readOnly = true)
     public List<ChangeLogView> history(UUID actorId, UUID txId) {
