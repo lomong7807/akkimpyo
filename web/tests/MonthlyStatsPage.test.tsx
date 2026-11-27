@@ -516,12 +516,19 @@ describe('(6)(7) 지출이 큰 카테고리', () => {
     await openStats()
     setViewportWidth(390)
     const row = topRows()[0]
+    const list = row.parentElement!
     expect(styleOf(row).gridTemplateAreas).toBe('"name amount" "bar bar"')
     expect(styleOf(row).rowGap).toBe('var(--space-4)')
     setViewportWidth(1280)
     expect(styleOf(row).gridTemplateAreas).toBe('"name bar amount"')
-    expect(styleOf(row).gridTemplateColumns).toBe('25% minmax(0, 1fr) auto')
-    expect(styleOf(row).columnGap).toBe('var(--space-12)')
+    expect(styleOf(list).gridTemplateColumns).toBe('25% minmax(0, 1fr) auto')
+    expect(styleOf(list).columnGap).toBe('var(--space-12)')
+  })
+
+  it('줄은 목록의 칸을 나눠 써(subgrid) 금액 폭이 달라도 막대 바탕의 폭이 모든 줄에서 같다', () => {
+    expect(readCssRule(CSS, '.topRow')).toContain('grid-template-columns: subgrid;')
+    expect(readCssRule(CSS, '.topRow')).toContain('grid-column: 1 / -1;')
+    expect(readCssRule(CSS, '.topList')).toContain('display: grid;')
   })
 })
 

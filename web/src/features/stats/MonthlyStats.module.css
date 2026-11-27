@@ -105,7 +105,14 @@
   font: var(--text-body-strong);
 }
 
+/*
+ * 칸(이름, 막대, 금액)은 목록이 정하고 줄은 그 칸을 나눠 쓴다(subgrid). 그래야 금액 글자 폭이 줄마다 달라도 막대 바탕의 폭이
+ * 모든 줄에서 같아, 막대 길이가 금액에 비례한다.
+ */
 .topList {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-12);
   margin: var(--space-8) 0 0;
   padding: 0;
   list-style: none;
@@ -117,11 +124,11 @@
  */
 .topRow {
   display: grid;
+  grid-column: 1 / -1;
   grid-template-areas: "name amount" "bar bar";
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: subgrid;
   align-content: center;
   align-items: center;
-  column-gap: var(--space-12);
   row-gap: var(--space-4);
   min-height: var(--size-row);
   padding: var(--space-8) var(--space-16);
@@ -142,9 +149,12 @@
 
 /* 넓은 화면은 한 줄에 이름(25%), 막대(남는 폭), 금액이다 */
 @media (width >= 1024px) {
+  .topList {
+    grid-template-columns: 25% minmax(0, 1fr) auto;
+  }
+
   .topRow {
     grid-template-areas: "name bar amount";
-    grid-template-columns: 25% minmax(0, 1fr) auto;
   }
 }
 
