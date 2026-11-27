@@ -177,6 +177,25 @@ class TransactionListPlanTest {
         assertThat(explain(sums, "force_generic_plan")).doesNotContain("Seq Scan");
     }
 
+    /**
+     * 중복 경고(#59)는 장부와 날짜로 그날의 거래만 읽고(큰 장부의 하루는 약 6건), 라인은 거래 id로 찾는다. 새 인덱스 없이
+     * 장부·날짜 인덱스로 좁힌다. 그날의 거래에 가맹점을 넣어 라인까지 읽게 한다.
+     */
+    @Test
+    void 중복_경고는_큰_장부에서_그날의_거래만_읽는다() {
+        LocalDate day = LocalDate.of(2026, 11, 18);
+        jdbc.update("update transaction set payee = 'P 7' where ledger_id = ? and occurred_on = ?", BIG_LEDGER, day);
+        List<Statement> found = statements("중복 경고 " + day, () -> assertThat(
+                listQuery.duplicates(BIG_OWNER, BIG_LEDGER, day, 1_000, "p7", null)).isNotEmpty());
+
+        Statement duplicates = pick(found, Kind.DUPLICATES);
+        String custom = explain(duplicates, "force_custom_plan");
+        assertThat(custom).contains("ix_transaction_ledger_occurred_on", "ix_transaction_line_transaction")
+                .doesNotContain("Seq Scan");
+        assertThat(mostRowsReadByAScan(custom)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG).isLessThan(100);
+        assertThat(explain(duplicates, "force_generic_plan")).doesNotContain("Seq Scan");
+    }
+
     /** 앱의 문장을 그대로 PREPARE하고 받은 값으로 실행한 계획. 비교용으로 인덱스를 끈 계획의 비용도 남긴다. */
     private String explain(Statement statement, String planCacheMode) {
         String name = "list_plan_" + PREPARED.incrementAndGet();
@@ -318,6 +337,9 @@ class TransactionListPlanTest {
 
         /** 목록이 보내는 문장의 종류. 구성원 확인 등 그 밖의 문장은 null이다. 구성원 확인(exists)도 fetch first를 쓴다. */
         Kind kind() {
+            if (sql.contains("translate(")) {
+                return Kind.DUPLICATES;
+            }
             if (sql.contains("left join transaction_line") && sql.contains("fetch first")) {
                 return Kind.PAGE;
             }
@@ -335,8 +357,8 @@ class TransactionListPlanTest {
         }
     }
 
-    /** 쪽(거래와 라인), 범위 합계, 쪽에 나온 날마다 합계, 달력의 날짜별 합계(달 범위를 날마다 묶는다). */
+    /** 쪽(거래와 라인), 범위 합계, 쪽에 나온 날마다 합계, 달력의 날짜별 합계(달 범위를 날마다 묶는다), 중복 경고. */
     private enum Kind {
-        PAGE, TOTALS, DAYS, MONTH_DAYS
+        PAGE, TOTALS, DAYS, MONTH_DAYS, DUPLICATES
     }
 }
