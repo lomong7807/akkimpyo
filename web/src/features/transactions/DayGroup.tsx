@@ -1,6 +1,6 @@
 import { useId } from 'react'
-import { Link } from 'react-router'
 import Amount from '../../components/Amount'
+import { Link } from '../../components/Link'
 import StatusChip from '../../components/StatusChip'
 import { formatDate } from '../../lib/calendarDate'
 import { PENDING_PATH } from '../sync/useSyncState'

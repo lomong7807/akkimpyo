@@ -1,7 +1,7 @@
-import { Link } from 'react-router'
 import Icon from '../components/Icon'
 import { holdKeyboard } from '../components/keyboardBridge'
 import layout from '../components/layout.module.css'
+import { Link } from '../components/Link'
 import { QUICK_ENTRY, type MainNavigationItem, type Navigation, type NavigationItem } from './navigation'
 import NavigationLink from './NavigationLink'
 import styles from './TabBar.module.css'

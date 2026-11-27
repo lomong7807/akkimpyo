@@ -1,6 +1,6 @@
 import type { ComponentProps, MouseEvent, ReactNode } from 'react'
-import { Link, type LinkProps } from 'react-router'
 import Icon, { type IconName } from './Icon'
+import { Link, type LinkProps } from './Link'
 import styles from './Button.module.css'
 
 type ButtonLook =

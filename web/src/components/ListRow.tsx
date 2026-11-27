@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router'
 import Icon, { type IconName } from './Icon'
+import { Link } from './Link'
 import styles from './ListRow.module.css'
 
 /** 줄의 묶음. 묶음이 이어지면 사이에 선을 긋는다. */

@@ -1,5 +1,6 @@
-import { Link, useLocation } from 'react-router'
+import { useLocation } from 'react-router'
 import Icon from '../../components/Icon'
+import { Link } from '../../components/Link'
 import { pendingSummary, PENDING_PATH, usePendingCounts } from './useSyncState'
 import styles from './SyncStatus.module.css'
 
