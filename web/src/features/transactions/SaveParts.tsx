@@ -1,7 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react'
 import DialogFrame from '../../components/DialogFrame'
 import RetryMessage from '../../components/RetryMessage'
-import ConflictPanel, { ConflictCompare, DeletedElsewhere } from './ConflictPanel'
+import ConflictPanel, { ConflictCompare, DeletedElsewhere, DuplicateRows } from './ConflictPanel'
 import { compareRows } from './conflictValues'
 import { QUEUE_FAILED } from './pendingTransactions'
 import type { TransactionType } from './transactions'
@@ -16,7 +16,11 @@ import {
 } from './useNewTransactionSave'
 import type { TransactionForm } from './useTransactionForm'
 
-/* 새 거래 저장(useNewTransactionSave)의 화면 부품: 저장 버튼 위의 실패 문구와 선택 판. D-04 새 입력과 D-05가 같이 쓴다 */
+/* 새 거래 저장(useNewTransactionSave)의 화면 부품: 저장 버튼 위의 실패 문구, 선택 판, 중복 경고 판. D-04 새 입력과 D-05가 같이 쓴다 */
+
+/* 중복 경고 판의 문구(D-04 (30)) */
+const DUPLICATE_TITLE = '같은 거래가 이미 있어요'
+const DUPLICATE_DESCRIPTION = '날짜, 금액, 가맹점이 같은 거래예요. 그래도 저장할까요?'
 
 interface SaveFailureMessagesProps {
   save: NewTransactionSave
@@ -145,5 +149,30 @@ function ChoiceContent({ choice, mineType, busy, online, onKeep, onFix, onSaveAs
     >
       {children}
     </ConflictPanel>
+  )
+}
+
+/**
+ * 중복 경고 판(F-209, D-04 (30)·(31), D-05 (10)). 휴대폰 배치는 바닥 시트, 넓은 화면은 가운데 창이다(DialogFrame). 처음 초점은
+ * 판 제목이다: 저장을 누르자 뜻밖에 뜨는 판이라, 엔터 한 번으로 겹친 거래가 저장되지 않게 한다(5.6의 예외, designer #241 D3).
+ * "닫기"(와 X, Esc, 판 바깥, 끌어내리기)는 판만 닫고 입력으로 돌아간다. "그래도 저장"은 판을 닫고 그대로 저장을 이어 가므로 판 안에
+ * 처리 중 표시와 실패 문구가 없다(designer #241 D4).
+ */
+export function DuplicateWarningDialog({ save }: { save: NewTransactionSave }) {
+  const { warning, warningOpen, me } = save
+  return (
+    <DialogFrame open={warningOpen} title={DUPLICATE_TITLE} titleFocusable onClose={save.closeWarning}>
+      {warning && (
+        <ConflictPanel
+          description={DUPLICATE_DESCRIPTION}
+          closeLabel="닫기"
+          onCloseAction={save.closeWarning}
+          action={{ label: '그래도 저장', kind: 'primary', onClick: save.saveAnyway }}
+          redraws={warning.openings}
+        >
+          <DuplicateRows items={warning.items} me={me} today={warning.today} />
+        </ConflictPanel>
+      )}
+    </DialogFrame>
   )
 }
