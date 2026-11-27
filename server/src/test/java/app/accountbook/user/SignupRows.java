@@ -19,8 +19,13 @@ public final class SignupRows {
                 .toList();
     }
 
-    /** 커밋된 가입 하나(사용자, 장부, 구성원, 카테고리)를 지운다. 없으면 아무것도 하지 않는다. */
+    /** 커밋된 가입 하나(사용자, 장부, 구성원, 카테고리, refresh token)를 지운다. 없으면 아무것도 하지 않는다. */
     public static void delete(JdbcTemplate jdbc, String email) {
+        jdbc.update("""
+                delete from refresh_token where family_id in
+                    (select f.id from refresh_token_family f join users u on u.id = f.user_id where u.email = ?)
+                """, email);
+        jdbc.update("delete from refresh_token_family where user_id in (select id from users where email = ?)", email);
         List<UUID> ledgerIds = jdbc.queryForList("""
                 select m.ledger_id from ledger_member m join users u on u.id = m.user_id where u.email = ?
                 """, UUID.class, email);

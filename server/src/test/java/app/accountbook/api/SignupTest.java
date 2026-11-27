@@ -43,6 +43,8 @@ class SignupTest {
     private static final String EMAIL = "marker-signup@example.com";
     /** 테스트 설정의 허용 목록(@example.com) 밖이다. */
     private static final String OUTSIDER = "marker-outsider@example.org";
+    private static final String SECOND = "marker-signup-second@example.com";
+    private static final String COOKIE = "__Secure-akkimpyo_refresh";
     private static final String PASSWORD = "password1";
     private static final String NAME = "아낌이";
     private static final Logger OURS = (Logger) LoggerFactory.getLogger("app.accountbook");
@@ -65,6 +67,7 @@ class SignupTest {
     void tearDown() {
         SignupRows.delete(jdbc, EMAIL);
         SignupRows.delete(jdbc, OUTSIDER);
+        SignupRows.delete(jdbc, SECOND);
     }
 
     @Test
@@ -75,7 +78,7 @@ class SignupTest {
         assertThat(reply.header("Content-Type")).isEqualTo("application/json");
         assertThat(reply.headers().get("Cache-Control"))
                 .containsExactly("no-cache, no-store, max-age=0, must-revalidate");
-        assertThat(reply.headers()).doesNotContainKeys("Set-Cookie", "Location");
+        assertThat(reply.headers()).doesNotContainKeys("Location");
         assertThat(reply.json().propertyNames()).containsExactly("accessToken");
 
         UUID userId = jdbc.queryForObject("select id from users where email = ?", UUID.class, EMAIL);
@@ -83,6 +86,16 @@ class SignupTest {
         assertThat(SignedJWT.parse(token).getJWTClaimsSet().getSubject()).isEqualTo(userId.toString());
         assertThat(anyone.get(AccessProbeController.ME, "Authorization", "Bearer " + token).json()
                 .get("userId").asString()).isEqualTo(userId.toString());
+    }
+
+    /** 가입 직후의 로그인도 로그인과 같다: 요청 쿠키가 가리키던 계열은 누구의 것이든 폐기한다(ADR 001 결정 3). */
+    @Test
+    void 가입하면_refresh_쿠키를_주고_요청_쿠키가_가리키던_다른_사람의_계열을_폐기한다() throws Exception {
+        String earlier = refreshCookie(signup(EMAIL, PASSWORD, NAME));
+        String mine = refreshCookie(signup(SECOND, PASSWORD, NAME, "Cookie", COOKIE + "=" + earlier));
+
+        assertThat(refresh(earlier).status()).isEqualTo(401);
+        assertThat(refresh(mine).status()).isEqualTo(200);
     }
 
     static Stream<Arguments> invalidInputs() {
@@ -227,6 +240,15 @@ class SignupTest {
 
     private Reply signup(String email, String password, String displayName, String... headers) throws Exception {
         return post(body(email, password, displayName), headers);
+    }
+
+    private Reply refresh(String cookie) throws Exception {
+        return anyone.send("POST", "/api/v1/auth/refresh", null, "X-Akkimpyo-Client", "web", "Cookie", COOKIE + "=" + cookie);
+    }
+
+    private static String refreshCookie(Reply reply) {
+        assertThat(reply.status()).as(reply.body()).isEqualTo(201);
+        return reply.header("Set-Cookie").split(";", 2)[0].substring(COOKIE.length() + 1);
     }
 
     private Reply post(String body, String... headers) throws Exception {
