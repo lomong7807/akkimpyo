@@ -287,7 +287,10 @@ class TransactionListPlanTest {
     private String explain(Statement statement, String planCacheMode) {
         String name = "list_plan_" + PREPARED.incrementAndGet();
         jdbc.execute("prepare " + name + " as " + numbered(statement.sql()));
+        // 로그의 날짜는 LocalDate.toString이라 네 자리를 넘는 해에 +가 붙는다(종료일 없는 검색의 끝인 10000-01-01).
+        // PostgreSQL의 날짜 입력은 +를 받지 않아 뗀다. 앱은 JDBC로 날짜 값을 보내므로 이 글자를 쓰지 않는다.
         String execute = "execute " + name + statement.values().stream()
+                .map(value -> value.matches("\\+[0-9]{5,}-[0-9]{2}-[0-9]{2}") ? value.substring(1) : value)
                 .map(value -> "'" + value.replace("'", "''") + "'")
                 .collect(joining(", ", "(", ")"));
         jdbc.execute("set local plan_cache_mode = " + planCacheMode);
