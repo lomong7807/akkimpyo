@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -41,6 +42,11 @@ final class ServerClient {
     /** 로그인하지 않고 부른다. Authorization 헤더는 부르는 쪽이 적는 것뿐이다. */
     static ServerClient anonymous(int port) {
         return new ServerClient(port, null);
+    }
+
+    /** 그 사용자로 로그인해 부른다. 토큰은 issuedAt에 발급한 것이다(서버의 시계가 멈춰 있으면 그 시각을 준다). */
+    static ServerClient signedIn(int port, UUID userId, Instant issuedAt) {
+        return new ServerClient(port, "Bearer " + TestAccessTokens.valid(userId, issuedAt));
     }
 
     /** {@link #raw}의 요청에 직접 적을 Authorization 헤더 한 줄. */

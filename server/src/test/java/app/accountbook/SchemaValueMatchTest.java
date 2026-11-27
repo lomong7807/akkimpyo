@@ -141,7 +141,7 @@ class SchemaValueMatchTest {
 
     /** 오늘(2026-11-26)과 시간대는 하한 판정과 무관하다. */
     private static void requireInLedgerRange(LocalDate date) {
-        LedgerDates.requireInRange("날짜는", date, Clock.fixed(Instant.parse("2026-11-26T00:00:00Z"), ZoneOffset.UTC),
+        LedgerDates.requireInRange("occurredOn", "날짜는", date, Clock.fixed(Instant.parse("2026-11-26T00:00:00Z"), ZoneOffset.UTC),
                 ZoneId.of("Asia/Seoul"));
     }
 
