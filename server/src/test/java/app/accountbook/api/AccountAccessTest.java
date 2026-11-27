@@ -29,7 +29,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 다른 장부 접근 거부(#19의 표를 이 API의 HTTP로, #13). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
+ * 다른 장부 접근 거부(#19의 표를 계좌·카테고리 API의 HTTP로, #13, #34). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
  * 없는 id와 같은 404이고, 응답에 B의 값이 없으며, DB가 그대로다. 대조로 B 자신은 같은 요청이 열린다(틀린 본문이면 400).
  * 틀린 본문과 B가 이미 쓰는 이름도 404라, 장부가 있는지와 그 안의 이름을 알 수 없다.
  */
@@ -105,7 +105,8 @@ class AccountAccessTest {
                 new Case("계좌 추가", (client, ledger) -> client.postJson(accounts(ledger), created), 201),
                 new Case("계좌 추가(틀린 본문)", (client, ledger) -> client.postJson(accounts(ledger), "{\"name\":1}"), 400),
                 new Case("계좌 추가(B가 쓰는 이름)", (client, ledger) -> client.postJson(accounts(ledger), sameName), 400),
-                new Case("계좌 추가(JSON이 아님)", (client, ledger) -> client.postJson(accounts(ledger), "{"), 400));
+                new Case("계좌 추가(JSON이 아님)", (client, ledger) -> client.postJson(accounts(ledger), "{"), 400),
+                new Case("카테고리 목록", (client, ledger) -> client.get(categories(ledger)), 200));
     }
 
     private void verifyDenied(Request request, UUID ledger) throws Exception {
@@ -136,6 +137,10 @@ class AccountAccessTest {
 
     private static String accounts(UUID ledger) {
         return "/api/v1/ledgers/" + ledger + "/accounts";
+    }
+
+    private static String categories(UUID ledger) {
+        return "/api/v1/ledgers/" + ledger + "/categories";
     }
 
     @FunctionalInterface

@@ -51,6 +51,9 @@ class ServiceMethodInventoryTest {
             "토큰의 사용자가 아직 있는지 요청마다 보는 조회(ADR 001 결정 1). 호출자를 정하기 전이고 있다/없다만 답한다",
             "LoginService.login",
             "로그인. 아직 호출자가 없다. 사용자 id를 받지 않고, 이메일과 비밀번호가 맞을 때만 그 사용자의 토큰을 준다",
+            "LoginService.signup",
+            "가입. 아직 호출자가 없다. 사용자 id를 받지 않고, user의 가입(입력 규칙, 허용 목록, 중복)을 지나 새로 만든 사용자의 "
+                    + "토큰만 준다",
             "AccessTokenVerifier.verify",
             "access token에서 호출자를 알아내는 메서드 자체다. 사용자 id를 받지 않는다",
             "TransactionAccountUsage.isUsed",

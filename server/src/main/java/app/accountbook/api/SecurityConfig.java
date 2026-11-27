@@ -36,6 +36,7 @@ class SecurityConfig {
     private static final RequestMatcher[] PUBLIC = {
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/actuator/health"),
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/signup"),
     };
 
     @Bean

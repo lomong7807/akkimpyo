@@ -2,10 +2,12 @@ package app.accountbook.api;
 
 import app.accountbook.auth.LoginService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 인증. 이 아래의 경로는 모두 POST이고 출처를 먼저 본다({@link AuthRequestFilter}). */
@@ -24,5 +26,13 @@ class AuthController {
             produces = MediaType.APPLICATION_JSON_VALUE)
     AccessTokenResponse login(@Valid @RequestBody LoginRequest request) {
         return new AccessTokenResponse(loginService.login(request.email(), request.password()));
+    }
+
+    /** 가입(F-002)하고 로그인과 같은 토큰을 준다. api는 auth만 부른다(ModuleBoundaryTest). refresh 쿠키는 #26. */
+    @PostMapping(path = "/signup", consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    AccessTokenResponse signup(@RequestBody SignupRequest request) {
+        return new AccessTokenResponse(loginService.signup(request.email(), request.password(), request.displayName()));
     }
 }

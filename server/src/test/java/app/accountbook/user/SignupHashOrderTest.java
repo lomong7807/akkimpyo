@@ -2,6 +2,7 @@ package app.accountbook.user;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import app.accountbook.common.DuplicateEmailException;
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.support.IntegrationTest;
@@ -71,6 +73,19 @@ class SignupHashOrderTest {
                 .isInstanceOf(InvalidRequestException.class);
 
         verify(passwordEncoder, never()).encode(any());
+    }
+
+    @Test
+    void createUser_doesNotHashOrSaveWhenEmailIsNotAllowed() {
+        long usersBefore = userRepository.count();
+
+        InvalidRequestException e = catchThrowableOfType(InvalidRequestException.class,
+                () -> userService.createUser("outsider@example.org", "password1", "주인"));
+
+        assertThat(e.field()).isEqualTo("email");
+        assertThat(e.code()).isEqualTo(FieldErrorCode.NOT_ALLOWED);
+        verify(passwordEncoder, never()).encode(any());
+        assertThat(userRepository.count()).isEqualTo(usersBefore);
     }
 
     @Test

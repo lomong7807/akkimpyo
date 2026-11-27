@@ -88,10 +88,14 @@ public class CategoryService {
         categoryRepository.delete(category);
     }
 
+    /**
+     * 장부의 모든 카테고리(최상위와 하위, 지출과 수입). 미분류(system)가 뒤, 다음은 만든 시각, 같으면 id 순이다.
+     * 그래서 구분별로 보면 미분류가 맨 뒤다(F-509, dba 메모 PR #136). 조회는 한 번이다.
+     */
     @Transactional(readOnly = true)
     public List<Category> list(UUID actorId, UUID ledgerId) {
         ledgerAccess.requireMember(actorId, ledgerId);
-        return categoryRepository.findByLedgerIdOrderByCreatedAtAsc(ledgerId);
+        return categoryRepository.findByLedgerIdOrderBySystemAscCreatedAtAscIdAsc(ledgerId);
     }
 
     /** 그 장부의 {@code 미분류}. 장부를 만들 때 kind마다 하나씩 만들어지므로 없으면 데이터 이상이다. */
