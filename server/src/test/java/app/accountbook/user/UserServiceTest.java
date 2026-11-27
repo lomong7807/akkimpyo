@@ -84,6 +84,14 @@ class UserServiceTest {
                 .containsExactlyInAnyOrder(tuple(CategoryKind.EXPENSE, "미분류"), tuple(CategoryKind.INCOME, "미분류"));
     }
 
+    @Test
+    void exists_tellsOnlyWhetherTheUserIsThere() {
+        User user = userService.createUser("owner@example.com", PASSWORD, "주인");
+
+        assertThat(userService.exists(user.getId())).isTrue();
+        assertThat(userService.exists(UUID.randomUUID())).isFalse();
+    }
+
     // --- 기본 카테고리 (P-223): 지출 11개, 수입 4개, 미분류 2개가 명세에 적힌 이름과 순서로 생긴다 ---
 
     @Test

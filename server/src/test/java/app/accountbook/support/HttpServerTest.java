@@ -20,6 +20,6 @@ import org.springframework.context.annotation.Import;
 @Documented
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT,
         properties = "spring.datasource.hikari.maximum-pool-size=2")
-@Import({PostgresContainerConfig.class, TestPasswordHasherConfig.class})
+@Import({PostgresContainerConfig.class, TestPasswordHasherConfig.class, TestAccessTokens.KeyConfig.class})
 public @interface HttpServerTest {
 }
