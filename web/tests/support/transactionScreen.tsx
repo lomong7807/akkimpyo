@@ -7,7 +7,7 @@ import { RouterProvider } from 'react-router/dom'
 import { expect, vi } from 'vitest'
 import { accountOf, startAccounts } from './accounts'
 import { ledgerIdOf, startBackend } from './backend'
-import { categoryWithChildren, startCategories } from './categories'
+import { categoryWithChildren, startCategories, startCategorySuggestions } from './categories'
 import { untilOpened } from './dialog'
 import { fetchScreenCodeFirst } from './screenCode'
 import { withShownLocation } from './shownScreen'
@@ -71,7 +71,8 @@ export function startServer(server: SetupServer) {
   const categories = startCategories(server, backend)
   categories.items = [...categoryItems]
   const transactions = startTransactions(server, backend)
-  return { backend, accounts, categories, transactions }
+  const suggestions = startCategorySuggestions(server, backend)
+  return { backend, accounts, categories, transactions, suggestions }
 }
 
 /**
@@ -172,4 +173,13 @@ export function resetGlobals() {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
+}
+
+/** 카테고리 칸 아래의 제안 도움말(P-219) */
+export const SUGGESTED = '지난번 같은 가맹점에 쓴 카테고리예요'
+
+/** 카테고리 칸에 제안 도움말이 이어져 있다 */
+export function hasSuggestedHelp(): boolean {
+  const ids = categoryField().getAttribute('aria-describedby')?.split(' ') ?? []
+  return ids.some((each) => document.getElementById(each)?.textContent === SUGGESTED)
 }

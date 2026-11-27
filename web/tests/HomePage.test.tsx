@@ -205,12 +205,15 @@ describe('주소와 공통 틀', () => {
     expect(addressOf(opened)).toBe('/home')
   })
 
-  it('구역 순서는 이번 달 합계, 계좌 잔액, 최근 거래다(1A에는 한 줄 입력, 예산, 이벤트, 확인할 거래가 없다)', async () => {
+  it('구역 순서는 한 줄 입력, 이번 달 합계, 계좌 잔액, 최근 거래다(예산, 이벤트, 확인할 거래는 2·3단계라 없다)', async () => {
     putTransactions()
     await openHome()
-    const headings = within(main()).getAllByRole('heading', { level: 2 }).map((each) => each.textContent)
-    expect(headings).toEqual(['11월 합계', '계좌 잔액', '최근 거래'])
-    expect(within(main()).queryByRole('textbox')).toBeNull()
+    const headings = within(main()).getAllByRole('heading', { level: 2 })
+    expect(headings.map((each) => each.textContent)).toEqual(['11월 합계', '계좌 잔액', '최근 거래'])
+    // 입력칸은 한 줄 입력 하나이고 맨 위 구역이다(C-01 (1), #233)
+    const [oneLine] = within(main()).getAllByRole('textbox')
+    expect(within(main()).getAllByRole('textbox')).toEqual([within(main()).getByRole('textbox', { name: '한 줄 입력' })])
+    expect(oneLine.compareDocumentPosition(headings[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
@@ -731,7 +734,7 @@ describe('배치(화면설계서 C-01, designer 결정 13·15)', () => {
     expect(styleOf(main()).paddingBottom).toBe('var(--space-24)')
   })
 
-  it('넓은 화면은 두 칸이다: 칸 사이 24px을 뺀 폭을 2:3으로 나누고 함께 스크롤한다', async () => {
+  it('넓은 화면은 한 줄 입력(전체 폭) 아래 두 칸이다: 칸 사이 24px을 뺀 폭을 2:3으로 나누고 함께 스크롤한다', async () => {
     putTransactions()
     await openHome()
     setViewportWidth(1280)
@@ -739,7 +742,9 @@ describe('배치(화면설계서 C-01, designer 결정 13·15)', () => {
     expect(styleOf(home).display).toBe('grid')
     expect(styleOf(home).gridTemplateColumns).toBe('minmax(0, 2fr) minmax(0, 3fr)')
     expect(styleOf(home).columnGap).toBe('var(--space-24)')
-    const [left, right] = [...home.children]
+    const [oneLine, left, right] = [...home.children]
+    expect(within(oneLine as HTMLElement).getByRole('textbox', { name: '한 줄 입력' })).toBeTruthy()
+    expect(styleOf(oneLine).gridColumn).toBe('1 / -1')
     expect(within(left as HTMLElement).getAllByRole('heading', { level: 2 }).map((each) => each.textContent)).toEqual([
       '11월 합계',
       '계좌 잔액',

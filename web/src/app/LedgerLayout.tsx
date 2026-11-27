@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import ConnectionBand from '../features/connection/ConnectionBand'
 import { watchConnectionBand } from '../features/connection/bandState'
+import { oneLinePreload } from '../features/home/oneLineLoader'
 import { useCurrentLedger } from '../features/me/CurrentLedgerContext'
 import { canEdit } from '../features/me/me'
 import SidebarSync from '../features/sync/SidebarSync'
@@ -13,14 +14,17 @@ import { useLogout } from './useLogout'
 
 /**
  * 현재 장부의 이름, 연결 없음 띠, 동기화 상태 표시(#235)를 보이는 공통 틀. 처음 그린 뒤 한가할 때 하단 탭에서 바로 가는 내역과 거래 입력(쓸 수 있을 때)의 코드를
- * 미리 받는다(#251).
+ * 미리 받는다(#251). 쓸 수 있으면 홈의 한 줄 입력의 해석기와 결과 확인(D-05) 조각도 받는다(#233).
  */
 export default function LedgerLayout() {
   const ledger = useCurrentLedger()
   const canWrite = canEdit(ledger)
   const { onLogout, dialog } = useLogout()
   useEffect(
-    () => preloadWhenIdle(canWrite ? [transactionListScreen, transactionNewScreen] : [transactionListScreen]),
+    () =>
+      preloadWhenIdle(
+        canWrite ? [transactionListScreen, transactionNewScreen, oneLinePreload] : [transactionListScreen],
+      ),
     [canWrite],
   )
   // 연결 없음 띠의 2초는 화면을 옮겨도 이어서 센다(#235)

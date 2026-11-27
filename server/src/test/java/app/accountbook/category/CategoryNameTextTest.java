@@ -106,12 +106,12 @@ class CategoryNameTextTest {
         Category snack = expense("간식");
         Category other = expense("외식");
 
-        assertThat(storedName(categoryService.rename(owner.getId(), other.getId(), nfd("\u3000야식 ")))).isEqualTo("야식");
-        assertThatThrownBy(() -> categoryService.rename(owner.getId(), other.getId(), nfd("간식")))
+        assertThat(storedName(categoryService.rename(owner.getId(), ledgerId, other.getId(), nfd("\u3000야식 ")))).isEqualTo("야식");
+        assertThatThrownBy(() -> categoryService.rename(owner.getId(), ledgerId, other.getId(), nfd("간식")))
                 .isInstanceOf(DuplicateCategoryNameException.class);
-        assertRejected(() -> categoryService.rename(owner.getId(), other.getId(), "야식\u200D"),
+        assertRejected(() -> categoryService.rename(owner.getId(), ledgerId, other.getId(), "야식\u200D"),
                 FieldErrorCode.INVALID_FORMAT);
-        assertRejected(() -> categoryService.rename(owner.getId(), other.getId(), "\u3000"), FieldErrorCode.REQUIRED);
+        assertRejected(() -> categoryService.rename(owner.getId(), ledgerId, other.getId(), "\u3000"), FieldErrorCode.REQUIRED);
         assertThat(storedName(snack)).isEqualTo("간식");
         assertThat(storedName(other)).isEqualTo("야식");
     }

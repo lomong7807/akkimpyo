@@ -69,7 +69,7 @@ record TransactionListRequest(TransactionScope scope, int limit, TransactionKey 
             return parsed.<TransactionScope>map(Month::new);
         }
         if (date != null) {
-            Optional<TransactionScope> parsed = parsed(DATE, date, text -> new Day(LocalDate.parse(text)));
+            Optional<TransactionScope> parsed = date(date).<TransactionScope>map(Day::new);
             if (parsed.isEmpty()) {
                 errors.add(invalidFormat("date", "date는 YYYY-MM-DD입니다."));
             }
@@ -83,13 +83,18 @@ record TransactionListRequest(TransactionScope scope, int limit, TransactionKey 
         return parsed(MONTH, text, YearMonth::parse);
     }
 
+    /** {@code date} 쿼리 값({@code YYYY-MM-DD}). 내보내기의 기간(#57)도 같은 형식으로 읽는다. 틀리면 빈 값이다. */
+    static Optional<LocalDate> date(String text) {
+        return parsed(DATE, text, LocalDate::parse);
+    }
+
     /** {@link #month}가 읽지 못한 값의 오류. */
     static InvalidRequestException invalidMonth() {
         return invalidFormat("month", "month는 YYYY-MM입니다.");
     }
 
     /** 모양이 맞고 값으로 읽히면 그 값. 13월, 평년의 2월 29일처럼 모양만 맞는 글자도 형식 오류다. */
-    private static <T> Optional<T> parsed(Pattern shape, String text, Function<String, T> parser) {
+    static <T> Optional<T> parsed(Pattern shape, String text, Function<String, T> parser) {
         if (!shape.matcher(text).matches()) {
             return Optional.empty();
         }
