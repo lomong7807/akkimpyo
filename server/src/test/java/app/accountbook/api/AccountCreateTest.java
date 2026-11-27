@@ -32,9 +32,9 @@ import tools.jackson.databind.JsonNode;
 class AccountCreateTest {
 
     /** 서울은 2026-11-28 00:30이고 UTC는 아직 11-27이다. 기준일의 끝은 서울의 오늘로부터 1년 뒤인 2027-11-28이다. */
-    private static final Instant NOW = Instant.parse("2026-11-27T15:30:00Z");
+    static final Instant NOW = Instant.parse("2026-11-27T15:30:00Z");
     /** 이 값을 넣으면 그 입력란을 본문에서 뺀다. */
-    private static final String OMIT = "(빠짐)";
+    static final String OMIT = "(빠짐)";
 
     @LocalServerPort int port;
     @Autowired StoppedClock clock;
@@ -213,7 +213,7 @@ class AccountCreateTest {
         return "/api/v1/ledgers/" + ledgerId + "/accounts";
     }
 
-    private static Map<String, String> valid() {
+    static Map<String, String> valid() {
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("name", "\"생활비\"");
         fields.put("type", "\"BANK\"");
@@ -222,7 +222,7 @@ class AccountCreateTest {
         return fields;
     }
 
-    private static String body(String name, String type, String openingBalance, String openingDate) {
+    static String body(String name, String type, String openingBalance, String openingDate) {
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("name", name);
         fields.put("type", type);
@@ -232,14 +232,14 @@ class AccountCreateTest {
     }
 
     /** 값은 JSON 글자 그대로다. */
-    private static String json(Map<String, String> fields) {
+    static String json(Map<String, String> fields) {
         return fields.entrySet().stream()
                 .filter(field -> !field.getValue().equals(OMIT))
                 .map(field -> "\"" + field.getKey() + "\":" + field.getValue())
                 .collect(Collectors.joining(",", "{", "}"));
     }
 
-    private static String quoted(String text) {
+    static String quoted(String text) {
         return "\"" + text + "\"";
     }
 
