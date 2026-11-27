@@ -43,6 +43,7 @@ import app.accountbook.transaction.TransactionPage.DayTotals;
 import app.accountbook.transaction.TransactionScope.Day;
 import app.accountbook.transaction.TransactionScope.Month;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
+import app.accountbook.transaction.TransactionSearch;
 import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionTrashQuery;
 import app.accountbook.transaction.TransactionType;
@@ -366,6 +367,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
                                 new TransactionFilter(Set.of(bBank), Set.of(bFood), Set.of(TransactionType.EXPENSE),
                                         null), null, 50)),
+                denied("조회: 거래 검색", NotLedgerMemberException.class, ledgerB, (actor, ledger) -> transactionListQuery
+                        .search(actor, ledger, new TransactionSearch("B단골식당", DAY, DAY), TransactionFilter.NONE, null)),
                 denied("조회: 중복 경고", NotLedgerMemberException.class, ledgerB, (actor, ledger) ->
                         transactionListQuery.duplicates(actor, ledger, DAY, 73_100, "B단골식당", null)),
                 denied("조회: 가맹점의 최근 카테고리 제안", NotLedgerMemberException.class, ledgerB,
@@ -459,7 +462,10 @@ class CrossLedgerAccessTest {
                                 new TransactionFilter(Set.of(account), Set.of(), Set.of(), null), null, 50)),
                 foreign("조회: A의 거래 목록을 B의 카테고리(하위가 있는)로 거름", invalid, bFood, aFood,
                         (actor, category) -> transactionListQuery.page(actor, ledgerA, new Month(NOVEMBER),
-                                new TransactionFilter(Set.of(), Set.of(category), Set.of(), null), null, 50)));
+                                new TransactionFilter(Set.of(), Set.of(category), Set.of(), null), null, 50)),
+                foreign("조회: A의 거래 검색을 B의 계좌로 거름", invalid, bBank, aCash,
+                        (actor, account) -> transactionListQuery.search(actor, ledgerA, new TransactionSearch(null,
+                                null, null), new TransactionFilter(Set.of(account), Set.of(), Set.of(), null), null)));
     }
 
     /** 수정·취소. version은 지금 값이고 요청 내용은 B가 보내면 통과하는 것이다. */
@@ -567,6 +573,8 @@ class CrossLedgerAccessTest {
                 denied("순서: B의 장부 거래 목록을 없는 계좌로 거름", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
                                 new TransactionFilter(Set.of(missing), Set.of(), Set.of(), null), null, 50)),
+                denied("순서: B의 장부를 조건 없이 검색", notMember, ledgerB, invalid, (actor, ledger) -> transactionListQuery
+                        .search(actor, ledger, new TransactionSearch(null, null, null), TransactionFilter.NONE, null)),
                 denied("순서: B의 장부에 101자 가맹점으로 중복 경고", notMember, ledgerB, invalid, (actor, ledger) ->
                         transactionListQuery.duplicates(actor, ledger, DAY, 73_100, "가".repeat(101), null)),
                 denied("순서: B의 장부에 101자 가맹점으로 카테고리 제안", notMember, ledgerB, invalid,

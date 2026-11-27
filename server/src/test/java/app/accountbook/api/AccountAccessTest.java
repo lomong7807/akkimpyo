@@ -128,6 +128,11 @@ class AccountAccessTest {
                 // B의 카테고리와 같은 이름이라 대조가 B의 카테고리를 바꾸지 않는다.
                 new Case("카테고리 이름 바꾸기(같은 이름)", (client, ledger) -> putCategory(client, ledger, "{\"name\":\"B식비\"}"), 200),
                 new Case("카테고리 이름 바꾸기(틀린 본문)", (client, ledger) -> putCategory(client, ledger, "{\"name\":1}"), 400),
+                new Case("카테고리 삭제 영향", (client, ledger) ->
+                        client.get(categories(ledger) + "/" + bFood + "/deletion-impact"), 200),
+                // 자신으로 옮기려 해 대조가 B의 카테고리를 지우지 않는다.
+                new Case("카테고리 지우기(자신으로 옮기기)", (client, ledger) -> client.send("DELETE",
+                        categories(ledger) + "/" + bFood + "?targetCategoryId=" + bFood, null), 400),
                 new Case("거래 목록(필터)", (client, ledger) -> client.get(transactions(ledger) + "?month=2026-11&accountId="
                         + bBank + "&categoryId=" + bFood + "&type=EXPENSE&status=POSTED"), 200),
                 new Case("거래 목록(틀린 필터 값)", (client, ledger) ->
