@@ -80,6 +80,9 @@ class LoginTest {
     void tearDown() {
         logs.close();
         OURS.setLevel(null);
+        jdbc.update("delete from refresh_token where family_id in (select id from refresh_token_family where user_id = ?)",
+                USER_ID);
+        jdbc.update("delete from refresh_token_family where user_id = ?", USER_ID);
         jdbc.update("delete from users where id in (?, ?)", USER_ID, NOOP_USER_ID);
     }
 
@@ -93,7 +96,7 @@ class LoginTest {
         assertThat(reply.header("Content-Type")).isEqualTo("application/json");
         assertThat(reply.headers().get("Cache-Control"))
                 .containsExactly("no-cache, no-store, max-age=0, must-revalidate");
-        assertThat(reply.headers()).doesNotContainKeys("Set-Cookie", "Authorization", "Location");
+        assertThat(reply.headers()).doesNotContainKeys("Authorization", "Location");
         assertThat(reply.json().propertyNames()).containsExactly("accessToken");
 
         JWTClaimsSet claims = SignedJWT.parse(reply.json().get("accessToken").asString()).getJWTClaimsSet();
