@@ -29,6 +29,15 @@ afterEach(() => {
   lazySeen = all.length
 })
 afterAll(() => {
+  const fetches = (globalThis as { __fetch291?: number[] }).__fetch291 ?? []
+  if (fetches.length > 0) {
+    const later = fetches.slice(3).sort((a, b) => a - b)
+    const file = (expect.getState().testPath ?? '').replace(/^.*\/tests\//, 'tests/')
+    appendFileSync(
+      join(tmpdir(), 'lazy291.txt'),
+      `FETCH291 ${file} first3=[${fetches.slice(0, 3).join(',')}] later n=${later.length} p50=${later[Math.floor(later.length / 2)] ?? '-'} max=${later.at(-1) ?? '-'}\n`,
+    )
+  }
   const firstWith = lazyByTest.findIndex((loads) => loads.length > 0)
   if (firstWith < 0) return
   const rest = lazyByTest.slice(firstWith + 1).flat().sort((a, b) => a - b)

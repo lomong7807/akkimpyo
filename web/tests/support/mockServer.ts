@@ -61,6 +61,10 @@ export function startMockServer() {
       headers.set(DISPATCH_HEADER, id)
       undispatched.add(id)
       const response = intercepted(input, { ...init, headers })
+      // 임시(#291): 요청마다 보낸 때부터 응답까지의 시간을 잰다(setup.ts가 파일마다 찍는다). ready 전에 되돌린다
+      const sentAt = performance.now()
+      const timing = globalThis as { __fetch291?: number[] }
+      response.then(() => void (timing.__fetch291 ??= []).push(Math.round(performance.now() - sentAt)), () => {})
       const done = () => void undispatched.delete(id)
       response.then(done, done)
       return response.then(asOurServer)
