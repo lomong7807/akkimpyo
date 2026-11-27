@@ -36,7 +36,7 @@ import {
   type Opened,
   type User,
 } from './support/transactionScreen'
-import { savedOf, type Transactions } from './support/transactions'
+import { savedOf, type SentTransaction, type Transactions } from './support/transactions'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 
 /*
@@ -96,11 +96,21 @@ async function openHome() {
   return opened
 }
 
+/**
+ * 해석기 조각(oneLineChunk)을 받을 때까지 기다린다. 앱이 받는 것과 같은 약속이다. 파일에서 처음 받는 조각은 CI에서 1초를 넘기기도
+ * 해(모듈 변환) 정한 시간 대신 받기가 끝나기를 기다린다.
+ */
+async function untilChunk() {
+  const { loadChunk } = await import('../src/features/home/oneLineLoader')
+  await act(() => loadChunk())
+}
+
 /** 한 줄을 쓰고 "입력"을 누른다. */
 async function submitLine(user: User, text: string) {
   await user.click(oneLine())
   if (text !== '') await user.keyboard(text)
   await user.click(enterButton())
+  await untilChunk()
 }
 
 /** 한 줄을 써서 휴대폰 배치의 D-05를 열고 기본 계좌가 들어갈 때까지 기다린다. */
@@ -156,7 +166,8 @@ describe('홈의 한 줄 입력(C-01 (1))', () => {
   it('비운 채 "입력"을 누르면 도움말 아래에 문구를 보이고 입력칸에 초점을 둔다. 해석하지 않는다', async () => {
     const { user } = await openHome()
     await user.click(enterButton())
-    // 해석기 조각을 받은 뒤에 본다(입력칸에 초점이 간 적이 없으면 누를 때 받는다)
+    // 입력칸에 초점이 간 적이 없으면 누를 때 조각을 받는다
+    await untilChunk()
     await waitFor(() => expect(errorOf(oneLine())).toBe(EMPTY))
     expect(oneLine().getAttribute('aria-invalid')).toBe('true')
     expect(document.activeElement).toBe(oneLine())
@@ -176,6 +187,7 @@ describe('홈의 한 줄 입력(C-01 (1))', () => {
     const text = `${'가'.repeat(96)} 12000`
     fireEvent.change(oneLine(), { target: { value: text } })
     await user.click(enterButton())
+    await untilChunk()
     await waitFor(() => expect(errorOf(oneLine())).toBe(TOO_LONG))
     expect(oneLine().value).toBe(text)
     await settle()
@@ -186,6 +198,7 @@ describe('홈의 한 줄 입력(C-01 (1))', () => {
     const { user } = await openHome()
     fireEvent.change(oneLine(), { target: { value: `${'가'.repeat(94)} 12000` } })
     await user.click(enterButton())
+    await untilChunk()
     expect(await screen.findByRole('dialog', { name: RESULT })).toBeTruthy()
   })
 
@@ -691,6 +704,66 @@ describe('저장 실패(서버 오류, 지연)', () => {
   })
 })
 
+describe('선택 판(ID_CONFLICT, #239)에서 보내는 동안', () => {
+  const board = () => screen.queryByRole('dialog', { name: '이미 저장된 거래가 있어요' })
+
+  it('"새 거래로 저장"을 보내는 동안 뒤로 가기를 눌러도 판이 남고, 요청 중에 끊기면 그 새 id로 기기에 쌓는다(architect #350)', async () => {
+    let cut = () => {}
+    // 앞서 같은 id로 수입이 저장돼 있어 고칠 수 없고 "새 거래로 저장"만 있다(P-213)
+    const answers = [
+      (sent: SentTransaction) =>
+        problem(409, 'ID_CONFLICT', {
+          current: savedOf(sent.body, sent.user, { type: 'INCOME', categoryId: id.pay, accountId: id.salary, amount: 15000 }),
+        }),
+    ]
+    transactions.response = (sent) =>
+      answers.shift()?.(sent) ?? new Promise<Response>((resolve) => (cut = () => resolve(HttpResponse.error())))
+    const opened = await openHome()
+    await openResult(opened.user)
+    await opened.user.click(saveButton())
+    await waitFor(() => expect(board()).not.toBeNull())
+    await untilOpened()
+    await opened.user.click(within(board()!).getAllByRole('button', { name: '새 거래로 저장' }).at(-1)!)
+    await waitFor(() => expect(transactions.sent).toHaveLength(2))
+    await act(() => opened.router.navigate(-1))
+    await settle()
+    expect(pathOf(opened)).toBe('/home')
+    expect(resultDialog()).not.toBeNull()
+    act(() => cut())
+    await waitFor(() => expect(toastText()).toBe(QUEUED))
+    const [item] = await queueOf('user-1')
+    expect(item.id).toBe(transactions.sent[1].body.id)
+    expect(item.id).not.toBe(transactions.sent[0].body.id)
+    await waitFor(() => expect(resultDialog()).toBeNull())
+  })
+
+  it('보내는 동안에는 홈을 떠나는 이동도 막는다', async () => {
+    let answer = () => {}
+    const answers = [
+      (sent: SentTransaction) =>
+        problem(409, 'ID_CONFLICT', {
+          current: savedOf(sent.body, sent.user, { type: 'INCOME', categoryId: id.pay, accountId: id.salary, amount: 15000 }),
+        }),
+    ]
+    transactions.response = (sent) =>
+      answers.shift()?.(sent) ??
+      new Promise<Response>((resolve) => (answer = () => resolve(HttpResponse.json(savedOf(sent.body, sent.user), { status: 201 }))))
+    const opened = await openHome()
+    await openResult(opened.user)
+    await opened.user.click(saveButton())
+    await waitFor(() => expect(board()).not.toBeNull())
+    await untilOpened()
+    await opened.user.click(within(board()!).getAllByRole('button', { name: '새 거래로 저장' }).at(-1)!)
+    await waitFor(() => expect(transactions.sent).toHaveLength(2))
+    await act(() => opened.router.navigate('/transactions'))
+    await settle()
+    expect(pathOf(opened)).toBe('/home')
+    act(() => answer())
+    await waitFor(() => expect(toastText()).toBe('저장했어요'))
+    await waitFor(() => expect(resultDialog()).toBeNull())
+  })
+})
+
 describe('연결이 없을 때(F-103, #234)', () => {
   it('저장하면 요청 없이 기기에 쌓고 판을 닫으며 입력칸을 비우고 토스트를 보인다. 최근 거래에 보내지 않음 줄이 생긴다', async () => {
     const { user } = await openHome()
@@ -980,7 +1053,10 @@ describe('D-05 조각을 받지 못하면', () => {
     try {
       const { user } = await openHome()
       if (offline) act(() => goOffline())
-      await submitLine(user, '점심 12000')
+      // 조각을 받지 못하므로 받기를 기다리지 않고 문구를 기다린다
+      await user.click(oneLine())
+      await user.keyboard('점심 12000')
+      await user.click(enterButton())
       await waitFor(() => expect(errorOf(oneLine())).toBe(message))
       expect(oneLine().value).toBe('점심 12000')
       expect(resultDialog()).toBeNull()

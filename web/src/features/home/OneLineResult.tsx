@@ -106,7 +106,11 @@ export default function OneLineResult({ request, text, setText, input }: OneLine
   const [mark, setMark] = useState<string>()
   // 쌓은 항목이 아직 지금 항목이 되기 전이다. 그동안도 보인다(실패해 다시 열면 같은 처리 안에서 칸이 있어야 초점을 준다)
   const [pushing, setPushing] = useState<string>()
+  // "저장"을 눌러 판을 닫고 보내는 중이다(뒷일: 입력칸, 다시 열기)
   const [sending, setSending] = useState(false)
+  // 판의 어느 버튼이든(저장, 다시 시도, 선택 판의 두 보내기) 요청이 나가 있다. 판의 save.busy를 따른다(architect #350)
+  const [sessionBusy, setSessionBusy] = useState(false)
+  const busy = sending || sessionBusy
   const keys = useRef(0)
   const handled = useRef(0)
   // 보내는 동안 낸 새 해석. 저장이 끝나면 연다(designer #233 6)
@@ -123,7 +127,7 @@ export default function OneLineResult({ request, text, setText, input }: OneLine
   })
 
   const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) => sending && currentLocation.pathname !== nextLocation.pathname,
+    ({ currentLocation, nextLocation }) => busy && currentLocation.pathname !== nextLocation.pathname,
   )
   useEffect(() => {
     if (blocker.state === 'blocked') blocker.reset()
@@ -207,18 +211,23 @@ export default function OneLineResult({ request, text, setText, input }: OneLine
     focusInput(typed === '' ? closed.text : undefined)
   }
 
-  // 브라우저 뒤로 가기로 지금 항목이 바뀌면 닫은 것이다
+  // 브라우저 뒤로 가기로 지금 항목이 바뀌면 닫은 것이다. 요청이 나가 있는 동안에는 닫지 않고 판을 다시 쌓는다: 판이 사라지면
+  // 요청의 뒷일(기기에 쌓기, 실패 문구)을 하지 못한다(D-04가 보내는 동안 떠나는 길을 막는 것과 같다, architect #350)
   const wasShown = useRef(false)
-  const closedByBack = useEffectEvent(() => {
+  const backPressed = useEffectEvent(() => {
+    if (busy) {
+      pushMark()
+      return
+    }
     const { session: closed, text: typed } = latest.current
     setMark(undefined)
     setSession(undefined)
     if (closed) focusInput(typed === '' ? closed.text : undefined)
   })
   useEffect(() => {
-    if (wasShown.current && !shown && mark !== undefined && !sending) closedByBack()
+    if (wasShown.current && !shown && mark !== undefined) backPressed()
     wasShown.current = shown
-  }, [shown, mark, sending])
+  }, [shown, mark])
 
   /** 검증을 지나 보내기 바로 앞. "저장"이면 판을 닫고 입력칸을 비워 커서를 준다. 그사이 입력칸에 쓴 새 글은 둔다 */
   function startSending(from: Sender) {
@@ -274,6 +283,7 @@ export default function OneLineResult({ request, text, setText, input }: OneLine
       onSending={startSending}
       onDone={finish}
       onFailed={fail}
+      onBusyChange={setSessionBusy}
       onDetail={detail}
     />
   )
@@ -287,6 +297,8 @@ interface SessionProps {
   onSending: (from: Sender) => void
   onDone: (toast: string) => void
   onFailed: () => void
+  /** 판의 요청이 나가 있는지(save.busy). 판이 사라지면 아니다 */
+  onBusyChange: (busy: boolean) => void
   onDetail: (
     values: TransactionValues,
     owner: { userId: string | undefined; ledgerId: string },
@@ -295,7 +307,17 @@ interface SessionProps {
 }
 
 /** 판 하나: 칸과 저장. 판이 닫혀도(보내는 중) 남아 있다가 실패하면 같은 값으로 다시 그린다 */
-function OneLineSession({ session, shown, draftRef, onClose, onSending, onDone, onFailed, onDetail }: SessionProps) {
+function OneLineSession({
+  session,
+  shown,
+  draftRef,
+  onClose,
+  onSending,
+  onDone,
+  onFailed,
+  onBusyChange,
+  onDetail,
+}: SessionProps) {
   const ledger = useCurrentLedger()
   const navigate = useNavigate()
   const wide = useWideScreen()
@@ -317,6 +339,10 @@ function OneLineSession({ session, shown, draftRef, onClose, onSending, onDone, 
     onDone,
     onFailed,
   })
+  useLayoutEffect(() => {
+    onBusyChange(save.busy)
+    return () => onBusyChange(false)
+  }, [save.busy, onBusyChange])
   // 되살린 판의 카테고리는 직접 골랐을 수 있어 덮어쓰지 않는다(P-502)
   const restoredCategory = session.id !== undefined && (session.values.categoryId ?? '') !== ''
   const suggestion = useCategorySuggestion({

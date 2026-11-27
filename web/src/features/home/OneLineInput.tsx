@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type SubmitEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type SubmitEvent } from 'react'
 import { connection } from '../../api/connection'
 import { sessionUserId } from '../../api/session'
 import { Button } from '../../components/Button'
@@ -37,7 +37,8 @@ export default function OneLineInput() {
   const [text, setText] = useState(returned ?? '')
   const [problem, setProblem] = useState<Unloaded | OneLineProblem>()
   const [request, setRequest] = useState<OneLineRequest>()
-  const [chunk, setChunk] = useState(loadedChunk)
+  // 조각이 오면 다시 그린다. 그리기와 듣기 사이에 온 조각도 놓치지 않는다
+  const chunk = useSyncExternalStore(onChunkArrived, loadedChunk)
   const input = useRef<HTMLInputElement>(null)
   const seq = useRef(0)
 
@@ -48,8 +49,6 @@ export default function OneLineInput() {
     element.focus()
     element.setSelectionRange(element.value.length, element.value.length)
   }, [returned])
-
-  useEffect(() => (chunk ? undefined : onChunkArrived(setChunk)), [chunk])
 
   function preload() {
     if (!loadedChunk()) oneLinePreload.preload()
