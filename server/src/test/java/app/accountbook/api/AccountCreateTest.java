@@ -60,10 +60,12 @@ class AccountCreateTest {
         assertThat(created.status()).as(created.body()).isEqualTo(201);
         assertThat(created.header("Content-Type")).isEqualTo("application/json");
         JsonNode account = created.json();
-        assertThat(account.propertyNames()).containsExactly("id", "name", "type", "balance", "openingBalance", "openingDate");
+        assertThat(account.propertyNames()).containsExactly("id", "name", "type", "balance", "openingBalance", "openingDate",
+                "hidden");
         assertThat(account.get("id").asString()).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
         assertThat(account.get("name").asString()).isEqualTo("신한카드");
         assertThat(account.get("type").asString()).isEqualTo("CARD");
+        assertThat(account.get("hidden").asBoolean()).as("새 계좌는 보인다").isFalse();
         assertThat(account.get("balance").isIntegralNumber()).isTrue();
         assertThat(account.get("balance").asLong()).as("부호를 바꾸지 않는다").isEqualTo(-350_000);
         assertThat(account.get("openingBalance").isIntegralNumber()).isTrue();
