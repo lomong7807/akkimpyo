@@ -60,7 +60,7 @@ record TransactionResponse(UUID id, TransactionType type, LocalDate occurredOn, 
         return tx.lines().stream().filter(line -> line.amount() > 0 == incoming).findFirst().orElseThrow();
     }
 
-    private static String serverTime(Instant at) {
+    static String serverTime(Instant at) {
         return at == null ? null : SERVER_TIME.format(at);
     }
 

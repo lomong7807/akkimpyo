@@ -18,6 +18,9 @@ public interface ChangeLogRepository extends Repository<ChangeLog, UUID> {
 
     Optional<ChangeLog> findFirstByTransactionIdOrderByVersionDesc(UUID transactionId);
 
+    /** 그 장부의 그 거래 이력, 오래된 것부터. 장부 조건은 거래 id와 함께 건다(이력 조회 API, #47). */
+    List<ChangeLog> findByTransactionIdAndLedgerIdOrderByVersionAsc(UUID transactionId, UUID ledgerId);
+
     /** 그 version까지의 마지막 이력. 전체 복원으로 version에 구멍이 있어도 된다(ADR 006 결정 5). */
     Optional<ChangeLog> findFirstByTransactionIdAndVersionLessThanEqualOrderByVersionDesc(UUID transactionId,
                                                                                          long version);
