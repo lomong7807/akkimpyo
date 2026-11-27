@@ -1,5 +1,5 @@
 import type { IconSvg } from '../components/Icon'
-import { DotsThree, House, ListBullets } from '../components/icons'
+import { ChartBar, DotsThree, House, ListBullets } from '../components/icons'
 
 export interface NavigationItem {
   label: string
@@ -39,6 +39,8 @@ export interface ScreenHandle {
 
 export const homeItem: MainNavigationItem = { label: '홈', to: '/home', icon: House }
 export const transactionsItem: MainNavigationItem = { label: '내역', to: '/transactions', icon: ListBullets }
+/** 통계 탭(B-01 5-3). 누르면 월별 통계(E-01)이고, 화면이 주소에 기억한 달이나 이번 달을 붙인다 */
+export const statsItem: MainNavigationItem = { label: '통계', to: '/stats/monthly', icon: ChartBar }
 export const moreItem: MainNavigationItem = { label: '더보기', to: '/more', icon: DotsThree }
 export const accountsItem: NavigationItem = { label: '계좌', to: '/accounts' }
 export const categoriesItem: NavigationItem = { label: '카테고리', to: '/categories' }
@@ -47,11 +49,11 @@ export const quickEntryItem: NavigationItem = { label: '거래 입력', to: '/tr
 
 /**
  * 하단 탭과 사이드바의 항목. 화면을 만드는 이슈가 자기 항목을 더한다.
- * 1A에는 통계 탭이 아직 없어 하단 탭은 [홈, 내역, 거래 입력, 더보기] 네 칸이다(1A 임시).
+ * 1단계의 하단 탭은 [홈, 내역, 거래 입력, 통계, 더보기] 다섯 칸이다(00-common 6.2, #242). 이벤트 탭은 2단계다.
  */
 export const navigation: Navigation = {
-  tabs: [homeItem, transactionsItem, QUICK_ENTRY, moreItem],
+  tabs: [homeItem, transactionsItem, QUICK_ENTRY, statsItem, moreItem],
   quickEntry: quickEntryItem,
   fallbackTab: moreItem,
-  sidebar: { main: [homeItem, transactionsItem], more: [accountsItem, categoriesItem] },
+  sidebar: { main: [homeItem, transactionsItem, statsItem], more: [accountsItem, categoriesItem] },
 }
