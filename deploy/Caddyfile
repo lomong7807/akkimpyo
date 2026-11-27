@@ -3,7 +3,7 @@
 # 레포의 이 파일을 바꿔도 서버의 설정은 바뀌지 않는다. 바꾸려면 owner가 다시 설치하고 proxy를 다시 띄운다.
 #
 # 환경 변수(compose가 넘긴다)
-#   SITE_ADDRESS          사이트 주소. 예: https://이름.duckdns.org. 서버의 WEB_ORIGIN도 같은 값이다(compose).
+#   SITE_ADDRESS          사이트 주소. 예: https://이름.duckdns.org. compose가 app.env의 WEB_ORIGIN을 넘긴다(서버의 WEB_ORIGIN과 같은 값).
 #   SW_DISABLE            yes면 /sw.js에 /sw-off.js의 내용을 낸다(service worker 긴급 끄기). 그 밖의 값은 no로 본다.
 #   ACCESS_LOG_KEEP_DAYS  접근 로그를 남겨 두는 날 수.
 #
@@ -123,7 +123,8 @@ http:// {
 		}
 		reverse_proxy server:8080 {
 			# 본문을 다 받은 뒤 서버로 넘긴다. 느린 본문이 서버의 연결을 잡지 않는다(#52 범위 보강 19).
-			# 상한보다 1바이트 크게 두어, 상한까지의 본문은 끝까지 받아 Content-Length를 붙여 넘긴다.
+			# 상한보다 1바이트 크게 두어 상한까지의 본문은 끝까지 받는다. 길이를 밝힌 본문은 Content-Length로,
+			# 나눠 보낸 본문은 나눠 보낸 그대로 넘긴다(대역 서버로 확인, deploy/tests/proxy-suite).
 			request_buffers 65537
 			transport http {
 				# 서버(Tomcat)는 쉬는 연결을 10초에 닫는다. 프록시가 먼저 닫아 쉰 연결에 보낸 요청이 502가 되지 않게 한다(#52 범위 보강 20).

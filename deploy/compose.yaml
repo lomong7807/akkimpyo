@@ -38,7 +38,8 @@ services:
       - "${PROXY_HTTP_PORT:-80}:80"
       - "${PROXY_HTTPS_PORT:-443}:443"
     environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:?SITE_ADDRESS가 없다}
+      # 사이트 주소는 서버의 WEB_ORIGIN과 같은 변수 하나에서 나온다. 어긋나면 로그인이 403이 된다(#52 범위 보강 17).
+      SITE_ADDRESS: ${WEB_ORIGIN:?WEB_ORIGIN이 없다}
       SW_DISABLE: ${SW_DISABLE:?SW_DISABLE가 없다}
       ACCESS_LOG_KEEP_DAYS: ${ACCESS_LOG_KEEP_DAYS:-14}
     volumes:
@@ -71,8 +72,8 @@ services:
       DB_USERNAME: ${DB_USERNAME:?DB_USERNAME이 없다}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD가 없다}
       ACCESS_TOKEN_SIGNING_KEY: ${ACCESS_TOKEN_SIGNING_KEY:?ACCESS_TOKEN_SIGNING_KEY가 없다}
-      # 프록시의 사이트 주소와 같은 변수에서 나온다. 어긋나면 로그인이 403이 된다(#52 범위 보강 17).
-      WEB_ORIGIN: ${SITE_ADDRESS:?SITE_ADDRESS가 없다}
+      # 프록시의 사이트 주소와 같은 변수다(위 proxy의 SITE_ADDRESS).
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN이 없다}
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

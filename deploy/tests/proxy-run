@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# 운영 compose(deploy/compose.yaml)와 프록시 설정(deploy/Caddyfile)을 로컬 Docker로 끝까지 돌려 본다(#52).
+# Docker(buildx, compose 포함)만 있으면 된다. 서버·웹 이미지는 docker-bake.hcl로 이 체크아웃에서 빌드한다(linux/arm64).
+# 운영 서버, Oracle Cloud, DuckDNS에 접속하지 않고 공개 인증서를 받지 않는다. TLS는 Caddy의 내부 CA로 localhost만 쓴다.
+# 이 실행이 만든 컨테이너, 볼륨, 네트워크, 이미지만 지운다(이름이 akkimpyo-test-proxy-<번호>로 시작한다).
+#
+# 환경 변수
+#   PROXY_TEST_SERVER_IMAGE, PROXY_TEST_WEB_IMAGE  둘 다 주면 빌드하지 않고 그 이미지를 쓴다(지우지 않는다).
+#   PROXY_TEST_QUICK=1  오래 걸리는 시험(느린 연결, 유지 연결, DB 내림)을 건너뛴다. CI(backup-test.yml)는 모두 돈다.
+set -euo pipefail
+
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
+harness=akkimpyo-test-proxy-harness
+id=akkimpyo-test-proxy-$$-$RANDOM
+
+server_image=${PROXY_TEST_SERVER_IMAGE:-}
+web_image=${PROXY_TEST_WEB_IMAGE:-}
+
+# 시험이 다시 docker compose와 docker run --mount를 하므로, 호스트와 시험 컨테이너가 같은 경로를 쓴다.
+work=$(cd -- "$(mktemp -d)" && pwd -P)
+cleanup() {
+  docker ps --all --quiet --filter "label=com.docker.compose.project=$id" | xargs docker rm --force --volumes >/dev/null 2>&1 || true
+  docker ps --all --quiet --filter "name=^$id" | xargs docker rm --force --volumes >/dev/null 2>&1 || true
+  docker volume ls --quiet --filter "label=com.docker.compose.project=$id" | xargs docker volume rm >/dev/null 2>&1 || true
+  docker network ls --quiet --filter "label=com.docker.compose.project=$id" | xargs docker network rm >/dev/null 2>&1 || true
+  docker image ls --quiet --filter "reference=$id-*" | sort -u | xargs docker image rm --force >/dev/null 2>&1 || true
+  # 시험 컨테이너가 root로 만든 파일(시험용 비밀값이 든 env 파일 포함)이 있어 컨테이너에서 지운다.
+  docker run --rm --volume "$work:$work" --entrypoint find "$harness" "$work" -mindepth 1 -delete >/dev/null 2>&1 || true
+  rmdir -- "$work" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+if [[ -z $server_image || -z $web_image ]]; then
+  (cd -- "$repo" && REVISION=$(git rev-parse HEAD) docker buildx bake --file docker-bake.hcl --load --progress quiet \
+    --set "server.tags=$id-server" --set "web.tags=$id-web" server web)
+  server_image=$id-server
+  web_image=$id-web
+fi
+docker build --quiet --tag "$harness" --file "$repo/deploy/tests/proxy-Dockerfile" "$repo/deploy/tests" >/dev/null
+
+docker run --rm --init --name "$id-suite" \
+  --volume /var/run/docker.sock:/var/run/docker.sock \
+  --volume "$repo:$repo:ro" --volume "$work:$work" \
+  --env "TEST_ID=$id" --env "REPO=$repo" --env "WORK=$work" \
+  --env "TEST_SERVER_IMAGE=$server_image" --env "TEST_WEB_IMAGE=$web_image" \
+  --env "PROXY_TEST_QUICK=${PROXY_TEST_QUICK:-0}" \
+  "$harness" "$repo/deploy/tests/proxy-suite"
