@@ -120,14 +120,15 @@ class TransactionDeleteRestoreTest {
             delete(created, query).assertFieldErrors("version:INVALID_FORMAT");
         }
         delete(created, "1", DEVICE, "a b").assertFieldErrors("X-Akkimpyo-Device:INVALID_FORMAT");
-        transactionService.delete(owner.getId(), id(created), 1, "test-device");
+        // 목록(ADR 007 결정 10)에 있는 기기 값이라 이력에 그대로 남는다.
+        transactionService.delete(owner.getId(), id(created), 1, "mac.chrome");
         restore(created, "{}").assertFieldErrors("version:REQUIRED");
         restore(created, "{\"version\":null}").assertFieldErrors("version:REQUIRED");
         restore(created, "{\"version\":\"2\"}").assertFieldErrors("version:INVALID_FORMAT");
         restore(created, "{\"version\":2.0}").assertFieldErrors("version:INVALID_FORMAT");
         restore(created, "{\"version\":2}", DEVICE, "a b").assertFieldErrors("X-Akkimpyo-Device:INVALID_FORMAT");
 
-        assertThat(history(created)).containsExactly("CREATE unknown", "DELETE test-device");
+        assertThat(history(created)).containsExactly("CREATE unknown", "DELETE mac.chrome");
     }
 
     /** 내가 구성원인 다른 장부의 거래, 남의 거래, 완전히 지운 거래, 없는 거래는 version이 틀려도 같은 404다. */
