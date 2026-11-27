@@ -468,6 +468,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionService.create(actor, ledger, null, DEVICE)),
                 denied("순서: B의 장부 월 통계를 달 없이", notMember, ledgerB, invalid,
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, null)),
+                denied("순서: B의 장부 월 통계를 범위 밖 달로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, YearMonth.of(1999, 12))),
                 denied("순서: B의 장부 거래 목록을 범위 밖 limit으로", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 0)),
                 denied("순서: B의 장부에 101자 가맹점으로 카테고리 제안", notMember, ledgerB, invalid,

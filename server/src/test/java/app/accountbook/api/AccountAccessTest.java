@@ -115,6 +115,8 @@ class AccountAccessTest {
                 new Case("카테고리 제안", (client, ledger) -> client.get(suggestions(ledger) + "?payee=B"), 200),
                 new Case("카테고리 제안(101자 가맹점)", (client, ledger) ->
                         client.get(suggestions(ledger) + "?payee=" + "x".repeat(101)), 400),
+                new Case("월별 통계", (client, ledger) ->
+                        client.get("/api/v1/ledgers/" + ledger + "/stats/monthly?month=2026-11"), 200),
                 new Case("거래 만들기", (client, ledger) ->
                         client.postJson(transactions(ledger), expense(UUID.randomUUID())), 201),
                 new Case("거래 만들기(B의 거래 id에 다른 내용)", (client, ledger) ->
