@@ -1,0 +1,19 @@
+// 데모 계정과 예시 데이터를 넣고(demoSeed) 지운다(demoSeedRemove). local 전용(docs/dev/demo-seed.md, #349). 떠 있는 서버와
+// 겹치지 않게 빈 포트로 열고, 이 실행에만 데모 이메일의 가입과(셸에 없으면) 쓰고 버리는 서명 키를 준다.
+// JavaExec는 bootRun과 달리 프로젝트의 toolchain(JDK 21)을 스스로 쓰지 않아 직접 준다.
+['demoSeed': 'insert', 'demoSeedRemove': 'remove'].each { taskName, mode ->
+    tasks.register(taskName, JavaExec) {
+        group = 'application'
+        description = "local 프로파일의 데모 계정과 예시 데이터를 ${mode == 'insert' ? '넣는다' : '지운다'}."
+        javaLauncher = javaToolchains.launcherFor(java.toolchain)
+        classpath = sourceSets.main.runtimeClasspath
+        mainClass = 'app.accountbook.AccountBookApplication'
+        args '--spring.profiles.active=local', "--demo.seed=${mode}", '--server.port=0',
+                '--SIGNUP_ALLOWLIST=demo@example.com'
+        if (!System.getenv('ACCESS_TOKEN_SIGNING_KEY')) {
+            byte[] key = new byte[32]
+            new java.security.SecureRandom().nextBytes(key)
+            environment 'ACCESS_TOKEN_SIGNING_KEY', key.encodeBase64().toString()
+        }
+    }
+}
