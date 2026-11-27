@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# 표준 입력의 글을 텔레그램으로 보낸다. 보내지 못하면 0이 아닌 코드로 끝난다.
+# 토큰과 chat id는 root 전용 파일(TELEGRAM_ENV_FILE)에서 읽고, 명령줄과 출력에 값을 내지 않는다.
+# 그 파일이 root 소유, 권한 600이 아니면 보내지 않는다.
+set +x
+set -euo pipefail
+umask 077
+
+fail() {
+  printf '텔레그램 알림: %s\n' "$*" >&2
+  exit 1
+}
+
+env_file=${TELEGRAM_ENV_FILE:-/etc/akkimpyo/telegram.env}
+[[ -r $env_file ]] || fail "파일을 읽을 수 없다: $env_file"
+[[ $(stat -c '%u %a' "$env_file") == '0 600' ]] || fail "$env_file 이 root 소유, 권한 600이 아니라서 보내지 않는다"
+
+token=$(sed -n 's/^TELEGRAM_BOT_TOKEN=//p' "$env_file")
+chat_id=$(sed -n 's/^TELEGRAM_CHAT_ID=//p' "$env_file")
+[[ $token =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] || fail "$env_file: TELEGRAM_BOT_TOKEN 형식이 아니다"
+[[ $chat_id =~ ^(-?[0-9]+|@[A-Za-z0-9_]+)$ ]] || fail "$env_file: TELEGRAM_CHAT_ID 형식이 아니다"
+
+# 텔레그램의 글자 수 한도(4096자)를 넘지 않게 자른다.
+text=$(cat)
+text=${text:0:4000}
+
+# 토큰이 든 주소는 프로세스 목록에 보이지 않게 설정 파일(파일 기술자)로 넘긴다. curl의 오류 문구도 내지 않는다.
+curl --disable --silent --fail --output /dev/null --max-time 20 --retry 3 --retry-delay 2 \
+  --config <(
+    printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token"
+    printf 'data-urlencode = "chat_id=%s"\n' "$chat_id"
+  ) \
+  --data-urlencode text@- 2>/dev/null <<<"$text" || fail "전송하지 못했다(curl 종료 코드 $?)"
