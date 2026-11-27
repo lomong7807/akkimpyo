@@ -10,6 +10,7 @@ import { readWebFile } from './support/webFile'
 import { installIntersectionObserver, type Intersection } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
+import { untilShown } from './support/shownScreen'
 import { passTime } from './support/testClock'
 import { toastRegion } from './support/toast'
 import {
@@ -168,6 +169,8 @@ describe('월 이동', () => {
     await opened.user.click(monthButton('이전 달')!)
     await waitFor(() => expect(addressOf(opened)).toBe('/transactions/calendar?month=2026-10'))
     expect(opened.router.state.historyAction).toBe('REPLACE')
+    // 같은 화면이라 새 화면에만 있는 요소가 없다. 주소는 화면보다 먼저 바뀌므로 바뀐 주소가 그려진 뒤에 제목을 본다(#291)
+    await untilShown(opened.router)
     expect(monthHeading().textContent).toBe('10월')
     await waitFor(() => expect(dailyMonths()).toEqual(['2026-11', '2026-10']))
   })

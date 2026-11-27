@@ -8,6 +8,7 @@ import { installIntersectionObserver, type Intersection } from './support/inters
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { untilShown } from './support/shownScreen'
 import {
   accountField,
   id,
@@ -974,6 +975,8 @@ describe('상세에서 뒤로 돌아오면', () => {
     const dom = recordDom()
     await act(() => opened.router.navigate(-1))
     await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-10'))
+    // 뒤로 가기(popstate)는 act 밖에서 온다. 주소는 화면보다 먼저 바뀌므로 목록이 그려진 뒤에 센다(#291)
+    await untilShown(opened.router)
     expect(allRows()).toHaveLength(51)
     await passTime(400)
     expect(dom.sawText(loading)).toBe(false)
@@ -1039,7 +1042,9 @@ describe('저장한 뒤 돌아오면', () => {
     await screen.findByRole('navigation', { name: '주 메뉴' })
     await saveFromTab(opened)
     await waitFor(() => expect(addressOf(opened)).toBe('/more'))
-    await opened.user.click(within(screen.getByRole('navigation', { name: '주 메뉴' })).getByRole('link', { name: '내역' }))
+    // 주소는 화면보다 먼저 바뀐다. 전체 화면 입력에는 없는 하단 탭이 돌아간 더보기에 그려지기를 기다린다(#291)
+    const tabs = await screen.findByRole('navigation', { name: '주 메뉴' })
+    await opened.user.click(within(tabs).getByRole('link', { name: '내역' }))
     await waitFor(() => expect(savedRow()).toBeTruthy())
     await settle(200)
     expect(savedRow()!.className).not.toMatch(/_highlighted_/)

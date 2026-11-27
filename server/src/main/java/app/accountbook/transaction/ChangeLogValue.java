@@ -61,6 +61,17 @@ record ChangeLogValue(
         return MAPPER.valueToTree(this);
     }
 
+    /**
+     * 저장된 전후 값을 그 행의 형식 버전으로 읽는다(ADR 007 결정 4). 지금은 버전 1뿐이고 그 모양이 이 레코드다. 값이 없으면
+     * ({@code CREATE}의 전 값, 완전 삭제 기록) null이다.
+     */
+    static ChangeLogValue read(short formatVersion, JsonNode json) {
+        if (formatVersion != FORMAT_VERSION) {
+            throw new IllegalStateException("모르는 이력 형식 버전: " + formatVersion);
+        }
+        return json == null || json.isNull() ? null : MAPPER.treeToValue(json, ChangeLogValue.class);
+    }
+
     /** 분개 라인. amount는 부호가 있는 정수 원이다. */
     record Line(UUID accountId, UUID categoryId, long amount) {
 
