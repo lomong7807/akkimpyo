@@ -50,7 +50,8 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link #lineFilter}의 고정된 조각에서 고르고 값은 바인딩한다. 쪽은 맞는 라인이 있는 거래를 주고, 합계는 맞는 라인의
  * 금액만 더한다(카테고리 필터의 나눈 거래, F-217).
  *
- * <p>검색({@link #search}, #64)은 같은 쪽과 합계 질의에 검색어 조건({@link SearchMatch})을 더한 것이다.
+ * <p>검색({@link #search}, #64)은 같은 쪽 질의에 검색어 조건({@link SearchMatch})을 더한 것이다. 합계는 건수를 함께 세는
+ * 한 문장({@link #searchTotals})이다.
  */
 @Component
 @Transactional(readOnly = true)
@@ -158,7 +159,7 @@ public class TransactionListQuery {
         TransactionFilter resolved = resolved(ledgerId, filter);
         List<Transaction> found = find(ledgerId, range, resolved, null, after, limit + 1);
         List<TransactionView> items = views(found.subList(0, Math.min(limit, found.size())));
-        Totals totals = after != null || scope instanceof WholeLedger ? null : totals(ledgerId, range, resolved, null);
+        Totals totals = after != null || scope instanceof WholeLedger ? null : totals(ledgerId, range, resolved);
         return new TransactionPage(items, found.size() > limit ? TransactionKey.of(items.getLast()) : null, totals,
                 days(ledgerId, items, resolved));
     }
@@ -166,8 +167,8 @@ public class TransactionListQuery {
     /**
      * 거래 검색(F-223, P-232, #64 응답 계약). 검색어({@link SearchMatch}), 기간, 필터에 모두 맞는 거래를 {@link #page}와 같은
      * 순서로 {@value #MAX_LIMIT}건씩 준다. 휴지통의 거래는 빠지고 취소한 거래는 든다. 합계는 첫 쪽에만 있고 조건 전체의
-     * P-205다. 날마다 합계는 없다. 기간이 없으면 장부의 모든 날짜(미래 포함)라 장부 전체를 훑을 수 있다(새 인덱스 없음).
-     * 구성원 확인이 조건 검사보다 먼저다.
+     * P-205와 건수다({@link #searchTotals}). 날마다 합계는 없다. 기간이 없으면 장부의 모든 날짜(미래 포함)라 장부 전체를
+     * 훑을 수 있다(새 인덱스 없음). 구성원 확인이 조건 검사보다 먼저다.
      *
      * @param search 검색어, 기간, 필터가 모두 없으면 {@code q}의 {@code REQUIRED}, 시작일이 종료일보다 뒤면 {@code to}의
      *               {@code NOT_ALLOWED}다
@@ -190,7 +191,7 @@ public class TransactionListQuery {
         List<Transaction> found = find(ledgerId, range, resolved, search.text(), after, MAX_LIMIT + 1);
         List<TransactionView> items = views(found.subList(0, Math.min(MAX_LIMIT, found.size())));
         return new TransactionPage(items, found.size() > MAX_LIMIT ? TransactionKey.of(items.getLast()) : null,
-                after == null ? totals(ledgerId, range, resolved, search.text()) : null, List.of());
+                after == null ? searchTotals(ledgerId, range, resolved, search.text()) : null, List.of());
     }
 
     /**
@@ -246,9 +247,9 @@ public class TransactionListQuery {
         return views(query.getResultList().stream().distinct().toList());
     }
 
-    /** 범위 전체에서 필터와 검색어(목록이면 null)에 맞는 라인의 P-205 합계. */
-    private Totals totals(UUID ledgerId, DateRange range, TransactionFilter filter, String text) {
-        Map<TransactionType, Long> sums = sums(SearchMatch.bind(entityManager.createQuery("""
+    /** 범위 전체에서 필터에 맞는 라인의 P-205 합계. */
+    private Totals totals(UUID ledgerId, DateRange range, TransactionFilter filter) {
+        Map<TransactionType, Long> sums = sums(entityManager.createQuery("""
                         select t.type, cast(sum(l.amount) as BigInteger)
                           from TransactionLine l
                           join l.transaction t
@@ -259,12 +260,39 @@ public class TransactionListQuery {
                            and t.deletedAt is null
                            and t.status <> :canceled
                          group by t.type
-                        """.formatted(sumFilter(filter) + SearchMatch.condition(text, "t")), Tuple.class), text)
+                        """.formatted(sumFilter(filter)), Tuple.class)
                 .setParameter("from", range.from())
                 .setParameter("until", range.until()), ledgerId, filter).stream()
                 .collect(Collectors.toMap(row -> row.get(0, TransactionType.class), TransactionListQuery::sum));
         return new Totals(sums.getOrDefault(TransactionType.INCOME, 0L),
                 expense(sums.getOrDefault(TransactionType.EXPENSE, 0L)));
+    }
+
+    /**
+     * 검색(#64)의 첫 쪽 합계와 건수를 한 문장으로 센다. 건수는 쪽에 나오는 거래(휴지통 제외, 취소·이체 포함, 라인 필터면 맞는
+     * 라인이 있는 거래)의 수이고, 합계는 {@link #totals}와 같은 P-205라 취소·이체 라인은 더하지 않는다. 그래서 취소·이체는
+     * 조건이 아니라 {@code case}로 뺀다.
+     */
+    private Totals searchTotals(UUID ledgerId, DateRange range, TransactionFilter filter, String text) {
+        List<Tuple> rows = sums(SearchMatch.bind(entityManager.createQuery("""
+                        select t.type, count(distinct t.id),
+                               cast(sum(case when t.type <> :transfer and t.status <> :canceled then l.amount
+                                             else 0L end) as BigInteger)
+                          from TransactionLine l
+                          join l.transaction t
+                         where l.ledgerId = :ledgerId
+                           and t.ledgerId = :ledgerId
+                           and t.occurredOn >= :from and t.occurredOn < :until%s
+                           and t.deletedAt is null
+                         group by t.type
+                        """.formatted(sumFilter(filter) + SearchMatch.condition(text, "t")), Tuple.class), text)
+                .setParameter("from", range.from())
+                .setParameter("until", range.until()), ledgerId, filter);
+        Map<TransactionType, Long> sums = rows.stream().collect(Collectors.toMap(
+                row -> row.get(0, TransactionType.class), row -> row.get(2, BigInteger.class).longValueExact()));
+        return new Totals(sums.getOrDefault(TransactionType.INCOME, 0L),
+                expense(sums.getOrDefault(TransactionType.EXPENSE, 0L)),
+                rows.stream().mapToLong(row -> row.get(1, Long.class)).sum());
     }
 
     /** 이 쪽에 나온 날마다 그날 전체에서 필터에 맞는 P-205 합계. 한 날이 두 쪽에 걸쳐도 같은 값이다. 쪽마다 한 문장이다. */
