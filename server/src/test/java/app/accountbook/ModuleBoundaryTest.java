@@ -42,7 +42,8 @@ class ModuleBoundaryTest {
             "user", Set.of("common", "ledger", "category"),
             "auth", Set.of("common", "user"),
             "stats", Set.of("common", "account", "category", "ledger", "transaction"),
-            "api", Set.of("common", "account", "auth", "category", "ledger", "stats", "transaction", "user"));
+            "api", Set.of("common", "account", "auth", "category", "ledger", "stats", "transaction", "user"),
+            "demo", Set.of("common", "account", "category", "ledger", "transaction", "user"));
 
     @ArchTest
     static final ArchRule 최상위_패키지_사이에_순환_의존이_없다 =
