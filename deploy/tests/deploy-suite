@@ -202,7 +202,7 @@ refuse() {
   check "$2"
   assert "$1: 받지 않는다($(tail -n 1 "$LOG"))" [ "$rc" -ne 0 ]
 }
-refuse '줄이 하나 더 있다(주석)' "$good"$'\n# 메모\n'
+refuse '줄이 하나 더 있다(주석)' "$good"$'\n# note\n'
 refuse '빈 줄이 더 있다' $'\n'"$good"$'\n'
 refuse '변수가 하나 더 있다' "$good"$'\nJAVA_TOOL_OPTIONS=-Dx=1\n'
 refuse 'SW_DISABLE 줄이 없다' "$(head -n 3 <<<"$good")"$'\n'
