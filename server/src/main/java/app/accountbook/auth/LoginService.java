@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 로그인(F-009), 가입 직후의 로그인, 갱신. 확인과 가입은 user가 하고 여기서는 그 결과로 토큰을 준다(ADR 004 결정 6).
+ * 로그인(F-009), 가입 직후의 로그인, 갱신, 로그아웃(F-016). 확인과 가입은 user가 하고 여기서는 그 결과로 토큰을 준다(ADR 004 결정 6).
  * 로그인과 가입은 새 refresh token 계열을 만들고, 요청의 refresh 쿠키가 가리키던 계열은 폐기한다(ADR 001 결정 3).
  * 모두 비밀번호 해시가 DB 연결을 잡지 않도록 트랜잭션 안에서 부르지 않는다.
  */
@@ -67,6 +67,16 @@ public class LoginService {
      */
     public LoginTokens refresh(String refreshCookie) {
         return refreshTokens.rotate(refreshCookie).map(this::tokens).orElseThrow(RefreshRejectedException::new);
+    }
+
+    /**
+     * 로그아웃(#28): refresh 쿠키 값의 계열을 폐기한다. 지금 토큰이든 이미 회전된 토큰이든 같고, 없거나 모르는 값이거나 이미
+     * 폐기된 계열이면 아무것도 하지 않는다(ADR 001 결정 3). 다른 계열(다른 기기)은 건드리지 않는다.
+     *
+     * @param refreshCookie 요청의 refresh 쿠키 값. 없으면 null
+     */
+    public void logout(String refreshCookie) {
+        refreshTokens.revokeFamily(refreshCookie);
     }
 
     private IssuedRefreshToken newFamily(UUID userId, String refreshCookie) {
