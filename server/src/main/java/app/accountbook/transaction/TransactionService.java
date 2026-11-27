@@ -8,8 +8,8 @@ import app.accountbook.category.CategoryRepository;
 import app.accountbook.category.CategoryService;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotFoundException;
-import app.accountbook.common.StaleVersionException;
 import app.accountbook.common.Times;
 import app.accountbook.common.UserText;
 import app.accountbook.ledger.Ledger;
@@ -18,6 +18,7 @@ import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
 import app.accountbook.transaction.TransactionView.Line;
+import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -52,9 +53,6 @@ public class TransactionService {
     /** 기기 값의 형식 오류를 알리는 입력란({@code deviceId} 인자). API는 기기 값을 받은 자리의 이름으로 바꿔 알린다. */
     public static final String DEVICE_ID_FIELD = DeviceIds.FIELD;
 
-    /** 어느 입력란도 아닌 요청 본문 전체의 오류(ADR 002 4절). */
-    private static final String WHOLE_BODY = "";
-
     /** V1 마이그레이션의 거래 기본키 제약 이름. */
     private static final String ID_CONSTRAINT = "transaction_pkey";
 
@@ -70,11 +68,13 @@ public class TransactionService {
     private final LedgerRepository ledgerRepository;
     private final Clock clock;
     private final TransactionTemplate transactionTemplate;
+    private final EntityManager entityManager;
 
     TransactionService(TransactionRepository transactionRepository, ChangeLogRepository changeLogRepository,
                        AccountRepository accountRepository, CategoryRepository categoryRepository,
                        CategoryService categoryService, LedgerAccess ledgerAccess,
-                       LedgerRepository ledgerRepository, Clock clock, TransactionTemplate transactionTemplate) {
+                       LedgerRepository ledgerRepository, Clock clock, TransactionTemplate transactionTemplate,
+                       EntityManager entityManager) {
         this.transactionRepository = transactionRepository;
         this.changeLogRepository = changeLogRepository;
         this.accountRepository = accountRepository;
@@ -84,6 +84,7 @@ public class TransactionService {
         this.ledgerRepository = ledgerRepository;
         this.clock = clock;
         this.transactionTemplate = transactionTemplate;
+        this.entityManager = entityManager;
     }
 
     /** {@link #createOrReplay}와 같고, 새로 만들었는지 알 필요가 없을 때 쓴다. */
@@ -152,21 +153,30 @@ public class TransactionService {
                 || ID_LEDGER_CONSTRAINT.equals(violation.getConstraintName()));
     }
 
-    /** 내용과 라인을 통째로 바꾼다. 거래 종류는 바꿀 수 없다. paidBy가 null이면 기존 값을 유지한다. */
+    /**
+     * 내용과 라인을 통째로 바꾼다. 거래 종류는 바꿀 수 없다. paidBy가 null이면 기존 값을 유지한다.
+     *
+     * <p>검사 순서(#36): 구성원 → 형식(기기 값, 입력란, 종류) → version → 상태(휴지통) → 참조 → 저장. 만들기와 같은 형식
+     * 검증이다. 값 맞추기를 거친 내용이 저장된 것과 같으면 바꾸지 않고(version 그대로, 이력 없음) 지금 거래를 돌려준다.
+     * 비교는 재전송 판정과 같다(ADR 006 결정 3).
+     */
     @Transactional
     public TransactionView update(UUID actorId, UUID txId, long expectedVersion, TransactionCommand cmd,
                                   String deviceId) {
         Transaction tx = loadAccessible(actorId, txId);
         DeviceIds.requireValidFormat(deviceId);
-        requireVersion(tx, expectedVersion);
-        requireNotDeleted(tx, "삭제된 거래는 수정할 수 없습니다.");
         Content content = normalize(tx.getLedgerId(), cmd, tx.getPaidBy());
-        requireReferences(tx.getLedgerId(), cmd);
         if (!tx.getId().equals(content.id())) {
-            throw new InvalidRequestException("요청의 거래 id가 수정 대상과 다릅니다.");
+            throw new InvalidRequestException("id", FieldErrorCode.NOT_ALLOWED, "요청의 거래 id가 수정 대상과 다릅니다.");
         }
         if (content.type() != tx.getType()) {
-            throw new InvalidRequestException("거래 종류는 바꿀 수 없습니다.");
+            throw new InvalidRequestException("type", FieldErrorCode.NOT_ALLOWED, "거래 종류는 바꿀 수 없습니다.");
+        }
+        requireVersion(tx, expectedVersion);
+        requireNotDeleted(tx, "삭제된 거래는 수정할 수 없습니다.");
+        requireReferences(tx.getLedgerId(), cmd);
+        if (Content.of(tx).sameAs(content)) {
+            return view(tx);
         }
         return write(tx, expectedVersion, ChangeAction.UPDATE, actorId, deviceId, now -> {
             tx.changeDetails(content.occurredOn(), content.occurredTime(), content.payee(), content.memo(),
@@ -184,7 +194,7 @@ public class TransactionService {
         requireVersion(tx, expectedVersion);
         requireNotDeleted(tx, "삭제된 거래는 취소할 수 없습니다.");
         if (tx.getStatus() == TransactionStatus.CANCELED) {
-            throw new InvalidRequestException("이미 취소된 거래입니다.");
+            throw new InvalidStateException("이미 취소된 거래입니다.");
         }
         return write(tx, expectedVersion, ChangeAction.CANCEL, actorId, deviceId, now -> tx.cancel());
     }
@@ -206,7 +216,7 @@ public class TransactionService {
         DeviceIds.requireValidFormat(deviceId);
         requireVersion(tx, expectedVersion);
         if (!tx.isDeleted()) {
-            throw new InvalidRequestException("삭제된 거래만 복원할 수 있습니다.");
+            throw new InvalidStateException("삭제된 거래만 복원할 수 있습니다.");
         }
         return write(tx, expectedVersion, ChangeAction.RESTORE, actorId, deviceId, now -> tx.restore());
     }
@@ -260,7 +270,7 @@ public class TransactionService {
         ChangeLogValue before = ChangeLogValue.of(tx);
         Instant now = Times.now();
         if (transactionRepository.advanceVersion(tx.getId(), expectedVersion, now) == 0) {
-            throw new StaleVersionException();
+            throw changedMeanwhile(tx);
         }
         tx.applyVersion(expectedVersion + 1, now);
         change.accept(now);
@@ -308,16 +318,30 @@ public class TransactionService {
                 .orElseThrow(NotFoundException::new);
     }
 
-    /** 상태 확인이 호출자가 본 바로 그 version에 대해 이뤄지도록 먼저 비교한다. 동시성은 조건부 UPDATE가 막는다. */
-    private static void requireVersion(Transaction tx, long expectedVersion) {
+    /**
+     * 상태 확인이 호출자가 본 바로 그 version에 대해 이뤄지도록 먼저 비교한다. 동시성은 조건부 UPDATE가 막는다.
+     * 거래는 이 트랜잭션에서 처음 읽은 것이라 거래와 라인이 한 시점의 값이고, 그것이 최신 내용이다.
+     */
+    private void requireVersion(Transaction tx, long expectedVersion) {
         if (tx.getVersion() != expectedVersion) {
-            throw new StaleVersionException();
+            throw new StaleVersionException(view(tx));
         }
+    }
+
+    /**
+     * 읽은 뒤 다른 요청이 먼저 바꿔 조건부 UPDATE가 0행이었다. 읽어 둔 거래는 낡았고, 같은 영속성 컨텍스트에서 다시 찾으면 그
+     * 낡은 것이 돌아오므로 떼어 내고 한 문장으로 새로 읽는다(#36, #202). 그사이 완전히 지워졌으면 없는 거래다.
+     */
+    private StaleVersionException changedMeanwhile(Transaction stale) {
+        entityManager.detach(stale);
+        return transactionRepository.findWithLinesById(stale.getId())
+                .map(fresh -> new StaleVersionException(view(fresh)))
+                .orElseThrow(NotFoundException::new);
     }
 
     private static void requireNotDeleted(Transaction tx, String message) {
         if (tx.isDeleted()) {
-            throw new InvalidRequestException(message);
+            throw new InvalidStateException(message);
         }
     }
 
@@ -328,7 +352,8 @@ public class TransactionService {
      */
     private Content normalize(UUID ledgerId, TransactionCommand cmd, UUID defaultPaidBy) {
         return switch (cmd) {
-            case null -> throw new InvalidRequestException(WHOLE_BODY, FieldErrorCode.REQUIRED, "거래 정보가 없습니다.");
+            case null -> throw new InvalidRequestException(InvalidRequestException.WHOLE_BODY, FieldErrorCode.REQUIRED,
+                    "거래 정보가 없습니다.");
             case Entry entry -> normalizeEntry(ledgerId, entry, defaultPaidBy);
             case Transfer transfer -> normalizeTransfer(ledgerId, transfer);
         };

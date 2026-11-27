@@ -4,24 +4,19 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 요청 값이 규칙에 맞지 않는다. 아무것도 저장하지 않는다.
+ * 요청 값이 규칙에 맞지 않는다. 아무것도 저장하지 않는다. 대상의 상태 때문에 할 수 없는 것은 {@link InvalidStateException}이다.
  * API는 {@link #errors()}의 {@link #field()}와 {@link #code()}로 답하고(ADR 002의 {@code VALIDATION_FAILED}) 문구는 응답에 싣지 않는다.
  * 여러 입력란이 함께 틀렸으면 {@link #ofAll}로 한 번에 알린다(#13).
  */
 public class InvalidRequestException extends RuntimeException {
 
-    /** 어느 입력란인지 정하지 않았거나 요청 본문 전체의 오류다. */
-    private static final String WHOLE_BODY = "";
+    /** 어느 입력란도 아닌 요청 본문 전체의 오류를 가리키는 입력란(ADR 002 4절). */
+    public static final String WHOLE_BODY = "";
 
     private final String field;
     private final FieldErrorCode code;
     /** 여럿을 함께 알릴 때 하나하나. 하나만 알리면 비어 있다. */
     private final List<InvalidRequestException> errors;
-
-    /** 어느 입력란인지 아직 정하지 않은 곳이 쓴다. 새 코드는 입력란을 담는 생성자를 쓴다. */
-    public InvalidRequestException(String message) {
-        this(WHOLE_BODY, FieldErrorCode.NOT_ALLOWED, message);
-    }
 
     /** @param field 입력란. 요청 본문의 경로(예: {@code amount}, {@code lines[0].amount})다 */
     public InvalidRequestException(String field, FieldErrorCode code, String message) {

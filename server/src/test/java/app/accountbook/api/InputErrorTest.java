@@ -9,6 +9,7 @@ import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.user.PasswordHashBusyException;
@@ -160,10 +161,21 @@ class InputErrorTest {
     }
 
     @Test
-    void 입력란을_담지_않은_서비스의_입력_오류는_본문_전체의_오류로_알린다() throws Exception {
-        probe.willThrow(new InvalidRequestException("이미 있는 생성자"));
+    void 본문_전체의_입력_오류는_빈_입력란으로_알린다() throws Exception {
+        probe.willThrow(new InvalidRequestException(InvalidRequestException.WHOLE_BODY, FieldErrorCode.NOT_ALLOWED,
+                "미분류는 바꿀 수 없습니다."));
 
         server.get(THROW).assertFieldErrors(":NOT_ALLOWED");
+    }
+
+    /** 입력란과 무관한 상태 오류는 400이 아니라 입력란 없는 409다(ADR 002 5절, #14). 문구는 나가지 않는다. */
+    @Test
+    void 상태_오류는_409_INVALID_STATE다() throws Exception {
+        probe.willThrow(new InvalidStateException("이미 삭제된 거래입니다."));
+
+        Reply reply = server.get(THROW).assertProblem(409, "Conflict", "INVALID_STATE");
+
+        assertThat(reply.body()).doesNotContain("이미 삭제된 거래입니다.");
     }
 
     static Stream<Arguments> duplicates() {

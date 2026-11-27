@@ -1,6 +1,7 @@
 package app.accountbook.stats;
 
 import app.accountbook.category.CategoryKind;
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.ledger.LedgerAccess;
 import app.accountbook.transaction.TransactionStatus;
@@ -33,7 +34,7 @@ public class MonthlyStatsQuery {
     public MonthlySummary monthly(UUID actorId, UUID ledgerId, YearMonth month) {
         ledgerAccess.requireMember(actorId, ledgerId);
         if (month == null) {
-            throw new InvalidRequestException("조회할 달이 없습니다.");
+            throw new InvalidRequestException("month", FieldErrorCode.REQUIRED, "조회할 달이 없습니다.");
         }
         return MonthlySummary.of(entityManager.createQuery("""
                         select l.categoryId, c.kind, cast(sum(l.amount) as BigInteger)

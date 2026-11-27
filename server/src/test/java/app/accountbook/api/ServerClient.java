@@ -136,6 +136,10 @@ final class ServerClient {
             if (code.equals("ID_CONFLICT") && problem.has("current")) {
                 names.add("current");
             }
+            // 수정 충돌에는 늘 있다(ADR 002 5절).
+            if (code.equals("STALE_VERSION")) {
+                names.add("current");
+            }
             assertThat(problem.propertyNames()).containsExactlyInAnyOrderElementsOf(names);
             assertThat(problem.get("type").asString()).isEqualTo("about:blank");
             assertThat(problem.get("title").asString()).isEqualTo(title);
