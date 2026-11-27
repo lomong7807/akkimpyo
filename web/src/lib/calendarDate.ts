@@ -102,6 +102,16 @@ export function weeksOf(month: string): (string | undefined)[][] {
   )
 }
 
+/** 그 달의 주 수만큼의 줄(달력 D-02 (2)). 일요일부터이고 다른 달의 자리는 비운다. 날짜 고르기(5.8)는 늘 6줄(weeksOf)이다 */
+export function monthWeeks(month: string): (string | undefined)[][] {
+  return weeksOf(month).filter((week) => week.some((date) => date !== undefined))
+}
+
+/** 고를 수 있는 달(00-common 5.9)인지. 달 모양이 아니거나 범위 밖이면 아니다 */
+export function isSelectableMonth(month: string | null, { first, last }: DateRange): month is string {
+  return month !== null && isMonth(month) && month >= first && month <= last
+}
+
 /** 화면에 쓰는 날짜(화면설계서 00-common 3.2) */
 export function formatDate(date: string, today: string): string {
   const [year, month, day] = partsOf(date)
