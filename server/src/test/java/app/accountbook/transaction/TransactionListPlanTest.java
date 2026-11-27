@@ -19,6 +19,7 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
@@ -153,6 +154,29 @@ class TransactionListPlanTest {
     }
 
     /**
+     * 필터(#62)를 모두 켠 달 모드도 쪽, 그 달의 합계, 날마다 합계가 새 인덱스 없이 장부·날짜 인덱스로 그 달만 읽는다. 계좌와
+     * 카테고리 조건은 라인에 걸려 라인 테이블의 Seq Scan으로 갈릴 수 있어 그 노드만 상한에서 뺀다({@link #LINE_SEQ_SCAN}).
+     * 큰 장부의 라인은 모두 같은 계좌·카테고리라, 라인을 계좌나 카테고리의 인덱스로 읽는 계획이면 2만 행으로 걸린다.
+     */
+    @Test
+    void 필터를_켠_달_모드도_큰_장부에서_그_달의_거래만_읽는다() {
+        TransactionFilter filter = new TransactionFilter(Set.of(id(ACCOUNT, 1)), Set.of(id(CATEGORY, 1)),
+                Set.of(TransactionType.EXPENSE), TransactionStatus.POSTED);
+        List<Statement> month = statements("필터 2026-11", () -> assertThat(listQuery.page(BIG_OWNER, BIG_LEDGER,
+                new Month(YearMonth.of(2026, 11)), filter, null, TransactionListQuery.MAX_LIMIT).items())
+                .hasSize(TransactionListQuery.MAX_LIMIT));
+
+        for (Kind kind : List.of(Kind.PAGE, Kind.TOTALS, Kind.DAYS)) {
+            Statement statement = pick(month, kind);
+            String custom = explain(statement, "force_custom_plan");
+            assertThat(custom).contains("ix_transaction_ledger_occurred_on");
+            assertThat(mostRowsReadExceptLineSeqScan(custom)).as("%s: 큰 장부 %d건 가운데 한 훑기가 읽은 행", kind, BIG)
+                    .isLessThan(500);
+            assertThat(explain(statement, "force_generic_plan")).doesNotContain("Seq Scan");
+        }
+    }
+
+    /**
      * 달력의 날짜별 합계(#66)는 그 달만 읽는다. 큰 장부의 11월(1일~27일)은 약 150건이다. 거래는 장부·날짜 인덱스로 그 달만
      * 읽고, 라인 테이블의 Seq Scan({@link #LINE_SEQ_SCAN})을 뺀 어느 훑기도 그보다 크게 늘지 않는다.
      */
@@ -237,7 +261,8 @@ class TransactionListPlanTest {
     /** 큰 장부의 한 쪽을 실제로 읽고, 그때 Hibernate가 보낸 문장과 그 값을 순서대로. */
     private List<Statement> statements(TransactionScope scope, TransactionKey after) {
         return statements(scope + (after == null ? " 첫 쪽" : " 다음 쪽"), () -> assertThat(
-                listQuery.page(BIG_OWNER, BIG_LEDGER, scope, after, TransactionListQuery.MAX_LIMIT).items())
+                listQuery.page(BIG_OWNER, BIG_LEDGER, scope, TransactionFilter.NONE, after,
+                        TransactionListQuery.MAX_LIMIT).items())
                 .hasSize(TransactionListQuery.MAX_LIMIT));
     }
 

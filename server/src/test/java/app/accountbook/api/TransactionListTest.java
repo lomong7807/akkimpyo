@@ -203,14 +203,77 @@ class TransactionListTest {
         }
     }
 
+    /** 필터(#62)는 같은 이름을 여러 번 보내면 또는이다. cursor는 같은 필터(값의 순서와 반복은 상관없다)에서만 받는다. */
     @Test
-    void 구성원이_아닌_장부는_쿼리_값이_틀려도_404다() throws Exception {
+    void 필터를_켜면_목록과_합계가_그_결과이고_cursor는_같은_필터에서만_받는다() throws Exception {
+        UUID bank = fixtures.account(owner, ledgerId, "은행", AccountType.BANK, 0, DAY).getId();
+        UUID transfer = fixtures.transfer(owner, ledgerId, bank, cash, DAY, 50_000).id();
+        UUID early = expense(DAY, "08:00");
+        UUID late = expense(DAY, "09:00");
+        fixtures.income(owner, ledgerId, bank, null, DAY, 3_000);
+        String filter = "&accountId=" + cash + "&accountId=" + bank + "&type=EXPENSE&type=TRANSFER&status=POSTED";
+
+        JsonNode first = list("month=2026-11&limit=2" + filter).json();
+
+        assertThat(ids(first)).containsExactly(late, early);
+        assertThat(first.get("totals")).isEqualTo(json("{\"income\":0,\"expense\":2000}"));
+        assertThat(first.get("days")).isEqualTo(json("[{\"date\":\"2026-11-18\",\"income\":0,\"expense\":2000}]"));
+        String cursor = "&cursor=" + first.get("nextCursor").asString();
+        JsonNode second = list("month=2026-11&limit=2" + cursor + "&status=POSTED&type=TRANSFER&accountId=" + bank
+                + "&type=EXPENSE&accountId=" + cash.toString().toUpperCase() + "&accountId=" + bank).json();
+        assertThat(ids(second)).containsExactly(transfer);
+        assertThat(second.get("totals").isNull()).isTrue();
+        for (String other : List.of("", filter.replace("&accountId=" + bank, ""), filter + "&type=INCOME",
+                filter.replace("POSTED", "CANCELED"), filter + "&categoryId=" + UUID.randomUUID())) {
+            list("month=2026-11&limit=2" + cursor + other).assertFieldErrors("cursor:INVALID_FORMAT");
+        }
+    }
+
+    /** 형식은 입력란마다 모두 알리고, 이 장부에 없는 계좌·카테고리(다른 장부의 것 포함)는 형식이 맞을 때 NOT_FOUND다. */
+    @Test
+    void 필터_값이_틀리면_그_입력란의_400이다() throws Exception {
+        User stranger = user();
+        UUID strangerCash = fixtures.account(stranger, fixtures.personalLedgerId(stranger), "남의현금", AccountType.CASH,
+                0, DAY).getId();
+        Map<String, String> rejected = Map.ofEntries(
+                Map.entry("accountId=abc", "accountId:INVALID_FORMAT"),
+                Map.entry("accountId=", "accountId:INVALID_FORMAT"),
+                Map.entry("accountId=" + cash + "," + cash, "accountId:INVALID_FORMAT"),
+                Map.entry("accountId=" + UUID.randomUUID(), "accountId:NOT_FOUND"),
+                Map.entry("accountId=" + strangerCash, "accountId:NOT_FOUND"),
+                Map.entry("accountId=" + cash + ("&accountId=" + cash).repeat(20), "accountId:OUT_OF_RANGE"),
+                Map.entry("categoryId=x", "categoryId:INVALID_FORMAT"),
+                Map.entry("categoryId=" + UUID.randomUUID(), "categoryId:NOT_FOUND"),
+                Map.entry("type=expense", "type:INVALID_FORMAT"),
+                Map.entry("type=REFUND", "type:INVALID_FORMAT"),
+                Map.entry("type=EXPENSE" + "&type=EXPENSE".repeat(20), "type:OUT_OF_RANGE"),
+                Map.entry("status=COMPLETED", "status:INVALID_FORMAT"),
+                Map.entry("status=PENDING", "status:INVALID_FORMAT"),
+                Map.entry("status=", "status:INVALID_FORMAT"),
+                Map.entry("status=POSTED&status=CANCELED", "status:INVALID_FORMAT"));
+        for (Map.Entry<String, String> query : rejected.entrySet()) {
+            list("month=2026-11&" + query.getKey()).assertFieldErrors(query.getValue());
+        }
+        list("month=2026-11&accountId=abc&categoryId=&type=x&status=y&limit=abc").assertFieldErrors(
+                "accountId:INVALID_FORMAT", "categoryId:INVALID_FORMAT", "type:INVALID_FORMAT", "status:INVALID_FORMAT",
+                "limit:INVALID_FORMAT");
+        list("month=2026-11&accountId=" + strangerCash + "&categoryId=" + UUID.randomUUID())
+                .assertFieldErrors("accountId:NOT_FOUND", "categoryId:NOT_FOUND");
+        assertThat(list("month=2026-11" + ("&accountId=" + cash).repeat(20)).status()).isEqualTo(200);
+    }
+
+    @Test
+    void 구성원이_아닌_장부는_쿼리_값이_틀려도_404이고_토큰이_없으면_401이다() throws Exception {
         User stranger = user();
         UUID strangerLedger = fixtures.personalLedgerId(stranger);
 
         Reply reply = client.get("/api/v1/ledgers/" + strangerLedger + "/transactions?month=bad&cursor=bad");
 
         reply.assertProblem(404, "Not Found", "NOT_FOUND");
+        client.get("/api/v1/ledgers/" + strangerLedger + "/transactions?accountId=bad&type=x&status=y")
+                .assertProblem(404, "Not Found", "NOT_FOUND");
+        ServerClient.anonymous(port).get(path() + "?month=2026-11&accountId=" + cash + "&type=EXPENSE")
+                .assertProblem(401, "Unauthorized", "UNAUTHENTICATED");
     }
 
     private UUID expense(LocalDate on, String time) {
