@@ -32,9 +32,9 @@ import tools.jackson.databind.JsonNode;
 class AccountCreateTest {
 
     /** 서울은 2026-11-28 00:30이고 UTC는 아직 11-27이다. 기준일의 끝은 서울의 오늘로부터 1년 뒤인 2027-11-28이다. */
-    private static final Instant NOW = Instant.parse("2026-11-27T15:30:00Z");
+    static final Instant NOW = Instant.parse("2026-11-27T15:30:00Z");
     /** 이 값을 넣으면 그 입력란을 본문에서 뺀다. */
-    private static final String OMIT = "(빠짐)";
+    static final String OMIT = "(빠짐)";
 
     @LocalServerPort int port;
     @Autowired StoppedClock clock;
@@ -60,12 +60,14 @@ class AccountCreateTest {
         assertThat(created.status()).as(created.body()).isEqualTo(201);
         assertThat(created.header("Content-Type")).isEqualTo("application/json");
         JsonNode account = created.json();
-        assertThat(account.propertyNames()).containsExactly("id", "name", "type", "balance", "openingDate");
+        assertThat(account.propertyNames()).containsExactly("id", "name", "type", "balance", "openingBalance", "openingDate");
         assertThat(account.get("id").asString()).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
         assertThat(account.get("name").asString()).isEqualTo("신한카드");
         assertThat(account.get("type").asString()).isEqualTo("CARD");
         assertThat(account.get("balance").isIntegralNumber()).isTrue();
         assertThat(account.get("balance").asLong()).as("부호를 바꾸지 않는다").isEqualTo(-350_000);
+        assertThat(account.get("openingBalance").isIntegralNumber()).isTrue();
+        assertThat(account.get("openingBalance").asLong()).isEqualTo(-350_000);
         assertThat(account.get("openingDate").asString()).isEqualTo("2026-11-01");
         assertThat(client.get(path()).json().get("items").get(0)).isEqualTo(account);
         assertThat(jdbc.queryForObject("select opening_balance from account where id = ?::uuid", Long.class,
@@ -213,7 +215,7 @@ class AccountCreateTest {
         return "/api/v1/ledgers/" + ledgerId + "/accounts";
     }
 
-    private static Map<String, String> valid() {
+    static Map<String, String> valid() {
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("name", "\"생활비\"");
         fields.put("type", "\"BANK\"");
@@ -222,7 +224,7 @@ class AccountCreateTest {
         return fields;
     }
 
-    private static String body(String name, String type, String openingBalance, String openingDate) {
+    static String body(String name, String type, String openingBalance, String openingDate) {
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("name", name);
         fields.put("type", type);
@@ -232,14 +234,14 @@ class AccountCreateTest {
     }
 
     /** 값은 JSON 글자 그대로다. */
-    private static String json(Map<String, String> fields) {
+    static String json(Map<String, String> fields) {
         return fields.entrySet().stream()
                 .filter(field -> !field.getValue().equals(OMIT))
                 .map(field -> "\"" + field.getKey() + "\":" + field.getValue())
                 .collect(Collectors.joining(",", "{", "}"));
     }
 
-    private static String quoted(String text) {
+    static String quoted(String text) {
         return "\"" + text + "\"";
     }
 
