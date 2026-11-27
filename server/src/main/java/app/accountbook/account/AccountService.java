@@ -80,7 +80,7 @@ public class AccountService {
     @Transactional(readOnly = true)
     public List<Account> list(UUID actorId, UUID ledgerId) {
         ledgerAccess.requireMember(actorId, ledgerId);
-        return accountRepository.findByLedgerIdOrderByCreatedAtAsc(ledgerId);
+        return accountRepository.findByLedgerIdOrderByCreatedAtAscIdAsc(ledgerId);
     }
 
     /** 없는 계좌도 구성원이 아닌 것과 같은 예외로 알려 다른 장부 계좌의 존재를 드러내지 않는다. */
