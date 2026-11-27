@@ -16,6 +16,7 @@ import app.accountbook.user.UserService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -148,22 +149,37 @@ class LedgerPathTest {
         assertThat(malformed.header("X-Request-Id")).isNotEqualTo("bad.id");
     }
 
-    /** 본문 상한(#21)은 토큰 확인(UserService.exists)과 서비스보다 먼저다. */
+    /**
+     * 본문 상한(#21)은 토큰 확인(UserService.exists), 로그인의 비밀번호 확인(UserService.authenticate)과 서비스보다 먼저다.
+     * 본문은 상한이 없으면 그대로 처리될 JSON에 공백을 붙여 상한을 1바이트 넘긴 것이다. 소켓에 그대로 쓰므로 ASCII만 쓴다.
+     */
     @Test
-    void 본문이_상한을_넘으면_토큰_확인과_서비스보다_먼저_413이다() throws Exception {
+    void 본문이_상한을_넘으면_토큰_확인과_비밀번호_확인과_서비스보다_먼저_413이다() throws Exception {
         clearInvocations(userService, accountService);
-        int limit = 64 * 1024;
-        String head = "POST " + accounts(ledgerId) + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n"
-                + owner.authorizationLine() + "Content-Type: application/json\r\n";
+        String account = "{\"name\":\"living\",\"type\":\"BANK\",\"openingBalance\":0,\"openingDate\":\"2026-11-01\"}";
+        String login = "{\"email\":\"someone@example.com\",\"password\":\"password1\"}";
+        Map<String, String> requests = Map.of(
+                "POST " + accounts(ledgerId) + " HTTP/1.1\r\n" + owner.authorizationLine(), account,
+                "POST /api/v1/auth/login HTTP/1.1\r\nX-Akkimpyo-Client: web\r\n", login);
 
-        owner.rawReply(head + "Content-Length: " + (limit + 1) + "\r\n\r\n" + "a".repeat(limit + 1))
-                .assertProblem(413, "Content Too Large", "PAYLOAD_TOO_LARGE");
-        owner.rawReply(head + "Transfer-Encoding: chunked\r\n\r\n" + Integer.toHexString(limit + 1) + "\r\n"
-                        + "a".repeat(limit + 1) + "\r\n0\r\n\r\n")
-                .assertProblem(413, "Content Too Large", "PAYLOAD_TOO_LARGE");
+        for (Map.Entry<String, String> request : requests.entrySet()) {
+            String head = request.getKey() + "Host: localhost\r\nConnection: close\r\nContent-Type: application/json\r\n";
+            String body = overLimit(request.getValue());
+            owner.rawReply(head + "Content-Length: " + body.length() + "\r\n\r\n" + body)
+                    .assertProblem(413, "Content Too Large", "PAYLOAD_TOO_LARGE");
+            owner.rawReply(head + "Transfer-Encoding: chunked\r\n\r\n" + Integer.toHexString(body.length()) + "\r\n"
+                            + body + "\r\n0\r\n\r\n")
+                    .assertProblem(413, "Content Too Large", "PAYLOAD_TOO_LARGE");
+        }
 
         verify(userService, never()).exists(any());
+        verify(userService, never()).authenticate(any(), any());
         verifyNoInteractions(accountService);
+    }
+
+    /** 64KB를 1바이트 넘기게 뒤에 공백을 붙인다. */
+    private static String overLimit(String json) {
+        return json + " ".repeat(64 * 1024 + 1 - json.length());
     }
 
     private List<Route> ledgerRoutes() {
