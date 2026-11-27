@@ -451,12 +451,13 @@ cleanup_images() {
 
 # compose_up 서버이미지 웹이미지 SW_DISABLE 서비스...: 서버에 설치된 compose 사본으로 올린다.
 # 이미지와 SW_DISABLE은 검사한 값만 환경 변수로 넘기고, 나머지 값은 서버의 env 파일에서만 온다.
+# 서버·웹 이미지는 앞에서 digest로 받아 두었다. compose 사본에 digest로 고정된 DB 이미지는 없을 때만 받는다(첫 배포).
 compose_up() {
   local server=$1 web=$2 sw=$3
   shift 3
   SERVER_IMAGE=$server WEB_IMAGE=$web SW_DISABLE=$sw docker compose --progress plain \
     --project-name "$COMPOSE_PROJECT" --file "$COMPOSE_FILE_PATH" --env-file "$APP_ENV_FILE" \
-    up --detach --no-build --pull never "$@"
+    up --detach --no-build --pull missing "$@"
 }
 
 # 최상위 객체의 status가 UP이다. 안쪽 객체(구성 요소)의 status는 보지 않는다.

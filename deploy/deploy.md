@@ -61,7 +61,7 @@ compose는 이렇게 부른다. 이미지와 `SW_DISABLE`은 검사한 값만 �
 
 ```
 SERVER_IMAGE=... WEB_IMAGE=... SW_DISABLE=... docker compose --progress plain --project-name akkimpyo \
-  --file /opt/akkimpyo/deploy/compose.yaml --env-file /etc/akkimpyo/app.env up --detach --no-build --pull never server|proxy
+  --file /opt/akkimpyo/deploy/compose.yaml --env-file /etc/akkimpyo/app.env up --detach --no-build --pull missing server|proxy
 ```
 
 ### env 파일 검사(범위 보강 13)
