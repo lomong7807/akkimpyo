@@ -2,6 +2,7 @@ package app.accountbook.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import app.accountbook.transaction.TransactionFilter;
 import app.accountbook.transaction.TransactionKey;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
 import app.accountbook.transaction.TrashPage;
@@ -33,10 +34,11 @@ class TrashCursorTest {
     @Test
     void 이_장부의_휴지통에서_만든_글자가_아니면_읽히지_않는다() {
         String valid = TrashCursor.encode(LEDGER, new TrashPage.Key(Instant.parse("2026-11-24T08:30:43Z"), TX));
-        String list = TransactionCursor.encode(LEDGER, new WholeLedger(), new TransactionKey(LocalDate.of(2026, 11, 18),
-                null, TX));
+        String list = TransactionCursor.encode(LEDGER, new WholeLedger(), TransactionFilter.NONE,
+                new TransactionKey(LocalDate.of(2026, 11, 18), null, TX));
         assertThat(TrashCursor.decode(valid, UUID.randomUUID())).isEmpty();
-        assertThat(TransactionCursor.decode(valid, LEDGER, new WholeLedger())).as("거래 목록에서").isEmpty();
+        assertThat(TransactionCursor.decode(valid, LEDGER, new WholeLedger(), TransactionFilter.NONE)).as("거래 목록에서")
+                .isEmpty();
         List<String> broken = List.of(list, "", "abc", "!!!!", valid + "A", valid + "=", valid.substring(1),
                 "A".repeat(300),
                 raw("1|" + LEDGER + "|T|2026-11-24T08:30:43Z|" + TX.toString().toUpperCase()),
