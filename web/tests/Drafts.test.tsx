@@ -89,7 +89,9 @@ describe('거래 입력(D-04 새 입력)', () => {
     revoke()
     await user.click(saveButton())
     expect(await loginNotice()).toBe(ENDED + KEPT)
-    const sentId = transactions.sent[0].body.id
+    // 저장은 먼저 중복 경고를 묻고(#241), 그 요청에서 로그인이 풀린 것을 안다. 물은 거래 id가 저장할 거래의 id다
+    const sentId = started.duplicates.requests[0].exclude
+    expect(transactions.sent).toEqual([])
     expect(await draftOf('user-1', 'transaction-new')).toMatchObject({
       path: '/transactions/new',
       values: { id: sentId, values: { amount: 12000, payee: '점심' } },
@@ -113,15 +115,16 @@ describe('거래 입력(D-04 새 입력)', () => {
     revoke()
     await user.click(saveButton())
     await loginNotice()
-    const sentId = transactions.sent[0].body.id
+    // 중복 경고를 묻는 요청에서 로그인이 풀린다(#241). 그 거래 id로 보낸다
+    const sentId = started.duplicates.requests[0].exclude
     await logIn(user)
     await waitFor(() => expect(amount().value).toBe('12,000'))
     expect(path(opened)).toBe('/transactions/new')
     expect(payee().value).toBe('점심')
     await waitFor(async () => expect(await draftOf('user-1', 'transaction-new')).toBeUndefined())
     await user.click(saveButton())
-    await waitFor(() => expect(transactions.sent).toHaveLength(2))
-    expect(transactions.sent[1]).toMatchObject({ user: 'user-1', body: { id: sentId, amount: 12000, payee: '점심' } })
+    await waitFor(() => expect(transactions.sent).toHaveLength(1))
+    expect(transactions.sent[0]).toMatchObject({ user: 'user-1', body: { id: sentId, amount: 12000, payee: '점심' } })
   })
 
   it('다른 계정으로 로그인하면 채우지 않고 앞 계정의 쓰던 값은 남는다', async () => {

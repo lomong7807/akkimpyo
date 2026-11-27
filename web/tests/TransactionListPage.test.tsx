@@ -1067,10 +1067,10 @@ describe('저장한 뒤 돌아오면', () => {
 describe('하단 탭과 사이드바의 "내역"', () => {
   const tabBar = () => screen.getByRole('navigation', { name: '주 메뉴' })
 
-  it('하단 탭은 홈, 내역, 거래 입력, 더보기 칸이고 내역은 ListBullets 24px이다', async () => {
+  it('하단 탭은 홈, 내역, 거래 입력, 통계, 더보기 칸이고 내역은 ListBullets 24px이다', async () => {
     await openList()
     const cells = within(tabBar()).getAllByRole('listitem')
-    expect(cells.map((cell) => cell.textContent)).toEqual(['홈', '내역', '', '더보기'])
+    expect(cells.map((cell) => cell.textContent)).toEqual(['홈', '내역', '', '통계', '더보기'])
     const link = within(cells[1]).getByRole('link', { name: '내역' })
     expect(link.getAttribute('href')).toBe('/transactions')
     const icon = link.querySelector('svg')!

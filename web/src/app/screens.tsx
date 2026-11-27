@@ -4,6 +4,7 @@ import { MainScreen, SubScreen } from '../components/Screen'
 import AccountsSkeleton from '../features/accounts/AccountsSkeleton'
 import AddAccountLink from '../features/accounts/AddAccountLink'
 import { CategoriesScreenSkeleton } from '../features/categories/CategoriesSkeleton'
+import { MonthlyStatsShell } from '../features/stats/MonthlyStatsSkeleton'
 import CalendarSkeleton from '../features/transactions/CalendarSkeleton'
 import { DetailSkeleton } from '../features/transactions/TransactionDetailSkeleton'
 import TransactionFieldsSkeleton from '../features/transactions/TransactionFieldsSkeleton'
@@ -103,6 +104,12 @@ export const pendingFixScreen = lazyScreen(() => import('../features/pending/Pen
   Frame: fullScreenForm('거래 입력', '/pending'),
   Placeholder: TransactionFieldsSkeleton,
   headingLevel: 2,
+})
+
+/** E-01 월별 통계(#242). 탭의 첫 화면이라 상단 바는 장부 이름이다. 화면 제목(h1)은 화면이 그린다 */
+export const monthlyStatsScreen = lazyScreen(() => import('../features/stats/MonthlyStatsPage'), {
+  Frame: MainScreen,
+  Placeholder: MonthlyStatsShell,
 })
 
 export const moreScreen = lazyScreen(() => import('./MoreRoute'), { Frame: MainScreen, Placeholder: Loading })
