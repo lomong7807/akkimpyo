@@ -1,13 +1,15 @@
 import { onlineManager } from '@tanstack/react-query'
-import { cleanup, fireEvent, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import { useNavigate, type RouteObject } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { watchConnection } from '../src/api/connection'
 import { login } from '../src/api/session'
 import PlainLayout from '../src/app/PlainLayout'
 import { createQueryClient } from '../src/app/queryClient'
 import LoginPage from '../src/features/auth/LoginPage'
+import { goOffline, goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { renderRoutes } from './support/renderRoutes'
@@ -29,6 +31,8 @@ const emailFormat = '이메일 주소 형식을 확인해 주세요'
 const passwordRequired = '비밀번호를 입력해 주세요'
 const refused = '이메일 또는 비밀번호가 맞지 않아요'
 const failed = '문제가 생겨 로그인하지 못했어요. 잠시 후 다시 시도해 주세요.'
+const lost = '연결이 끊겨 로그인하지 못했어요. 연결되면 다시 시도해 주세요.'
+const offlineReason = '연결되면 로그인할 수 있어요'
 
 const email = () => screen.getByLabelText<HTMLInputElement>('이메일')
 const password = () => screen.getByLabelText<HTMLInputElement>('비밀번호')
@@ -495,11 +499,64 @@ describe('서버가 거부함', () => {
   })
 })
 
+describe('연결이 없을 때(00-common 4.3, 1B #238)', () => {
+  /** 브라우저의 연결 신호를 앱이 받게 하고 테스트가 끝나면 멈춘다 */
+  function watch() {
+    const stop = watchConnection()
+    onTestFinished(stop)
+  }
+
+  it('로그인 버튼은 비활성이고 바로 위에 "연결되면 로그인할 수 있어요"를 보인다. 칸은 쓸 수 있고 엔터로도 보내지 않는다', async () => {
+    watch()
+    const bodies = respondToLogin(success)
+    const { user } = openLogin()
+    act(() => goOffline())
+    expect(loginButton().getAttribute('aria-disabled')).toBe('true')
+    const reason = loginButton().previousElementSibling as HTMLElement
+    expect(reason.textContent).toBe(offlineReason)
+    expect(reason.getAttribute('role')).toBe('status')
+    await fill(user, 'name@example.com', 'pass1234')
+    await user.click(loginButton())
+    await user.type(password(), '{Enter}')
+    expect(bodies).toEqual([])
+    expect(email().value).toBe('name@example.com')
+  })
+
+  it('연결이 돌아오면 그 줄을 지우고 바로 누를 수 있다', async () => {
+    watch()
+    respondToLogin(success)
+    const { user, router } = openLogin()
+    act(() => goOffline())
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(loginButton().getAttribute('aria-disabled')).toBeNull()
+    await fillAndSubmit(user)
+    await screen.findByRole('heading', { name: '홈' })
+    expect(router.state.location.pathname).toBe('/home')
+  })
+
+  it('요청 중에 끊기면 그 줄 대신 "연결이 끊겨 로그인하지 못했어요."와 "다시 시도"(연결이 없는 동안 비활성)를 보이고, 돌아오면 누를 수 있다', async () => {
+    watch()
+    const answers = [() => HttpResponse.error(), success]
+    respondToLogin(() => answers.shift()!())
+    const { user, router } = openLogin()
+    await fillAndSubmit(user)
+    expect((await screen.findByRole('alert')).textContent).toBe(lost)
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    expect(loginButton().getAttribute('aria-disabled')).toBe('true')
+    act(() => goOnline())
+    expect(retryButton().getAttribute('aria-disabled')).toBeNull()
+    await user.click(retryButton())
+    await screen.findByRole('heading', { name: '홈' })
+    expect(router.state.location.pathname).toBe('/home')
+  })
+})
+
 describe('서버 오류와 지연', () => {
   it.each([
     ['500', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['429', () => problem(429, 'TOO_MANY_REQUESTS')],
     ['403', () => problem(403, 'ORIGIN_NOT_ALLOWED')],
     ['400 MALFORMED_REQUEST', () => problem(400, 'MALFORMED_REQUEST')],
@@ -539,10 +596,10 @@ describe('서버 오류와 지연', () => {
     expect(bodies).toHaveLength(1)
   })
 
-  it('브라우저가 연결 없음이라고 해도 멈춰 기다리지 않고 실패를 알린다', async () => {
+  it('TanStack이 연결 없음이라고 해도 멈춰 기다리지 않고 실패를 알린다', async () => {
     onlineManager.setOnline(false)
     try {
-      respondToLogin(() => HttpResponse.error())
+      respondToLogin(() => problem(500, 'INTERNAL_ERROR'))
       const { user } = openLogin()
       await fillAndSubmit(user)
       expect((await screen.findByRole('alert')).textContent).toBe(failed)

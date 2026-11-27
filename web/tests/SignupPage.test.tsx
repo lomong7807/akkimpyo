@@ -1,13 +1,15 @@
 import { onlineManager } from '@tanstack/react-query'
-import { cleanup, fireEvent, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { useNavigate, type RouteObject } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { watchConnection } from '../src/api/connection'
 import { signup } from '../src/api/session'
 import { createQueryClient } from '../src/app/queryClient'
 import SignupPage from '../src/features/auth/SignupPage'
 import { delayed } from './support/backend'
 import { readCssRule } from './support/cssRule'
+import { goOffline, goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { renderRoutes } from './support/renderRoutes'
@@ -38,6 +40,8 @@ const nameUnusable = '쓸 수 없는 글자가 있어요. 모두 지우고 다�
 const duplicate = '이미 가입된 이메일이에요. 로그인해 주세요.'
 const notAllowed = '지금은 허용된 이메일만 가입할 수 있어요'
 const failed = '문제가 생겨 가입하지 못했어요. 잠시 후 다시 시도해 주세요.'
+const lost = '연결이 끊겨 가입하지 못했어요. 연결되면 다시 시도해 주세요.'
+const offlineReason = '연결되면 가입할 수 있어요'
 
 const email = () => screen.getByLabelText<HTMLInputElement>('이메일')
 const password = () => screen.getByLabelText<HTMLInputElement>('비밀번호')
@@ -713,11 +717,51 @@ describe('서버가 거부함', () => {
   })
 })
 
+describe('연결이 없을 때(00-common 4.3, 1B #238)', () => {
+  /** 브라우저의 연결 신호를 앱이 받게 하고 테스트가 끝나면 멈춘다 */
+  function watch() {
+    onTestFinished(watchConnection())
+  }
+
+  it('가입 버튼은 비활성이고 바로 위에 "연결되면 가입할 수 있어요"를 보인다. 칸은 쓸 수 있고 엔터로도 보내지 않는다', async () => {
+    watch()
+    const bodies = respondToSignup(success)
+    const { user } = openSignup()
+    act(() => goOffline())
+    expect(signupButton().getAttribute('aria-disabled')).toBe('true')
+    expect(signupButton().previousElementSibling!.textContent).toBe(offlineReason)
+    await fill(user)
+    await user.click(signupButton())
+    await user.type(displayName(), '{Enter}')
+    expect(bodies).toEqual([])
+    expect(fields().map((input) => input.value)).toEqual(Object.values(valid))
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(signupButton().getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('요청 중에 끊기면 그 줄 대신 "연결이 끊겨 가입하지 못했어요."와 "다시 시도"(연결이 없는 동안 비활성)를 보이고 초점을 옮긴다', async () => {
+    watch()
+    const answers = [() => HttpResponse.error(), success]
+    const bodies = respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    expect((await screen.findByRole('alert')).textContent).toBe(lost)
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(document.activeElement).toBe(retryButton())
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    expect(fields().map((input) => input.value)).toEqual(Object.values(valid))
+    act(() => goOnline())
+    expect(retryButton().getAttribute('aria-disabled')).toBeNull()
+    await user.click(retryButton())
+    await vi.waitFor(() => expect(bodies).toHaveLength(2))
+  })
+})
+
 describe('서버 오류와 지연', () => {
   it.each([
     ['500', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['429', () => problem(429, 'TOO_MANY_REQUESTS')],
     ['403', () => problem(403, 'ORIGIN_NOT_ALLOWED')],
     ['400 MALFORMED_REQUEST', () => problem(400, 'MALFORMED_REQUEST')],
@@ -781,10 +825,10 @@ describe('서버 오류와 지연', () => {
     expect(bodies).toHaveLength(1)
   })
 
-  it('브라우저가 연결 없음이라고 해도 멈춰 기다리지 않고 실패를 알린다', async () => {
+  it('TanStack이 연결 없음이라고 해도 멈춰 기다리지 않고 실패를 알린다', async () => {
     onlineManager.setOnline(false)
     try {
-      respondToSignup(() => HttpResponse.error())
+      respondToSignup(() => problem(500, 'INTERNAL_ERROR'))
       const { user } = openSignup()
       await fillAndSubmit(user)
       expect((await screen.findByRole('alert')).textContent).toBe(failed)

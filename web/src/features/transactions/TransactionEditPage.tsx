@@ -3,8 +3,8 @@ import { useParams } from 'react-router'
 import { sessionUserId } from '../../api/session'
 import { Button } from '../../components/Button'
 import DialogFrame from '../../components/DialogFrame'
+import DisabledReason from '../../components/DisabledReason'
 import FullScreenForm from '../../components/FullScreenForm'
-import LoadFailure from '../../components/LoadFailure'
 import RetryMessage from '../../components/RetryMessage'
 import { useToast } from '../../components/ToastContext'
 import { useGoBack } from '../../components/useGoBack'
@@ -13,6 +13,9 @@ import { today as todayOfDevice } from '../../lib/calendarDate'
 import { isUuid } from '../../lib/uuid'
 import { useAccounts } from '../accounts/useAccounts'
 import { useCategories } from '../categories/useCategories'
+import LoadFailureHere from '../connection/LoadFailureHere'
+import { failureTextOf, offlineReasonOf, SAVE } from '../connection/offlineAction'
+import { useConnection } from '../connection/useConnection'
 import NotFoundPage from '../not-found/NotFoundPage'
 import ConflictPanel, { ConflictCompare, DeletedElsewhere } from './ConflictPanel'
 import { compareRows, reapplyMine, updatedTextOf } from './conflictValues'
@@ -177,7 +180,9 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
     filled,
   )
   // 저장 위의 실패. 다시 보내는 동안에도 남기고, 실패마다 count를 올려 새로 그려 다시 읽히게 한다
-  const [shown, setShown] = useState<{ failure: Failure; count: number }>()
+  const [shown, setShown] = useState<{ failure: Failure; count: number; text: string }>()
+  // 연결이 없으면 저장은 비활성이고 바로 위에 까닭을 보인다(00-common 4.3, 02의 0.10). 값은 계속 쓸 수 있다
+  const online = useConnection() === 'online'
   // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돈다(00-common 4.5)
   const [sender, setSender] = useState<Sender>('save')
   // 충돌 판(N-04). 닫히는 움직임 동안 내용이 남도록 열림을 따로 둔다
@@ -190,7 +195,8 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
   const failure = shown?.failure
 
   function submit(from: Sender = 'save') {
-    if (busy || !opened) return
+    // 엔터와 단축키로 보내는 길도 막는다(버튼은 누를 수 없게만 둔다)
+    if (busy || !opened || !online) return
     // 바꾼 값이 없으면 보내지 않고 닫는다. 토스트도 없다
     if (!form.changed) return guard.leave(goBack)
     unfoldFor(validateTransaction(form.effective))
@@ -225,7 +231,7 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
       form.reject(rejected)
     }
     const next = failureOf(error, id)
-    setShown((last) => next && { failure: next, count: (last?.count ?? 0) + 1 })
+    setShown((last) => next && { failure: next, count: (last?.count ?? 0) + 1, text: failureTextOf(error, SAVE) })
   }
 
   /**
@@ -290,9 +296,9 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
                   failures={shown?.count}
                   onRetry={() => submit('message')}
                   busy={messageBusy}
-                  disabled={saveBusy}
+                  disabled={saveBusy || !online}
                 >
-                  문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.
+                  {shown!.text}
                 </RetryMessage>
               )}
               {failure === 'conflict' && (
@@ -305,7 +311,9 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
                   {DELETED_MEANWHILE}
                 </RetryMessage>
               )}
-              <Button kind="primary" type="submit" busy={saveBusy} disabled={messageBusy}>
+              {/* 한 버튼 위에는 한 줄만 둔다. 실패 문구가 있으면 덧붙이지 않는다(00-common 4.3) */}
+              {!online && shown === undefined && <DisabledReason>{offlineReasonOf(SAVE)}</DisabledReason>}
+              <Button kind="primary" type="submit" busy={saveBusy} disabled={messageBusy || !online}>
                 저장
               </Button>
             </>
@@ -392,7 +400,7 @@ function Waiting({ queries }: { queries: Query[] }) {
   const failed = queries.filter((query) => !query.data && query.isFetchedAfterMount)
   if (failed.length > 0) {
     return (
-      <LoadFailure
+      <LoadFailureHere
         headingLevel={2}
         busy={queries.some((query) => query.isFetching)}
         onRetry={() => failed.forEach((query) => void query.refetch())}

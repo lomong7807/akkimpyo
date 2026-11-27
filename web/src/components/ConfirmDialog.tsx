@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from './Button'
 import DialogFrame from './DialogFrame'
+import DisabledReason from './DisabledReason'
 import ErrorMessage from './ErrorMessage'
 import styles from './ConfirmDialog.module.css'
 
@@ -25,6 +26,10 @@ interface ConfirmDialogProps {
   /** 실행 중. 실행 버튼에 도는 표시를 두고, 다른 버튼도 누를 수 없으며, 닫히지 않는다(5.6). */
   busy?: boolean
   failure?: ConfirmFailure
+  /** 실행 버튼을 누를 수 없다(열린 채 연결이 끊김 등, 00-common 5.6). 까닭은 `reason`으로 보인다 */
+  actionDisabled?: boolean
+  /** 실행 버튼을 누를 수 없는 까닭 한 줄. 버튼 바로 위, 실패 문구와 같은 자리다. 실패 문구가 있으면 보이지 않는다(한 줄만) */
+  reason?: string
   onClose: () => void
   onAction: () => void
 }
@@ -59,6 +64,8 @@ export function ConfirmQuestion({
   actionLabel,
   busy,
   failure,
+  actionDisabled = false,
+  reason,
   onClose,
   onAction,
 }: Omit<ConfirmDialogProps, 'open' | 'title'> & { busy: boolean }) {
@@ -80,6 +87,11 @@ export function ConfirmQuestion({
           <ErrorMessage role="alert">{failure.message}</ErrorMessage>
         </div>
       )}
+      {!failure && reason && (
+        <div className={styles.failure}>
+          <DisabledReason>{reason}</DisabledReason>
+        </div>
+      )}
       <div className={styles.actions}>
         <div>
           <Button ref={closeButton} kind="secondary" disabled={busy} onClick={onClose}>
@@ -87,7 +99,7 @@ export function ConfirmQuestion({
           </Button>
         </div>
         <div>
-          <Button ref={actionButton} kind="danger" busy={busy} onClick={onAction}>
+          <Button ref={actionButton} kind="danger" busy={busy} disabled={actionDisabled} onClick={onAction}>
             {actionLabel}
           </Button>
         </div>
