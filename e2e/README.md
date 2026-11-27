@@ -17,7 +17,8 @@ Playwright로 web 화면을 실제 브라우저에서 돌린다. 무엇을 여�
 2. 서버 jar: `server/`에서 `./gradlew bootJar`. 서버를 고치면 다시 만든다. `PATH`의 `java`가 21이어야 한다.
 3. web 의존성: `web/`에서 `npm ci`.
 
-아래 명령은 `e2e/`에서 실행한다. 2026-11-27에 macOS(arm64), Node 24.3.0 / npm 11.4.2, JDK 21에서 실행해 확인했다.
+아래 명령은 `e2e/`에서 실행한다. 2026-11-27에 macOS(arm64), Node 24.3.0 / npm 11.4.2, JDK 21(Corretto 21.0.3)에서 실행해 확인했다.
+그때 DB는 compose DB 대신 따로 띄운 `postgres:17` 컨테이너를 `DB_URL`로 주었다.
 
 | 할 일 | 명령 |
 |---|---|
