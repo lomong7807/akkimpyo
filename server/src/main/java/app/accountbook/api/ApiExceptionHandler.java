@@ -3,6 +3,7 @@ package app.accountbook.api;
 import app.accountbook.api.Problem.InvalidField;
 import app.accountbook.auth.InvalidCredentialsException;
 import app.accountbook.auth.RefreshRejectedException;
+import app.accountbook.common.AccountHasTransactionsException;
 import app.accountbook.common.DuplicateAccountNameException;
 import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.DuplicateEmailException;
@@ -110,6 +111,11 @@ class ApiExceptionHandler {
     @ExceptionHandler
     ResponseEntity<Problem> invalidState(InvalidStateException e, HttpServletRequest request) {
         return respond(ErrorCode.INVALID_STATE, e, request);
+    }
+
+    @ExceptionHandler
+    ResponseEntity<Problem> accountHasTransactions(AccountHasTransactionsException e, HttpServletRequest request) {
+        return respond(ErrorCode.ACCOUNT_HAS_TRANSACTIONS, e, request);
     }
 
     /** 같은 장부에서 내가 만든 거래와 내용이 다를 때만 {@code current}가 있다. 그 밖은 모두 같은 응답이다. */
