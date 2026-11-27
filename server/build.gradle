@@ -24,6 +24,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     implementation 'org.flywaydb:flyway-database-postgresql'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.security:spring-security-crypto'
     // access token(JWT)의 서명과 검증. 리소스 서버 스타터는 쓰지 않는다(공개 주소를 스스로 연다, ADR 001·#12).
     implementation 'org.springframework.security:spring-security-oauth2-jose'
