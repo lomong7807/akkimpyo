@@ -90,6 +90,13 @@ export const pendingScreen = lazyScreen(() => import('../features/pending/Pendin
   headingLevel: 2,
 })
 
+/** B-05의 "고쳐서 보내기"가 연 거래 입력(#237). 칸은 거래 입력과 같고 닫으면 B-05로 간다 */
+export const pendingFixScreen = lazyScreen(() => import('../features/pending/PendingFixPage'), {
+  Frame: fullScreenForm('거래 입력', '/pending'),
+  Placeholder: TransactionFieldsSkeleton,
+  headingLevel: 2,
+})
+
 export const moreScreen = lazyScreen(() => import('./MoreRoute'), { Frame: MainScreen, Placeholder: Loading })
 
 export const notFoundScreen = lazyScreen(() => import('../features/not-found/NotFoundPage'), {

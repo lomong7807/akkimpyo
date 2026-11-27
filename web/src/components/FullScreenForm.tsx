@@ -29,6 +29,8 @@ interface FullScreenFormProps {
   bottom?: ReactNode
   /** 화면 이름 아래의 안내 한 줄(D-04 상태의 "열린 경로별 안내", 보조 글자색). 칸 맨 위에 둔다 */
   notice?: string
+  /** 안내를 위험색 글자로 보인다(D-04 (33) "보내지 못한 이유", designer #237 D9). 자리와 글자는 같다 */
+  noticeDanger?: boolean
   /** Ctrl+엔터(Mac은 Cmd+엔터)를 어느 칸에서나 저장으로 받는다(D-04 (16)). 한글을 조합하는 중과 판이 열린 동안은 받지 않는다. */
   submitShortcut?: boolean
   children: ReactNode
@@ -44,6 +46,7 @@ export default function FullScreenForm({
   onSubmit,
   bottom,
   notice,
+  noticeDanger = false,
   submitShortcut = false,
   children,
 }: FullScreenFormProps) {
@@ -88,7 +91,7 @@ export default function FullScreenForm({
           <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>
             {/* 초점은 옮기지 않는다. 비어 있을 때 자리를 차지하지 않게 있을 때만 그린다 */}
             {notice && (
-              <p role="status" className={styles.notice}>
+              <p role="status" className={noticeDanger ? `${styles.notice} ${styles.noticeDanger}` : styles.notice}>
                 {notice}
               </p>
             )}

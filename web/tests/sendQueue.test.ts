@@ -581,6 +581,54 @@ describe('지금 보내기와 탭 사이 잠금(#236)', () => {
   })
 })
 
+describe('고쳐서 보낸 뒤의 보내기(F-108, #237)', () => {
+  it('wait면 다른 탭이 보내는 중이어도 건너뛰지 않고 기다렸다가, 그 탭이 잡은 목록에 없던 줄도 보낸다', async () => {
+    const one = await openTab()
+    const two = await openTab()
+    await one.pending.queueTransaction(item(1))
+    const first = delayed()
+    transactions.response = (sent) =>
+      sent.body.id === id(1) ? first.respond() : HttpResponse.json(savedOf(sent.body), { status: 201 })
+    const auto = two.sendQueue()
+    await first.arrived
+    // 다른 탭이 보내기 목록을 잡은 뒤에 고쳐 대기로 넣은 줄
+    await one.pending.queueTransaction(item(2))
+    const fixed = one.sendQueue({ wait: true })
+    first.answer(HttpResponse.json(savedOf(expense(1)), { status: 201 }))
+    await auto
+    expect(await fixed).toEqual({ noticed: 0, sent: 1, rejected: 0, unsent: 0 })
+    expect(sentIds()).toEqual([id(1), id(2)])
+    expect(await states(one)).toEqual([])
+  })
+
+  it('사용자가 누른 지금 보내기가 아니라서 끝나면 byUser 없이 알린다(B-05가 화면 읽기에 건수를 알린다)', async () => {
+    const tab = await openTab()
+    await tab.pending.queueTransaction(item(1))
+    const finished: [number, boolean][] = []
+    tab.onSendFinished((result, byUser) => finished.push([result.sent, byUser]))
+    await tab.sendQueue({ wait: true })
+    expect(finished).toEqual([[1, false]])
+  })
+
+  it('429로 쉬는 동안이면 저절로 보내기처럼 보내지도 알리지도 않는다(그 줄은 대기로 남는다)', async () => {
+    const tab = await openTab()
+    await tab.pending.queueTransaction(item(1))
+    transactions.response = () => {
+      const response = problem(429, 'TOO_MANY_REQUESTS')
+      response.headers.set('Retry-After', '30')
+      return response
+    }
+    await tab.sendQueue()
+    transactions.response = (sent) => HttpResponse.json(savedOf(sent.body), { status: 201 })
+    const finished = vi.fn()
+    tab.onSendFinished(finished)
+    expect(await tab.sendQueue({ wait: true })).toEqual({ noticed: 0, sent: 0, rejected: 0, unsent: 0 })
+    expect(finished).not.toHaveBeenCalled()
+    expect(transactions.sent).toHaveLength(1)
+    expect(await states(tab)).toEqual([[id(1), 'waiting']])
+  })
+})
+
 describe('버리기(F-109, #236)', () => {
   it('그 줄을 지운다', async () => {
     const tab = await openTab()

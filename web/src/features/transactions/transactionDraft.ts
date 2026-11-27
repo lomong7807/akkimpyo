@@ -22,6 +22,17 @@ export interface EditTransactionDraft {
   openedValues?: TransactionValues
 }
 
+/** 고쳐서 보내기(#237)의 쓰던 값. 거래 id는 대기열의 그 입력이 정하므로(주소의 id) 값만 남긴다 */
+export interface FixTransactionDraft {
+  values: TransactionValues
+}
+
+export function fixTransactionDraftOf(saved: unknown): FixTransactionDraft | undefined {
+  if (typeof saved !== 'object' || saved === null) return undefined
+  const values = transactionValuesOf((saved as Partial<Record<keyof FixTransactionDraft, unknown>>).values)
+  return values && { values }
+}
+
 export function newTransactionDraftOf(saved: unknown): NewTransactionDraft | undefined {
   if (typeof saved !== 'object' || saved === null) return undefined
   const { id, values } = saved as Partial<Record<keyof NewTransactionDraft, unknown>>

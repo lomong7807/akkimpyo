@@ -509,11 +509,11 @@ describe('(3) 입력 줄과 (4) 상태', () => {
     const rejectedChip = within(rowOf('거부 줄')).getByText('보낼 수 없음')
     expect(rejectedChip.className).toMatch(/_danger_/)
     expect(getComputedStyle(rejectedChip).color).toBe('var(--color-danger)')
-    // 줄 안에서 누를 수 있는 것은 버리기 하나다(1B 임시: 보낼 수 없음 줄도 눌러도 아무 일이 없다)
-    for (const row of rows()) {
-      expect(within(row).queryByRole('link')).toBeNull()
-      expect(within(row).getAllByRole('button').map((button) => button.textContent)).toEqual(['버리기'])
-    }
+    // 대기인 줄에서 누를 수 있는 것은 버리기 하나다. 보낼 수 없음 줄의 고쳐서 보내기는 PendingFix.test.tsx(#237)
+    const waiting = rowOf('대기 줄')
+    expect(within(waiting).queryByRole('link')).toBeNull()
+    expect(within(waiting).getAllByRole('button').map((button) => button.textContent)).toEqual(['버리기'])
+    expect(within(rowOf('거부 줄')).getAllByRole('link').map((link) => link.textContent)).toEqual(['고쳐서 보내기'])
   })
 
   it('다른 사용자가 이 기기에 쌓은 입력은 보이지 않는다', async () => {
@@ -665,7 +665,7 @@ describe('(6) 거부 이유', () => {
   it.each([
     ['카테고리가 삭제됨', { fieldErrors: [{ field: 'categoryId', code: 'NOT_FOUND' }] }, '카테고리가 삭제되어 보낼 수 없어요. 다른 카테고리를 골라 보내 주세요.'],
     ['그 밖의 검증 실패', { fieldErrors: [{ field: 'amount', code: 'OUT_OF_RANGE' }] }, '입력한 값을 저장할 수 없어요. 고쳐서 보내 주세요.'],
-    ['current가 없는 409', { status: 409, code: 'ID_CONFLICT' }, '이미 있는 다른 거래와 겹쳐 보낼 수 없어요. 버리고 새로 입력해 주세요.'],
+    ['current가 없는 409', { status: 409, code: 'ID_CONFLICT' }, '이미 있는 다른 거래와 겹쳐 보낼 수 없어요. 고쳐서 보내면 새 거래로 보내요.'],
     ['current가 있는 409(고르기는 #280)', { status: 409, code: 'ID_CONFLICT', current: { id: 'x', version: 1 } }, '앞서 저장한 거래와 내용이 달라 보낼 수 없어요. 내역에서 확인해 주세요.'],
   ])('%s', async (_, refusal, text) => {
     await seedRejected(expense({ payee: '거부 줄' }), refusal)

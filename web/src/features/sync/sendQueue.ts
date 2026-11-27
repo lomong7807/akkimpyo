@@ -31,6 +31,11 @@ export interface SendHandlers {
   onSent?: (ledgerId: string) => void
   /** 사용자가 누른 "지금 보내기"(F-107). 다른 탭이 보내는 중이면 끝나기를 기다렸다가 보낸다 */
   byUser?: boolean
+  /**
+   * 다른 탭이 보내는 중이면 건너뛰지 않고 놓을 때까지 기다린다. 기본은 byUser다. 고쳐서 보낸 뒤(F-108, #237)는 저절로 보내기처럼
+   * 알리되(byUser 아님) 기다린다. 건너뛰면 그 탭은 이미 보낼 목록을 잡아 고친 줄을 다음 계기까지 보내지 않는다(architect #237)
+   */
+  wait?: boolean
 }
 
 /**
@@ -75,7 +80,7 @@ interface Step {
 }
 
 /** 대기인 입력을 오래된 것부터 보낸다. 실패해도 던지지 않는다. */
-export async function sendQueue({ onSent, byUser = false }: SendHandlers = {}): Promise<SendResult> {
+export async function sendQueue({ onSent, byUser = false, wait = byUser }: SendHandlers = {}): Promise<SendResult> {
   const userId = currentUserId()
   const result: SendResult = { noticed: 0, sent: 0, rejected: 0, unsent: 0 }
   // 확인하지 못한 로그인(토큰 없음)이면 보내지 않는다. 확인된 뒤의 계기에 보낸다
@@ -105,7 +110,7 @@ export async function sendQueue({ onSent, byUser = false }: SendHandlers = {}): 
           if (step.stop) return
         }
       },
-      { wait: byUser },
+      { wait },
     )
   } catch {
     // 기기 저장소를 쓸 수 없거나 다른 탭이 잠금을 놓지 않았다. 대기열은 그대로이고 다음 계기에 다시 본다

@@ -21,11 +21,20 @@ import {
 
 /** 서버가 거부한 칸의 문구. 아는 칸과 code가 하나도 없으면 없다. */
 export function rejectedFields(error: unknown): FieldErrors<TransactionField> | undefined {
-  if (!(error instanceof ApiError) || error.code !== 'VALIDATION_FAILED') return undefined
+  if (!(error instanceof ApiError)) return undefined
+  return rejectedFieldsOf(error.code ?? '', error.fieldErrors)
+}
+
+/**
+ * 거부의 code와 칸에서 칸마다의 문구. 아는 칸과 code가 하나도 없으면 없다. 대기열에 남은 거부(보낼 수 없음, 고쳐서 보내기 #237)도
+ * 읽으므로 칸의 모양을 다시 본다(다른 판의 앱이 남겼을 수 있다).
+ */
+export function rejectedFieldsOf(code: string, fieldErrors: readonly unknown[]): FieldErrors<TransactionField> | undefined {
+  if (code !== 'VALIDATION_FAILED') return undefined
   const rejected: FieldErrors<TransactionField> = {}
-  for (const { field, code } of error.fieldErrors) {
+  for (const { field, code: fieldCode } of fieldErrorsOf(fieldErrors)) {
     const known = fieldOf(field)
-    const message = known && messageFor(known, code)
+    const message = known && messageFor(known, fieldCode)
     // 같은 칸에 여럿이 오면 앞의 것을 보인다
     if (known && message && rejected[known] === undefined) rejected[known] = message
   }
@@ -33,17 +42,36 @@ export function rejectedFields(error: unknown): FieldErrors<TransactionField> | 
 }
 
 /**
+ * 그사이 지워져 서버가 찾지 못한 계좌·카테고리의 칸(NOT_FOUND). 고쳐서 보내기는 이 칸을 비운 채 연다(D-04 (33), #237).
+ * 화면 위쪽부터의 순서이고 겹치지 않는다.
+ */
+export function goneFields(code: string, fieldErrors: readonly unknown[]): TransactionField[] {
+  if (code !== 'VALIDATION_FAILED') return []
+  const gone = new Set(
+    fieldErrorsOf(fieldErrors)
+      .filter((error) => error.code === 'NOT_FOUND')
+      .map(({ field }) => fieldOf(field)),
+  )
+  const references: TransactionField[] = ['categoryId', 'accountId', 'toAccountId']
+  return references.filter((field) => gone.has(field))
+}
+
+/**
  * 서버가 거부한 까닭이 그사이 지워진 계좌나 카테고리인지(보내지 않은 입력 목록 B-05 (6), P-226, #236). 둘 다면 계좌가 앞선다
- * (B-05 거부 이유 문구 표의 순서). 아니면 없다. 대기열에 남은 거부(다른 판의 앱이 남겼을 수 있다)도 읽으므로 모양을 다시 본다.
+ * (B-05 거부 이유 문구 표의 순서). 아니면 없다.
  */
 export function goneReference(code: string, fieldErrors: readonly unknown[]): 'account' | 'category' | undefined {
-  if (code !== 'VALIDATION_FAILED') return undefined
-  const gone = fieldErrors.flatMap((error) => {
-    const { field, code: fieldCode } = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>
-    return typeof field === 'string' && fieldCode === 'NOT_FOUND' ? [fieldOf(field)] : []
-  })
+  const gone = goneFields(code, fieldErrors)
   if (gone.includes('accountId') || gone.includes('toAccountId')) return 'account'
   return gone.includes('categoryId') ? 'category' : undefined
+}
+
+/** 모양이 맞는 칸만(field와 code가 글자) */
+function fieldErrorsOf(fieldErrors: readonly unknown[]): { field: string; code: string }[] {
+  return fieldErrors.flatMap((error) => {
+    const { field, code } = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>
+    return typeof field === 'string' && typeof code === 'string' ? [{ field, code }] : []
+  })
 }
 
 /** 보낸 필드 이름에서 화면의 칸. 이체의 보내는 계좌는 계좌 칸이 맡는다. */

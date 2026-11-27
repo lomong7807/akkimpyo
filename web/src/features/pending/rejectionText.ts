@@ -9,8 +9,11 @@ import { goneReference } from '../transactions/transactionRejection'
 export const ACCOUNT_GONE = '계좌가 삭제되어 보낼 수 없어요. 다른 계좌를 골라 보내 주세요.'
 export const CATEGORY_GONE = '카테고리가 삭제되어 보낼 수 없어요. 다른 카테고리를 골라 보내 주세요.'
 export const INVALID_VALUE = '입력한 값을 저장할 수 없어요. 고쳐서 보내 주세요.'
-/** current가 없는 409 ID_CONFLICT(다른 장부의 id, 남이 만든 거래, 완전히 지운 거래). 사용자는 id를 모른다(designer #236) */
-export const TAKEN_ID = '이미 있는 다른 거래와 겹쳐 보낼 수 없어요. 버리고 새로 입력해 주세요.'
+/**
+ * current가 없는 409 ID_CONFLICT(다른 장부의 id, 남이 만든 거래, 완전히 지운 거래). 사용자는 id를 모른다(designer #236).
+ * 고쳐서 보내기가 새 거래 id로 보낸다(ADR 006 결정 3, designer #237 D2)
+ */
+export const TAKEN_ID = '이미 있는 다른 거래와 겹쳐 보낼 수 없어요. 고쳐서 보내면 새 거래로 보내요.'
 /** current가 있는 409 ID_CONFLICT. 고르는 판은 #280이 넣는다(planner #236). 1A 거래 입력의 문구와 같은 말이다 */
 export const DIFFERENT_CONTENT = '앞서 저장한 거래와 내용이 달라 보낼 수 없어요. 내역에서 확인해 주세요.'
 

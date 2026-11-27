@@ -8,7 +8,7 @@ import { isInstantMs, isUserId, resultOf, transact } from './deviceDb'
  */
 
 /** 쓰던 값을 남기는 입력 화면 */
-export type DraftForm = 'transaction-new' | 'transaction-edit' | 'account-add' | 'first-account'
+export type DraftForm = 'transaction-new' | 'transaction-edit' | 'account-add' | 'first-account' | 'pending-fix'
 
 /** 남긴 때부터 이만큼 지나면 앱을 열 때 지운다(security 권고, planner Q12) */
 export const KEEP_DRAFTS_MS = 30 * 24 * 60 * 60 * 1000
