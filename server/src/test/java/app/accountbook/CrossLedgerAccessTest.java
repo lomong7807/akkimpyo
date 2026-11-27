@@ -31,6 +31,9 @@ import app.accountbook.transaction.IdConflictException;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
+import app.accountbook.transaction.TransactionListQuery;
+import app.accountbook.transaction.TransactionScope.Month;
+import app.accountbook.transaction.TransactionScope.WholeLedger;
 import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionType;
 import app.accountbook.transaction.TransactionView;
@@ -91,6 +94,7 @@ class CrossLedgerAccessTest {
     @Autowired AccountService accountService;
     @Autowired CategoryService categoryService;
     @Autowired TransactionService transactionService;
+    @Autowired TransactionListQuery transactionListQuery;
     @Autowired BalanceQuery balanceQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
     @Autowired LedgerAccess ledgerAccess;
@@ -173,6 +177,7 @@ class CrossLedgerAccessTest {
         accountService = recorded(accountService);
         categoryService = recorded(categoryService);
         transactionService = recorded(transactionService);
+        transactionListQuery = recorded(transactionListQuery);
         balanceQuery = recorded(balanceQuery);
         monthlyStatsQuery = recorded(monthlyStatsQuery);
         ledgerAccess = recorded(ledgerAccess);
@@ -257,6 +262,8 @@ class CrossLedgerAccessTest {
         assertThat(categoryService.list(a, ledgerA)).extracting(Category::getLedgerId).containsOnly(ledgerA);
         assertThat(transactionService.listDeleted(a, ledgerA)).extracting(TransactionView::id)
                 .containsExactly(aDeleted.id());
+        assertThat(transactionListQuery.page(a, ledgerA, new WholeLedger(), null, 50).items())
+                .extracting(TransactionView::id).containsExactlyInAnyOrder(aExpense.id(), aTransfer.id());
         // 100,000 - 지출 1,100 - 이체 2,200. 삭제한 3,300은 빠진다.
         assertThat(balanceQuery.balances(a, ledgerA))
                 .containsOnly(Map.entry(aBank, 96_700L), Map.entry(aCash, 2_200L));
@@ -294,6 +301,10 @@ class CrossLedgerAccessTest {
                         (actor, tx) -> transactionService.history(actor, tx)),
                 denied("조회: 휴지통", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionService.listDeleted(actor, ledger)),
+                denied("조회: 거래 목록(달)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 50)),
+                denied("조회: 거래 목록(장부 전체)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new WholeLedger(), null, 50)),
                 denied("조회: 계좌 잔액", NotLedgerMemberException.class, bBank,
                         (actor, account) -> balanceQuery.balance(actor, account)),
                 denied("조회: 장부의 모든 잔액", NotLedgerMemberException.class, ledgerB,
@@ -443,6 +454,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionService.create(actor, ledger, null, DEVICE)),
                 denied("순서: B의 장부 월 통계를 달 없이", notMember, ledgerB, invalid,
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, null)),
+                denied("순서: B의 장부 거래 목록을 범위 밖 limit으로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 0)),
                 denied("순서: B의 지출을 낡은 version으로 취소", notFound, bExpense.id(), StaleVersionException.class,
                         (actor, tx) -> transactionService.cancel(actor, tx, bExpense.version() + 1, DEVICE)),
                 denied("순서: B의 지출을 빈 요청으로 수정", notFound, bExpense.id(), invalid,
