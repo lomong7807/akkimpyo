@@ -7,7 +7,7 @@ import RetryMessage from '../../components/RetryMessage'
 import { TitleBar } from '../../components/Screen'
 import { PasswordField, TextField } from '../../components/TextField'
 import { useFormFields } from '../../components/useFormFields'
-import { failureTextOf, offlineReasonOf, SIGN_UP } from '../connection/offlineAction'
+import { failureTextOf, isConnectionLost, offlineReasonOf, SIGN_UP } from '../connection/offlineAction'
 import { useConnection } from '../connection/useConnection'
 import AuthLink from './AuthLink'
 import {
@@ -43,11 +43,13 @@ export default function SignupPage({ signUp, onSignedUp, initialEmail }: SignupP
     validate: validateSignup,
   })
   // 가입 위의 실패 문구. 다시 보내는 동안에도 남기고, 실패마다 count를 올려 새로 그려 다시 읽히게 한다. 없으면 없다
-  const [failure, setFailure] = useState<{ count: number; text: string }>()
+  const [failure, setFailure] = useState<{ count: number; text: string; lost: boolean }>()
   // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돌고 다른 버튼은 누를 수 없다(00-common 4.5, designer 규칙 #102)
   const [sender, setSender] = useState<Sender>('signup')
 
   const busy = signup.isPending || signup.isSuccess
+  // 연결이 끊기면 안내 줄이 앞선 실패 문구를 대신하고 다시 연결돼도 되살리지 않는다. 한 버튼 위에는 한 줄만(designer #238)
+  if (!online && failure && !failure.lost) setFailure(undefined)
 
   function leavePassword() {
     check('password')
@@ -70,7 +72,11 @@ export default function SignupPage({ signUp, onSignedUp, initialEmail }: SignupP
   function showFailure(error: Error) {
     const rejected = rejectedFields(error)
     if (rejected) reject(rejected)
-    setFailure((last) => (rejected ? undefined : { count: (last?.count ?? 0) + 1, text: failureTextOf(error, SIGN_UP) }))
+    setFailure((last) =>
+      rejected
+        ? undefined
+        : { count: (last?.count ?? 0) + 1, text: failureTextOf(error, SIGN_UP), lost: isConnectionLost(error) },
+    )
   }
 
   function handleSubmit(event: SubmitEvent) {

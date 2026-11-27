@@ -7,7 +7,7 @@ import { keepFocusInField } from '../../components/keepFocusInField'
 import RetryMessage from '../../components/RetryMessage'
 import { PasswordField, TextField } from '../../components/TextField'
 import { useFormFields } from '../../components/useFormFields'
-import { failureTextOf, LOG_IN, offlineReasonOf } from '../connection/offlineAction'
+import { failureTextOf, isConnectionLost, LOG_IN, offlineReasonOf } from '../connection/offlineAction'
 import { useConnection } from '../connection/useConnection'
 import AuthLink from './AuthLink'
 import { loginFields, validateLogin } from './loginForm'
@@ -40,11 +40,13 @@ export default function LoginPage({ signIn, onSignedIn, sessionEnded, draftKept,
   })
   // 로그인 위의 실패 문구. 다시 보내는 동안에도 새 결과가 올 때까지 남기고, 실패마다 count를 올려 새로 그려 다시
   // 읽히게 한다. 없으면 없다
-  const [shown, setShown] = useState<{ failure: Failure; count: number; text?: string }>()
+  const [shown, setShown] = useState<{ failure: Failure; count: number; text?: string; lost: boolean }>()
   // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돌고 다른 버튼은 누를 수 없다(00-common 4.5, designer 규칙 #102)
   const [sender, setSender] = useState<Sender>('login')
 
   const busy = login.isPending || login.isSuccess
+  // 연결이 끊기면 안내 줄이 앞선 실패 문구를 대신하고 다시 연결돼도 되살리지 않는다. 한 버튼 위에는 한 줄만(designer #238)
+  if (!online && shown && !shown.lost) setShown(undefined)
 
   function submit(from: Sender = 'login') {
     // 엔터로 보내는 길도 막는다(버튼은 누를 수 없게만 둔다)
@@ -60,7 +62,8 @@ export default function LoginPage({ signIn, onSignedIn, sessionEnded, draftKept,
 
   function showFailure(error: Error) {
     const failure = isWrongCredentials(error) ? 'refused' : 'retry'
-    setShown((last) => ({ failure, count: (last?.count ?? 0) + 1, text: failureTextOf(error, LOG_IN) }))
+    const text = failureTextOf(error, LOG_IN)
+    setShown((last) => ({ failure, count: (last?.count ?? 0) + 1, text, lost: isConnectionLost(error) }))
   }
 
   function handleSubmit(event: SubmitEvent) {
@@ -115,7 +118,7 @@ export default function LoginPage({ signIn, onSignedIn, sessionEnded, draftKept,
           </RetryMessage>
         )}
         {/* 한 버튼 위에는 한 줄만 둔다. 실패 문구가 있으면 덧붙이지 않는다(00-common 4.3) */}
-        {!online && shown?.failure !== 'retry' && <DisabledReason>{offlineReasonOf(LOG_IN)}</DisabledReason>}
+        {!online && shown === undefined && <DisabledReason>{offlineReasonOf(LOG_IN)}</DisabledReason>}
         <Button
           kind="primary"
           type="submit"

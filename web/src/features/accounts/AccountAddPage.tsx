@@ -15,7 +15,7 @@ import { useAccountForm } from './useAccountForm'
 import { useCreateAccount } from './useCreateAccount'
 import { useKeepDraft } from '../drafts/keepDraft'
 import { useRestoredDraft } from '../drafts/restoreDraft'
-import { failureTextOf, offlineReasonOf, SAVE } from '../connection/offlineAction'
+import { failureTextOf, isConnectionLost, offlineReasonOf, SAVE } from '../connection/offlineAction'
 import { useConnection } from '../connection/useConnection'
 import { accountValuesOf } from './accountDraft'
 
@@ -34,11 +34,13 @@ export default function AccountAddPage() {
   const form = useAccountForm()
   const online = useConnection() === 'online'
   // 저장 위의 실패 문구. 다시 보내는 동안에도 남기고, 실패마다 올려 새로 그려 다시 읽히게 한다. 없으면 없다
-  const [failure, setFailure] = useState<{ count: number; text: string }>()
+  const [failure, setFailure] = useState<{ count: number; text: string; lost: boolean }>()
   // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돌고 다른 버튼은 누를 수 없다(00-common 4.5, designer 검토 2026-11-26)
   const [sender, setSender] = useState<'save' | 'retry'>('save')
 
   const busy = creation.isPending || creation.isSuccess
+  // 연결이 끊기면 안내 줄이 앞선 실패 문구를 대신하고 다시 연결돼도 되살리지 않는다. 한 버튼 위에는 한 줄만(designer #238)
+  if (!online && failure && !failure.lost) setFailure(undefined)
   const guard = useLeaveGuard({ parent: LIST, changed: form.changed, busy })
   // 로그인이 풀리면 쓰던 값을 이 기기에 남기고, 같은 계정으로 이 주소에 돌아오면 채운다(00-common 4.1, #234 C2)
   useKeepDraft('account-add', () => (form.changed ? form.values : undefined))
@@ -68,7 +70,9 @@ export default function AccountAddPage() {
   function showFailure(error: Error) {
     const rejected = rejectedFields(error)
     if (rejected) form.reject(rejected)
-    setFailure((last) => (rejected ? undefined : { count: (last?.count ?? 0) + 1, text: failureTextOf(error, SAVE) }))
+    setFailure((last) =>
+      rejected ? undefined : { count: (last?.count ?? 0) + 1, text: failureTextOf(error, SAVE), lost: isConnectionLost(error) },
+    )
   }
 
   return (

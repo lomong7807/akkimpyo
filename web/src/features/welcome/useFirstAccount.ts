@@ -9,7 +9,7 @@ import type { NewAccount } from '../accounts/accounts'
 import { accountsKey } from '../accounts/useAccounts'
 import { useAccountForm } from '../accounts/useAccountForm'
 import { useCreateAccount } from '../accounts/useCreateAccount'
-import { CREATE_ACCOUNT, failureTextOf } from '../connection/offlineAction'
+import { CREATE_ACCOUNT, failureTextOf, isConnectionLost } from '../connection/offlineAction'
 import { useConnection } from '../connection/useConnection'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 
@@ -54,9 +54,11 @@ export function useFirstAccount() {
   const [sender, setSender] = useState<Sender>('create')
   // 버튼 위의 실패 문구. 다시 보내는 동안에도 남기고, 실패마다 올려 새로 그려 다시 읽히게 한다. 없으면 없다.
   // 칸에 보인 거부와, 계좌가 생긴 것으로 보는 거부는 실패가 아니다
-  const [failure, setFailure] = useState<{ count: number; text: string }>()
+  const [failure, setFailure] = useState<{ count: number; text: string; lost: boolean }>()
 
   const busy = creation.isPending || creation.isSuccess
+  // 연결이 끊기면 안내 줄이 앞선 실패 문구를 대신하고 다시 연결돼도 되살리지 않는다. 한 버튼 위에는 한 줄만(designer #238)
+  if (!online && failure && !failure.lost) setFailure(undefined)
 
   // 안내를 떠난 뒤에 온 응답으로는 불리지 않는다
   function finish(message?: string) {
@@ -66,7 +68,8 @@ export function useFirstAccount() {
 
   /** 실패 문구를 새로 그린다. 연결이 끊긴 것과 그 밖을 나눈다(00-common 4.3) */
   function fail(error: Error) {
-    setFailure((last) => ({ count: (last?.count ?? 0) + 1, text: failureTextOf(error, CREATE_ACCOUNT) }))
+    const text = failureTextOf(error, CREATE_ACCOUNT)
+    setFailure((last) => ({ count: (last?.count ?? 0) + 1, text, lost: isConnectionLost(error) }))
   }
 
   function create(from: Sender = 'create') {

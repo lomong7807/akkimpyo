@@ -8,8 +8,27 @@ const DISPATCH_HEADER = 'x-test-dispatch'
 /** 보낸 요청이 핸들러를 고르기를 기다리는 한도(ms). 보통은 기다리지 않거나 몇 ms다. */
 const DISPATCH_LIMIT_MS = 2_000
 
+/** 우리 프록시와 서버가 모든 응답에 싣는 헤더(ADR 005 결정 7). 앱은 이것이 있는 응답을 받아야 연결이 있다고 본다(#234) */
+const REQUEST_ID = 'X-Request-Id'
+
 /**
- * 테스트 안의 가짜 서버. 준비하지 않은 요청은 실패로 본다.
+ * 핸들러가 이 헤더를 달면 우리 서버를 거치지 않은 응답(포털 페이지 등)으로 보고 X-Request-Id를 붙이지 않는다. 앱에는 닿기 전에 뗀다.
+ * 응답이 원래 X-Request-Id를 실었으면 그대로 둔다.
+ */
+export const NOT_OUR_SERVER = 'x-test-not-our-server'
+
+/** 실제 서버처럼 X-Request-Id를 붙인다(qa #289). 붙이지 않을 응답은 NOT_OUR_SERVER로 고른다 */
+function asOurServer(response: Response): Response {
+  const headers = new Headers(response.headers)
+  if (headers.has(NOT_OUR_SERVER)) headers.delete(NOT_OUR_SERVER)
+  else if (headers.has(REQUEST_ID)) return response
+  else headers.set(REQUEST_ID, 'req-test')
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
+/**
+ * 테스트 안의 가짜 서버. 준비하지 않은 요청은 실패로 본다. 응답에는 실제 서버처럼 X-Request-Id를 붙인다(NOT_OUR_SERVER로 뺀다).
+ * 브라우저가 연결이 없다고 하는 동안(goOffline, startOffline)은 실제 브라우저처럼 모든 요청이 응답 없이 실패한다.
  *
  * 테스트가 끝나면 그 테스트의 핸들러를 비우는데, 그 전에 그 테스트에서 보낸 요청이 모두 핸들러를 고를 때까지 기다린다.
  * msw는 진짜 fetch(undici)를 소켓에서 가로채므로 fetch를 부른 뒤 핸들러를 고르기까지 실제 I/O를 몇 번 거친다. 그사이 다음
@@ -33,6 +52,10 @@ export function startMockServer() {
     })
     const intercepted = globalThis.fetch
     globalThis.fetch = (input, init) => {
+      // 브라우저가 연결이 없다고 하면(tests/support/connection) 실제 브라우저처럼 어떤 요청도 서버에 닿지 않는다
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return Promise.reject(new TypeError('Failed to fetch'))
+      }
       const id = String((sent += 1))
       const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
       headers.set(DISPATCH_HEADER, id)
@@ -40,7 +63,7 @@ export function startMockServer() {
       const response = intercepted(input, { ...init, headers })
       const done = () => void undispatched.delete(id)
       response.then(done, done)
-      return response
+      return response.then(asOurServer)
     }
   })
 

@@ -346,6 +346,16 @@ describe('연결이 없을 때(00-common 4.3, 02의 0.10, #238)', () => {
     expect(saveButton().getAttribute('aria-disabled')).toBeNull()
   })
 
+  it('앞선 실패 문구가 있으면 연결이 끊길 때 안내 줄이 그것을 대신하고, 다시 연결돼도 되살리지 않는다(designer #238)', async () => {
+    await failToSave(() => problem(500, 'INTERNAL_ERROR'))
+    act(() => goOffline())
+    expect(screen.queryByText(failed)).toBeNull()
+    expect(saveButton().previousElementSibling!.textContent).toBe(offlineReason)
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(screen.queryByText(failed)).toBeNull()
+  })
+
   it('요청 중에 끊기면 그 줄 대신 "연결이 끊겨 저장하지 못했어요."와 "다시 시도"(연결이 없는 동안 비활성)이고, 돌아와도 저절로 다시 보내지 않는다', async () => {
     const { user } = await failToSave(() => HttpResponse.error())
     expect(screen.getByRole('alert').textContent).toBe(lost)

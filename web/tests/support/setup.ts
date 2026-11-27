@@ -1,9 +1,10 @@
 // jsdom에는 IndexedDB가 없다. 규격대로 도는 가짜를 전역에 둔다(devDependency, #234)
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
-import { afterAll, afterEach, beforeEach, vi } from 'vitest'
-import { connection, watchConnection } from '../../src/api/connection'
+import { afterAll, beforeEach, expect, vi } from 'vitest'
+import { connection } from '../../src/api/connection'
 import { DEFAULT_NOW, setDeviceClock } from './clock'
+import { reconnectStaticApp } from './staticConnection'
 import { installDialog } from './dialogElement'
 import { failOnLeftShields, watchShields } from './shieldCheck'
 
@@ -19,15 +20,17 @@ vi.mock(import('../../src/lib/clock'), (importOriginal) => importOriginal())
 // 테스트마다 기기의 지금과 시간대를 정해 둔다. 테스트를 돌리는 기기의 시계와 시간대(TZ)를 보지 않는다(#225)
 beforeEach(() => setDeviceClock(DEFAULT_NOW))
 
-// 앱 모듈을 정적으로 불러온 파일은 한 연결 판단(api/connection)을 테스트끼리 나눠 쓴다. 가짜 서버의 응답에는 X-Request-Id가 없어
-// 요청이 응답 없이 실패한 뒤에는 다음 테스트도 연결이 없는 채로 시작한다. 테스트가 끝나면 연결이 있는 상태로 되돌린다(#238).
+// 앱 모듈을 정적으로 불러온 파일은 연결 판단(api/connection) 하나를 테스트끼리 나눠 쓴다. 테스트가 연결을 끊었으면 그 테스트가
+// 되돌린다(goOnline 등). 남아 있으면 다음 테스트를 '연결 없음'으로 시작하게 하고, 화면이 판단을 잘못 남기는 버그도 가리므로
+// 테스트 이름과 함께 실패한다. 다음 테스트를 위해 되돌린 뒤에 실패한다. 앞 정리가 실패해도 돌도록 onTestFinished로 건다(qa #289, #274).
 // 앱을 새로 여는 테스트(vi.resetModules)는 새 모듈을 받으므로 이것과 상관없다
-afterEach(() => {
-  if (typeof window === 'undefined' || connection() === 'online') return
-  const stop = watchConnection()
-  window.dispatchEvent(new Event('online'))
-  stop()
-})
+beforeEach(({ onTestFinished }) =>
+  onTestFinished(() => {
+    if (typeof window === 'undefined' || connection() === 'online') return
+    reconnectStaticApp()
+    throw new Error(`연결 판단이 '없음'으로 남았다: ${expect.getState().currentTestName}. 연결을 끊은 테스트는 끝에서 되돌린다`)
+  }),
+)
 
 // jsdom에는 없다. 배치를 계산하지 않고 움직임이 없으므로 아무것도 하지 않는다
 if (typeof Element !== 'undefined') {

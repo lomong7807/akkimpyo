@@ -560,6 +560,23 @@ describe('삭제(F-227)', () => {
     expect(detail.requests.delete.map(({ query }) => query)).toEqual(['version=1', 'version=1'])
   })
 
+  it('창의 앞선 실패 문구는 연결이 끊길 때 안내 줄이 대신하고 실행 버튼은 "삭제"(비활성)로 돌아오며, 다시 연결돼도 되살리지 않는다(designer #238)', async () => {
+    detail.deleteResponse = () => problem(500, 'INTERNAL_ERROR')
+    const item = lunch()
+    put(item)
+    const opened = await openDetail(item)
+    await askToDelete(opened)
+    await opened.user.click(inDialog('삭제'))
+    expect((await within(dialog()!).findByRole('alert')).textContent).toBe(failedToDelete)
+    act(() => goOffline())
+    expect(within(dialog()!).queryByText(failedToDelete)).toBeNull()
+    expect(within(dialog()!).getByText(offlineDelete)).toBeTruthy()
+    expect(inDialog('삭제').getAttribute('aria-disabled')).toBe('true')
+    act(() => goOnline())
+    expect(within(dialog()!).queryByText(offlineDelete)).toBeNull()
+    expect(within(dialog()!).queryByRole('alert')).toBeNull()
+  })
+
   it('창이 열린 채 연결이 끊기면 "삭제"가 비활성이고 바로 위에 "연결되면 삭제할 수 있어요"를 보이며, 돌아오면 지운다(00-common 5.6, #238)', async () => {
     const item = lunch()
     put(item)

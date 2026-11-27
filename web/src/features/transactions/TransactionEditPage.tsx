@@ -14,7 +14,7 @@ import { isUuid } from '../../lib/uuid'
 import { useAccounts } from '../accounts/useAccounts'
 import { useCategories } from '../categories/useCategories'
 import LoadFailureHere from '../connection/LoadFailureHere'
-import { failureTextOf, offlineReasonOf, SAVE } from '../connection/offlineAction'
+import { failureTextOf, isConnectionLost, offlineReasonOf, SAVE } from '../connection/offlineAction'
 import { useConnection } from '../connection/useConnection'
 import NotFoundPage from '../not-found/NotFoundPage'
 import ConflictPanel, { ConflictCompare, DeletedElsewhere } from './ConflictPanel'
@@ -180,7 +180,7 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
     filled,
   )
   // 저장 위의 실패. 다시 보내는 동안에도 남기고, 실패마다 count를 올려 새로 그려 다시 읽히게 한다
-  const [shown, setShown] = useState<{ failure: Failure; count: number; text: string }>()
+  const [shown, setShown] = useState<{ failure: Failure; count: number; text: string; lost: boolean }>()
   // 연결이 없으면 저장은 비활성이고 바로 위에 까닭을 보인다(00-common 4.3, 02의 0.10). 값은 계속 쓸 수 있다
   const online = useConnection() === 'online'
   // 보내는 동안 도는 표시를 둘 버튼. 누른 버튼만 돈다(00-common 4.5)
@@ -191,6 +191,8 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
   const [reapplied, setReapplied] = useState(false)
 
   const busy = updating.isPending || updating.isSuccess
+  // 연결이 끊기면 안내 줄이 앞선 실패 문구를 대신하고 다시 연결돼도 되살리지 않는다. 한 버튼 위에는 한 줄만(designer #238)
+  if (!online && shown && !shown.lost) setShown(undefined)
   const guard = useLeaveGuard({ parent: detailPath, changed: form.changed, busy })
   const failure = shown?.failure
 
@@ -231,7 +233,8 @@ function EditForm({ id, opened, lists, waiting, onGone, onRebase }: EditFormProp
       form.reject(rejected)
     }
     const next = failureOf(error, id)
-    setShown((last) => next && { failure: next, count: (last?.count ?? 0) + 1, text: failureTextOf(error, SAVE) })
+    const text = failureTextOf(error, SAVE)
+    setShown((last) => next && { failure: next, count: (last?.count ?? 0) + 1, text, lost: isConnectionLost(error) })
   }
 
   /**

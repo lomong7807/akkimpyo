@@ -520,6 +520,7 @@ describe('연결이 없을 때(00-common 4.3, 1B #238)', () => {
     await user.type(password(), '{Enter}')
     expect(bodies).toEqual([])
     expect(email().value).toBe('name@example.com')
+    act(() => goOnline())
   })
 
   it('연결이 돌아오면 그 줄을 지우고 바로 누를 수 있다', async () => {
@@ -533,6 +534,24 @@ describe('연결이 없을 때(00-common 4.3, 1B #238)', () => {
     await fillAndSubmit(user)
     await screen.findByRole('heading', { name: '홈' })
     expect(router.state.location.pathname).toBe('/home')
+  })
+
+  it.each([
+    ['맞지 않는 비밀번호', () => problem(401, 'INVALID_CREDENTIALS'), refused],
+    ['서버 오류', () => problem(500, 'INTERNAL_ERROR'), failed],
+  ])('앞선 실패 문구(%s)가 있으면 연결이 끊길 때 안내 줄이 그것을 대신하고, 다시 연결돼도 되살리지 않는다(designer #238)', async (_, respond, message) => {
+    watch()
+    respondToLogin(respond)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    expect((await screen.findByRole('alert')).textContent).toBe(message)
+    act(() => goOffline())
+    expect(screen.queryByText(message)).toBeNull()
+    expect(loginButton().previousElementSibling!.textContent).toBe(offlineReason)
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(screen.queryByText(message)).toBeNull()
+    expect(loginButton().getAttribute('aria-disabled')).toBeNull()
   })
 
   it('요청 중에 끊기면 그 줄 대신 "연결이 끊겨 로그인하지 못했어요."와 "다시 시도"(연결이 없는 동안 비활성)를 보이고, 돌아오면 누를 수 있다', async () => {
