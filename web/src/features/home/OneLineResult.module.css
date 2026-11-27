@@ -18,7 +18,10 @@
   gap: var(--space-16);
 }
 
-/* (8) 이름 "날짜·시각" 하나 아래 날짜와 시각을 나란히 둔다. 한 줄에 안 들어가면(글자 200%) 시각이 다음 줄로 간다 */
+/*
+ * (8) 이름 "날짜·시각" 하나 아래 날짜와 시각을 3:2로 나란히 둔다. 기준 폭은 칸 높이의 3배와 2배라 글자를 키우면 함께 커지고,
+ * 한 줄에 안 들어가면(글자 200%) 시각이 다음 줄로 간다
+ */
 .dateTime {
   display: flex;
   flex-direction: column;
@@ -36,12 +39,12 @@
 }
 
 .date {
-  flex: 3 1 10rem;
+  flex: 3 1 calc(3 * var(--size-field));
   min-width: 0;
 }
 
 .time {
-  flex: 2 1 8rem;
+  flex: 2 1 calc(2 * var(--size-field));
   min-width: 0;
 }
 

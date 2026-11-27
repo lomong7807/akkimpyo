@@ -5,6 +5,7 @@ import { sessionUserId } from '../../api/session'
 import { Button, ButtonLink } from '../../components/Button'
 import Field from '../../components/Field'
 import { holdKeyboard } from '../../components/keyboardBridge'
+import { oneLineProblem } from '../../lib/oneLineText'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { keepComposingEnter } from '../transactions/fieldKeys'
 import { handOffToEntry, oneLineReturnOf, settleOneLineReturn } from '../transactions/oneLineHandoff'
@@ -13,7 +14,7 @@ import type { OneLineRequest } from './OneLineResult'
 import styles from './Home.module.css'
 
 /*
- * C-01 (1) 한 줄 입력(F-114, #233). 첫 화면 묶음에는 입력칸만 두고, 해석기와 결과 확인(D-05)은 따로 싣는 조각(oneLineChunk)이다.
+ * C-01 (1) 한 줄 입력(F-114, #233). 첫 화면 묶음에는 입력칸과 빈 글·100자 검사만 두고, 해석기와 결과 확인(D-05)은 따로 싣는 조각(oneLineChunk)이다.
  * 조각은 입력칸이 초점을 받거나 글을 쓰기 시작하면, 그리고 홈이 한가할 때(LedgerLayout) 받는다. 받지 못하면 오류 자리에 알리고
  * 쓴 글은 그대로 둔다(designer #233). 해석은 기기에서 바로 끝나므로 처리 중 표시가 없다(C-01 상태).
  */
@@ -32,7 +33,7 @@ type Problem = keyof typeof messages
 function isFixed(problem: Problem, text: string): boolean {
   const chunk = loadedChunk()
   if (problem === 'not-found') return chunk?.parseOneLine(text) !== undefined
-  if (problem === 'empty' || problem === 'too-long') return chunk?.oneLineProblem(text) !== problem
+  if (problem === 'empty' || problem === 'too-long') return oneLineProblem(text) !== problem
   return true
 }
 
@@ -73,6 +74,13 @@ export default function OneLineInput() {
   async function submit(event: SubmitEvent) {
     event.preventDefault()
     const typed = text
+    // 빈 글과 100자 넘는 글은 조각 없이 바로 알린다
+    const checked = oneLineProblem(typed)
+    if (checked) {
+      setProblem(checked)
+      input.current?.focus()
+      return
+    }
     let found: OneLineChunk
     try {
       found = loadedChunk() ?? (await loadChunk())
@@ -81,10 +89,8 @@ export default function OneLineInput() {
       input.current?.focus()
       return
     }
-    const checked = found.oneLineProblem(typed)
-    const parsed = checked ? undefined : found.parseOneLine(typed)
-    const next = checked ?? (parsed ? undefined : 'not-found')
-    setProblem(next)
+    const parsed = found.parseOneLine(typed)
+    setProblem(parsed ? undefined : 'not-found')
     if (!parsed) {
       input.current?.focus()
       return

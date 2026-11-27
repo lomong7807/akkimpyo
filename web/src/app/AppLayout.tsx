@@ -34,7 +34,8 @@ export default function AppLayout({ navigation, ledgerName, canWrite = false, on
   const screenTabs = navigation.tabs.filter((tab): tab is MainNavigationItem => tab !== QUICK_ENTRY)
   const currentTab = useCurrentTab({ tabs: screenTabs, fallbackTab: navigation.fallbackTab }, screenItem)
   const quickEntry = canWrite ? navigation.quickEntry : undefined
-  const tabs = !fullScreen && !useSyncExternalStore(onKeyboardChange, keyboardShown)
+  const keyboard = useSyncExternalStore(onKeyboardChange, keyboardShown)
+  const tabs = !fullScreen && !keyboard
   return (
     <div className={tabs ? `${styles.frame} ${styles.withTabs}` : styles.frame}>
       <Sidebar

@@ -3,4 +3,4 @@
  * 입력칸이 초점을 받거나 글을 쓰기 시작할 때, 그리고 홈이 한가할 때 받아 둔다.
  */
 export { default as OneLineResult } from './OneLineResult'
-export { detailPayeeOf, oneLineProblem, parseOneLine } from '../../lib/oneLine'
+export { detailPayeeOf, parseOneLine } from '../../lib/oneLine'
