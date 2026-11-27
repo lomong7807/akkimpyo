@@ -1,0 +1,55 @@
+/* 화면 읽기에만 알린다 */
+.announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 300ms 전에는 자리만 차지하고 보이지 않는다 */
+.reserved {
+  visibility: hidden;
+}
+
+.name,
+.amount {
+  flex: none;
+}
+
+.name {
+  width: 40%;
+}
+
+.amount {
+  width: 24%;
+  margin-inline-start: auto;
+}
+
+.hero {
+  font: var(--text-hero);
+}
+
+.title {
+  font: var(--text-title);
+}
+
+.body {
+  font: var(--text-body);
+}
+
+.label {
+  font: var(--text-label);
+}
+
+/* 글자처럼 줄 안에 놓아, 줄의 높이는 글자가 올 때와 같고 막대만 글자 크기다 */
+.bar {
+  display: inline-block;
+  width: 100%;
+  height: 1em;
+  border-radius: var(--radius-10);
+  background-color: var(--color-border);
+  vertical-align: middle;
+}

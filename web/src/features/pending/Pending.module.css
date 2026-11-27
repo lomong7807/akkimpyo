@@ -1,0 +1,138 @@
+/*
+ * 보내지 않은 입력 목록(B-05, 00-common 6.6). 값은 designer #236 답이다: (1) 아래 16, 버튼 위 문구와 버튼 사이 8, 버튼 아래 24.
+ * 줄은 거래 줄(0.4)과 같은 짜임이라 줄 사이 선이 없고 위아래 12, 줄 안의 줄 사이 4다. 고칠 수 있는 보낼 수 없음 줄만 누를 수 있고
+ * 거래 줄처럼 누름 바탕이 깔린다. 초점은 줄 안의 버튼만 받는다(designer #237 D5). 움직임 없음.
+ */
+
+/* (1) 마지막으로 맞춘 시각 */
+.synced {
+  margin: var(--space-16) 0 0;
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+}
+
+/* 버튼 바로 위의 문구(연결 끊김, 서버 오류) */
+.problem {
+  margin-top: var(--space-16);
+}
+
+/* (2) 좌우 16px 여백(내용 여백)의 전체 폭. 문구가 있으면 그 아래 8 */
+.sendNow {
+  display: grid;
+  margin-top: var(--space-16);
+}
+
+.problem + .sendNow {
+  margin-top: var(--space-8);
+}
+
+/* 목록. 줄의 위 12와 더해 버튼(없으면 (1)) 아래 24 */
+.rows {
+  margin: var(--space-12) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-block: var(--space-12);
+}
+
+.meta {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * 가맹점/내용과 금액. 금액은 제목의 첫 줄에 맞추고, 제목 자리가 줄의 절반보다 좁아지면 다음 줄 오른쪽으로 내린다.
+ * 제목은 자르지 않는다(줄을 눌러 다 볼 곳이 없다).
+ */
+.main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-12);
+  margin: 0;
+  font: var(--text-body);
+}
+
+.title {
+  flex: 1 1 50%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.amount {
+  flex: 0 1 auto;
+  margin-inline-start: auto;
+  text-align: end;
+}
+
+/*
+ * 고쳐서 보낼 수 있는 보낼 수 없음 줄(B-05 (7)). 누름 바탕이 거래 줄처럼 좌우 화면 끝까지 닿게 내용 여백만큼 넓히고 그만큼
+ * 안쪽 여백을 둬 글은 다른 줄과 같은 선에 있다(designer #237 D5)
+ */
+.fixable {
+  margin-inline: calc(-1 * var(--space-16));
+  padding-inline: var(--space-16);
+}
+
+/* 지금 보내기 처리 중에는 누를 수 없어 바탕도 없다. 줄 안의 버리기를 누를 때는 줄 바탕을 깔지 않는다 */
+.pressable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pressable:active:not(:has(.actions button:active)) {
+  background-color: var(--color-press);
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .pressable:hover:not(:has(.actions button:hover)) {
+    background-color: var(--color-press);
+  }
+}
+
+/*
+ * 셋째 줄: 왼쪽 상태 칩, 오른쪽 끝에 고쳐서 보내기와 버리기(누르는 영역 44px, 사이 간격 없이 글자 버튼 안쪽 여백 8+8). 좁은 화면에서
+ * 글자를 키워 한 줄에 들지 않으면 두 버튼이 함께 다음 줄 오른쪽 끝으로 내려가고, 그래도 넘치면 버리기가 그 아래 오른쪽 끝이다
+ * (320px 글자 200%, designer #237 D5)
+ */
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-12);
+  min-height: var(--size-touch);
+}
+
+/* 글자 버튼의 안쪽 여백만큼 당겨 글자를 내용의 오른쪽 선에 맞춘다 */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-inline: auto calc(-1 * var(--space-8));
+}
+
+/* (6) 거부 이유: 칩 아래 왼쪽 */
+.reason {
+  margin: 0;
+  color: var(--color-danger);
+  font: var(--text-secondary);
+}
+
+/* 저절로 보낸 건수를 화면 읽기에만 알린다 */
+.spoken {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

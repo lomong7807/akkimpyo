@@ -9,12 +9,13 @@ export default function LoginRoute() {
   const { signIn } = useSession()
   const navigate = useNavigate()
   const location = useLocation()
-  const state = location.state as { sessionEnded?: boolean } | null
+  const state = location.state as { sessionEnded?: boolean; draftKept?: boolean } | null
   return (
     <LoginPage
       signIn={signIn}
       onSignedIn={() => navigate(readReturnAddress(), { replace: true })}
       sessionEnded={state?.sessionEnded === true}
+      draftKept={state?.draftKept === true}
       initialEmail={passedEmail(state)}
     />
   )

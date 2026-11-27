@@ -1,3 +1,11 @@
 .groups {
   padding-top: var(--space-8);
 }
+
+/* 마지막으로 맞춘 시각(M-01 (16)): text-caption(13px), color-text-secondary. 목록과의 간격은 묶음 사이와 같다 */
+.synced {
+  margin: 0;
+  padding-top: var(--space-16);
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}

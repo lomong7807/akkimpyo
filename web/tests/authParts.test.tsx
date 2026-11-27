@@ -2,7 +2,7 @@ import { cleanup, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AuthLink from '../src/features/auth/AuthLink'
-import RetryMessage from '../src/features/auth/RetryMessage'
+import RetryMessage from '../src/components/RetryMessage'
 import { renderRoutes } from './support/renderRoutes'
 
 afterEach(cleanup)

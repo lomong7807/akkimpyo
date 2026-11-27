@@ -173,11 +173,9 @@ class TransactionCreateRaceTest {
         });
     }
 
-    /** 완전 삭제(#9)가 한 트랜잭션에서 할 일: 그 거래의 이력과 거래를 지우고 기록 한 행만 남긴다. */
+    /** 완전 삭제(#9)가 한 트랜잭션에서 할 일. 지우는 거래가 version 1이라 기록의 번호는 2다. */
     private void purge() {
-        jdbc.update("delete from change_log where transaction_id = ?", id);
-        jdbc.update("delete from transaction where id = ?", id);
-        fixtures.purgeRecord(id, ledgerId, ChangeAction.PURGE, owner.getId());
+        fixtures.purge(id, owner.getId());
     }
 
     private CreateResult create(User actor, UUID ledger, UUID account, long amount) {
@@ -200,8 +198,8 @@ class TransactionCreateRaceTest {
 
     private void assertOnlyPurgeRecordIsStored() {
         assertThat(jdbc.queryForObject("select count(*) from transaction where id = ?", Integer.class, id)).isZero();
-        assertThat(jdbc.queryForList("select action from change_log where transaction_id = ?", String.class, id))
-                .containsExactly("PURGE");
+        assertThat(jdbc.queryForList("select action || ' ' || version from change_log where transaction_id = ?",
+                String.class, id)).containsExactly("PURGE 2");
     }
 
     record Race(CreateResult first, CompletableFuture<CreateResult> second) {

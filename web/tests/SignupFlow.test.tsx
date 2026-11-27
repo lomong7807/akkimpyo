@@ -1,6 +1,8 @@
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { delayed, ledgerNameOf, startBackend, type Backend } from './support/backend'
+import { startAccounts } from './support/accounts'
+import { delayed, ledgerIdOf, ledgerNameOf, startBackend, type Backend } from './support/backend'
+import { startCategories, type Categories } from './support/categories'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -11,9 +13,13 @@ vi.stubGlobal('scrollTo', vi.fn())
 
 const server = startMockServer()
 let backend: Backend
+let categories: Categories
 
 beforeEach(() => {
   backend = startBackend(server)
+  // 가입한 사람의 장부에는 계좌가 없고 기본 카테고리만 있다
+  startAccounts(server, backend)
+  categories = startCategories(server, backend)
   sessionStorage.clear()
 })
 
@@ -30,9 +36,14 @@ const failed = '문제가 생겨 가입하지 못했어요. 잠시 후 다시 �
 const open = (path: string) => openApp(path, addScreens([{ path: '/secret', element: <main>{secret}</main> }]))
 type User = Awaited<ReturnType<typeof open>>['user']
 
-const signupHeading = () => screen.findByRole('heading', { level: 1, name: '가입' })
+/** 가입 화면. 화면 코드를 받는 동안의 틀에도 같은 제목이 있으므로 칸이 나오기를 기다린다(#251). */
+async function signupHeading() {
+  const heading = await screen.findByRole('heading', { level: 1, name: '가입' })
+  await screen.findByLabelText('표시 이름')
+  return heading
+}
 const loginHeading = () => screen.findByRole('heading', { level: 1, name: '로그인' })
-const notFound = () => screen.findByRole('heading', { level: 1, name: '찾을 수 없어요.' })
+const welcome = () => screen.findByRole('heading', { level: 1, name: '기본 카테고리를 넣어 두었어요' })
 const email = () => screen.getByLabelText<HTMLInputElement>('이메일')
 const password = () => screen.getByLabelText<HTMLInputElement>('비밀번호')
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50))
@@ -82,14 +93,14 @@ describe('/signup을 열면', () => {
 })
 
 describe('가입하면', () => {
-  it('로그인한 상태가 되어 /welcome으로 간다. 화면이 아직 없으므로 새 사용자의 공통 틀과 찾을 수 없음이다', async () => {
+  it('로그인한 상태가 되어 새 사용자 장부의 첫 실행 안내(/welcome)로 간다', async () => {
     const { router, user } = await open('/signup')
     await signUp(user)
-    await notFound()
+    await welcome()
     expect(router.state.location.pathname).toBe('/welcome')
     expect(router.state.historyAction).toBe('REPLACE')
     expect(router.state.location.state).toBeNull()
-    expect(screen.getAllByText(ledgerNameOf('new-user')).length).toBeGreaterThan(0)
+    await waitFor(() => expect(categories.requests).toEqual([ledgerIdOf('new-user')]))
     expect(backend.requests.me).toEqual(['new-user'])
     expect(backend.requests.refresh).toHaveLength(1)
   })
@@ -97,7 +108,7 @@ describe('가입하면', () => {
   it('쓴 값을 보낸다', async () => {
     const { user } = await open('/signup')
     await signUp(user)
-    await notFound()
+    await welcome()
     const [request] = backend.requests.signup
     expect(await request.json()).toEqual({ email: 'new@example.com', password: 'pass1234', displayName: '이서연' })
     expect(request.headers.get('X-Akkimpyo-Client')).toBe('web')
@@ -109,18 +120,19 @@ describe('가입하면', () => {
     expect(sessionStorage.getItem(RETURN_ADDRESS)).toBe('/secret')
     await toSignup(user)
     await signUp(user)
-    await notFound()
+    await welcome()
     expect(router.state.location.pathname).toBe('/welcome')
     await waitFor(() => expect(sessionStorage.length).toBe(0))
   })
 
-  it('"뒤로" 가도 가입 화면으로 돌아가지 않는다', async () => {
+  it('"뒤로" 가도 가입 화면으로 돌아가지 않는다. 계좌가 아직 없으므로 홈 대신 다시 안내다', async () => {
     const { router, user } = await open('/login')
     await toSignup(user)
     await signUp(user)
-    await notFound()
+    await welcome()
     await router.navigate(-1)
-    await waitFor(() => expect(router.state.location.pathname).toBe('/home'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/welcome'))
+    expect(await welcome()).toBeTruthy()
   })
 
   it('앞 사용자의 로그인이 풀린 자리에서 가입하면 앞 사용자의 값이 보이지 않는다', async () => {
@@ -135,9 +147,10 @@ describe('가입하면', () => {
     const dom = recordDom()
     await toSignup(user)
     await signUp(user)
-    await notFound()
+    await welcome()
     expect(router.state.location.pathname).toBe('/welcome')
-    expect(dom.sawText(ledgerNameOf('new-user'))).toBe(true)
+    // 안내에는 공통 틀이 없어 장부 이름이 보이지 않는다. 새 사용자의 장부를 받았는지로 본다
+    await waitFor(() => expect(categories.requests).toEqual([ledgerIdOf('new-user')]))
     expect(dom.sawText(ledgerNameOf('user-1'))).toBe(false)
     expect(dom.sawText(secret)).toBe(false)
   })
@@ -155,7 +168,7 @@ describe('가입하면', () => {
     await settle()
     expect(router.state.location.pathname).toBe('/signup')
     signup.answer(backend.issue('new-user', 201))
-    await notFound()
+    await welcome()
     expect(router.state.location.pathname).toBe('/welcome')
     expect(backend.requests.me).toEqual(['new-user'])
   })
@@ -163,7 +176,7 @@ describe('가입하면', () => {
   it('토큰, 이메일, 비밀번호를 저장소에 남기지 않는다', async () => {
     const { user } = await open('/signup')
     await signUp(user)
-    await notFound()
+    await welcome()
     expect(sessionStorage.length).toBe(0)
     // 로그인했음을 다른 화면이 아는, 뜻이 없는 임의 값 하나만 남는다
     expect({ ...localStorage }).toEqual({ 'akkimpyo-login': expect.stringMatching(/^[0-9a-f]{32}$/) })
@@ -185,7 +198,7 @@ describe('가입에 실패하면', () => {
 
     backend.signupResponse = undefined
     await user.click(screen.getByRole('button', { name: '다시 시도' }))
-    await notFound()
+    await welcome()
     expect(router.state.location.pathname).toBe('/welcome')
   })
 })
@@ -205,6 +218,7 @@ describe('로그인 화면과 이메일을 주고받기', () => {
 
   it('가입에서 쓴 이메일이 로그인에 채워지고 비밀번호에 초점이 간다. 다른 값은 넘기지 않는다', async () => {
     const { router, user } = await open('/signup')
+    await signupHeading()
     await user.type(email(), 'name@example.com')
     await user.type(password(), 'pass1234')
     await user.type(screen.getByLabelText('표시 이름'), '이서연')

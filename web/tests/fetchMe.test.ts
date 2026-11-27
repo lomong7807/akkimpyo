@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../src/api/apiError'
-import { fetchMe } from '../src/features/me/me'
+import { canEdit, fetchMe } from '../src/features/me/me'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 
@@ -68,5 +68,19 @@ describe('내 정보(GET /api/v1/me)', () => {
   it('서버가 거부하면 그 오류를 그대로 던진다', async () => {
     server.use(http.get('/api/v1/me', () => problem(401, 'UNAUTHENTICATED')))
     await expect(fetchMe()).rejects.toMatchObject({ kind: 'rejected', status: 401, code: 'UNAUTHENTICATED' })
+  })
+})
+
+describe('편집 이상', () => {
+  it.each([
+    ['OWNER', true],
+    ['MEMBER', true],
+    // 보기 전용과 서버가 앞으로 더할 모르는 값은 편집할 수 없는 것으로 본다(#30)
+    ['VIEWER', false],
+    ['ADMIN', false],
+    ['owner', false],
+    ['', false],
+  ])('%s: %s', (role, expected) => {
+    expect(canEdit({ ...ledger, role })).toBe(expected)
   })
 })

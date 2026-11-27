@@ -1,7 +1,7 @@
-import userEvent from '@testing-library/user-event'
 import type { RouteObject } from 'react-router'
 import { vi } from 'vitest'
 import { renderRoutes } from './renderRoutes'
+import { setupUser } from './testClock'
 
 type Edit = (routes: RouteObject[]) => RouteObject[] | Promise<RouteObject[]>
 
@@ -13,7 +13,7 @@ export async function openApp(path: string, edit: Edit = (routes) => routes) {
   vi.resetModules()
   const { routes } = await import('../../src/app/routes')
   const router = renderRoutes(await edit(routes), path)
-  return { router, user: userEvent.setup() }
+  return { router, user: setupUser() }
 }
 
 /** 공통 틀 안에 화면을 더한다. */
