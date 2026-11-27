@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { sessionUserId } from '../../api/session'
 import Amount from '../../components/Amount'
@@ -172,7 +172,9 @@ function useSendNow(): Sending {
   const [problem, setProblem] = useState<string>()
   const [announcement, setAnnouncement] = useState('')
 
-  useEffect(
+  // 화면이 그려지는 때(commit)에 바로 듣는다. useEffect는 그린 뒤에 늦게 돌 수 있어, 고쳐서 보내기(#237)로 돌아온 직후 끝난
+  // 보내기의 결과를 놓쳤다. 목록이 보이면 결과를 듣고 있다
+  useLayoutEffect(
     () =>
       onSendFinished((result, byUser) => {
         setProblem(problemOf(result))
