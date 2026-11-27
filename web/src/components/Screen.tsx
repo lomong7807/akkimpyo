@@ -36,6 +36,8 @@ interface TitleBarProps {
   parent: string
   /** 오른쪽 끝에 두는 화면의 글자 버튼 */
   action?: ReactNode
+  /** 넓은 화면에서 가운데 720px로 모으지 않고 내용 영역 전체 폭을 쓴다. 두 칸 하위 화면(달력 D-02)만 쓴다(00-common 2.5). */
+  fullWidth?: boolean
 }
 
 /** 하위 화면: 목록에서 들어간 상세, 설정, 관리 화면. 상단 바에 "뒤로"와 화면 이름을 둔다. */
@@ -43,18 +45,22 @@ export function SubScreen({ children, ...titleBarProps }: TitleBarProps & { chil
   return (
     <>
       <TitleBar {...titleBarProps} />
-      <main className={`${layout.contentWidth} ${styles.content}`}>{children}</main>
+      <main className={`${widthOf(titleBarProps.fullWidth)} ${styles.content}`}>{children}</main>
     </>
   )
 }
 
+function widthOf(fullWidth = false): string {
+  return fullWidth ? `${layout.contentWidth} ${layout.fullWidth}` : layout.contentWidth
+}
+
 /** 하위 화면의 상단 바. 내용의 배치가 다른 화면은 이것만 쓴다. */
-export function TitleBar({ title, parent, action }: TitleBarProps) {
+export function TitleBar({ title, parent, action, fullWidth }: TitleBarProps) {
   const goBack = useGoBack(parent)
   const { band, syncStatus } = use(ShellContext)
   return (
     <>
-      <header className={`${layout.contentWidth} ${styles.topBar} ${styles.titleBar}`}>
+      <header className={`${widthOf(fullWidth)} ${styles.topBar} ${styles.titleBar}`}>
         <div className={styles.back}>
           <Button kind="icon" icon="CaretLeft" aria-label="뒤로" onClick={goBack} />
         </div>

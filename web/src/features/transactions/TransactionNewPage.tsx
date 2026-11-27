@@ -6,6 +6,7 @@ import FullScreenForm from '../../components/FullScreenForm'
 import { useToast } from '../../components/ToastContext'
 import { useGoBack } from '../../components/useGoBack'
 import { useLeaveGuard } from '../../components/useLeaveGuard'
+import { clampDate, isDate, selectableRange, today as todayOfDevice } from '../../lib/calendarDate'
 import { useKeepDraft } from '../drafts/keepDraft'
 import { useRestoredDraft } from '../drafts/restoreDraft'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
@@ -47,7 +48,9 @@ export default function TransactionNewPage() {
   const [handoff] = useState(() => entryHandoffOf(location.state, owner))
   const [defaultAccountId, setDefaultAccountId] = useState<string>()
   if (defaultAccountId === undefined && accounts.data) setDefaultAccountId(defaultAccountOf(owner, accounts.data))
-  const form = useTransactionForm(defaultAccountId ?? '', () => ({ ...newTransactionValues(), ...handoff?.values }))
+  // 달력(D-02)의 데이터 없음 자리에서 열면 날짜를 고른 날로 채운다(D-04 들어오는 길, architect #300). 주소에는 담지 않는다.
+  // 한 줄 입력이 넘긴 값은 그 위에 채운다
+  const form = useTransactionForm(defaultAccountId ?? '', () => ({ ...valuesOnDate(location.state), ...handoff?.values }))
   // 값을 채운 입력은 펼친 채로 연다(D-04 (8))
   const { moreOpen, setMoreOpen, unfoldFor } = useMoreFold(handoff !== undefined)
   // 한 줄 입력에서 왔으면 닫기, 뒤로, 다른 길로 떠나도 홈의 입력칸에 글이 돌아온다. 저장하면 비운다(leaveAfterSave)
@@ -116,4 +119,15 @@ export default function TransactionNewPage() {
       <SaveChoiceDialog save={save} form={form} />
     </EntryCopiesContext>
   )
+}
+
+/**
+ * 새 입력의 기본값. 들어온 길이 날짜(`{ date }`, 달력의 고른 날)를 넘겼고 고를 수 있는 날짜(P-202)이면 날짜만 그날로 바꾼다.
+ * 모양이 다르거나 범위 밖이면 넘기지 않은 것과 같다(기기의 오늘).
+ */
+function valuesOnDate(state: unknown) {
+  const values = newTransactionValues()
+  const date = typeof state === 'object' && state !== null ? (state as Record<string, unknown>).date : undefined
+  if (typeof date !== 'string' || !isDate(date) || clampDate(date, selectableRange(todayOfDevice())) !== date) return values
+  return { ...values, occurredOn: date }
 }
