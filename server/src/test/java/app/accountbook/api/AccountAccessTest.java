@@ -137,6 +137,8 @@ class AccountAccessTest {
                 new Case("중복 경고(금액 없음)", (client, ledger) ->
                         client.get(transactions(ledger) + "/duplicates?occurredOn=2026-11-18"), 400),
                 new Case("휴지통", (client, ledger) -> client.get(transactions(ledger) + "/trash"), 200),
+                new Case("변경 이력", (client, ledger) ->
+                        client.get(transactions(ledger) + "/" + bExpense + "/history"), 200),
                 new Case("휴지통(틀린 cursor)", (client, ledger) -> client.get(transactions(ledger) + "/trash?cursor=x"), 400),
                 new Case("카테고리 제안", (client, ledger) -> client.get(suggestions(ledger) + "?payee=B"), 200),
                 new Case("카테고리 제안(101자 가맹점)", (client, ledger) ->

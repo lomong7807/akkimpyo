@@ -104,4 +104,8 @@ public class ChangeLog extends BaseEntity {
     public JsonNode getAfterValue() {
         return afterValue;
     }
+
+    short getFormatVersion() {
+        return formatVersion;
+    }
 }

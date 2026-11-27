@@ -1,7 +1,11 @@
 import type { RouteObject } from 'react-router'
 import { vi } from 'vitest'
 import { renderRoutes } from './renderRoutes'
+import { fetchScreenCodeFirst } from './screenCode'
 import { setupUser } from './testClock'
+
+// 파일의 첫 테스트가 화면 코드를 받는 시간을 테스트 밖에서 먼저 쓴다(#291)
+fetchScreenCodeFirst()
 
 type Edit = (routes: RouteObject[]) => RouteObject[] | Promise<RouteObject[]>
 

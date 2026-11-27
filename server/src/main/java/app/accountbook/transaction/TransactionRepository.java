@@ -31,4 +31,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
      */
     @EntityGraph(attributePaths = "lines")
     Optional<Transaction> findWithLinesById(UUID id);
+
+    /** 그 장부에 있는 거래인가. 휴지통의 거래도 있다. 완전히 지운 거래는 행이 없다. */
+    boolean existsByIdAndLedgerId(UUID id, UUID ledgerId);
 }
