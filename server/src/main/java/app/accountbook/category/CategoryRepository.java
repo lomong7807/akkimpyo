@@ -10,6 +10,9 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
 
     List<Category> findByLedgerIdOrderByCreatedAtAsc(UUID ledgerId);
 
+    /** 카테고리 목록의 순서(#34, dba 메모 PR #136): 미분류(system)가 뒤, 다음은 만든 시각, 같으면 id. */
+    List<Category> findByLedgerIdOrderBySystemAscCreatedAtAscIdAsc(UUID ledgerId);
+
     Optional<Category> findByLedgerIdAndKindAndSystemTrue(UUID ledgerId, CategoryKind kind);
 
     boolean existsByParentId(UUID parentId);
