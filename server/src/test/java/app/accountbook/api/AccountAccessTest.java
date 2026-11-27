@@ -16,6 +16,8 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -151,9 +153,20 @@ class AccountAccessTest {
         assertThat(denied.body().replace(denied.header("X-Request-Id"), ""))
                 .as("없는 장부와 같은 응답")
                 .isEqualTo(missing.body().replace(missing.header("X-Request-Id"), ""));
-        assertThat(denied.headers().keySet()).isEqualTo(missing.headers().keySet());
+        assertThat(endToEndHeaders(denied)).isEqualTo(endToEndHeaders(missing));
         assertThat(String.join("\n", denied.body(), denied.headers().toString())).doesNotContain(secretsOfB);
         assertThat(snapshot()).as("DB가 그대로다").isEqualTo(before);
+    }
+
+    /**
+     * 응답 헤더의 이름에서 연결을 다루는 것을 뺀다. Tomcat은 한 연결의 100번째 응답에 {@code Connection: close}를 붙여
+     * (maxKeepAliveRequests) 표의 줄 수에 따라 거부 응답과 없는 장부의 응답 중 하나에만 붙는다.
+     */
+    private static Set<String> endToEndHeaders(Reply reply) {
+        Set<String> names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        names.addAll(reply.headers().keySet());
+        names.removeAll(List.of("Connection", "Keep-Alive"));
+        return names;
     }
 
     /** flyway 이력을 뺀 모든 테이블의 모든 행. */
