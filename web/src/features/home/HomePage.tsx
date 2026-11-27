@@ -41,6 +41,7 @@ import {
   useMonthTotals,
   useRecentTransactions,
 } from '../transactions/useTransactionList'
+import OneLineInput from './OneLineInput'
 import styles from './Home.module.css'
 
 /** 구역이 기다리는 서버 조회. 불러오지 못했을 때 받지 못한 것만 다시 받는다 */
@@ -79,9 +80,10 @@ function keptFrom<T>(kept: Kept<LastMonth> | null | undefined, pick: (value: Las
  * 기기에 남긴 값(최근 한 달, 계좌, 카테고리)이 있으면 받는 동안 뼈대 대신 먼저 보이고(00-common 4.5), 연결이 없거나 새로 받지
  * 못하면 그 값을 기준 시각과 함께 보인다(F-908, P-902). 합계와 잔액은 마지막으로 서버와 맞춘 값이라 보내지 않은 입력을 넣지 않는다.
  * 홈을 열면 최근 한 달을 받아 기기에 남긴다(#238).
- * 1A 임시: 이번 달 합계는 눌리지 않고 머리 줄에 화살표가 없다(월별 통계 E-01은 1B). 한 줄 입력과 숨긴 계좌가 없다.
+ * 맨 위는 한 줄 입력(C-01 (1), #233)이고 보기 전용에게는 없다.
+ * 1A 임시: 이번 달 합계는 눌리지 않고 머리 줄에 화살표가 없다(월별 통계 E-01은 1B). 숨긴 계좌가 없다.
  * 예산·진행 중 이벤트·확인할 거래는 2·3단계다.
- * 넓은 화면은 두 칸이다: 왼쪽에 합계와 계좌 잔액, 오른쪽에 최근 거래.
+ * 넓은 화면은 한 줄 입력(전체 폭) 아래 두 칸이다: 왼쪽에 합계와 계좌 잔액, 오른쪽에 최근 거래.
  */
 export default function HomePage() {
   // 화면을 연 날의 오늘. 이번 달(기기의 오늘이 속한 달, planner 결정 2026-11-25)과 날짜 이름(올해인지)을 정한다
@@ -121,6 +123,7 @@ export default function HomePage() {
       {/* 뼈대는 구역마다 있지만 화면 읽기에는 한 번만 알린다 */}
       <LoadingStatus message={loading ? message : undefined} />
       <div className={styles.home}>
+        {canEdit(ledger) && <OneLineInput />}
         <div className={styles.column}>
           <MonthTotals
             month={month}

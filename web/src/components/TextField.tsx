@@ -54,13 +54,14 @@ export function InputField({
   optional,
   help,
   error,
+  labelHidden,
   count,
   action,
   ...inputProps
 }: TextFieldProps & { type: string; action?: ReactNode }) {
   const className = action ? `${styles.input} ${styles.withAction}` : styles.input
   return (
-    <Field label={label} optional={optional} help={help} error={error} count={count}>
+    <Field label={label} optional={optional} help={help} error={error} labelHidden={labelHidden} count={count}>
       {(control) => (
         <>
           <input
