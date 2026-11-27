@@ -5,6 +5,7 @@ import app.accountbook.common.NotFoundException;
 import app.accountbook.transaction.CreateResult;
 import app.accountbook.transaction.IdConflictException;
 import app.accountbook.transaction.TransactionCommand;
+import app.accountbook.transaction.TransactionFilter;
 import app.accountbook.transaction.TransactionListQuery;
 import app.accountbook.transaction.TransactionPage;
 import app.accountbook.transaction.TransactionService;
@@ -59,8 +60,8 @@ class TransactionController {
                                  @RequestParam(name = "limit", required = false) String limit,
                                  @RequestParam(name = "cursor", required = false) String cursor) {
         TransactionListRequest request = TransactionListRequest.of(ledgerId, month, date, limit, cursor);
-        TransactionPage page = transactionListQuery.page(actorId, ledgerId, request.scope(), request.after(),
-                request.limit());
+        TransactionPage page = transactionListQuery.page(actorId, ledgerId, request.scope(), TransactionFilter.NONE,
+                request.after(), request.limit());
         String nextCursor = page.next() == null ? null
                 : TransactionCursor.encode(ledgerId, request.scope(), page.next());
         return TransactionListResponse.of(page, userService.memberDisplayNames(actorId, ledgerId), nextCursor);

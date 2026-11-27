@@ -1,5 +1,6 @@
 package app.accountbook.transaction;
 
+import static app.accountbook.transaction.TransactionFilter.NONE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
@@ -213,10 +214,10 @@ class TransactionListQueryTest {
             assertThat(walk(new Day(day), limit)).as("limit " + limit).containsExactlyElementsOf(expected(day::equals));
         }
         assertOutOfRange("date", () -> listQuery.page(owner.getId(), ledgerId, new Day(LocalDate.of(1999, 12, 31)),
-                null, 1));
+                NONE, null, 1));
         // 서울 11-27의 1년 뒤는 2027-11-27이다.
         assertOutOfRange("date", () -> listQuery.page(owner.getId(), ledgerId, new Day(LocalDate.of(2027, 11, 28)),
-                null, 1));
+                NONE, null, 1));
         assertThatNoException().isThrownBy(() -> page(new Day(LocalDate.of(2027, 11, 27)), null, 1));
         assertThatNoException().isThrownBy(() -> page(new Day(LedgerDates.MIN_DATE), null, 1));
     }
@@ -354,10 +355,10 @@ class TransactionListQueryTest {
     void limit은_1부터_50까지이고_달은_2000_01부터_장부_시간대로_1년_뒤의_날이_속한_달까지다() {
         clock.stopAt(Instant.parse("2026-11-30T14:59:59Z")); // 서울 11-30, 1년 뒤는 2027-11-30
 
-        assertOutOfRange("limit", () -> listQuery.page(owner.getId(), ledgerId, NOVEMBER, null, 0));
-        assertOutOfRange("limit", () -> listQuery.page(owner.getId(), ledgerId, NOVEMBER, null, 51));
-        assertOutOfRange("month", () -> listQuery.page(owner.getId(), ledgerId, month(1999, 12), null, 1));
-        assertOutOfRange("month", () -> listQuery.page(owner.getId(), ledgerId, month(2027, 12), null, 1));
+        assertOutOfRange("limit", () -> listQuery.page(owner.getId(), ledgerId, NOVEMBER, NONE, null, 0));
+        assertOutOfRange("limit", () -> listQuery.page(owner.getId(), ledgerId, NOVEMBER, NONE, null, 51));
+        assertOutOfRange("month", () -> listQuery.page(owner.getId(), ledgerId, month(1999, 12), NONE, null, 1));
+        assertOutOfRange("month", () -> listQuery.page(owner.getId(), ledgerId, month(2027, 12), NONE, null, 1));
         assertThatNoException().isThrownBy(() -> page(month(2000, 1), null, 1));
         assertThatNoException().isThrownBy(() -> page(month(2027, 11), null, 50));
 
@@ -392,7 +393,7 @@ class TransactionListQueryTest {
     private TransactionPage page(TransactionScope scope, TransactionKey after, int limit) {
         entityManager.flush();
         entityManager.clear();
-        return listQuery.page(owner.getId(), ledgerId, scope, after, limit);
+        return listQuery.page(owner.getId(), ledgerId, scope, NONE, after, limit);
     }
 
     private List<DayTotals> dailyTotals(YearMonth month) {

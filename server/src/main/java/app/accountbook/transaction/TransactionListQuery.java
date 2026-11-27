@@ -21,10 +21,12 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
@@ -43,6 +45,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>합계({@link TransactionPage#totals()}, {@link TransactionPage#days()})는 P-205이고 DB가 계산한다. 쪽과는 다른
  * 문장이라, 그사이 다른 요청이 고친 거래는 쪽과 합계에 다르게 보일 수 있다.
+ *
+ * <p>필터({@link TransactionFilter}, #62)는 쪽과 합계에 같이 걸린다. 조건은 {@link #transactionFilter}와
+ * {@link #lineFilter}의 고정된 조각에서 고르고 값은 바인딩한다. 쪽은 맞는 라인이 있는 거래를 주고, 합계는 맞는 라인의
+ * 금액만 더한다(카테고리 필터의 나눈 거래, F-217).
  */
 @Component
 @Transactional(readOnly = true)
@@ -129,23 +135,27 @@ public class TransactionListQuery {
     }
 
     /**
-     * 한 쪽. 구성원 확인이 범위 검사보다 먼저다.
+     * 한 쪽. 구성원 확인이 범위 검사보다 먼저다. 다음 쪽은 첫 쪽과 같은 필터로 부른다(api의 cursor가 확인한다).
      *
-     * @param after 앞 쪽의 {@link TransactionPage#next()}. 첫 쪽이면 null
-     * @param limit 1~{@value #MAX_LIMIT}. 밖이면 {@code limit}의 {@code OUT_OF_RANGE}다
+     * @param filter 계좌·카테고리가 이 장부에 없으면(다른 장부의 것 포함) 그 입력란({@code accountId},
+     *               {@code categoryId})의 {@code NOT_FOUND}다
+     * @param after  앞 쪽의 {@link TransactionPage#next()}. 첫 쪽이면 null
+     * @param limit  1~{@value #MAX_LIMIT}. 밖이면 {@code limit}의 {@code OUT_OF_RANGE}다
      */
-    public TransactionPage page(UUID actorId, UUID ledgerId, TransactionScope scope, TransactionKey after, int limit) {
+    public TransactionPage page(UUID actorId, UUID ledgerId, TransactionScope scope, TransactionFilter filter,
+                                TransactionKey after, int limit) {
         ledgerAccess.requireMember(actorId, ledgerId);
         if (limit < 1 || limit > MAX_LIMIT) {
             throw new InvalidRequestException("limit", FieldErrorCode.OUT_OF_RANGE,
                     "한 번에 1건부터 50건까지 불러올 수 있습니다.");
         }
         DateRange range = range(scope, zoneOf(ledgerId));
-        List<Transaction> found = find(ledgerId, range, after, limit + 1);
+        TransactionFilter resolved = resolved(ledgerId, filter);
+        List<Transaction> found = find(ledgerId, range, resolved, after, limit + 1);
         List<TransactionView> items = views(found.subList(0, Math.min(limit, found.size())));
-        Totals totals = after != null || scope instanceof WholeLedger ? null : totals(ledgerId, range);
+        Totals totals = after != null || scope instanceof WholeLedger ? null : totals(ledgerId, range, resolved);
         return new TransactionPage(items, found.size() > limit ? TransactionKey.of(items.getLast()) : null, totals,
-                days(ledgerId, items));
+                days(ledgerId, items, resolved));
     }
 
     /**
@@ -164,7 +174,7 @@ public class TransactionListQuery {
         Map<LocalDate, Map<TransactionType, Long>> sums = daySums(entityManager.createQuery(
                         DAY_SUMS.formatted("t.occurredOn >= :from and t.occurredOn < :until"), Tuple.class)
                 .setParameter("from", range.from())
-                .setParameter("until", range.until()), ledgerId);
+                .setParameter("until", range.until()), ledgerId, TransactionFilter.NONE);
         return sums.keySet().stream().sorted().map(date -> dayTotals(date, sums)).toList();
     }
 
@@ -201,42 +211,43 @@ public class TransactionListQuery {
         return views(query.getResultList().stream().distinct().toList());
     }
 
-    /** 범위 전체의 P-205 합계. */
-    private Totals totals(UUID ledgerId, DateRange range) {
+    /** 범위 전체에서 필터에 맞는 라인의 P-205 합계. */
+    private Totals totals(UUID ledgerId, DateRange range, TransactionFilter filter) {
         Map<TransactionType, Long> sums = sums(entityManager.createQuery("""
                         select t.type, cast(sum(l.amount) as BigInteger)
                           from TransactionLine l
                           join l.transaction t
                          where l.ledgerId = :ledgerId
                            and t.ledgerId = :ledgerId
-                           and t.occurredOn >= :from and t.occurredOn < :until
+                           and t.occurredOn >= :from and t.occurredOn < :until%s
                            and t.type <> :transfer
                            and t.deletedAt is null
                            and t.status <> :canceled
                          group by t.type
-                        """, Tuple.class)
+                        """.formatted(sumFilter(filter)), Tuple.class)
                 .setParameter("from", range.from())
-                .setParameter("until", range.until()), ledgerId).stream()
+                .setParameter("until", range.until()), ledgerId, filter).stream()
                 .collect(Collectors.toMap(row -> row.get(0, TransactionType.class), TransactionListQuery::sum));
         return new Totals(sums.getOrDefault(TransactionType.INCOME, 0L),
                 expense(sums.getOrDefault(TransactionType.EXPENSE, 0L)));
     }
 
-    /** 이 쪽에 나온 날마다 그날 전체의 P-205 합계. 한 날이 두 쪽에 걸쳐도 같은 값이다. 쪽마다 한 문장이다. */
-    private List<DayTotals> days(UUID ledgerId, List<TransactionView> items) {
+    /** 이 쪽에 나온 날마다 그날 전체에서 필터에 맞는 P-205 합계. 한 날이 두 쪽에 걸쳐도 같은 값이다. 쪽마다 한 문장이다. */
+    private List<DayTotals> days(UUID ledgerId, List<TransactionView> items, TransactionFilter filter) {
         List<LocalDate> dates = items.stream().map(TransactionView::occurredOn).distinct().toList();
         if (dates.isEmpty()) {
             return List.of();
         }
         Map<LocalDate, Map<TransactionType, Long>> sums = daySums(entityManager.createQuery(
-                        DAY_SUMS.formatted("t.occurredOn in :dates"), Tuple.class)
-                .setParameter("dates", dates), ledgerId);
+                        DAY_SUMS.formatted("t.occurredOn in :dates" + sumFilter(filter)), Tuple.class)
+                .setParameter("dates", dates), ledgerId, filter);
         return dates.stream().map(date -> dayTotals(date, sums)).toList();
     }
 
     /** {@link #DAY_SUMS}의 행을 날짜와 종류로 묶은 합. */
-    private static Map<LocalDate, Map<TransactionType, Long>> daySums(TypedQuery<Tuple> query, UUID ledgerId) {
-        return sums(query, ledgerId).stream()
+    private static Map<LocalDate, Map<TransactionType, Long>> daySums(TypedQuery<Tuple> query, UUID ledgerId,
+                                                                       TransactionFilter filter) {
+        return sums(query, ledgerId, filter).stream()
                 .collect(Collectors.groupingBy(row -> row.get(2, LocalDate.class),
                         Collectors.toMap(row -> row.get(0, TransactionType.class), TransactionListQuery::sum)));
     }
@@ -252,8 +263,8 @@ public class TransactionListQuery {
      * 합계 질의의 공통 조건 값. 라인과 거래에 장부 조건을 각각 건다(docs/db/schema-standards.md 4절). 수입·지출 구분은
      * 카테고리가 아니라 거래 종류로 한다. 서비스가 카테고리의 구분을 종류와 맞추므로 월 통계(MonthlyStatsQuery)와 같은 값이다.
      */
-    private static List<Tuple> sums(TypedQuery<Tuple> query, UUID ledgerId) {
-        return query.setParameter("ledgerId", ledgerId)
+    private static List<Tuple> sums(TypedQuery<Tuple> query, UUID ledgerId, TransactionFilter filter) {
+        return bind(query, filter).setParameter("ledgerId", ledgerId)
                 .setParameter("transfer", TransactionType.TRANSFER)
                 .setParameter("canceled", TransactionStatus.CANCELED)
                 .getResultList();
@@ -285,9 +296,11 @@ public class TransactionListQuery {
         };
     }
 
-    private List<Transaction> find(UUID ledgerId, DateRange range, TransactionKey after, int size) {
+    private List<Transaction> find(UUID ledgerId, DateRange range, TransactionFilter filter, TransactionKey after,
+                                   int size) {
         String next = after == null ? "" : after.occurredTime() == null ? AFTER_UNTIMED : AFTER_TIMED;
-        TypedQuery<Transaction> query = entityManager.createQuery(PAGE.formatted(next), Transaction.class)
+        TypedQuery<Transaction> query = bind(entityManager.createQuery(PAGE.formatted(pageFilter(filter) + next),
+                        Transaction.class), filter)
                 .setParameter("ledgerId", ledgerId)
                 .setParameter("from", range.from())
                 .setParameter("until", range.until())
@@ -300,6 +313,80 @@ public class TransactionListQuery {
         }
         // 라인을 함께 읽어 거래 하나가 라인 수만큼의 행으로 온다. 같은 거래는 같은 객체다.
         return query.getResultList().stream().distinct().toList();
+    }
+
+    /**
+     * 필터의 계좌와 카테고리가 이 장부의 것인지 보고, 고른 상위 카테고리에 그 하위를 더한 필터. 다른 장부의 id는 없는 id와
+     * 같은 오류다. 숨긴 계좌도 받는다. 카테고리는 2단계까지라(P-221) 하위의 하위는 없다. 고른 것이 없으면 읽지 않는다.
+     */
+    private TransactionFilter resolved(UUID ledgerId, TransactionFilter filter) {
+        List<InvalidRequestException> errors = new ArrayList<>();
+        if (!filter.accountIds().isEmpty() && !inLedger(
+                "select a.id from Account a where a.ledgerId = :ledgerId and a.id in :ids",
+                ledgerId, filter.accountIds()).containsAll(filter.accountIds())) {
+            errors.add(new InvalidRequestException("accountId", FieldErrorCode.NOT_FOUND, "장부에 없는 계좌입니다."));
+        }
+        Set<UUID> categoryIds = filter.categoryIds().isEmpty() ? Set.of() : inLedger(
+                "select c.id from Category c where c.ledgerId = :ledgerId and (c.id in :ids or c.parentId in :ids)",
+                ledgerId, filter.categoryIds());
+        if (!categoryIds.containsAll(filter.categoryIds())) {
+            errors.add(new InvalidRequestException("categoryId", FieldErrorCode.NOT_FOUND, "장부에 없는 카테고리입니다."));
+        }
+        if (!errors.isEmpty()) {
+            throw InvalidRequestException.ofAll(errors);
+        }
+        return new TransactionFilter(filter.accountIds(), categoryIds, filter.types(), filter.status());
+    }
+
+    private Set<UUID> inLedger(String jpql, UUID ledgerId, Set<UUID> ids) {
+        return Set.copyOf(entityManager.createQuery(jpql, UUID.class)
+                .setParameter("ledgerId", ledgerId)
+                .setParameter("ids", ids)
+                .getResultList());
+    }
+
+    /**
+     * 쪽의 하위 질의(거래 {@code p})에 더하는 필터 조건. 라인 조건은 거래 id로 라인을 찾는 exists라 이체의 두 라인이 모두
+     * 맞아도 거래는 한 번 나온다. 라인에 장부 조건을 걸지 않는 까닭은 {@link #PAGE}의 라인 읽기와 같다.
+     */
+    private static String pageFilter(TransactionFilter filter) {
+        String line = lineFilter(filter, "fl");
+        return transactionFilter(filter, "p") + (line.isEmpty() ? ""
+                : " and exists (select fl.id from TransactionLine fl where fl.transaction = p" + line + ")");
+    }
+
+    /** 합계 질의(라인 {@code l}, 거래 {@code t})에 더하는 필터 조건. 맞는 라인의 금액만 더한다. */
+    private static String sumFilter(TransactionFilter filter) {
+        return transactionFilter(filter, "t") + lineFilter(filter, "l");
+    }
+
+    /** 거래에 거는 조각. alias는 이 클래스의 질의에 있는 이름이고, 사용자 값은 조각에 들지 않는다. */
+    private static String transactionFilter(TransactionFilter filter, String alias) {
+        return (filter.types().isEmpty() ? "" : " and " + alias + ".type in :types")
+                + (filter.status() == null ? "" : " and " + alias + ".status = :status");
+    }
+
+    /** 라인에 거는 조각. 계좌와 카테고리는 한 라인이 둘 다 맞아야 한다. */
+    private static String lineFilter(TransactionFilter filter, String alias) {
+        return (filter.accountIds().isEmpty() ? "" : " and " + alias + ".accountId in :accountIds")
+                + (filter.categoryIds().isEmpty() ? "" : " and " + alias + ".categoryId in :categoryIds");
+    }
+
+    /** 조각에 쓴 이름에만 값을 넣는다. */
+    private static <T extends TypedQuery<?>> T bind(T query, TransactionFilter filter) {
+        if (!filter.types().isEmpty()) {
+            query.setParameter("types", filter.types());
+        }
+        if (filter.status() != null) {
+            query.setParameter("status", filter.status());
+        }
+        if (!filter.accountIds().isEmpty()) {
+            query.setParameter("accountIds", filter.accountIds());
+        }
+        if (!filter.categoryIds().isEmpty()) {
+            query.setParameter("categoryIds", filter.categoryIds());
+        }
+        return query;
     }
 
     /** 읽은 순서 그대로의 읽기 모델. 고친 사람은 {@link #lastEdits}다. */
