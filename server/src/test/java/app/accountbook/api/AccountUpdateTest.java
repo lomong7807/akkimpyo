@@ -76,12 +76,14 @@ class AccountUpdateTest {
         assertThat(updated.status()).as(updated.body()).isEqualTo(200);
         assertThat(updated.header("Content-Type")).isEqualTo("application/json");
         JsonNode account = updated.json();
-        assertThat(account.propertyNames()).containsExactly("id", "name", "type", "balance", "openingDate");
+        assertThat(account.propertyNames()).containsExactly("id", "name", "type", "balance", "openingBalance", "openingDate");
         assertThat(List.of(account.get("id").asString(), account.get("name").asString(),
                 account.get("type").asString(), account.get("openingDate").asString()))
                 .containsExactly(living.toString(), "신한카드", "CARD", "2026-10-31");
         assertThat(account.get("balance").isIntegralNumber()).isTrue();
         assertThat(account.get("balance").asLong()).as("부호를 바꾸지 않는다").isEqualTo(-350_000);
+        assertThat(account.get("openingBalance").isIntegralNumber()).isTrue();
+        assertThat(account.get("openingBalance").asLong()).isEqualTo(-350_000);
         assertThat(client.get(path()).json().get("items").get(0)).isEqualTo(account);
         assertThat(stored(living)).isEqualTo("신한카드 CARD -350000 2026-10-31");
     }
@@ -218,6 +220,7 @@ class AccountUpdateTest {
         Reply reply = put(account, body("\"월급통장\"", "\"BANK\"", openingBalance, quoted(openingDate)));
         assertThat(reply.status()).as(reply.body()).isEqualTo(200);
         long balance = reply.json().get("balance").asLong();
+        assertThat(reply.json().get("openingBalance").asString()).as("시작 잔액은 보낸 값 그대로").isEqualTo(openingBalance);
         JsonNode listed = client.get(path()).json().get("items").valueStream()
                 .filter(item -> item.get("id").asString().equals(account.toString()))
                 .findFirst().orElseThrow();
