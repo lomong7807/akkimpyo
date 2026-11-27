@@ -61,7 +61,7 @@ class TransactionCreateFieldErrorTest {
         food = category(owner, ledgerId, "식비", CategoryKind.EXPENSE);
         salary = category(owner, ledgerId, "급여", CategoryKind.INCOME);
         removedCategory = category(owner, ledgerId, "지운분류", CategoryKind.EXPENSE);
-        categoryService.delete(owner.getId(), removedCategory);
+        categoryService.delete(owner.getId(), ledgerId, removedCategory, null, null);
 
         User other = fixtures.user("other@example.com");
         UUID otherLedger = fixtures.personalLedgerId(other);

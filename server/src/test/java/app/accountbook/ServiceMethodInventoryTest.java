@@ -52,6 +52,9 @@ class ServiceMethodInventoryTest {
             "LoginService.logout",
             "로그아웃(#28). 호출자가 없다(access token을 보지 않는다). 사용자 id를 받지 않고, refresh 쿠키 값이 가리키는 계열 "
                     + "하나만 폐기하며 아무것도 돌려주지 않는다",
+            "TransactionCategoryUsage.moveLines",
+            "카테고리 삭제용 포트(CategoryUsage) 구현(#3). CategoryService가 구성원, 장부의 카테고리, 옮길 곳을 확인하고 잠근 "
+                    + "뒤에 부른다",
             "DemoSeed.run",
             "local 프로파일에서만 생겨 기동 때 스프링이 부르는 ApplicationRunner(#349). demo.seed가 있을 때만 활성 프로파일을 "
                     + "다시 보고 데모 계정만 넣거나 지운다. api는 demo 모듈을 참조할 수 없다(ModuleBoundaryTest)"),
@@ -73,8 +76,8 @@ class ServiceMethodInventoryTest {
             "access token에서 호출자를 알아내는 메서드 자체다. 사용자 id를 받지 않는다",
             "TransactionAccountUsage.isUsed",
             "계좌 삭제 제한용 포트(AccountUsage) 구현. AccountService가 구성원 확인 뒤에 부른다",
-            "TransactionCategoryUsage.isUsed",
-            "카테고리 삭제 제한용 포트(CategoryUsage) 구현. CategoryService가 구성원 확인 뒤에 부른다",
+            "TransactionCategoryUsage.countTransactions",
+            "카테고리 삭제용 포트(CategoryUsage) 구현. CategoryService가 구성원과 장부의 카테고리인지 확인한 뒤에 부른다",
             "RequiredDbSettings.postProcessAfterInitialization",
             "기동할 때 스프링이 부르는 BeanPostProcessor. DB 접속 변수가 있는지만 보고 장부 데이터를 다루지 않는다"))
             .flatMap(map -> map.entrySet().stream())

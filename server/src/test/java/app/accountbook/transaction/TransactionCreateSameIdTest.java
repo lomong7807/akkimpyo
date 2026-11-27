@@ -250,7 +250,7 @@ class TransactionCreateSameIdTest {
                 expense(id, bank, null, 12_000, null), DEVICE);
         entityManager.flush();
         accountService.delete(owner.getId(), ledgerId, cash);
-        categoryService.delete(owner.getId(), food);
+        categoryService.delete(owner.getId(), ledgerId, food, null, DEVICE);
 
         assertThat(createAs(owner, first)).isEqualTo(new CreateResult(updated, false));
     }
