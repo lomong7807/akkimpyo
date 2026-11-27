@@ -17,6 +17,11 @@
     calc(var(--size-tabbar) + env(safe-area-inset-bottom) + var(--space-4));
 }
 
+/* 토스트(ToastProvider)는 휴대폰 배치에서 하단 탭 위, 넓은 화면에서 사이드바 옆에 놓인다 */
+:root:has(.withTabs) {
+  --toast-offset: calc(var(--size-tabbar) + env(safe-area-inset-bottom));
+}
+
 @media (width >= 1024px) {
   .frame {
     flex-direction: row;
@@ -27,6 +32,8 @@
   }
 
   :root:has(.frame) {
+    --toast-start: var(--width-sidebar);
+
     scroll-padding-block: 0;
   }
 }

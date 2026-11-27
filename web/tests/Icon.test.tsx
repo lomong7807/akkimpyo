@@ -4,16 +4,26 @@ import Icon, { type IconName } from '../src/components/Icon'
 import { readWebFile } from './support/webFile'
 
 const files: Record<IconName, string> = {
+  CalendarBlank: 'calendar-blank',
+  CaretDown: 'caret-down',
   CaretLeft: 'caret-left',
   CaretRight: 'caret-right',
+  CaretUp: 'caret-up',
   Check: 'check',
+  CloudArrowUp: 'cloud-arrow-up',
   DotsThree: 'dots-three',
   Eye: 'eye',
   EyeSlash: 'eye-slash',
+  House: 'house',
   Info: 'info',
+  ListBullets: 'list-bullets',
+  MagnifyingGlass: 'magnifying-glass',
   Plus: 'plus',
   SignOut: 'sign-out',
+  Tag: 'tag',
+  Wallet: 'wallet',
   WarningCircle: 'warning-circle',
+  WifiSlash: 'wifi-slash',
   X: 'x',
 }
 const names = Object.keys(files) as IconName[]

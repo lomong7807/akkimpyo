@@ -6,6 +6,17 @@
   list-style: none;
 }
 
+/* 내용을 가운데로 모으는 폭에서는 묶음 사이의 선이 내용 폭에 맞고 줄의 바탕만 넓다 */
+@media (width >= 768px) {
+  .group {
+    margin-inline: 0;
+  }
+
+  .group > li {
+    margin-inline: calc(-1 * var(--space-16));
+  }
+}
+
 .group + .group {
   margin-top: var(--space-24);
   padding-top: var(--space-24);

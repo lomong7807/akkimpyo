@@ -1,17 +1,19 @@
 import { onlineManager } from '@tanstack/react-query'
-import { cleanup, fireEvent, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import { useNavigate, type RouteObject } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { watchConnection } from '../src/api/connection'
 import { login } from '../src/api/session'
 import PlainLayout from '../src/app/PlainLayout'
 import { createQueryClient } from '../src/app/queryClient'
 import LoginPage from '../src/features/auth/LoginPage'
+import { goOffline, goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { renderRoutes } from './support/renderRoutes'
+import { holdClock, passTime, setupUser } from './support/testClock'
 import { resetViewport, setViewportWidth } from './support/viewport'
 
 vi.stubGlobal('scrollTo', vi.fn())
@@ -29,6 +31,8 @@ const emailFormat = '이메일 주소 형식을 확인해 주세요'
 const passwordRequired = '비밀번호를 입력해 주세요'
 const refused = '이메일 또는 비밀번호가 맞지 않아요'
 const failed = '문제가 생겨 로그인하지 못했어요. 잠시 후 다시 시도해 주세요.'
+const lost = '연결이 끊겨 로그인하지 못했어요. 연결되면 다시 시도해 주세요.'
+const offlineReason = '연결되면 로그인할 수 있어요'
 
 const email = () => screen.getByLabelText<HTMLInputElement>('이메일')
 const password = () => screen.getByLabelText<HTMLInputElement>('비밀번호')
@@ -61,7 +65,7 @@ function routesWith(login: ReactNode): RouteObject[] {
 function openLogin({ queryClient = createQueryClient(), sessionEnded = false, initialEmail = '' } = {}) {
   const login = <Login sessionEnded={sessionEnded} initialEmail={initialEmail} />
   const router = renderRoutes(routesWith(login), '/login', queryClient)
-  return { user: userEvent.setup(), router }
+  return { user: setupUser(), router }
 }
 
 /** 로그인 API의 응답을 정하고, 받은 본문을 모아 돌려준다. */
@@ -78,12 +82,12 @@ function respondToLogin(respond: () => Response | Promise<Response>) {
 
 const success = () => HttpResponse.json({ accessToken: 'token-1' })
 
-async function fill(user: ReturnType<typeof userEvent.setup>, emailValue: string, passwordValue: string) {
+async function fill(user: ReturnType<typeof setupUser>, emailValue: string, passwordValue: string) {
   await user.type(email(), emailValue)
   await user.type(password(), passwordValue)
 }
 
-async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
+async function fillAndSubmit(user: ReturnType<typeof setupUser>) {
   await fill(user, 'name@example.com', 'pass1234')
   await user.click(loginButton())
 }
@@ -114,6 +118,14 @@ describe('로그인(A-02)의 요소', () => {
     openLogin()
     expect(password().type).toBe('password')
     expect(password().autocomplete).toBe('current-password')
+  })
+
+  it('비밀번호 칸의 보기 버튼 이름은 "비밀번호 보기"이고, 누르면 "비밀번호 숨기기"다', async () => {
+    const { user } = openLogin()
+    await user.click(screen.getByRole('button', { name: '비밀번호 보기' }))
+    expect(password().type).toBe('text')
+    await user.click(screen.getByRole('button', { name: '비밀번호 숨기기' }))
+    expect(password().type).toBe('password')
   })
 
   it('화면을 열면 이메일 칸에 초점을 둔다', () => {
@@ -383,14 +395,17 @@ describe('처리 중', () => {
     expect(router.state.location.pathname).toBe('/signup')
   })
 
-  it('다시 보내는 동안 앞선 오류 문구를 지운다', async () => {
+  /* 거부 문구도 다시 보내는 동안 지우지 않고 새 결과가 올 때까지 남긴다(designer 검토 2026-11-26, #224) */
+  it('다시 보내는 동안 앞선 거부 문구를 남기고 로그인만 돈다', async () => {
     const answers = [Promise.resolve(problem(401, 'INVALID_CREDENTIALS')), new Promise<Response>(() => {})]
-    respondToLogin(() => answers.shift()!)
+    const bodies = respondToLogin(() => answers.shift()!)
     const { user } = openLogin()
     await fillAndSubmit(user)
     await screen.findByText(refused)
     await user.click(loginButton())
-    await vi.waitFor(() => expect(screen.queryByText(refused)).toBeNull())
+    await vi.waitFor(() => expect(bodies).toHaveLength(2))
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([refused])
+    expect(loginButton().getAttribute('aria-busy')).toBe('true')
   })
 })
 
@@ -439,6 +454,39 @@ describe('서버가 거부함', () => {
     expect(refresh).not.toHaveBeenCalled()
   })
 
+  it('칸을 고쳐도 거부 문구는 다시 보낼 때까지 남는다', async () => {
+    respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByText(refused)
+    await user.type(email(), 'm')
+    await user.type(password(), '5')
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([refused])
+  })
+
+  it('다시 보낸 것이 또 거부되면 문구를 새로 그려 다시 읽히게 한다', async () => {
+    respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    const first = await screen.findByRole('alert')
+    await user.click(loginButton())
+    await vi.waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([refused])
+    expect(loginButton().hasAttribute('aria-busy')).toBe(false)
+  })
+
+  it('다시 보낸 것이 서버 오류면 거부 문구를 "다시 시도" 문구로 바꾼다', async () => {
+    const answers = [problem(401, 'INVALID_CREDENTIALS'), problem(500, 'INTERNAL_ERROR')]
+    respondToLogin(() => answers.shift()!)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByText(refused)
+    await user.click(loginButton())
+    await screen.findByText(failed)
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([failed])
+    expect(retryButton()).toBeTruthy()
+  })
+
   it('비운 채로 다시 누르면 앞선 거부 문구를 지우고 칸의 오류만 보인다', async () => {
     respondToLogin(() => problem(401, 'INVALID_CREDENTIALS'))
     const { user } = openLogin()
@@ -451,11 +499,83 @@ describe('서버가 거부함', () => {
   })
 })
 
+describe('연결이 없을 때(00-common 4.3, 1B #238)', () => {
+  /** 브라우저의 연결 신호를 앱이 받게 하고 테스트가 끝나면 멈춘다 */
+  function watch() {
+    const stop = watchConnection()
+    onTestFinished(stop)
+  }
+
+  it('로그인 버튼은 비활성이고 바로 위에 "연결되면 로그인할 수 있어요"를 보인다. 칸은 쓸 수 있고 엔터로도 보내지 않는다', async () => {
+    watch()
+    const bodies = respondToLogin(success)
+    const { user } = openLogin()
+    act(() => goOffline())
+    expect(loginButton().getAttribute('aria-disabled')).toBe('true')
+    const reason = loginButton().previousElementSibling as HTMLElement
+    expect(reason.textContent).toBe(offlineReason)
+    expect(reason.getAttribute('role')).toBe('status')
+    await fill(user, 'name@example.com', 'pass1234')
+    await user.click(loginButton())
+    await user.type(password(), '{Enter}')
+    expect(bodies).toEqual([])
+    expect(email().value).toBe('name@example.com')
+    act(() => goOnline())
+  })
+
+  it('연결이 돌아오면 그 줄을 지우고 바로 누를 수 있다', async () => {
+    watch()
+    respondToLogin(success)
+    const { user, router } = openLogin()
+    act(() => goOffline())
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(loginButton().getAttribute('aria-disabled')).toBeNull()
+    await fillAndSubmit(user)
+    await screen.findByRole('heading', { name: '홈' })
+    expect(router.state.location.pathname).toBe('/home')
+  })
+
+  it.each([
+    ['맞지 않는 비밀번호', () => problem(401, 'INVALID_CREDENTIALS'), refused],
+    ['서버 오류', () => problem(500, 'INTERNAL_ERROR'), failed],
+  ])('앞선 실패 문구(%s)가 있으면 연결이 끊길 때 안내 줄이 그것을 대신하고, 다시 연결돼도 되살리지 않는다(designer #238)', async (_, respond, message) => {
+    watch()
+    respondToLogin(respond)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    expect((await screen.findByRole('alert')).textContent).toBe(message)
+    act(() => goOffline())
+    expect(screen.queryByText(message)).toBeNull()
+    expect(loginButton().previousElementSibling!.textContent).toBe(offlineReason)
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(screen.queryByText(message)).toBeNull()
+    expect(loginButton().getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('요청 중에 끊기면 그 줄 대신 "연결이 끊겨 로그인하지 못했어요."와 "다시 시도"(연결이 없는 동안 비활성)를 보이고, 돌아오면 누를 수 있다', async () => {
+    watch()
+    const answers = [() => HttpResponse.error(), success]
+    respondToLogin(() => answers.shift()!())
+    const { user, router } = openLogin()
+    await fillAndSubmit(user)
+    expect((await screen.findByRole('alert')).textContent).toBe(lost)
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    expect(loginButton().getAttribute('aria-disabled')).toBe('true')
+    act(() => goOnline())
+    expect(retryButton().getAttribute('aria-disabled')).toBeNull()
+    await user.click(retryButton())
+    await screen.findByRole('heading', { name: '홈' })
+    expect(router.state.location.pathname).toBe('/home')
+  })
+})
+
 describe('서버 오류와 지연', () => {
   it.each([
     ['500', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['429', () => problem(429, 'TOO_MANY_REQUESTS')],
     ['403', () => problem(403, 'ORIGIN_NOT_ALLOWED')],
     ['400 MALFORMED_REQUEST', () => problem(400, 'MALFORMED_REQUEST')],
@@ -478,16 +598,12 @@ describe('서버 오류와 지연', () => {
     respondToLogin(() => new Promise(() => {}))
     const { user } = openLogin()
     await fill(user, 'name@example.com', 'pass1234')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      fireEvent.click(loginButton())
-      await vi.advanceTimersByTimeAsync(14_900)
-      expect(screen.queryByRole('alert')).toBeNull()
-      await vi.advanceTimersByTimeAsync(200)
-      expect(screen.getByRole('alert').textContent).toBe(failed)
-    } finally {
-      vi.useRealTimers()
-    }
+    holdClock()
+    fireEvent.click(loginButton())
+    await passTime(14_900)
+    expect(screen.queryByRole('alert')).toBeNull()
+    await passTime(200)
+    expect(screen.getByRole('alert').textContent).toBe(failed)
   })
 
   it('저절로 다시 보내지 않는다', async () => {
@@ -499,10 +615,10 @@ describe('서버 오류와 지연', () => {
     expect(bodies).toHaveLength(1)
   })
 
-  it('브라우저가 연결 없음이라고 해도 멈춰 기다리지 않고 실패를 알린다', async () => {
+  it('TanStack이 연결 없음이라고 해도 멈춰 기다리지 않고 실패를 알린다', async () => {
     onlineManager.setOnline(false)
     try {
-      respondToLogin(() => HttpResponse.error())
+      respondToLogin(() => problem(500, 'INTERNAL_ERROR'))
       const { user } = openLogin()
       await fillAndSubmit(user)
       expect((await screen.findByRole('alert')).textContent).toBe(failed)
@@ -525,16 +641,66 @@ describe('서버 오류와 지연', () => {
     ])
   })
 
-  it('"다시 시도"가 사라져도 초점이 로그인 버튼에 남는다', async () => {
+  /* 다시 보내는 동안 문구를 남기고 누른 버튼만 도는 표시다(designer 규칙 #102, 계좌 추가·거래 입력과 같다) */
+  it('"다시 시도"로 다시 보내는 동안 문구를 둔 채 "다시 시도"만 돌고 로그인은 누를 수 없으며 초점이 남는다', async () => {
     const answers = [Promise.resolve(problem(500, 'INTERNAL_ERROR')), new Promise<Response>(() => {})]
-    respondToLogin(() => answers.shift()!)
+    const bodies = respondToLogin(() => answers.shift()!)
     const { user } = openLogin()
     await fillAndSubmit(user)
     await screen.findByRole('alert')
     retryButton().focus()
     await user.keyboard('{Enter}')
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull())
-    expect(document.activeElement).toBe(loginButton())
+    await vi.waitFor(() => expect(bodies).toHaveLength(2))
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect(loginButton().hasAttribute('aria-busy')).toBe(false)
+    expect(loginButton().getAttribute('aria-disabled')).toBe('true')
+    expect(document.activeElement).toBe(retryButton())
+    await user.click(loginButton())
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('로그인을 다시 누르면 문구를 둔 채 로그인만 도는 표시이고 "다시 시도"는 누를 수 없다', async () => {
+    const answers = [Promise.resolve(problem(500, 'INTERNAL_ERROR')), new Promise<Response>(() => {})]
+    const bodies = respondToLogin(() => answers.shift()!)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByRole('alert')
+    await user.click(loginButton())
+    await vi.waitFor(() => expect(bodies).toHaveLength(2))
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(loginButton().getAttribute('aria-busy')).toBe('true')
+    expect(retryButton().hasAttribute('aria-busy')).toBe(false)
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    await user.click(retryButton())
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('다시 시도한 것이 또 실패하면 문구를 새로 그려 다시 읽히게 하고 초점은 "다시 시도"에 남는다', async () => {
+    const answers = [problem(500, 'INTERNAL_ERROR'), problem(503, 'INTERNAL_ERROR')]
+    respondToLogin(() => answers.shift()!)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    const first = await screen.findByRole('alert')
+    retryButton().focus()
+    await user.keyboard('{Enter}')
+    await vi.waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().hasAttribute('aria-busy')).toBe(false)
+    expect(loginButton().hasAttribute('aria-disabled')).toBe(false)
+    expect(document.activeElement).toBe(retryButton())
+  })
+
+  it('다시 보낸 것이 맞지 않는 이메일·비밀번호면 문구를 그것으로 바꾸고 "다시 시도"를 지운다', async () => {
+    const answers = [problem(500, 'INTERNAL_ERROR'), problem(401, 'INVALID_CREDENTIALS')]
+    respondToLogin(() => answers.shift()!)
+    const { user } = openLogin()
+    await fillAndSubmit(user)
+    await screen.findByRole('alert')
+    await user.click(retryButton())
+    await screen.findByText(refused)
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([refused])
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull()
   })
 })
 
@@ -584,7 +750,7 @@ it('성공한 뒤 다음 화면이 열릴 때까지 다시 누를 수 없다', a
   const bodies = respondToLogin(success)
   const slowHome = { path: '/home', loader: () => new Promise(() => {}), element: null, hydrateFallbackElement: null }
   renderRoutes([{ path: '/login', element: <Login /> }, slowHome], '/login')
-  const user = userEvent.setup()
+  const user = setupUser()
   await fillAndSubmit(user)
   await vi.waitFor(() => expect(bodies).toHaveLength(1))
   await new Promise((resolve) => setTimeout(resolve, 30))

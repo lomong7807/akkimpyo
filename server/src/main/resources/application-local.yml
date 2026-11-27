@@ -1,0 +1,9 @@
+# 로컬 개발 전용(SPRING_PROFILES_ACTIVE=local). 레포 루트 compose.yaml의 DB에 붙는다.
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/accountbook}
+    username: ${DB_USERNAME:accountbook}
+    password: ${DB_PASSWORD:accountbook}
+server:
+  # 같은 망의 다른 기기에서 접속하지 못하게 이 컴퓨터 안에서만 연다.
+  address: 127.0.0.1

@@ -1,0 +1,22 @@
+/* 줄 폭보다 길 때만 끊는다. 놓는 칸은 그 전에 다음 줄로 내려가게 한다 */
+.amount {
+  overflow-wrap: anywhere;
+}
+
+.expense,
+.balance {
+  color: var(--color-text);
+}
+
+.income {
+  color: var(--color-accent);
+}
+
+.transfer,
+.canceled {
+  color: var(--color-text-secondary);
+}
+
+.canceled {
+  text-decoration: line-through;
+}

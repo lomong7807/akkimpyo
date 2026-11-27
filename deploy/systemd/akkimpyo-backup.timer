@@ -1,0 +1,11 @@
+[Unit]
+Description=아낌표 DB 백업 (매일 03:30 한국 시각)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Seoul
+AccuracySec=1min
+# 그 시각에 서버가 꺼져 있었으면 켜진 뒤에 돈다.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

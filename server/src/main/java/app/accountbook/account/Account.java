@@ -8,8 +8,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.util.UUID;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "account")
@@ -35,8 +33,8 @@ public class Account extends BaseEntity {
     @Column(name = "opening_date", nullable = false)
     private LocalDate openingDate;
 
-    @JdbcTypeCode(SqlTypes.CHAR)
-    @Column(name = "currency", nullable = false, length = 3)
+    /** 늘 {@link #DEFAULT_CURRENCY}다(P-201). DB의 ck_account_currency_values와 같은 값이다. */
+    @Column(name = "currency", nullable = false)
     private String currency;
 
     protected Account() {

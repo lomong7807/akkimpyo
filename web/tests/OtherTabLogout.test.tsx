@@ -211,7 +211,7 @@ it('로그아웃을 안 탭에서 다른 계정으로 로그인할 수 있다', 
   await opened.user.type(await screen.findByLabelText('이메일'), 'name@example.com')
   await opened.user.type(screen.getByLabelText('비밀번호'), 'pass1234')
   await press(opened.user, '로그인')
-  await screen.findByText('찾을 수 없어요.')
+  await screen.findByRole('heading', { level: 1, name: '홈' })
   expect(addressOf(opened)).toBe('/home')
   storageEvent('akkimpyo-login')
   await settle()

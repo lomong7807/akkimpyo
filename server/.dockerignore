@@ -1,0 +1,23 @@
+# 빌드 산출물
+build/
+.gradle/
+bin/
+out/
+
+# 이미지 빌드에서는 테스트를 돌리지 않는다
+src/test/
+
+# 이미지에 필요 없는 파일
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+gradlew.bat
+docs/
+**/*.md
+
+# 로컬 설정과 비밀값
+.env*
+.idea/
+*.iml
+**/.DS_Store

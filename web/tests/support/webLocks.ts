@@ -1,6 +1,6 @@
 export const SESSION_LOCK = 'akkimpyo-session'
 
-type Callback = () => Promise<unknown>
+type Callback = (lock: { name: string; mode: 'exclusive' } | null) => Promise<unknown>
 
 interface Request {
   callback: Callback
@@ -28,7 +28,7 @@ export function createFakeLocks() {
     const granted = state.queue.shift()!
     state.held = granted
     void Promise.resolve()
-      .then(granted.callback)
+      .then(() => granted.callback({ name, mode: 'exclusive' }))
       .then(granted.resolve, granted.reject)
       .then(() => {
         // 빼앗긴 잠금은 이미 쥔 것이 아니다
@@ -40,11 +40,13 @@ export function createFakeLocks() {
 
   return {
     request(name: string, options: LockOptions, callback: Callback): Promise<unknown> {
-      const { signal, steal } = options
+      const { signal, steal, ifAvailable } = options
       if (signal && steal) return Promise.reject(new DOMException('함께 쓸 수 없음', 'NotSupportedError'))
+      const state = stateOf(name)
+      // 바로 얻을 수 없으면 기다리지 않고 null로 부른다(규격 4절)
+      if (ifAvailable && (state.held || state.queue.length > 0)) return Promise.resolve().then(() => callback(null))
       const { promise, resolve, reject } = Promise.withResolvers<unknown>()
       const request = { callback, resolve, reject }
-      const state = stateOf(name)
       signal?.addEventListener('abort', () => {
         const index = state.queue.indexOf(request)
         // 이미 얻은 잠금에는 영향이 없다
