@@ -68,13 +68,13 @@ class TransactionListPlanTest {
      */
     private static final String LINE_SEQ_SCAN = "Seq Scan on transaction_line";
     /**
-     * 한 해의 거래(약 2,200건)와 라인을 잇는 계획. 이 데이터에서는 거래마다 라인을 찾는 Nested Loop가 비싸, 라인 테이블을
-     * 통째로 읽는 Hash Join이나 거래 id 인덱스를 처음부터 읽는 Merge Join을 고를 수 있고, 둘의 비용은 라인 테이블의 쪽 수에
-     * 따라 뒤집힐 수 있다({@link #LINE_SEQ_SCAN}과 같은 까닭). 운영 크기에서는 라인 테이블이 커서 Nested Loop다(#171).
-     * 그래서 라인 테이블을 거래 id로 잇는 훑기는 모두 상한에서 뺀다. 라인을 카테고리 인덱스로 읽는 계획(#16이 막은 것)은 센다.
+     * 연 단위 통계의 읽은 행 상한은 거래 테이블을 훑은 노드(Seq Scan, Index Scan, Bitmap Heap Scan)만 센다. 그해의 거래
+     * 2,190건과 잇는 쪽은 이 데이터에서 테이블을 통째로 읽는다: CI에서 라인은 Hash Join의 Seq Scan(장부의 2만 행),
+     * 카테고리는 Seq Scan(테스트 DB 전체의 카테고리)이었다. 운영 크기에서는 라인 테이블이 커서 Nested Loop다(#171).
+     * Bitmap Index Scan도 세지 않는다. 그 rows는 이 클래스의 앞선 테스트가 같은 id로 넣고 되돌린 거래의 인덱스 항목까지 들어
+     * 테스트 순서에 따라 바뀐다(CI에서 2,190건의 4배인 8,760). 라인을 카테고리 인덱스로 읽는 계획(#16이 막은 것)은 따로 막는다.
      */
-    private static final Predicate<String> NOT_LINE_BY_TRANSACTION = line -> !line.contains(LINE_SEQ_SCAN)
-            && !line.contains("ix_transaction_line_transaction");
+    private static final Predicate<String> ON_TRANSACTION_TABLE = line -> line.contains(" on transaction ");
     private static final Pattern BIND = Pattern.compile("binding parameter \\((\\d+):[^)]*\\) <- \\[(.*)]");
     private static final AtomicInteger PREPARED = new AtomicInteger();
 
@@ -201,7 +201,7 @@ class TransactionListPlanTest {
 
     /**
      * 연 단위 통계(#10)는 한 문장으로 그해만 읽는다. 큰 장부의 2025년은 2,190건이다(2만 건 가운데). 조건은 월별 통계와 같고
-     * 범위만 한 해다. 거래는 장부·날짜 인덱스로 그해만 읽고, 라인은 {@link #NOT_LINE_BY_TRANSACTION}의 훑기를 뺀 상한을 본다.
+     * 범위만 한 해다. 거래는 장부·날짜 인덱스로 그해만 읽는다({@link #ON_TRANSACTION_TABLE}).
      */
     @Test
     void 연_단위_통계는_큰_장부에서_그해의_거래만_한_문장으로_읽는다() {
@@ -210,8 +210,8 @@ class TransactionListPlanTest {
 
         Statement sums = pick(yearly, Kind.YEAR_MONTHS);
         String custom = explain(sums, "force_custom_plan");
-        assertThat(custom).contains("ix_transaction_ledger_occurred_on");
-        assertThat(mostRowsRead(custom, NOT_LINE_BY_TRANSACTION)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG)
+        assertThat(custom).contains("ix_transaction_ledger_occurred_on").doesNotContain("ix_transaction_line_category");
+        assertThat(mostRowsRead(custom, ON_TRANSACTION_TABLE)).as("큰 장부 %d건 가운데 거래 테이블에서 읽은 행", BIG)
                 .isLessThan(3_000);
         assertThat(explain(sums, "force_generic_plan")).doesNotContain("Seq Scan");
     }
