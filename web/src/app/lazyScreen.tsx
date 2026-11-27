@@ -21,8 +21,8 @@ export interface ScreenShell {
 export interface LazyScreen {
   /** 라우트의 element로 그린다. */
   Screen: ComponentType
-  /** 화면 코드를 미리 받는다. 받지 못해도 알리지 않고, 화면을 열 때 다시 받는다. */
-  preload: () => void
+  /** 화면 코드를 미리 받는다. 받지 못해도 알리지 않고, 화면을 열 때 다시 받는다. 받거나 받지 못하면 끝나는 약속을 준다. */
+  preload: () => Promise<void>
 }
 
 /**
@@ -105,7 +105,10 @@ export function lazyScreen(load: () => Promise<{ default: ComponentType }>, shel
   return {
     Screen,
     preload() {
-      fetchScreen().catch(() => {})
+      return fetchScreen().then(
+        () => {},
+        () => {},
+      )
     },
   }
 }

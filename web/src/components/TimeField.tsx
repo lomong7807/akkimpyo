@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent, type CompositionEvent, type Ref } from 'react'
-import { formatTimeText, positionAfterTimeDigits } from '../lib/timeText'
+import { formatTimeText, positionAfterTimeDigits } from '../lib/timeInput'
 import { Button } from './Button'
 import type { FieldLabels } from './Field'
 import { InputField } from './TextField'

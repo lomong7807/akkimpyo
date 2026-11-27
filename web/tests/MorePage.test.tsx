@@ -59,6 +59,8 @@ describe('더보기(M-01)', () => {
 
   it('1A에는 계좌와 카테고리 묶음, 맨 아래의 로그아웃 묶음만 있고 자리 표시가 없다', async () => {
     await open('/more')
+    // 더보기는 따로 싣는다. 틀(상단 바와 불러오는 중)이 아니라 화면이 그려진 뒤에 센다
+    await screen.findByRole('button', { name: '로그아웃' })
     const groups = content()
       .getAllByRole('list')
       .map((list) => within(list).getAllByRole('listitem').map((item) => item.textContent))

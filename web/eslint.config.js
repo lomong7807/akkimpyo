@@ -64,9 +64,16 @@ const mswPackage = {
   message: '가짜 응답은 테스트에서만 쓴다.',
 }
 
+// react-router의 Link·NavLink는 앱이 쓰지 않는 prefetch 부품을 첫 화면 JS로 끌어온다(#355, architect).
+const routerLinks = {
+  regex: '^react-router(/dom)?$',
+  importNames: ['Link', 'NavLink'],
+  message: 'react-router의 Link·NavLink 대신 components/Link를 쓴다. 다시 불러오면 첫 화면 JS가 커진다(#355).',
+}
+
 /** 파일마다 마지막에 맞는 설정 하나만 걸리므로 앱 코드 전체의 규칙을 폴더마다 함께 적는다. */
 function restrictedImports(files, patterns = []) {
-  return { files, rules: { 'no-restricted-imports': ['error', { patterns: [mswPackage, ...patterns] }] } }
+  return { files, rules: { 'no-restricted-imports': ['error', { patterns: [mswPackage, routerLinks, ...patterns] }] } }
 }
 
 export default tseslint.config(

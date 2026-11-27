@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ButtonLink } from '../components/Button'
 import Icon from '../components/Icon'
+import { Plus } from '../components/icons'
 import { holdKeyboard } from '../components/keyboardBridge'
 import type { Navigation, NavigationItem } from './navigation'
 import NavigationLink from './NavigationLink'
@@ -27,7 +28,7 @@ export default function Sidebar({ items, current, ledgerName, quickEntry, onLogo
         <div className={styles.quickEntry}>
           <ButtonLink kind="primary" to={quickEntry.to} onClick={holdKeyboard}>
             <span className={styles.quickEntryLabel}>
-              <Icon name="Plus" size={20} />
+              <Icon icon={Plus} size={20} />
               {quickEntry.label}
             </span>
           </ButtonLink>
@@ -39,7 +40,7 @@ export default function Sidebar({ items, current, ledgerName, quickEntry, onLogo
             {items.main.map((item) => (
               <li key={item.to}>
                 <NavigationLink item={item} current={item === current} className={styles.row}>
-                  <Icon name={item.icon} size={24} />
+                  <Icon icon={item.icon} size={24} />
                   {item.label}
                 </NavigationLink>
               </li>

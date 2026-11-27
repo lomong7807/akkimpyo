@@ -3,7 +3,6 @@ import { MainScreen } from '../components/Screen'
 import HomePage from '../features/home/HomePage'
 import ClearStaleCaret from './ClearStaleCaret'
 import LedgerLayout from './LedgerLayout'
-import LoginRoute from './LoginRoute'
 import { accountsItem, categoriesItem, homeItem, moreItem, transactionsItem } from './navigation'
 import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
@@ -11,6 +10,7 @@ import {
   accountAddScreen,
   accountsScreen,
   categoriesScreen,
+  loginScreen,
   moreScreen,
   notFoundScreen,
   pendingFixScreen,
@@ -30,7 +30,7 @@ import SignedOutArea from './SignedOutArea'
 
 /**
  * 주소는 화면설계서 00-common 12절을 따른다. 화면을 만드는 이슈가 자기 주소를 더한다.
- * 로그인과 홈 말고는 화면 코드를 따로 싣는다(screens.tsx, #251). 라우트와 handle은 묶음을 받기 전에도 공통 틀이 맞게 그려지도록 여기 둔다.
+ * 홈 말고는 화면 코드를 따로 싣는다(screens.tsx, #251, 로그인은 #355). 라우트와 handle은 묶음을 받기 전에도 공통 틀이 맞게 그려지도록 여기 둔다.
  */
 export const routes: RouteObject[] = [
   {
@@ -51,7 +51,7 @@ export const routes: RouteObject[] = [
       {
         element: <SignedOutArea />,
         children: [
-          { element: <PlainLayout />, children: [{ path: '/login', element: <LoginRoute /> }] },
+          { element: <PlainLayout />, children: [{ path: '/login', element: <loginScreen.Screen /> }] },
           { path: '/signup', element: <signupScreen.Screen /> },
         ],
       },

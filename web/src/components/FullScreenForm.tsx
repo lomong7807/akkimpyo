@@ -12,6 +12,7 @@ import {
 import { Button } from './Button'
 import ConfirmDialog from './ConfirmDialog'
 import { useDragDown } from './dragDown'
+import { X } from './icons'
 import { keepFocusInField } from './keepFocusInField'
 import layout from './layout.module.css'
 import { isModalOpen } from './openModal'
@@ -90,7 +91,7 @@ export default function FullScreenForm({
         {...(dragToClose && drag)}
       >
         <div className={styles.close}>
-          <Button kind="icon" icon="X" aria-label="닫기" onClick={guard.close} />
+          <Button kind="icon" icon={X} aria-label="닫기" onClick={guard.close} />
         </div>
         <h1 className={styles.title}>{title}</h1>
       </header>
