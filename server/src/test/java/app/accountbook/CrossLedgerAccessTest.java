@@ -397,7 +397,9 @@ class CrossLedgerAccessTest {
     Stream<Row> changeRows() {
         return Stream.of(
                 denied("수정: B의 계좌", NotLedgerMemberException.class, bBank,
-                        (actor, account) -> accountService.update(actor, account, accountCommand("바꾼이름"))),
+                        (actor, account) -> accountService.update(actor, ledgerB, account, accountCommand("바꾼이름"))),
+                foreign("수정: A의 장부로 B의 계좌", NotLedgerMemberException.class, bBank, aCash,
+                        (actor, account) -> accountService.update(actor, ledgerA, account, accountCommand("바꾼이름"))),
                 denied("수정: B의 카테고리 이름", NotLedgerMemberException.class, bFood,
                         (actor, category) -> categoryService.rename(actor, category, "바꾼이름")),
                 denied("수정: B의 지출", NotFoundException.class, bExpense.id(),
@@ -452,7 +454,7 @@ class CrossLedgerAccessTest {
                 denied("순서: B의 미분류 삭제", notMember, bUncategorized, invalid,
                         (actor, category) -> categoryService.delete(actor, category)),
                 denied("순서: B의 계좌를 빈 요청으로 수정", notMember, bBank, invalid,
-                        (actor, account) -> accountService.update(actor, account, null)),
+                        (actor, account) -> accountService.update(actor, ledgerB, account, null)),
                 denied("순서: B의 카테고리를 빈 이름으로", notMember, bFood, invalid,
                         (actor, category) -> categoryService.rename(actor, category, " ")),
                 denied("순서: B의 장부에 빈 계좌 요청", notMember, ledgerB, invalid,
