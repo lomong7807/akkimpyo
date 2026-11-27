@@ -151,7 +151,7 @@ class LedgerPathTest {
     }
 
     /**
-     * 본문 상한(#21)은 토큰 확인(UserService.exists), 로그인의 비밀번호 확인(UserService.authenticate)과 서비스보다 먼저다.
+     * 본문 상한(#21)은 토큰 확인(UserService.exists), 로그인의 비밀번호 확인(UserService.checkPassword)과 서비스보다 먼저다.
      * 본문은 상한이 없으면 그대로 처리될 JSON에 공백을 붙여 상한을 1바이트 넘긴 것이다. 소켓에 그대로 쓰므로 ASCII만 쓴다.
      */
     @Test
@@ -174,7 +174,7 @@ class LedgerPathTest {
         }
 
         verify(userService, never()).exists(any());
-        verify(userService, never()).authenticate(any(), any());
+        verify(userService, never()).checkPassword(any(), any());
         verifyNoInteractions(accountService);
     }
 
