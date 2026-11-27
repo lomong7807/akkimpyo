@@ -112,6 +112,8 @@ class AccountAccessTest {
                 new Case("계좌 추가(B가 쓰는 이름)", (client, ledger) -> client.postJson(accounts(ledger), sameName), 400),
                 new Case("계좌 추가(JSON이 아님)", (client, ledger) -> client.postJson(accounts(ledger), "{"), 400),
                 new Case("카테고리 목록", (client, ledger) -> client.get(categories(ledger)), 200),
+                new Case("월별 통계", (client, ledger) ->
+                        client.get("/api/v1/ledgers/" + ledger + "/stats/monthly?month=2026-11"), 200),
                 new Case("거래 만들기", (client, ledger) ->
                         client.postJson(transactions(ledger), expense(UUID.randomUUID())), 201),
                 new Case("거래 만들기(B의 거래 id에 다른 내용)", (client, ledger) ->
