@@ -1,4 +1,4 @@
-import { SignOut, Tag, Wallet } from '../../components/icons'
+import { DownloadSimple, SignOut, Tag, Wallet } from '../../components/icons'
 import { ListButton, ListGroup, ListLink } from '../../components/ListRow'
 import { MainScreen } from '../../components/Screen'
 import SyncedTime from '../sync/SyncedTime'
@@ -15,6 +15,10 @@ export default function MorePage({ onLogout }: { onLogout: () => void }) {
           </ListLink>
           <ListLink icon={Tag} to="/categories">
             카테고리
+          </ListLink>
+          {/* (6) 1·2단계 이름은 "내보내기"다(F-901). 아이콘은 designer #240 D2 */}
+          <ListLink icon={DownloadSimple} to="/export">
+            내보내기
           </ListLink>
         </ListGroup>
         <ListGroup>

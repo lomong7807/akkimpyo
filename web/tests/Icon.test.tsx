@@ -15,6 +15,7 @@ const files: Record<IconName, string> = {
   Check: 'check',
   CloudArrowUp: 'cloud-arrow-up',
   DotsThree: 'dots-three',
+  DownloadSimple: 'download-simple',
   Eye: 'eye',
   EyeSlash: 'eye-slash',
   House: 'house',

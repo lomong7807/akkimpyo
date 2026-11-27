@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -83,6 +84,7 @@ public class CategoryService {
      * 이름만 바꾼다(F-511). 검증은 만들기와 같고 자기 이름과는 겹치지 않는 것으로 본다. 같은 이름이면 바뀌는 것이 없다.
      * 그 장부의 카테고리가 아니면(내가 구성원인 다른 장부의 것, 없거나 지운 것) 구성원이 아닌 것과 같은 예외이고 검증보다 먼저다.
      * 미분류는 입력 검증을 지난 뒤 상태 오류로 거부한다(ADR 002 5절의 순서).
+     * 읽은 뒤 저장하기 전에 {@link #delete}가 커밋되면 저장이 0행이 되는데, 이것도 지운 것과 같은 예외다(#35).
      */
     @Transactional
     public Category rename(UUID actorId, UUID ledgerId, UUID categoryId, String name) {
@@ -96,7 +98,11 @@ public class CategoryService {
             throw new InvalidStateException("기본 카테고리(미분류)의 이름은 바꿀 수 없습니다.");
         }
         category.rename(newName);
-        return saveUnlessDuplicate(category);
+        try {
+            return saveUnlessDuplicate(category);
+        } catch (OptimisticLockingFailureException e) {
+            throw new NotLedgerMemberException();
+        }
     }
 
     /** 지우면 옮겨질 거래 수(F-512). 하위, 휴지통, 취소한 거래를 포함해 거래 단위로 센다. 거부는 {@link #delete}와 같다. */
