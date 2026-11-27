@@ -24,6 +24,6 @@ final class TransactionLimits {
 
     /** 범위는 {@link LedgerDates}가 정한다. */
     static void requireDateInRange(LocalDate occurredOn, Clock clock, ZoneId ledgerZone) {
-        LedgerDates.requireInRange("날짜는", occurredOn, clock, ledgerZone);
+        LedgerDates.requireInRange("occurredOn", "날짜는", occurredOn, clock, ledgerZone);
     }
 }
