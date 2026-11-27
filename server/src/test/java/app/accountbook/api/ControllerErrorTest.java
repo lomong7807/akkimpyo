@@ -48,7 +48,7 @@ class ControllerErrorTest {
     // --- 400 MALFORMED_REQUEST ---
 
     @ParameterizedTest
-    @ValueSource(strings = {"", "{", "{\"name\":\"a\"", "{\"name\":tru}", "{\"amount\":12x}", "{'name':'a'}",
+    @ValueSource(strings = {"", " ", "\n\t ", "{", "{\"name\":\"a\"", "{\"name\":tru}", "{\"amount\":12x}", "{'name':'a'}",
             "{\"lines\":[{\"amount\":1}", "{\"lines\":[{\"amount\":}]}", "not json", "{\"name\":\"a\u0001\"}",
             "{\"name\":\"a\",\"amount\":1}{}", "{\"name\":\"a\",\"amount\":1} 1", "{\"name\":\"a\",\"amount\":1} null"})
     void 본문을_JSON으로_읽을_수_없으면_문구가_고정이다(String body) throws Exception {
