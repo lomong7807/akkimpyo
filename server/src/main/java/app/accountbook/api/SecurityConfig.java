@@ -37,6 +37,8 @@ class SecurityConfig {
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/actuator/health"),
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login"),
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/signup"),
+            // refresh 쿠키로 인증한다(ADR 001 결정 3). 만료된 access token이 같이 와도 열린다.
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/refresh"),
     };
 
     @Bean

@@ -10,7 +10,7 @@ import java.util.UUID;
  * @param userId    계열의 사용자
  * @param expiresAt 이 값을 쓸 수 있는 마지막 시각(그 시각부터 거부). 준 때부터 30일이고 계열의 절대 만료를 넘지 않는다
  */
-record IssuedRefreshToken(String value, UUID userId, Instant expiresAt) {
+public record IssuedRefreshToken(String value, UUID userId, Instant expiresAt) {
 
     /** 값이 실수로 로그에 찍히지 않게 값을 뺀다. */
     @Override

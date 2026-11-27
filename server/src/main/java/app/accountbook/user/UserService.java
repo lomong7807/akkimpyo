@@ -103,6 +103,14 @@ public class UserService {
      * <p>실패는 사용자 id로 남긴다. 찾은 사용자가 없으면 알 수 없는 계정이고 입력한 값은 남기지 않는다(ADR 001 결정 10).
      */
     public Optional<UUID> authenticate(String rawEmail, String rawPassword) {
+        return checkPassword(rawEmail, rawPassword).map(PasswordCheck::userId);
+    }
+
+    /**
+     * {@link #authenticate}와 같은 확인이고, 맞으면 사용자 id와 함께 확인할 때 본 저장값을 준다. 로그인은 계열을 만드는
+     * 트랜잭션에서 그것을 {@link #lockUnchanged}에 돌려준다(ADR 001 결정 7). 트랜잭션 안에서 부르지 않는다.
+     */
+    public Optional<PasswordCheck> checkPassword(String rawEmail, String rawPassword) {
         if (!PasswordPolicy.isComparable(rawPassword)) {
             log.info(LOGIN_FAILED, UNKNOWN_ACCOUNT);
             return Optional.empty();
@@ -111,11 +119,25 @@ public class UserService {
         Optional<User> comparable = found.filter(user -> StoredPasswordHash.isComparable(user.getPasswordHash()));
         boolean matches = passwordHasher.matches(rawPassword,
                 comparable.map(User::getPasswordHash).orElse(decoyHash));
-        Optional<UUID> userId = comparable.filter(user -> matches).map(User::getId);
-        if (userId.isEmpty()) {
+        Optional<PasswordCheck> check = comparable.filter(user -> matches)
+                .map(user -> new PasswordCheck(user.getId(), user.getPasswordHash()));
+        if (check.isEmpty()) {
             log.info(LOGIN_FAILED, found.map(user -> "사용자 " + user.getId()).orElse(UNKNOWN_ACCOUNT));
         }
-        return userId;
+        return check;
+    }
+
+    /**
+     * 사용자 행을 {@code FOR SHARE}로 잠그고 확인할 때 본 저장값이 그대로인가(dba와 정함, #26). 로그인이 계열을 만드는
+     * 트랜잭션 안에서 부른다. 잠금은 그 트랜잭션이 끝날 때까지 남아, 비밀번호 바꾸기({@code FOR NO KEY UPDATE})와 서로
+     * 기다린다. 확인한 뒤 비밀번호가 바뀌었거나 사용자가 지워졌으면 거짓이다.
+     */
+    public boolean lockUnchanged(PasswordCheck check) {
+        boolean unchanged = userRepository.lockPasswordHash(check.userId()).filter(check.storedHash()::equals).isPresent();
+        if (!unchanged) {
+            log.info(LOGIN_FAILED, "사용자 " + check.userId() + ", 확인한 뒤 비밀번호가 바뀜");
+        }
+        return unchanged;
     }
 
     /** 이 id의 사용자가 있는가. 토큰의 사용자가 탈퇴로 지워졌는지 요청마다 본다(ADR 001 결정 1). 사용자의 값은 내주지 않는다. */

@@ -80,6 +80,9 @@ class LoginTest {
     void tearDown() {
         logs.close();
         OURS.setLevel(null);
+        jdbc.update("delete from refresh_token where family_id in (select id from refresh_token_family where user_id = ?)",
+                USER_ID);
+        jdbc.update("delete from refresh_token_family where user_id = ?", USER_ID);
         jdbc.update("delete from users where id in (?, ?)", USER_ID, NOOP_USER_ID);
     }
 
@@ -93,7 +96,7 @@ class LoginTest {
         assertThat(reply.header("Content-Type")).isEqualTo("application/json");
         assertThat(reply.headers().get("Cache-Control"))
                 .containsExactly("no-cache, no-store, max-age=0, must-revalidate");
-        assertThat(reply.headers()).doesNotContainKeys("Set-Cookie", "Authorization", "Location");
+        assertThat(reply.headers()).doesNotContainKeys("Authorization", "Location");
         assertThat(reply.json().propertyNames()).containsExactly("accessToken");
 
         JWTClaimsSet claims = SignedJWT.parse(reply.json().get("accessToken").asString()).getJWTClaimsSet();
@@ -264,7 +267,7 @@ class LoginTest {
     @Test
     void 해시_자리가_없으면_429이고_1초_뒤에_다시_보내라고_알린다() throws Exception {
         doThrow(BeanUtils.instantiateClass(PasswordHashBusyException.class))
-                .when(userService).authenticate(any(), any());
+                .when(userService).checkPassword(any(), any());
 
         Reply reply = login(EMAIL, PASSWORD).assertProblem(429, "Too Many Requests", "TOO_MANY_REQUESTS");
 
@@ -395,7 +398,7 @@ class LoginTest {
     }
 
     private void assertNotAuthenticated() {
-        verify(userService, never()).authenticate(any(), any());
+        verify(userService, never()).checkPassword(any(), any());
     }
 
     private static Map<String, Object> withoutRequestId(Reply reply) {
