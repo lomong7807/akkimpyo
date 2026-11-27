@@ -223,21 +223,6 @@
   white-space: nowrap;
 }
 
-/* 보내지 않음 줄은 눌리지 않는다(1B 임시, #236). 누르거나 올려도 바탕이 바뀌지 않는다 */
-.pendingRow:active {
-  background-color: transparent;
-}
-
-@media (hover: hover) {
-  .pendingRow:hover {
-    background-color: transparent;
-  }
-}
-
-.pendingRow.highlighted {
-  background-color: var(--color-surface);
-}
-
 /* 뼈대의 막대는 폭을 줄의 비율로 정한다 */
 .detailSkeleton {
   display: flex;

@@ -4,19 +4,18 @@ import { pendingOf, readPending, settlePending, type Outcome, type PendingTransa
 import { markSent } from '../../device/syncedAt'
 import { now } from '../../lib/clock'
 import { createTransaction, needsResendNotice, type NewTransaction } from '../transactions/transactions'
+import { withQueueLock } from './queueLock'
 
 /*
- * 쌓인 입력 보내기 한 번(F-105, ADR 006 결정 6, #235). 앱을 연 뒤 보내기 계기(useAutoSend)가 처음 부를 때 따로 받는다.
+ * 쌓인 입력 보내기 한 번(F-105, F-107, ADR 006 결정 6, #235). 앱을 연 뒤 보내기 계기(useAutoSend)가 처음 부를 때 따로 받는다.
  * 보내기는 연결이 있을 때만 하므로 이 조각을 받을 수 있는 때이고, 받지 못해도 입력은 대기열에 그대로다(architect #235 A).
+ * 보내지 않은 입력 목록(B-05)의 "지금 보내기"도 이것을 부른다(#236).
  *
  * - 토큰의 사용자가 쌓은 대기만 오래된 것부터 하나씩 보낸다. 줄마다 그 사용자가 지금 토큰의 sub와 같은지 다시 보고, 요청 계층도
  *   보낼 때마다(갱신해 다시 보낼 때 포함) 본다. 다르면 보내지도 지우지도 않고 멈춘다(security #79, architect #235 D)
- * - 다른 탭이 보내는 중이면 이번은 건너뛴다(탭 사이 잠금, architect #235 B)
+ * - 다른 탭이 보내는 중이면 저절로 보내기는 건너뛰고, 지금 보내기는 끝나기를 기다린다(탭 사이 잠금, architect #235 B, queueLock)
  * - 줄마다 보내기 직전에 다시 읽고, 응답 뒤에는 그때 본 줄과 같을 때만 바꾼다(architect #235 C)
  */
-
-/** 탭 사이 잠금의 이름. 세션 잠금(akkimpyo-session)과 다르다 */
-const LOCK_NAME = 'akkimpyo-queue'
 
 /** 429에 Retry-After가 없거나 읽을 수 없을 때 기다리는 시간 */
 const RETRY_AFTER_DEFAULT_MS = 60_000
@@ -30,61 +29,101 @@ let pausedUntil = 0
 export interface SendHandlers {
   /** 그 장부의 입력을 서버가 받았다(201, 200). 그 장부의 서버 데이터를 무효로 만든다 */
   onSent?: (ledgerId: string) => void
+  /** 사용자가 누른 "지금 보내기"(F-107). 다른 탭이 보내는 중이면 끝나기를 기다렸다가 보낸다 */
+  byUser?: boolean
 }
+
+/**
+ * 대기로 남은 입력이 있는 까닭. connection은 보내던 중 연결이 끊김(다시 연결되면 저절로 보낸다), trouble은 서버 오류(5xx)·응답
+ * 지연·429·다른 탭이 잠금을 놓지 않음·기기 저장소를 쓸 수 없음처럼 잠시 뒤에 다시 보낼 것이다(B-05 (2), P-226).
+ */
+export type SendStop = 'connection' | 'trouble'
 
 export interface SendResult {
   /** 200이고 '이미 저장된 거래라 저장된 내용으로 두었다'를 알릴 건수(ADR 006 결정 3) */
   noticed: number
+  /** 서버가 받은 건수(201, 200) */
+  sent: number
+  /** 이번에 서버가 이유를 붙여 거부해 보낼 수 없음이 된 건수 */
+  rejected: number
+  /** 이번에 보낼 차례였지만 보내지 못하고 대기로 남은 건수 */
+  unsent: number
+  /** 대기로 남은 입력이 있으면 그 까닭. 연결이 끊긴 것이 앞선다 */
+  stopped?: SendStop
+}
+
+/** 보내기 한 번이 끝날 때마다(실제로 보내 본 때만) 부른다. 다른 탭이 보내는 중이라 건너뛴 때는 부르지 않는다 */
+type FinishedListener = (result: SendResult, byUser: boolean) => void
+
+const finishedListeners = new Set<FinishedListener>()
+
+/** 이 탭의 보내기가 끝날 때마다 부른다(B-05가 결과 문구와 화면 읽기 알림에 쓴다). 돌려받은 함수로 끊는다 */
+export function onSendFinished(listener: FinishedListener): () => void {
+  finishedListeners.add(listener)
+  return () => void finishedListeners.delete(listener)
 }
 
 /** 한 줄을 보낸 뒤 할 일 */
 interface Step {
   sent?: true
   notice?: boolean
+  rejected?: true
+  /** 대기로 남았다 */
+  kept?: SendStop
   /** 남은 줄을 이번에 보내지 않는다 */
   stop?: true
 }
 
 /** 대기인 입력을 오래된 것부터 보낸다. 실패해도 던지지 않는다. */
-export async function sendQueue({ onSent }: SendHandlers = {}): Promise<SendResult> {
+export async function sendQueue({ onSent, byUser = false }: SendHandlers = {}): Promise<SendResult> {
   const userId = currentUserId()
-  const result: SendResult = { noticed: 0 }
+  const result: SendResult = { noticed: 0, sent: 0, rejected: 0, unsent: 0 }
   // 확인하지 못한 로그인(토큰 없음)이면 보내지 않는다. 확인된 뒤의 계기에 보낸다
-  if (userId === undefined || now() < pausedUntil) return result
-  await withQueueLock(async () => {
-    for (const { id, state } of await pendingOf(userId)) {
-      if (state.kind !== 'waiting') continue
-      if (currentUserId() !== userId || now() < pausedUntil) return
-      const seen = await readPending(userId, id)
-      if (seen?.state.kind !== 'waiting') continue
-      const step = await sendOne(seen)
-      if (step.notice) result.noticed += 1
-      if (step.sent) onSent?.(seen.ledgerId)
-      if (step.stop) return
-    }
-  }).catch(() => {
-    // 기기 저장소를 쓸 수 없다. 대기열은 그대로이고 다음 계기에 다시 본다
-  })
-  return result
+  if (userId === undefined || now() < pausedUntil) {
+    if (!byUser) return result
+    return finished({ ...result, stopped: 'trouble' }, byUser)
+  }
+  let attempted: boolean
+  try {
+    attempted = await withQueueLock(
+      async () => {
+        const waiting = (await pendingOf(userId)).filter(({ state }) => state.kind === 'waiting')
+        for (const [index, { id }] of waiting.entries()) {
+          if (currentUserId() !== userId) return
+          if (now() < pausedUntil) return keep(result, 'trouble', waiting.length - index)
+          const seen = await readPending(userId, id)
+          if (seen?.state.kind !== 'waiting') continue
+          const step = await sendOne(seen)
+          if (step.notice) result.noticed += 1
+          if (step.sent) {
+            result.sent += 1
+            onSent?.(seen.ledgerId)
+          }
+          if (step.rejected) result.rejected += 1
+          // 멈추면 이 줄과 뒤에 남은 줄이 모두 대기로 남는다
+          if (step.kept) keep(result, step.kept, step.stop ? waiting.length - index : 1)
+          if (step.stop) return
+        }
+      },
+      { wait: byUser },
+    )
+  } catch {
+    // 기기 저장소를 쓸 수 없거나 다른 탭이 잠금을 놓지 않았다. 대기열은 그대로이고 다음 계기에 다시 본다
+    attempted = true
+    result.stopped ??= 'trouble'
+  }
+  return attempted ? finished(result, byUser) : result
 }
 
-/**
- * 다른 탭이 쥐고 있으면 기다리지 않고 건너뛴다. 잠금 기능이 없거나 막힌 브라우저에서는 잠금 없이 보낸다. 같은 id를 두 탭이 보내도
- * 서버는 200(재전송)으로 답하고, 줄은 보낼 때 본 것과 같을 때만 바꾸므로 두 번 바뀌지 않는다.
- */
-async function withQueueLock(work: () => Promise<void>): Promise<void> {
-  if (!('locks' in navigator)) return work()
-  let granted = false
-  try {
-    await navigator.locks.request(LOCK_NAME, { ifAvailable: true }, async (lock) => {
-      if (!lock) return
-      granted = true
-      await work()
-    })
-  } catch (error) {
-    if (granted) throw error
-    await work()
-  }
+/** `count`건이 `why`로 대기로 남았다. 연결이 끊긴 까닭이 서버 오류보다 앞선다 */
+function keep(result: SendResult, why: SendStop, count: number): void {
+  result.unsent += count
+  if (result.stopped !== 'connection') result.stopped = why
+}
+
+function finished(result: SendResult, byUser: boolean): SendResult {
+  for (const listener of finishedListeners) listener(result, byUser)
+  return result
 }
 
 async function sendOne(seen: PendingTransaction): Promise<Step> {
@@ -106,16 +145,16 @@ async function sendOne(seen: PendingTransaction): Promise<Step> {
  * 로그인이 끝나 다음 줄 앞에서 멈춘다.
  */
 async function failed(seen: PendingTransaction, error: unknown): Promise<Step> {
-  if (!(error instanceof ApiError)) return { stop: true }
+  if (!(error instanceof ApiError)) return { kept: 'trouble', stop: true }
   if (isRefusal(error)) {
     await settle(seen, rejectionOf(error))
-    return {}
+    return { rejected: true }
   }
   if (error.status === 429) {
     pausedUntil = now() + Math.min(error.retryAfterMs ?? RETRY_AFTER_DEFAULT_MS, RETRY_AFTER_MAX_MS)
-    return { stop: true }
+    return { kept: 'trouble', stop: true }
   }
-  return error.kind === 'connection' ? { stop: true } : {}
+  return error.kind === 'connection' ? { kept: 'connection', stop: true } : { kept: 'trouble' }
 }
 
 /** 서버가 이유(code)를 붙여 거부했다. 본문을 읽을 수 없는 응답(프록시가 낸 4xx 등)은 아니다(code가 없다) */
@@ -126,7 +165,7 @@ function isRefusal(error: ApiError): error is ApiError & { status: number; code:
 function rejectionOf(error: ApiError & { status: number; code: string }): Outcome {
   const { status, code, fieldErrors, current } = error
   const rejection: Extract<Outcome, { kind: 'rejected' }> = { kind: 'rejected', status, code, fieldErrors, at: now() }
-  // 선택 화면(#236, #239)이 쓰도록 같은 id로 저장된 내 거래를 남긴다
+  // 선택 화면(#280)이 쓰도록 같은 id로 저장된 내 거래를 남긴다
   if (code === 'ID_CONFLICT' && current !== undefined) rejection.current = current
   return rejection
 }
