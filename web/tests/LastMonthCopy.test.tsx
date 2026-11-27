@@ -6,6 +6,7 @@ import { nowOnDevice, setDeviceClock } from './support/clock'
 import { goOffline } from './support/connection'
 import { copyKeys, forgetUser, ledgerCopy, seedLedgerCopy, seedLogin, seedMeCopy } from './support/device'
 import { untilUnshielded } from './support/dialog'
+import { wallTimeNow } from '../src/lib/clock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { deviceNow, startEditServer } from './support/transactionEdit'
@@ -38,6 +39,13 @@ afterEach(async () => {
   await untilUnshielded()
   resetGlobals()
 })
+
+// 임시(#292 CI 재현): 실패한 회의 기기 시계를 적는다. 뒤에 건 afterEach가 먼저 돌아 정리 전의 시계를 읽는다. ready 전에 되돌린다
+let clockAtEnd = ''
+afterEach(() => {
+  clockAtEnd = `기기의 지금=${new Date(nowOnDevice()).toISOString()} 기기 시간대로 본 지금=${JSON.stringify(wallTimeNow())} 프로세스 시간대=${Intl.DateTimeFormat().resolvedOptions().timeZone}`
+})
+beforeEach(({ onTestFailed }) => onTestFailed(() => console.log(`[clock] ${clockAtEnd}`)))
 
 const spend = (occurredOn: string, payee: string) =>
   expenseOf({ occurredOn, accountId: id.salary, categoryId: id.food, amount: 1000, payee })
