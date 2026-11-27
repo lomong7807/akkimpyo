@@ -46,6 +46,11 @@
   color: var(--color-text);
 }
 
+.secondary.square {
+  width: var(--size-touch);
+  padding: 0;
+}
+
 .text,
 .textDanger {
   min-height: var(--size-touch);

@@ -1,7 +1,8 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, ledgerNameOf, startBackend, type Backend } from './support/backend'
+import { goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -32,6 +33,7 @@ const ended = '로그인이 풀렸어요. 다시 로그인해 주세요.'
 const open = (path: string) => openApp(path, addScreens([{ path: '/secret', element: <main>{secret}</main> }]))
 const loginHeading = () => screen.findByRole('heading', { level: 1, name: '로그인' })
 const notFound = () => screen.findByRole('heading', { level: 1, name: '찾을 수 없어요.' })
+const home = () => screen.findByRole('heading', { level: 1, name: '홈' })
 const failure = () => screen.findByRole('heading', { level: 1, name: '불러오지 못했어요.' })
 
 async function logIn(user: Awaited<ReturnType<typeof open>>['user']) {
@@ -128,7 +130,6 @@ describe('로그인 여부를 확인하지 못하면', () => {
   it.each([
     ['서버 오류', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['약속과 다른 200', () => HttpResponse.json({})],
     ['403', () => problem(403, 'ORIGIN_NOT_ALLOWED')],
   ])('%s이면 로그인 풀림으로 다루지 않고 "불러오지 못했어요."를 보인다', async (_, respond) => {
@@ -145,11 +146,37 @@ describe('로그인 여부를 확인하지 못하면', () => {
   })
 })
 
+describe('연결이 없어 로그인 여부를 확인하지 못하면(00-common 4.1, 1B)', () => {
+  it('"불러오지 못했어요."와 "연결되면 자동으로 불러올게요."만 보이고 "다시 시도"와 "로그인하러 가기"를 두지 않는다', async () => {
+    backend.refreshResponse = () => HttpResponse.error()
+    const dom = recordDom()
+    const { router } = await open('/secret')
+    await failure()
+    expect(screen.getByRole('main').textContent).toBe('불러오지 못했어요.연결되면 자동으로 불러올게요.')
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('link')).toBeNull()
+    await settle()
+    expect(router.state.location.pathname).toBe('/secret')
+    expect(dom.sawText(secret)).toBe(false)
+  })
+
+  it('연결이 돌아오면 저절로 다시 확인해 들어간다', async () => {
+    backend.refreshResponse = () => HttpResponse.error()
+    await open('/secret')
+    await failure()
+    await settle()
+    backend.refreshResponse = undefined
+    signedIn()
+    act(() => goOnline())
+    expect(await screen.findByText(secret)).toBeTruthy()
+  })
+})
+
 describe('/', () => {
   it('로그인했으면 /home이다', async () => {
     signedIn()
     const { router } = await open('/')
-    await notFound()
+    await home()
     expect(router.state.location.pathname).toBe('/home')
     expect(router.state.historyAction).toBe('REPLACE')
   })
@@ -157,7 +184,7 @@ describe('/', () => {
   it('로그인하지 않았으면 /login이고, 로그인하면 /home으로 간다', async () => {
     const { router, user } = await open('/')
     await logIn(user)
-    await notFound()
+    await home()
     expect(router.state.location.pathname).toBe('/home')
   })
 })
@@ -200,7 +227,7 @@ describe('로그인 없이 볼 수 있는 주소', () => {
       const { router } = await open(path)
       await waitFor(() => expect(router.state.location.pathname).toBe('/home'))
       await waitFor(() => expect(sessionStorage.length).toBe(0))
-      await notFound()
+      await home()
       expect(router.state.location.pathname).toBe('/home')
     })
   })
@@ -212,7 +239,7 @@ describe('로그인 없이 볼 수 있는 주소', () => {
     sessionStorage.setItem(RETURN_ADDRESS, '/secret')
     await router.navigate(path)
     await waitFor(() => expect(router.state.location.pathname).toBe('/home'))
-    await notFound()
+    await home()
   })
 })
 
@@ -239,7 +266,7 @@ describe('로그인하면', () => {
   it('로그인 화면을 바로 열었으면 /home으로 간다', async () => {
     const { router, user } = await open('/login')
     await logIn(user)
-    await notFound()
+    await home()
     expect(router.state.location.pathname).toBe('/home')
   })
 
@@ -268,7 +295,7 @@ describe('로그인하면', () => {
       sessionStorage.setItem(RETURN_ADDRESS, address)
       const { router, user } = await open('/login')
       await logIn(user)
-      await notFound()
+      await home()
       expect(router.state.location.pathname).toBe('/home')
     },
   )
@@ -279,7 +306,7 @@ describe('로그인하면', () => {
     })
     const { router, user } = await open('/secret')
     await logIn(user)
-    await notFound()
+    await home()
     expect(router.state.location.pathname).toBe('/home')
   })
 

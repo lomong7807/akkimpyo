@@ -1,0 +1,45 @@
+name: Image check
+
+# 이미지 빌드에 쓰는 파일이 바뀐 PR에서만 이미지가 만들어지는지 본다. 로그인하지 않고 올리지 않는다.
+# 앱 소스만 바뀐 PR은 ci.yml이 본다. ci.yml에 넣지 않은 것은 paths 필터가 job 단위로는 되지 않기 때문이다.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/image.yml'
+      - '.github/workflows/image-check.yml'
+      - 'docker-bake.hcl'
+      - 'server/**'
+      - '!server/src/**'
+      - 'web/**'
+      - '!web/src/**'
+      - '!web/tests/**'
+      - '!**/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: image build (linux/arm64, 올리지 않음)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    env:
+      REVISION: ${{ github.sha }}
+      # image.yml과 같은 값을 쓴다. Dependabot이 갱신하지 않는다.
+      BUILDKIT_IMAGE: moby/buildkit:v0.35.1@sha256:baf6138eb8c37644800c7c913fba051e840ebb9ba13eaf92d92ef9a1712d0b4c
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create builder
+        run: |
+          docker buildx create --name image --use --bootstrap \
+            --driver docker-container --driver-opt "image=$BUILDKIT_IMAGE"
+
+      - name: Build
+        run: docker buildx bake --file docker-bake.hcl --progress=plain --set '*.output=type=cacheonly'

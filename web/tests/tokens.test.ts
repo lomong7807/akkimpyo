@@ -61,6 +61,8 @@ const sizes = {
   '--size-icon-20': 20,
   '--size-icon-24': 24,
   '--size-row': 56,
+  '--size-toast': 56,
+  '--size-sheet-handle': 36,
 } as const
 
 const widths = {
@@ -70,6 +72,15 @@ const widths = {
   '--width-sidebar': 240,
   '--width-list-min': 360,
   '--width-side-panel': 440,
+  '--width-field-panel': 320,
+  '--width-full-screen-form': 560,
+  '--width-dialog': 480,
+  '--width-toast': 480,
+  '--width-welcome': 480,
+} as const
+
+const heights = {
+  '--height-field-panel': 360,
 } as const
 
 interface Situation {
@@ -179,8 +190,12 @@ describe('글자', () => {
 })
 
 describe('간격, 모서리, 크기, 선', () => {
-  it.each(Object.entries({ ...spaces, ...sizes, ...widths }))('%s는 %dpx를 rem으로 쓴 값이다', (name, px) => {
+  it.each(Object.entries({ ...spaces, ...sizes, ...widths, ...heights }))('%s는 %dpx를 rem으로 쓴 값이다', (name, px) => {
     expect(tokensIn()(name)).toBe(rem(px))
+  })
+
+  it('높이 토큰은 펼친 판의 최대 높이 하나다', () => {
+    expect(declaredNames('--height-')).toEqual(Object.keys(heights).sort())
   })
 
   it('간격은 척도의 일곱 값뿐이다', () => {

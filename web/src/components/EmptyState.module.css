@@ -1,0 +1,14 @@
+.empty {
+  padding-top: var(--space-40);
+  text-align: center;
+}
+
+.description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}
+
+.action {
+  margin-top: var(--space-16);
+}

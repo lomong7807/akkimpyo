@@ -1,0 +1,877 @@
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { StrictMode, useState, type ReactNode } from 'react'
+import { createMemoryRouter, Outlet, type RouteObject } from 'react-router'
+import { RouterProvider } from 'react-router/dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import ToastProvider from '../src/app/ToastProvider'
+import { useToast } from '../src/components/ToastContext'
+import { readCssRule } from './support/cssRule'
+import { recordDom } from './support/recordDom'
+import { resetViewport, setViewportWidth } from './support/viewport'
+import { readWebFile } from './support/webFile'
+
+const CSS = 'src/app/ToastProvider.module.css'
+const LAYOUT_CSS = 'src/app/AppLayout.module.css'
+const DURATION = 4000
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
+})
+
+afterEach(() => {
+  cleanup()
+  resetViewport()
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
+
+function Caller() {
+  const showToast = useToast()
+  return (
+    <>
+      <button type="button" onClick={() => showToast("'신한카드' 계좌를 추가했어요")}>
+        알리기
+      </button>
+      <button type="button" onClick={() => showToast('다른 알림')}>
+        또 알리기
+      </button>
+    </>
+  )
+}
+
+function routerWith(routes: RouteObject[]) {
+  return createMemoryRouter(routes, { initialEntries: ['/'] })
+}
+
+/** 앱처럼 라우터 안에 그린다. */
+function renderScreen(element: ReactNode) {
+  return render(<RouterProvider router={routerWith([{ path: '/', element }])} />)
+}
+
+function renderToasts() {
+  return renderScreen(
+    <ToastProvider>
+      <Caller />
+    </ToastProvider>,
+  )
+}
+
+const press = (name: string) => fireEvent.click(screen.getByText(name))
+const pass = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+const region = () => screen.getByRole('status')
+const toast = () => region().firstElementChild as HTMLElement | null
+const message = () => region().textContent
+
+describe('토스트의 자리', () => {
+  it('알림 영역은 비어 있어도 늘 있다', () => {
+    renderToasts()
+    expect(region().textContent).toBe('')
+    expect(toast()).toBeNull()
+  })
+
+  it('부르면 같은 영역에 문구를 보인다', () => {
+    renderToasts()
+    const before = region()
+    press('알리기')
+    expect(region()).toBe(before)
+    expect(message()).toBe("'신한카드' 계좌를 추가했어요")
+  })
+
+  it('영역은 뒤 화면을 누르는 것을 막지 않고 토스트만 누른다', () => {
+    renderToasts()
+    press('알리기')
+    expect(getComputedStyle(region()).pointerEvents).toBe('none')
+    expect(getComputedStyle(toast()!).pointerEvents).toBe('auto')
+  })
+
+  it('상단 바와 하단 탭, 덮개보다 위다', () => {
+    const zIndexOf = (path: string, selector: string) => Number(/z-index: (\d+)/.exec(readCssRule(path, selector))?.[1])
+    const own = zIndexOf(CSS, '.region')
+    expect(own).toBeGreaterThan(zIndexOf('src/components/pressGuard.module.css', '.shield'))
+    expect(own).toBeGreaterThan(zIndexOf('src/app/TabBar.module.css', '.tabBar'))
+  })
+
+  it('휴대폰 배치는 하단 탭이나 아래 안전 영역의 16px 위이고 좌우 16px을 뺀 폭이다', () => {
+    expect(readCssRule(CSS, '.region')).toContain(
+      'bottom: calc(var(--toast-offset, env(safe-area-inset-bottom)) + var(--space-16))',
+    )
+    expect(readCssRule(CSS, '.region')).toContain(
+      'padding-inline: max(var(--space-16), env(safe-area-inset-left)) max(var(--space-16), env(safe-area-inset-right))',
+    )
+    expect(readCssRule(LAYOUT_CSS, ':root:has(.withTabs)')).toContain(
+      '--toast-offset: calc(var(--size-tabbar) + env(safe-area-inset-bottom))',
+    )
+  })
+
+  it.each([
+    [390, '100%', 'var(--width-content-narrow)'],
+    [768, '100%', 'var(--width-content-narrow)'],
+    [1280, '100%', 'var(--width-toast)'],
+  ])('폭 %dpx에서 폭은 %s이고 최대 %s다', (width, own, max) => {
+    renderToasts()
+    press('알리기')
+    setViewportWidth(width)
+    expect(getComputedStyle(toast()!).width).toBe(own)
+    expect(getComputedStyle(toast()!).maxWidth).toBe(max)
+    expect(getComputedStyle(region()).justifyContent).toBe('center')
+  })
+
+  it('넓은 화면은 사이드바 옆 내용 영역의 가운데이고 아래에서 24px이다', () => {
+    renderToasts()
+    setViewportWidth(1280)
+    expect(getComputedStyle(region()).bottom).toBe('calc(var(--space-24) + env(safe-area-inset-bottom))')
+    expect(readCssRule(CSS, '.region')).toContain('inset-inline: var(--toast-start, 0) 0')
+    expect(readWebFile(LAYOUT_CSS)).toContain('--toast-start: var(--width-sidebar)')
+  })
+})
+
+describe('토스트의 모양', () => {
+  it('높이 56px 이상, 모서리 12px, 반전 색, 본문 글자이고 그림자가 없다', () => {
+    renderToasts()
+    press('알리기')
+    const style = getComputedStyle(toast()!)
+    expect(style.minHeight).toBe('var(--size-toast)')
+    expect(style.borderRadius).toBe('var(--radius-12)')
+    expect(style.backgroundColor).toBe('var(--color-inverse)')
+    expect(style.color).toBe('var(--color-on-inverse)')
+    expect(style.font).toBe('var(--text-body)')
+    expect(style.boxShadow).toBe('')
+  })
+
+  it('글이 길면 그만큼 늘어나고 자르지 않는다. 띄어쓰기가 없어도 칸 안에서 줄을 바꾼다', () => {
+    const rule = readCssRule(CSS, '.message')
+    expect(rule).toContain('overflow-wrap: anywhere')
+    expect(readWebFile(CSS)).not.toMatch(/line-clamp|ellipsis|overflow: hidden|max-height|nowrap/)
+  })
+
+  it('글자로만 그린다', () => {
+    function Html() {
+      const showToast = useToast()
+      return (
+        <button type="button" onClick={() => showToast('<b>굵게</b>')}>
+          누르기
+        </button>
+      )
+    }
+    renderScreen(
+      <ToastProvider>
+        <Html />
+      </ToastProvider>,
+    )
+    press('누르기')
+    expect(message()).toBe('<b>굵게</b>')
+    expect(region().querySelector('b')).toBeNull()
+  })
+
+  it('150ms 투명도로만 나타나고 사라진다', () => {
+    const rule = readCssRule(CSS, '.toast')
+    expect(rule).toContain('animation: appear var(--motion-toast-duration)')
+    expect(rule).toContain('transition: opacity var(--motion-toast-duration)')
+    expect(readCssRule(CSS, '.toast[data-closing]')).toContain('opacity: 0')
+    expect(rule).not.toMatch(/translate|transform/)
+  })
+})
+
+describe('지속 시간', () => {
+  it('4초 뒤에 사라진다', async () => {
+    renderToasts()
+    press('알리기')
+    await pass(DURATION - 1)
+    expect(message()).not.toBe('')
+    await pass(1)
+    expect(message()).toBe('')
+  })
+
+  it('두 번 그리는 개발 모드에서도 4초다', async () => {
+    const provider = (
+      <ToastProvider>
+        <Caller />
+      </ToastProvider>
+    )
+    render(
+      <StrictMode>
+        <RouterProvider router={routerWith([{ path: '/', element: provider }])} />
+      </StrictMode>,
+    )
+    press('알리기')
+    await pass(DURATION - 1)
+    expect(message()).not.toBe('')
+    await pass(1)
+    expect(message()).toBe('')
+  })
+
+  it('마우스가 올라가 있는 동안 시간이 멈추고, 내리면 남은 시간만큼 더 보인다', async () => {
+    renderToasts()
+    press('알리기')
+    await pass(3000)
+    fireEvent.pointerEnter(toast()!)
+    await pass(10_000)
+    expect(message()).not.toBe('')
+    fireEvent.pointerLeave(toast()!)
+    await pass(999)
+    expect(message()).not.toBe('')
+    await pass(1)
+    expect(message()).toBe('')
+  })
+
+  it('초점이 안에 있는 동안 시간이 멈춘다', async () => {
+    renderToasts()
+    press('알리기')
+    fireEvent.focus(toast()!)
+    await pass(10_000)
+    expect(message()).not.toBe('')
+    fireEvent.blur(toast()!)
+    await pass(DURATION)
+    expect(message()).toBe('')
+  })
+
+  it('초점이 있으면 마우스를 내려도 멈춰 있다', async () => {
+    renderToasts()
+    press('알리기')
+    fireEvent.pointerEnter(toast()!)
+    fireEvent.focus(toast()!)
+    fireEvent.pointerLeave(toast()!)
+    await pass(10_000)
+    expect(message()).not.toBe('')
+  })
+
+  it('사라지는 움직임이 끝난 뒤에 빠진다', async () => {
+    const motion = Promise.withResolvers<void>()
+    vi.spyOn(Element.prototype, 'getAnimations').mockReturnValue([{ finished: motion.promise } as unknown as Animation])
+    renderToasts()
+    press('알리기')
+    expect(toast()!.hasAttribute('data-closing')).toBe(false)
+    await pass(DURATION)
+    expect(toast()!.hasAttribute('data-closing')).toBe(true)
+    await act(async () => motion.resolve())
+    expect(message()).toBe('')
+  })
+
+  it('화면에서 빠지면 남는 시계가 없다', () => {
+    const { unmount } = renderToasts()
+    press('알리기')
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('겹침', () => {
+  it('새 토스트가 오면 앞의 것을 바로 바꾸고 4초를 새로 센다', async () => {
+    renderToasts()
+    press('알리기')
+    await pass(3000)
+    press('또 알리기')
+    expect(message()).toBe('다른 알림')
+    await pass(DURATION - 1)
+    expect(message()).toBe('다른 알림')
+    await pass(1)
+    expect(message()).toBe('')
+  })
+
+  it('사라지는 중에 온 새 토스트를 앞의 것이 지우지 않는다', async () => {
+    const motion = Promise.withResolvers<void>()
+    vi.spyOn(Element.prototype, 'getAnimations').mockReturnValueOnce([
+      { finished: motion.promise } as unknown as Animation,
+    ])
+    renderToasts()
+    press('알리기')
+    await pass(DURATION)
+    press('또 알리기')
+    await act(async () => motion.resolve())
+    expect(message()).toBe('다른 알림')
+    expect(toast()!.hasAttribute('data-closing')).toBe(false)
+  })
+
+  it('같은 문구를 또 알려도 새로 그려 다시 읽힌다', () => {
+    renderToasts()
+    press('알리기')
+    const first = toast()
+    press('알리기')
+    expect(toast()).not.toBe(first)
+  })
+})
+
+describe('아래로 밀어 닫기', () => {
+  const HEIGHT = 56
+  const pointer = { pointerId: 1, isPrimary: true, button: 0 }
+
+  function start() {
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(HEIGHT)
+    renderToasts()
+    press('알리기')
+    fireEvent.pointerDown(toast()!, { ...pointer, clientY: 100 })
+  }
+  const move = (distance: number, init = {}) =>
+    act(async () => void fireEvent.pointerMove(toast()!, { ...pointer, clientY: 100 + distance, ...init }))
+
+  it('높이의 4분의 1보다 많이 밀면 닫힌다', async () => {
+    start()
+    await move(HEIGHT / 4)
+    expect(message()).not.toBe('')
+    await move(HEIGHT / 4 + 1)
+    expect(message()).toBe('')
+  })
+
+  it('위로 밀면 닫히지 않는다', async () => {
+    start()
+    await move(-100)
+    expect(message()).not.toBe('')
+  })
+
+  it('떼거나 끊긴 뒤의 움직임은 미는 것이 아니다', async () => {
+    start()
+    fireEvent.pointerUp(toast()!, pointer)
+    await move(100)
+    expect(message()).not.toBe('')
+    fireEvent.pointerDown(toast()!, { ...pointer, clientY: 100 })
+    fireEvent.pointerCancel(toast()!, pointer)
+    await move(100)
+    expect(message()).not.toBe('')
+  })
+
+  it('미는 동안 닿은 두 번째 손가락은 보지 않는다', async () => {
+    start()
+    await move(100, { pointerId: 2, isPrimary: false })
+    expect(message()).not.toBe('')
+  })
+
+  it('두 번째 손가락과 마우스 오른쪽 버튼으로는 밀지 않는다', async () => {
+    start()
+    fireEvent.pointerUp(toast()!, pointer)
+    fireEvent.pointerDown(toast()!, { ...pointer, button: 2, clientY: 100 })
+    await move(100)
+    expect(message()).not.toBe('')
+    fireEvent.pointerDown(toast()!, { ...pointer, isPrimary: false, clientY: 100 })
+    await move(100)
+    expect(message()).not.toBe('')
+  })
+
+  it('손가락이 밖으로 나가도 이어지게 포인터를 붙들고, 브라우저의 스크롤과 글자 선택이 시작되지 않는다', () => {
+    const capture = vi.spyOn(Element.prototype, 'setPointerCapture')
+    start()
+    expect(capture.mock.calls).toEqual([[1]])
+    expect(readCssRule(CSS, '.toast')).toContain('touch-action: none')
+    expect(readCssRule(CSS, '.toast')).toContain('user-select: none')
+  })
+})
+
+describe('모달이 열려 있으면', () => {
+  function openDialog() {
+    const dialog = document.createElement('dialog')
+    document.body.append(dialog)
+    dialog.showModal()
+    return dialog
+  }
+  const settle = () => act(async () => void (await new Promise((resolve) => setImmediate(resolve))))
+
+  afterEach(() => document.querySelectorAll('dialog').forEach((dialog) => dialog.remove()))
+
+  it('닫힌 뒤에 알리고 그때부터 4초다', async () => {
+    renderToasts()
+    const dialog = openDialog()
+    press('알리기')
+    await pass(DURATION)
+    expect(message()).toBe('')
+    dialog.close()
+    await settle()
+    expect(message()).not.toBe('')
+    await pass(DURATION - 1)
+    expect(message()).not.toBe('')
+    await pass(1)
+    expect(message()).toBe('')
+  })
+
+  it('기다리는 동안 새로 온 것만 알린다', async () => {
+    renderToasts()
+    const dialog = openDialog()
+    press('알리기')
+    press('또 알리기')
+    dialog.close()
+    await settle()
+    expect(message()).toBe('다른 알림')
+  })
+
+  it('기다리는 동안 공급자가 사라지면 알리지 않는다', async () => {
+    const { unmount } = renderToasts()
+    const dialog = openDialog()
+    press('알리기')
+    unmount()
+    const consoleError = vi.spyOn(console, 'error')
+    dialog.close()
+    await settle()
+    expect(document.body.textContent).toBe('')
+    expect(consoleError).not.toHaveBeenCalled()
+  })
+})
+
+describe('전체 화면 입력을 열면', () => {
+  /** 토스트는 저장 버튼과 같은 자리에 놓이므로 걷는다. 공급자는 화면이 바뀌어도 그대로다. */
+  function open() {
+    const layout = (
+      <ToastProvider>
+        <Caller />
+        <Outlet />
+      </ToastProvider>
+    )
+    const children = [
+      { path: '/', element: <p>목록</p> },
+      { path: '/detail', element: <p>상세</p> },
+      { path: '/new', element: <p>입력</p>, handle: { fullScreen: true } },
+      { path: '/edit', element: <p>수정</p>, handle: { fullScreen: true } },
+    ]
+    const router = routerWith([{ element: layout, children }])
+    render(<RouterProvider router={router} />)
+    return router
+  }
+
+  it('보이던 토스트를 사라지는 움직임 없이 바로 걷는다', async () => {
+    vi.spyOn(Element.prototype, 'getAnimations').mockReturnValue([
+      { finished: new Promise(() => {}) } as unknown as Animation,
+    ])
+    const router = open()
+    press('알리기')
+    expect(message()).not.toBe('')
+    const dom = recordDom()
+    await act(() => router.navigate('/new'))
+    expect(screen.getByText('입력')).toBeTruthy()
+    expect(message()).toBe('')
+    expect(dom.sawElement('[data-closing]')).toBe(false)
+  })
+
+  it('입력 화면이 그려질 때 이미 걷혀 있다', async () => {
+    const router = open()
+    press('알리기')
+    let shownTogether = false
+    const observer = new MutationObserver(() => {
+      if (screen.queryByText('입력') && message() !== '') shownTogether = true
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    await act(() => router.navigate('/new'))
+    observer.disconnect()
+    expect(shownTogether).toBe(false)
+  })
+
+  it('다른 화면으로 가면 그대로 보인다', async () => {
+    const router = open()
+    press('알리기')
+    await act(() => router.navigate('/detail'))
+    expect(message()).not.toBe('')
+  })
+
+  it('입력 화면에서 알린 것(저장을 마침)은 걷지 않고 나간 화면에도 보인다', async () => {
+    const router = open()
+    await act(() => router.navigate('/new'))
+    press('알리기')
+    expect(message()).not.toBe('')
+    await act(() => router.navigate('/'))
+    expect(message()).not.toBe('')
+  })
+
+  it('나갔다가 다시 열어도 걷는다', async () => {
+    const router = open()
+    await act(() => router.navigate('/new'))
+    press('알리기')
+    await act(() => router.navigate('/'))
+    await act(() => router.navigate('/new'))
+    expect(message()).toBe('')
+  })
+
+  it('입력 화면에서 다른 입력 화면을 열어도 걷는다', async () => {
+    const router = open()
+    await act(() => router.navigate('/new'))
+    press('알리기')
+    await act(() => router.navigate('/edit'))
+    expect(message()).toBe('')
+  })
+})
+
+describe('되돌리기가 있는 토스트', () => {
+  const UNDO_DURATION = 8000
+  const onUndo = vi.fn()
+  afterEach(() => onUndo.mockClear())
+
+  function UndoCaller() {
+    const showToast = useToast()
+    return (
+      <button type="button" onClick={() => showToast('휴지통으로 옮겼어요', { label: '되돌리기', onAction: onUndo })}>
+        삭제하기
+      </button>
+    )
+  }
+
+  function renderUndo() {
+    return renderScreen(
+      <ToastProvider>
+        <Caller />
+        <UndoCaller />
+      </ToastProvider>,
+    )
+  }
+
+  const undoButton = () => within(region()).getByRole('button', { name: '되돌리기' })
+
+  it('문구 오른쪽 끝에 글자 버튼을 둔다', () => {
+    renderUndo()
+    press('삭제하기')
+    expect(within(region()).getByText('휴지통으로 옮겼어요')).toBeTruthy()
+    expect(toast()!.lastElementChild).toBe(undoButton())
+    expect(undoButton().getAttribute('type')).toBe('button')
+  })
+
+  it('글 자리가 토스트 폭의 절반보다 좁아지면(글자 200%) 버튼이 글 아래 오른쪽으로 내려간다', () => {
+    renderUndo()
+    press('삭제하기')
+    const toastStyle = getComputedStyle(toast()!)
+    expect(toastStyle.flexWrap).toBe('wrap')
+    expect(toastStyle.columnGap).toBe('var(--space-8)')
+    // 내려간 버튼의 누르는 영역(위로 12px 당김)이 글과 겹치지 않는다
+    expect(toastStyle.rowGap).toBe('var(--space-12)')
+    expect(getComputedStyle(within(region()).getByText('휴지통으로 옮겼어요')).flex).toBe('1 1 50%')
+    // 내려가도 오른쪽 끝이다
+    expect(readCssRule(CSS, '.action')).toContain('margin-inline: auto calc(-1 * var(--space-8))')
+  })
+
+  it('글 자리가 절반보다 넓으면 낱말 안에서 끊지 않는다. 글 자리가 낱말보다 좁을 때만 낱말 안에서 끊는다', () => {
+    renderUndo()
+    press('삭제하기')
+    const text = getComputedStyle(within(region()).getByText('휴지통으로 옮겼어요'))
+    expect(text.minWidth).toBe('0px')
+    expect(text.overflowWrap).toBe('anywhere')
+    // 버튼은 줄지 않아 글이 버튼 옆에서 낱말 안으로 밀려 끊기지 않는다
+    expect(getComputedStyle(undoButton()).flex).toBe('0 0 auto')
+  })
+
+  it('버튼은 반전 동작 색의 굵은 본문이고, 누르는 영역 44px이 토스트 높이를 늘리지 않는다', () => {
+    renderUndo()
+    press('삭제하기')
+    const style = getComputedStyle(undoButton())
+    expect(style.color).toBe('var(--color-inverse-action)')
+    expect(style.font).toBe('var(--text-body-strong)')
+    expect(style.minHeight).toBe('var(--size-touch)')
+    expect(style.backgroundColor).toBe('rgba(0, 0, 0, 0)')
+    // 줄지 않아 글자가 한 줄이다. 글이 길면 문구 쪽이 줄을 바꾼다
+    expect(style.flex).toBe('0 0 auto')
+    const rule = readCssRule(CSS, '.action')
+    // 44px 가운데 본문 한 줄(24px)만 차지해 높이 56px(위아래 16px)이 그대로다
+    expect(rule).toContain('margin-block: calc(-1 * var(--space-12))')
+    // 글자 버튼의 안쪽 8px만큼 바깥으로 당겨 글자를 토스트 안쪽 16px 선에 맞춘다
+    expect(rule).toContain('padding-inline: var(--space-8)')
+    expect(rule).toContain('margin-inline: auto calc(-1 * var(--space-8))')
+    expect(readCssRule(CSS, '.action:focus-visible')).toContain('outline-color: var(--color-inverse-action)')
+  })
+
+  it('8초 동안 보인다', async () => {
+    renderUndo()
+    press('삭제하기')
+    await pass(UNDO_DURATION - 1)
+    expect(message()).not.toBe('')
+    await pass(1)
+    expect(message()).toBe('')
+    expect(onUndo).not.toHaveBeenCalled()
+  })
+
+  it('마우스가 올라가 있거나 초점이 안에 있는 동안 시간이 멈춘다', async () => {
+    renderUndo()
+    press('삭제하기')
+    fireEvent.pointerEnter(toast()!)
+    await pass(20_000)
+    fireEvent.focus(undoButton())
+    fireEvent.pointerLeave(toast()!)
+    await pass(20_000)
+    expect(message()).not.toBe('')
+    fireEvent.blur(undoButton())
+    await pass(UNDO_DURATION)
+    expect(message()).toBe('')
+  })
+
+  it('누르면 사라지는 움직임 없이 바로 걷고 동작을 한 번 한다', () => {
+    vi.spyOn(Element.prototype, 'getAnimations').mockReturnValue([
+      { finished: new Promise(() => {}) } as unknown as Animation,
+    ])
+    renderUndo()
+    press('삭제하기')
+    fireEvent.click(undoButton())
+    expect(toast()).toBeNull()
+    expect(onUndo).toHaveBeenCalledTimes(1)
+  })
+
+  describe('모달이 열린 동안(architect 결정 2026-11-26, #102)', () => {
+    function openDialog() {
+      const dialog = document.createElement('dialog')
+      document.body.append(dialog)
+      dialog.showModal()
+      return dialog
+    }
+    // 모달이 열리고 닫히는 것은 MutationObserver가 알린다
+    const observe = () => act(async () => {})
+
+    afterEach(() => document.querySelectorAll('dialog').forEach((dialog) => dialog.remove()))
+
+    it('되돌리기 토스트는 시간이 멈추고, 닫히면 남은 시간부터 센다', async () => {
+      renderUndo()
+      press('삭제하기')
+      await pass(3000)
+      const dialog = openDialog()
+      await observe()
+      await pass(60_000)
+      expect(message()).not.toBe('')
+      dialog.close()
+      await observe()
+      await pass(UNDO_DURATION - 3000 - 1)
+      expect(message()).not.toBe('')
+      await pass(1)
+      expect(message()).toBe('')
+    })
+
+    it('모달이 닫힌 뒤에도 마우스가 올라가 있으면 멈춰 있다', async () => {
+      renderUndo()
+      press('삭제하기')
+      const dialog = openDialog()
+      await observe()
+      fireEvent.pointerEnter(toast()!)
+      dialog.close()
+      await observe()
+      await pass(60_000)
+      expect(message()).not.toBe('')
+    })
+
+    it('되돌리기가 없는 토스트는 모달과 상관없이 4초다', async () => {
+      renderUndo()
+      press('알리기')
+      openDialog()
+      await observe()
+      await pass(DURATION)
+      expect(message()).toBe('')
+    })
+  })
+
+  describe('누르면 사라지는 버튼 대신 지금 화면의 제목(h1)으로 초점을 옮긴다(designer 검토 2026-11-26)', () => {
+    function renderWithTitle(title = <h1>내역</h1>) {
+      return renderScreen(
+        <ToastProvider>
+          {title}
+          <UndoCaller />
+        </ToastProvider>,
+      )
+    }
+    const heading = () => screen.getByRole('heading', { level: 1 })
+
+    it('키보드로 누르면(click detail 0) 제목에 초점을 두고 테두리를 보인다', () => {
+      const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+      renderWithTitle()
+      press('삭제하기')
+      fireEvent.click(undoButton(), { detail: 0 })
+      expect(document.activeElement).toBe(heading())
+      expect(heading().getAttribute('tabindex')).toBe('-1')
+      expect(focus.mock.contexts.at(-1)).toBe(heading())
+      expect(focus.mock.calls.at(-1)).toEqual([{ focusVisible: true }])
+      expect(onUndo).toHaveBeenCalledTimes(1)
+    })
+
+    it('마우스나 손가락으로 누르면 제목에 초점을 두되 테두리를 보이지 않는다', () => {
+      const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+      renderWithTitle()
+      press('삭제하기')
+      fireEvent.click(undoButton(), { detail: 1 })
+      expect(document.activeElement).toBe(heading())
+      expect(focus.mock.calls.at(-1)).toEqual([{ focusVisible: false }])
+    })
+
+    it('제목에 이미 tabindex가 있으면 그대로 둔다', () => {
+      renderWithTitle(<h1 tabIndex={0}>내역</h1>)
+      press('삭제하기')
+      fireEvent.click(undoButton(), { detail: 0 })
+      expect(heading().getAttribute('tabindex')).toBe('0')
+      expect(document.activeElement).toBe(heading())
+    })
+
+    it('제목이 없어도 동작은 한다', () => {
+      renderWithTitle(<p>제목 없음</p>)
+      press('삭제하기')
+      fireEvent.click(undoButton(), { detail: 0 })
+      expect(onUndo).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('동작이 새 토스트를 알리면 그것을 보인다', () => {
+    function Retry() {
+      const showToast = useToast()
+      const fail = () => showToast('되돌리지 못했어요', { label: '다시 시도', onAction: fail })
+      return (
+        <button type="button" onClick={() => showToast('휴지통으로 옮겼어요', { label: '되돌리기', onAction: fail })}>
+          삭제하기
+        </button>
+      )
+    }
+    renderScreen(
+      <ToastProvider>
+        <Retry />
+      </ToastProvider>,
+    )
+    press('삭제하기')
+    fireEvent.click(undoButton())
+    expect(message()).toBe('되돌리지 못했어요다시 시도')
+    fireEvent.click(within(region()).getByRole('button', { name: '다시 시도' }))
+    expect(within(region()).getByRole('button', { name: '다시 시도' })).toBeTruthy()
+  })
+
+  it('버튼에서 시작한 누름은 밀어 닫기가 아니다(포인터를 붙들지 않아 버튼이 눌린다)', () => {
+    const capture = vi.spyOn(Element.prototype, 'setPointerCapture')
+    renderUndo()
+    press('삭제하기')
+    fireEvent.pointerDown(undoButton(), { pointerId: 1, isPrimary: true, button: 0, clientY: 100 })
+    expect(capture).not.toHaveBeenCalled()
+  })
+
+  it('새 토스트가 오면 바로 바꾸고 그 토스트의 시간을 센다', async () => {
+    renderUndo()
+    press('삭제하기')
+    press('알리기')
+    expect(within(region()).queryByRole('button')).toBeNull()
+    await pass(DURATION)
+    expect(message()).toBe('')
+  })
+
+  describe('전체 화면 입력을 열어도', () => {
+    function open() {
+      const layout = (
+        <ToastProvider>
+          <Caller />
+          <UndoCaller />
+          <Outlet />
+        </ToastProvider>
+      )
+      const children = [
+        { path: '/', element: <p>목록</p> },
+        { path: '/new', element: <p>입력</p>, handle: { fullScreen: true } },
+      ]
+      const router = routerWith([{ element: layout, children }])
+      render(<RouterProvider router={router} />)
+      return router
+    }
+
+    it('걷지 않고 8초가 다 될 때까지 남는다', async () => {
+      const router = open()
+      press('삭제하기')
+      await pass(3000)
+      await act(() => router.navigate('/new'))
+      expect(within(region()).getByRole('button', { name: '되돌리기' })).toBeTruthy()
+      await pass(UNDO_DURATION - 3000 - 1)
+      expect(message()).not.toBe('')
+      await pass(1)
+      expect(message()).toBe('')
+    })
+
+    it('그동안 저장 자리 위에 놓인다. 입력 화면을 나가면 제자리다', async () => {
+      const router = open()
+      press('삭제하기')
+      expect(region().hasAttribute('data-above-form')).toBe(false)
+      await act(() => router.navigate('/new'))
+      expect(region().hasAttribute('data-above-form')).toBe(true)
+      await act(() => router.navigate('/'))
+      expect(region().hasAttribute('data-above-form')).toBe(false)
+    })
+
+    it.each([390, 1280])('폭 %dpx에서 저장 자리의 윗선(전체 화면 입력이 알린다)에서 16px 위다', async (width) => {
+      const router = open()
+      await act(() => router.navigate('/new'))
+      setViewportWidth(width)
+      expect(getComputedStyle(region()).bottom).toBe('calc(var(--toast-above-form, 0px) + var(--space-16))')
+    })
+
+    it('되돌리기가 없는 토스트는 그대로 바로 걷는다', async () => {
+      const router = open()
+      press('알리기')
+      await act(() => router.navigate('/new'))
+      expect(message()).toBe('')
+    })
+  })
+})
+
+it('공급자를 다시 만들면 앞의 알림이 남지 않는다', () => {
+  function Keyed() {
+    const [session, setSession] = useState(0)
+    return (
+      <>
+        <button type="button" onClick={() => setSession(session + 1)}>
+          로그아웃
+        </button>
+        <ToastProvider key={session}>
+          <Caller />
+        </ToastProvider>
+      </>
+    )
+  }
+  renderScreen(<Keyed />)
+  press('알리기')
+  press('로그아웃')
+  expect(message()).toBe('')
+})
+
+it('공급자 밖에서는 쓸 수 없다', () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  expect(() => render(<Caller />)).toThrow()
+})
+
+describe('되돌리기 토스트 뒤에 보이는 알림(자동 보내기의 200 알림, designer #235 Q1)', () => {
+  const UNDO_DURATION = 8000
+
+  function Callers() {
+    const showToast = useToast()
+    return (
+      <>
+        <button type="button" onClick={() => showToast('휴지통으로 옮겼어요', { label: '되돌리기', onAction: () => {} })}>
+          삭제하기
+        </button>
+        <button type="button" onClick={() => showToast('보낸 입력 1건은 이미 저장된 거래라 저장된 내용으로 두었어요', undefined, { behindAction: true })}>
+          보내기 끝
+        </button>
+      </>
+    )
+  }
+
+  function renderCallers() {
+    return renderScreen(
+      <ToastProvider>
+        <Caller />
+        <Callers />
+      </ToastProvider>,
+    )
+  }
+
+  it('되돌리기 토스트가 떠 있으면 걷지 않고, 끝난 뒤에 보인다', async () => {
+    renderCallers()
+    press('삭제하기')
+    press('보내기 끝')
+    expect(message()).toContain('휴지통으로 옮겼어요')
+    await pass(UNDO_DURATION)
+    expect(message()).toBe('보낸 입력 1건은 이미 저장된 거래라 저장된 내용으로 두었어요')
+    await pass(DURATION)
+    expect(message()).toBe('')
+  })
+
+  it('되돌리기를 누르면 바로 그 뒤의 알림을 보인다', async () => {
+    renderCallers()
+    press('삭제하기')
+    press('보내기 끝')
+    fireEvent.click(within(region()).getByRole('button', { name: '되돌리기' }))
+    expect(message()).toBe('보낸 입력 1건은 이미 저장된 거래라 저장된 내용으로 두었어요')
+  })
+
+  it('되돌리기가 없는 토스트가 떠 있으면 바로 바꾼다', () => {
+    renderCallers()
+    press('알리기')
+    press('보내기 끝')
+    expect(message()).toBe('보낸 입력 1건은 이미 저장된 거래라 저장된 내용으로 두었어요')
+  })
+
+  it('기다리는 사이 다른 토스트가 와서 되돌리기 토스트를 바꾸면 기다리던 알림은 그 뒤에 이어 보인다', async () => {
+    renderCallers()
+    press('삭제하기')
+    press('보내기 끝')
+    press('알리기')
+    expect(message()).toBe("'신한카드' 계좌를 추가했어요")
+    await pass(DURATION)
+    expect(message()).toBe('보낸 입력 1건은 이미 저장된 거래라 저장된 내용으로 두었어요')
+  })
+})

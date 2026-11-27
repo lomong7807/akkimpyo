@@ -94,10 +94,12 @@ security의 위험도 판정(본문)을 그대로 둔다. S 라벨만 대응시�
 | cannot-reproduce | 재현 안 됨. 합의 전에는 닫지 않는다. | triage |
 | blocked | 선행 이슈 대기 | triage |
 | stale | 기한 넘게 움직임 없음 | triage |
-| ready | 작업 가능. 개발 루프가 집을 수 있다. | owner만 |
+| ready | 작업 가능. 개발 루프가 집을 수 있다. | planner |
 | in-progress | worker가 진행 중 | 담당 봇 |
 | duplicate | 원래 이슈를 연결하고 알린 뒤 닫는다. | triage |
 | wontfix | 하지 않기로 했다. | owner |
+
+ready는 planner가 붙인다(2026-11-25 owner 결정). 승인된 단계 안에서, 선행 이슈가 머지됐고 수용 기준이 있는 이슈에만, 구현 봇 하나에 동시에 2개까지 붙인다. triage는 붙이지 않는다.
 
 ## 8. 조각
 
