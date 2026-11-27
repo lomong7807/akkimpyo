@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 /**
  * refresh 쿠키(ADR 001 결정 4, ADR 005 결정 6): {@code HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth}, Domain 없음,
  * 이름에 {@code __Secure-} 접두어, 유효 기간은 refresh token의 기한. local 프로파일(로컬 http)에서만 Secure와 접두어를 끈다.
- * 쿠키를 지우는 응답은 로그아웃(#28)뿐이라 여기에는 지우는 쿠키가 없다.
+ * 쿠키를 지우는 응답은 로그아웃(#28)뿐이고, 지우는 쿠키는 같은 이름·Path·속성에 {@code Max-Age=0}이다.
  */
 @Component
 final class RefreshCookie {
@@ -46,15 +46,25 @@ final class RefreshCookie {
 
     /** access token을 본문으로, refresh token을 쿠키로 담은 응답. refresh token은 본문에 넣지 않는다. */
     ResponseEntity<AccessTokenResponse> respond(HttpStatus status, LoginTokens tokens) {
-        ResponseCookie cookie = ResponseCookie.from(name, tokens.refreshToken().value())
+        return ResponseEntity.status(status)
+                .header(HttpHeaders.SET_COOKIE, cookie(tokens.refreshToken().value(),
+                        Duration.between(clock.instant(), tokens.refreshToken().expiresAt())))
+                .body(new AccessTokenResponse(tokens.accessToken()));
+    }
+
+    /** 로그아웃의 응답: 본문 없는 204와 브라우저의 refresh 쿠키를 지우는 쿠키. */
+    ResponseEntity<Void> clear() {
+        return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO)).build();
+    }
+
+    private String cookie(String value, Duration maxAge) {
+        return ResponseCookie.from(name, value)
                 .httpOnly(true)
                 .secure(secure)
                 .sameSite("Strict")
                 .path(PATH)
-                .maxAge(Duration.between(clock.instant(), tokens.refreshToken().expiresAt()))
-                .build();
-        return ResponseEntity.status(status)
-                .header(HttpHeaders.SET_COOKIE, cookie.toString())
-                .body(new AccessTokenResponse(tokens.accessToken()));
+                .maxAge(maxAge)
+                .build()
+                .toString();
     }
 }

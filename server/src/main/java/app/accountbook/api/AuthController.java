@@ -57,4 +57,14 @@ class AuthController {
                                                 HttpServletRequest http) {
         return refreshCookie.respond(HttpStatus.OK, loginService.refresh(refreshCookie.read(http)));
     }
+
+    /**
+     * 로그아웃(#28): refresh 쿠키만으로 그 계열을 폐기하고 쿠키를 지운다. 본문은 갱신과 같이 없어도 되고 있으면 JSON만 받고 읽지
+     * 않는다. 쿠키가 없거나, 모르는 값이거나, 이미 폐기됐거나, 회전된 토큰이어도 204다. 화면은 204만 성공으로 본다(ADR 001 결정 3·6).
+     */
+    @PostMapping(path = "/logout", consumes = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<Void> logout(@RequestBody(required = false) Map<String, Object> ignored, HttpServletRequest http) {
+        loginService.logout(refreshCookie.read(http));
+        return refreshCookie.clear();
+    }
 }
