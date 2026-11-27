@@ -1,5 +1,5 @@
 import { useMemo, useState, type MouseEvent, type ReactNode } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { connection } from '../../api/connection'
 import { sessionUserId } from '../../api/session'
 import { Button } from '../../components/Button'
@@ -9,7 +9,7 @@ import RetryMessage from '../../components/RetryMessage'
 import { useToast } from '../../components/ToastContext'
 import { useGoBack } from '../../components/useGoBack'
 import { useLeaveGuard } from '../../components/useLeaveGuard'
-import { today as todayOfDevice } from '../../lib/calendarDate'
+import { clampDate, isDate, selectableRange, today as todayOfDevice } from '../../lib/calendarDate'
 import { uuidV7 } from '../../lib/uuid'
 import { useConnection } from '../connection/useConnection'
 import { useKeepDraft } from '../drafts/keepDraft'
@@ -26,6 +26,7 @@ import TransactionFields from './TransactionFields'
 import { newTransactionDraftOf } from './transactionDraft'
 import {
   hasSameContent,
+  newTransactionValues,
   savedTransactionValues,
   toNewTransaction,
   toTransactionUpdate,
@@ -95,7 +96,9 @@ export default function TransactionNewPage() {
   const [owner] = useState(() => ({ userId: sessionUserId(), ledgerId: ledger.id }))
   const [defaultAccountId, setDefaultAccountId] = useState<string>()
   if (defaultAccountId === undefined && accounts.data) setDefaultAccountId(defaultAccountOf(owner, accounts.data))
-  const form = useTransactionForm(defaultAccountId ?? '')
+  // 달력(D-02)의 데이터 없음 자리에서 열면 날짜를 고른 날로 채운다(D-04 들어오는 길, architect #300). 주소에는 담지 않는다
+  const { state } = useLocation()
+  const form = useTransactionForm(defaultAccountId ?? '', () => valuesOnDate(state))
   const [id, setId] = useState(uuidV7)
   // "내 입력으로 고치기"는 같은 id의 거래를 고친다
   const updating = useUpdateTransaction(id)
@@ -477,4 +480,15 @@ function failureOf(error: Error): Failure | undefined {
   const conflict = idConflictOf(error)
   if (!conflict) return { kind: 'retry' }
   return conflict.savedId ? { kind: 'saved-differently', savedId: conflict.savedId } : { kind: 'id-unusable' }
+}
+
+/**
+ * 새 입력의 기본값. 들어온 길이 날짜(`{ date }`, 달력의 고른 날)를 넘겼고 고를 수 있는 날짜(P-202)이면 날짜만 그날로 바꾼다.
+ * 모양이 다르거나 범위 밖이면 넘기지 않은 것과 같다(기기의 오늘).
+ */
+function valuesOnDate(state: unknown) {
+  const values = newTransactionValues()
+  const date = typeof state === 'object' && state !== null ? (state as Record<string, unknown>).date : undefined
+  if (typeof date !== 'string' || !isDate(date) || clampDate(date, selectableRange(todayOfDevice())) !== date) return values
+  return { ...values, occurredOn: date }
 }

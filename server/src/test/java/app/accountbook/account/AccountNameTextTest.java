@@ -71,11 +71,11 @@ class AccountNameTextTest {
         Account first = create("생활비");
         Account second = create("비상금");
 
-        Account renamed = accountService.update(owner.getId(), second.getId(),
+        Account renamed = accountService.update(owner.getId(), ledgerId, second.getId(),
                 new AccountCommand(nfd("여행 자금"), AccountType.BANK, 0, OPENING));
         assertThat(storedName(renamed)).isEqualTo("여행 자금");
 
-        assertThatThrownBy(() -> accountService.update(owner.getId(), second.getId(),
+        assertThatThrownBy(() -> accountService.update(owner.getId(), ledgerId, second.getId(),
                 new AccountCommand(nfd("생활비"), AccountType.BANK, 0, OPENING)))
                 .isInstanceOf(DuplicateAccountNameException.class);
         assertThat(storedName(first)).isEqualTo("생활비");
