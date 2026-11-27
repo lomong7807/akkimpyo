@@ -76,7 +76,8 @@ class AccountUpdateTest {
         assertThat(updated.status()).as(updated.body()).isEqualTo(200);
         assertThat(updated.header("Content-Type")).isEqualTo("application/json");
         JsonNode account = updated.json();
-        assertThat(account.propertyNames()).containsExactly("id", "name", "type", "balance", "openingBalance", "openingDate");
+        assertThat(account.propertyNames()).containsExactly("id", "name", "type", "balance", "openingBalance", "openingDate",
+                "hidden");
         assertThat(List.of(account.get("id").asString(), account.get("name").asString(),
                 account.get("type").asString(), account.get("openingDate").asString()))
                 .containsExactly(living.toString(), "신한카드", "CARD", "2026-10-31");

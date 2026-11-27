@@ -21,6 +21,8 @@ enum ErrorCode {
     ID_CONFLICT(HttpStatus.CONFLICT, "그 id로는 만들 수 없다"),
     /** 입력란과 무관한 상태 오류("이미 삭제된 거래" 등). */
     INVALID_STATE(HttpStatus.CONFLICT, "대상의 지금 상태로는 할 수 없다"),
+    /** 계좌를 쓰는 거래(휴지통·취소 포함)가 있어 지울 수 없다(F-508). 화면은 숨기기를 안내한다. */
+    ACCOUNT_HAS_TRANSACTIONS(HttpStatus.CONFLICT, "거래가 있는 계좌는 지울 수 없다"),
     PAYLOAD_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "요청 본문이 너무 크다"),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 Content-Type이다"),
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청이 많아 지금은 처리할 수 없다"),
