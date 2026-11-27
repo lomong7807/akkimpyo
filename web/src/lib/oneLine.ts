@@ -1,12 +1,12 @@
-import { ONE_LINE_MAX } from './oneLineText'
-import { normalizeName, TRIMMED_SPACES, trimSpaces } from './visibleText'
-
-export { ONE_LINE_MAX, oneLineProblem } from './oneLineText'
+import { lengthOf, normalizeName, TRIMMED_SPACES, trimSpaces } from './visibleText'
 
 /*
  * 한 줄 입력의 해석(F-210, 화면설계서 D-05 "한 줄 해석 규칙"). 기기에서 하므로 연결이 없어도 된다.
  * 금액은 글자에서 자리를 옮겨 정수로 만든다. 부동소수점을 쓰지 않는다.
  */
+
+/** 한 줄 글과 가맹점/내용의 최대 글자 수(F-210, P-214) */
+export const ONE_LINE_MAX = 100
 
 /** P-201의 금액 범위 */
 const AMOUNT_MAX = 9_999_999_999
@@ -16,6 +16,13 @@ export interface OneLine {
   amount: number
   /** 금액 조각을 뺀 나머지. 없으면 빈 글자다 */
   payee: string
+}
+
+/** 해석하기 전에 막는 글: 비었거나 100자를 넘는다. 서버처럼 앞뒤 공백을 지우고 조합형으로 맞춰 센다 */
+export function oneLineProblem(text: string): 'empty' | 'too-long' | undefined {
+  const length = lengthOf(normalizeName(text))
+  if (length === 0) return 'empty'
+  if (length > ONE_LINE_MAX) return 'too-long'
 }
 
 // 쉼표는 세 자리마다만 받는다(12,000). 아무 데나 둔 쉼표(12,00)는 다른 금액을 뜻했을 수 있다

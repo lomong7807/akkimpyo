@@ -156,7 +156,8 @@ describe('홈의 한 줄 입력(C-01 (1))', () => {
   it('비운 채 "입력"을 누르면 도움말 아래에 문구를 보이고 입력칸에 초점을 둔다. 해석하지 않는다', async () => {
     const { user } = await openHome()
     await user.click(enterButton())
-    expect(errorOf(oneLine())).toBe(EMPTY)
+    // 해석기 조각을 받은 뒤에 본다(입력칸에 초점이 간 적이 없으면 누를 때 받는다)
+    await waitFor(() => expect(errorOf(oneLine())).toBe(EMPTY))
     expect(oneLine().getAttribute('aria-invalid')).toBe('true')
     expect(document.activeElement).toBe(oneLine())
     await settle()
@@ -166,7 +167,7 @@ describe('홈의 한 줄 입력(C-01 (1))', () => {
   it('공백만 있어도 빈 글이다', async () => {
     const { user } = await openHome()
     await submitLine(user, '   ')
-    expect(errorOf(oneLine())).toBe(EMPTY)
+    await waitFor(() => expect(errorOf(oneLine())).toBe(EMPTY))
     expect(oneLine().value).toBe('   ')
   })
 
@@ -175,7 +176,7 @@ describe('홈의 한 줄 입력(C-01 (1))', () => {
     const text = `${'가'.repeat(96)} 12000`
     fireEvent.change(oneLine(), { target: { value: text } })
     await user.click(enterButton())
-    expect(errorOf(oneLine())).toBe(TOO_LONG)
+    await waitFor(() => expect(errorOf(oneLine())).toBe(TOO_LONG))
     expect(oneLine().value).toBe(text)
     await settle()
     expect(resultDialog()).toBeNull()

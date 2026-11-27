@@ -18,7 +18,7 @@ import { resendNoticeText, useAutoSend } from '../features/sync/useAutoSend'
 import { pendingKey } from '../features/transactions/pendingTransactions'
 import { now } from '../lib/clock'
 import { useMe } from '../features/me/useMe'
-import { forgetOneLineHandoff } from '../features/transactions/oneLineHandoff'
+import { loadedChunk as loadedOneLineChunk } from '../features/home/oneLineLoader'
 import ListMemoryProvider from './ListMemoryProvider'
 import Loading from './Loading'
 import PlainLayout from './PlainLayout'
@@ -54,7 +54,8 @@ function SessionData({ children }: { children: ReactNode }) {
   useEffect(
     () => () => {
       queryClient.clear()
-      forgetOneLineHandoff()
+      // 넘기는 값은 한 줄 입력의 조각만 만든다. 조각을 받지 않았으면 지울 것이 없다
+      loadedOneLineChunk()?.forgetOneLineHandoff()
     },
     [queryClient],
   )
