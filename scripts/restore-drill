@@ -1,0 +1,333 @@
+#!/usr/bin/env bash
+# 복원 훈련. 백업을 내려받아 복호화하고, 빈 PostgreSQL 17 컨테이너에 복원해 점검한 뒤 컨테이너와 평문을 지운다.
+# 통과 조건은 docs/db/backup-restore.md 9절이다. 운영 DB와 운영 서버에는 접속하지 않는다.
+# macOS 기본 bash(3.2)에서도 돈다.
+set -euo pipefail
+umask 077
+
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=deploy/bin/backup-lib.sh
+. "$repo/deploy/bin/backup-lib.sh"
+# shellcheck source=scripts/server-container.sh
+. "$repo/scripts/server-container.sh"
+
+usage() {
+  cat <<'USAGE'
+사용법: scripts/restore-drill --identity 개인키파일 [백업] [옵션]
+
+백업(하나만, 정하지 않으면 버킷 daily/의 가장 새것):
+  --object 이름       버킷에서 이 객체를 받는다(예: weekly/akkimpyo-20261129T033000KST.tar.age)
+  --file 파일         이미 받아 둔 .tar.age 파일. 같은 폴더의 .sha256 파일로 확인한다
+  --store 폴더        버킷 대신 로컬 폴더에서 daily/의 가장 새것을 쓴다(시험용)
+
+옵션:
+  --keep-copy 폴더    복원과 명세표까지 통과한 암호화 파일을 이 폴더에 두고, 거기 있던 옛 사본은 지운다
+  --server-jar 파일   이 jar로 서버를 띄운다. 정하지 않으면 server/에서 빌드한다
+  --skip-server       서버 기동과 Flyway validate를 건너뛴다. 훈련은 "불완전"으로 끝난다
+
+버킷에서 받을 때는 환경변수를 쓴다.
+  OCI_NAMESPACE, OCI_BUCKET   버킷
+  OCI_CONFIG_DIR              OCI 설정 폴더(config와 API 키). 기본값 ~/.oci.
+                              이 폴더만 OCI CLI 컨테이너에 읽기 전용으로 넘긴다
+
+종료 코드: 0 통과, 1 실패, 2 불완전
+USAGE
+}
+
+identity='' object='' file='' store='' keep_copy='' server_jar='' skip_server=no
+while (($#)); do
+  case $1 in
+    --skip-server) skip_server=yes ;;
+    --help | -h)
+      usage
+      exit 0
+      ;;
+    --identity | --object | --file | --store | --keep-copy | --server-jar)
+      (($# > 1)) || die "$1 뒤에 값이 없다"
+      case $1 in
+        --identity) identity=$2 ;;
+        --object) object=$2 ;;
+        --file) file=$2 ;;
+        --store) store=$2 ;;
+        --keep-copy) keep_copy=$2 ;;
+        --server-jar) server_jar=$2 ;;
+      esac
+      shift
+      ;;
+    *)
+      usage >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+[[ -r $identity ]] || die '--identity로 age 개인키 파일을 준다'
+[[ -z $server_jar || -r $server_jar ]] || die "jar 파일을 읽을 수 없다: $server_jar"
+
+AGE_BIN=${AGE_BIN:-age}
+OCI_CLI_IMAGE=${OCI_CLI_IMAGE:-$DEFAULT_OCI_CLI_IMAGE}
+POSTGRES_IMAGE=${POSTGRES_IMAGE:-postgres:17}
+# server/Dockerfile(#51)과 같은 JRE다.
+JRE_IMAGE=${JRE_IMAGE:-eclipse-temurin:21.0.13_9-jre-noble@sha256:b4f9d2a0bc273417cf5219b7b832bbf0493ed500b7b57d5001d9f83374659060}
+command -v -- "$AGE_BIN" >/dev/null || die "age가 없다(macOS: brew install age)"
+command -v docker >/dev/null || die 'docker가 없다'
+
+# 복호화한 덤프가 잠깐 디스크에 놓인다. 지워도 덮어써 지우는 것은 아니므로 디스크 암호화를 전제로 한다.
+if command -v fdesetup >/dev/null && [[ $(fdesetup status 2>/dev/null) != *'FileVault is On'* ]]; then
+  log '주의: FileVault가 꺼져 있다. 복호화한 평문이 암호화되지 않은 디스크에 잠깐 놓인다'
+fi
+
+sha256_of() {
+  if command -v sha256sum >/dev/null; then
+    sha256sum -- "$1" | cut -d' ' -f1
+  else
+    shasum -a 256 -- "$1" | cut -d' ' -f1
+  fi
+}
+
+# --- 정리 ---
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/akkimpyo-drill.XXXXXX")
+name=$(basename -- "$work" | tr '[:upper:].' '[:lower:]-')
+# shellcheck disable=SC2317  # trap이 부른다.
+cleanup() {
+  local rc=$?
+  trap - EXIT
+  docker rm --force --volumes "$name-app" "$name-db" >/dev/null 2>&1 || true
+  docker network rm "$name" >/dev/null 2>&1 || true
+  rm -rf -- "$work" || rc=1
+  if [[ -e $work ]]; then
+    log "평문이 남았다. 직접 지운다: $work"
+    rc=1
+  fi
+  exit "$rc"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# --- 결과 ---
+
+report='' failed=no
+pass() { report="$report- $1: 통과${2:+ ($2)}"$'\n'; }
+fail() {
+  report="$report- $1: 실패${2:+ ($2)}"$'\n'
+  failed=yes
+}
+
+finish() {
+  local result=통과 rc=0
+  if [[ $failed == yes ]]; then
+    result=실패 rc=1
+  elif [[ $skip_server == yes ]]; then
+    result=불완전 rc=2
+  fi
+  printf '\n복원 훈련 결과: %s\n- 백업: %s (덤프 시각 %s)\n%s- 걸린 시간: %d초\n' \
+    "$result" "$object" "${dumped_at:-모름}" "$report" "$SECONDS"
+  printf '\ndocs/db/backup-restore.md 훈련 기록에 넣을 줄:\n| %s | %s | %s | %d초 | %s |\n' \
+    "$(TZ=Asia/Seoul date +%F)" "${dumped_at%%T*}" "$result" "$SECONDS" "$object"
+  exit "$rc"
+}
+
+# --- 백업 가져오기 ---
+
+oci_cli() {
+  docker run --rm --init --user "$(id -u):$(id -g)" --volume "$oci_config_dir:$oci_config_dir:ro" \
+    --env "HOME=$HOME" --env "OCI_CLI_CONFIG_FILE=$oci_config_dir/config" \
+    ${OCI_CLI_AUTH:+--env "OCI_CLI_AUTH=$OCI_CLI_AUTH"} \
+    "$OCI_CLI_IMAGE" os object "$@" --namespace "$OCI_NAMESPACE" --bucket-name "$OCI_BUCKET"
+}
+
+newest() {
+  grep -E '^daily/akkimpyo-[0-9]{8}T[0-9]{6}KST\.tar\.age$' | sort | tail -n 1
+}
+
+fetch() {
+  if [[ -n $store ]]; then
+    cp -- "$store/$1" "$2"
+  else
+    oci_cli get --name "$1" --file - >"$2"
+  fi
+}
+
+dumped_at=''
+log '백업 가져오기'
+if [[ -n $file ]]; then
+  object=$(basename -- "$file")
+  bundle=$object
+  cp -- "$file" "$work/$bundle"
+  cp -- "$file.sha256" "$work/$bundle.sha256" || die "sha256 파일이 없다: $file.sha256"
+else
+  if [[ -z $store ]]; then
+    [[ -n ${OCI_NAMESPACE:-} && -n ${OCI_BUCKET:-} ]] || die '환경변수 OCI_NAMESPACE와 OCI_BUCKET을 정한다'
+    oci_config_dir=$(cd -- "${OCI_CONFIG_DIR:-$HOME/.oci}" && pwd) || die 'OCI 설정 폴더가 없다'
+  fi
+  if [[ -z $object ]]; then
+    if [[ -n $store ]]; then
+      object=$(cd -- "$store" && find daily -type f | newest) || die 'daily/에 백업이 없다'
+    else
+      # shellcheck disable=SC2016  # 백틱은 JMESPath의 글자 표기다.
+      object=$(oci_cli list --prefix daily/ --all --query 'join(`\n`, data[].name)' --raw-output | newest) ||
+        die 'daily/에 백업이 없다'
+    fi
+  fi
+  bundle=$(basename -- "$object")
+  fetch "$object" "$work/$bundle"
+  fetch "$object.sha256" "$work/$bundle.sha256"
+fi
+log "백업: $object"
+
+expected=$(cut -d' ' -f1 "$work/$bundle.sha256")
+if [[ $(sha256_of "$work/$bundle") != "$expected" ]]; then
+  fail 'sha256' '받은 파일이 올릴 때와 다르다'
+  finish
+fi
+pass 'sha256'
+
+# --- 복호화 ---
+
+log '복호화'
+mkdir "$work/plain"
+if ! "$AGE_BIN" --decrypt --identity "$identity" --output "$work/bundle.tar" "$work/$bundle"; then
+  fail '복호화'
+  finish
+fi
+files='SHA256SUMS meta.txt manifest.txt integrity-checks.sql globals.sql db.dump'
+[[ $(tar -tf "$work/bundle.tar" | tr '\n' ' ') == "$files " ]] || die '백업 안의 파일 목록이 다르다'
+tar -xf "$work/bundle.tar" -C "$work/plain"
+rm -- "$work/bundle.tar"
+[[ -z $(find "$work/plain" ! -type d ! -type f) ]] || die '백업 안에 보통 파일이 아닌 것이 있다'
+while read -r sum entry; do
+  [[ $(sha256_of "$work/plain/$entry") == "$sum" ]] || die "백업 안의 파일이 깨졌다: $entry"
+done <"$work/plain/SHA256SUMS"
+meta() { sed -n "s/^$1=//p" "$work/plain/meta.txt"; }
+[[ $(meta format) == 1 ]] || die '모르는 백업 형식이다'
+dumped_at=$(meta dumped_at)
+database=$(meta database)
+pass '복호화'
+
+# --- 복원 ---
+
+log '복원'
+restore_started=$SECONDS
+docker network create --internal "$name" >/dev/null
+# 데이터는 메모리에만 둔다. 밖에 여는 포트가 없고 네트워크는 바깥과 떨어져 있다.
+docker run --detach --name "$name-db" --network "$name" --network-alias db \
+  --tmpfs /var/lib/postgresql/data \
+  --env POSTGRES_USER=drill_admin --env POSTGRES_DB=postgres --env POSTGRES_HOST_AUTH_METHOD=trust \
+  "$POSTGRES_IMAGE" >/dev/null
+for _ in $(seq 60); do
+  docker exec "$name-db" pg_isready --quiet --host 127.0.0.1 && break
+  sleep 1
+done
+db() { docker exec -i "$name-db" "$@"; }
+if db psql -X -q -v ON_ERROR_STOP=1 -U drill_admin -d postgres <"$work/plain/globals.sql" >/dev/null &&
+  db pg_restore --exit-on-error --create -U drill_admin -d postgres <"$work/plain/db.dump"; then
+  pass '복원' "$((SECONDS - restore_started))초"
+else
+  fail '복원'
+  finish
+fi
+
+# --- 점검 ---
+
+log '명세표와 점검 쿼리'
+psql_restored() { db psql -X -q -v ON_ERROR_STOP=1 -U drill_admin -d "$database" "$@"; }
+
+# 백업 때 쓴 쿼리 파일(백업 안에 있다)로 다시 만들어 맞춰 본다.
+if [[ $(meta manifest) != ok ]]; then
+  fail '명세표' '백업할 때 만들지 못했다'
+elif manifest_script "$work/plain/integrity-checks.sql" | psql_restored >"$work/manifest.txt" &&
+  diff "$work/plain/manifest.txt" "$work/manifest.txt" >&2; then
+  pass '명세표'
+  if [[ -n $keep_copy ]]; then
+    mkdir -p -- "$keep_copy"
+    cp -- "$work/$bundle" "$work/$bundle.sha256" "$keep_copy/"
+    for old in "$keep_copy"/akkimpyo-*KST.tar.age "$keep_copy"/akkimpyo-*KST.tar.age.sha256; do
+      [[ -e $old && $old != "$keep_copy/$bundle" && $old != "$keep_copy/$bundle.sha256" ]] || continue
+      rm -- "$old"
+    done
+    log "암호화 사본: $keep_copy/$bundle (덤프 시각 ${dumped_at}부터 35일 안에 지운다)"
+  fi
+else
+  fail '명세표' '백업 때와 다르다'
+fi
+
+checks=$repo/docs/db/integrity-checks.sql
+if ! cmp -s "$work/plain/integrity-checks.sql" "$checks"; then
+  report="$report- 쿼리 파일: 다름. 서버에 설치된 integrity-checks.sql이 이 체크아웃의 파일과 다르다."
+  report="$report 운영에 배포된 버전의 체크아웃인지, 서버의 파일을 다시 설치해야 하는지 본다"$'\n'
+fi
+bad=''
+for number in $(check_numbers "$checks"); do
+  if sql_section "$checks" "점검 $number" | psql_restored -A -t >"$work/check.txt"; then
+    rows=$(wc -l <"$work/check.txt" | tr -d ' ')
+    ((rows == 0)) || bad="$bad 점검 $number: ${rows}건,"
+  else
+    bad="$bad 점검 $number: 쿼리 오류,"
+  fi
+done
+count=$(check_numbers "$checks" | wc -l | tr -d ' ')
+if ((count == 0)); then
+  fail '점검 쿼리' "${checks}에서 점검을 찾지 못했다"
+elif [[ -z $bad ]]; then
+  pass '점검 쿼리' "${count}개 모두 0건"
+else
+  fail '점검 쿼리' "${bad# }"
+fi
+
+# --- 서버 기동 ---
+
+# 서버는 뜰 때 Flyway validate를 하고(ddl-auto=validate), 코드에만 있는 새 마이그레이션은 복원 DB에 적용한다.
+if [[ $skip_server == yes ]]; then
+  report="$report- 서버 기동과 Flyway validate: 건너뜀"$'\n'
+  finish
+fi
+if [[ -z $server_jar ]]; then
+  log '서버 빌드'
+  (cd -- "$repo/server" && ./gradlew --quiet bootJar) >&2
+  server_jar=$(find "$repo/server/build/libs" -name '*.jar' ! -name '*-plain.jar')
+  [[ -f $server_jar ]] || die "server/build/libs에 jar가 하나가 아니다: $server_jar"
+fi
+log '서버 기동'
+create_server --name "$name-app" --network "$name" --user 10001:10001 --memory 1g \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --env "DB_URL=jdbc:postgresql://db:5432/$database" --env DB_USERNAME=drill_admin --env DB_PASSWORD=unused \
+  "$JRE_IMAGE" java -jar /app.jar || die '서버 컨테이너를 만들지 못했다'
+cp -- "$server_jar" "$work/app.jar"
+chmod 644 "$work/app.jar"
+docker cp --quiet "$work/app.jar" "$name-app:/app.jar"
+docker start "$name-app" >/dev/null
+
+health() {
+  # shellcheck disable=SC2016
+  docker exec "$name-db" timeout 5 bash -c '
+    exec 3<>"/dev/tcp/$1/8080" && printf "GET /actuator/health HTTP/1.0\r\nHost: app\r\n\r\n" >&3 && cat <&3
+  ' bash "$name-app" 2>/dev/null | tr -d '\r\n'
+}
+up=no
+for _ in $(seq 120); do
+  case $(health || true) in
+    HTTP/1.?' 200'*'"status":"UP"'*)
+      up=yes
+      break
+      ;;
+  esac
+  [[ $(docker inspect --format '{{.State.Running}}' "$name-app") == true ]] || break
+  sleep 1
+done
+docker logs "$name-app" >"$work/app.log" 2>&1
+validated=$(grep -oE 'Successfully validated [0-9]+ migrations?' "$work/app.log" | head -n 1 || true)
+if [[ -n $validated ]]; then
+  pass 'Flyway validate' "$validated"
+else
+  fail 'Flyway validate'
+fi
+if [[ $up == yes ]]; then
+  pass '서버 기동'
+else
+  fail '서버 기동'
+  tail -n 30 "$work/app.log" >&2
+fi
+finish

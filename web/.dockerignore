@@ -1,0 +1,21 @@
+# 빌드 산출물
+node_modules/
+dist/
+coverage/
+
+# 이미지 빌드에서는 린트와 테스트를 돌리지 않는다
+tests/
+eslint.config.js
+
+# 이미지에 필요 없는 파일
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+docs/
+**/*.md
+
+# 로컬 설정과 비밀값. Vite는 .env의 VITE_ 값을 번들에 넣는다
+.env*
+.idea/
+**/.DS_Store

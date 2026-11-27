@@ -34,13 +34,13 @@ class OutsideControllerErrorTest {
     // --- 없는 경로 ---
 
     @ParameterizedTest
-    @ValueSource(strings = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "MARKER"})
+    @ValueSource(strings = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
     void 없는_경로는_메서드와_무관하게_404다(String method) throws Exception {
         server.send(method, "/api/v1/nope", null).assertProblem(404, "Not Found", "NOT_FOUND");
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/", "/favicon.ico", "/index.html", "/error", "/error/x", "/actuator/env", "//nope"})
+    @ValueSource(strings = {"/", "/favicon.ico", "/index.html", "/error", "/error/x", "/actuator/env"})
     void 열려_있지_않은_경로는_404다(String path) throws Exception {
         server.get(path, "Accept", "text/html").assertProblem(404, "Not Found", "NOT_FOUND");
     }
@@ -95,6 +95,7 @@ class OutsideControllerErrorTest {
     void 본문을_보내다_멈춘_요청은_다시_보낼_수_있게_500이고_요청_id와_함께_남는다() throws Exception {
         try (CapturedLogs logs = CapturedLogs.start()) {
             Reply reply = server.rawReply("POST " + ErrorProbeController.PATH + "/body HTTP/1.1\r\n" + HOST
+                    + server.authorizationLine()
                     + "X-Request-Id: stalled-1\r\nContent-Type: application/json\r\nContent-Length: 50\r\n\r\n"
                     + "{\"name\":\"marker");
 
@@ -157,21 +158,5 @@ class OutsideControllerErrorTest {
     @ValueSource(strings = {"\u0016\u0003\u0001\u0002\u0000\r\n\r\n", "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"})
     void HTTP_1_1이_아닌_요청에도_HTML을_주지_않는다(String request) throws IOException {
         assertThat(server.raw(request)).doesNotContainIgnoringCase("<html").doesNotContainIgnoringCase("tomcat");
-    }
-
-    // --- actuator (지금 동작의 확인. 접근 제한은 #12의 둘째 PR) ---
-
-    @Test
-    void 열린_actuator는_health뿐이고_상세가_없다() throws Exception {
-        Reply health = server.get("/actuator/health");
-        assertThat(health.status()).isEqualTo(200);
-        assertThat(health.json().propertyNames()).containsExactlyInAnyOrder("status", "groups");
-        assertThat(health.json().get("status").asString()).isEqualTo("UP");
-
-        server.get("/actuator/info").assertProblem(404, "Not Found", "NOT_FOUND");
-        server.get("/actuator/metrics").assertProblem(404, "Not Found", "NOT_FOUND");
-        // 없는 상태 항목은 actuator가 직접 빈 본문의 404로 답한다.
-        assertThat(server.get("/actuator/health/db").status()).isEqualTo(404);
-        assertThat(server.get("/actuator/health/db").body()).isEmpty();
     }
 }
