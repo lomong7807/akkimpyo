@@ -1,0 +1,12 @@
+.message {
+  display: flex;
+  gap: var(--space-4);
+  margin: 0;
+  color: var(--color-danger);
+  font: var(--text-secondary);
+}
+
+/* 글자를 키워 낱말 하나가 줄보다 길어지면 낱말 안에서 줄을 바꾼다 */
+.message > span {
+  min-width: 0;
+}

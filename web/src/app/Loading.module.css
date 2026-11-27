@@ -1,0 +1,11 @@
+.loading {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  /* 내용 아래 여백 24px과 짝을 맞춰 세로로도 가운데에 둔다 */
+  padding-top: var(--space-24);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}

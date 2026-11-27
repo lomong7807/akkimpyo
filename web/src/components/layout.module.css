@@ -1,0 +1,38 @@
+/*
+ * 바탕은 전체 폭에 그리고 안의 항목만 화면 폭에 따라 가운데로 모은다(화면설계서 00-common 2.5).
+ * 좌우 여백은 휴대폰 배치 16px, 넓은 화면 24px이고 좌우 안전 영역보다 좁아지지 않는다.
+ */
+.contentWidth {
+  --content-width: 100%;
+  --gutter: var(--space-16);
+
+  padding-inline: max(var(--gutter), env(safe-area-inset-left), (100% - var(--content-width)) / 2)
+    max(var(--gutter), env(safe-area-inset-right), (100% - var(--content-width)) / 2);
+}
+
+@media (width >= 768px) {
+  .contentWidth {
+    --content-width: var(--width-content-narrow);
+  }
+}
+
+@media (width >= 1024px) {
+  .contentWidth {
+    --content-width: var(--width-content-wide);
+    --gutter: var(--space-24);
+  }
+}
+
+/* 전체 화면 입력의 폭. .contentWidth에 더해 건다 */
+@media (width >= 1024px) {
+  .fullScreenForm {
+    --content-width: var(--width-full-screen-form);
+  }
+}
+
+/* 두 칸 화면(홈)의 넓은 화면 폭. 가운데 720px로 모으지 않고 내용 영역 전체를 쓴다(00-common 2.5). .contentWidth에 더해 건다 */
+@media (width >= 1024px) {
+  .fullWidth {
+    --content-width: 100%;
+  }
+}

@@ -2,8 +2,9 @@
 
 가계부 서비스. 앱 이름은 "아낌표"이고, 코드와 폴더의 `account-book` / `accountbook` 표기는 그대로 둔다.
 
-- `server/` — Spring Boot 3.5, Gradle, Java 21, PostgreSQL, Flyway
+- `server/` — Spring Boot 4.2, Gradle, Java 21, PostgreSQL, Flyway
 - `web/` — React 19, Vite, TypeScript, Vitest
+- `e2e/` — Playwright 끝에서 끝까지 테스트(Chromium, WebKit 아이폰 크기). `web/`에서 `npm ci`를 한 뒤 `e2e/`에서 `npm ci`, `npx playwright install chromium webkit`, `npm test`(2026-11-26 확인, 자세한 것은 `e2e/README.md`)
 - `compose.yaml` — 로컬 개발용 PostgreSQL
 - `docs/planning/` — 기획 문서(무엇을 만들지의 기준)
 

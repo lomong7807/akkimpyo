@@ -1,0 +1,20 @@
+.input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 1;
+}
+
+/* 비밀번호 보기 버튼은 앱이 그린다. Edge가 그리는 버튼은 감춘다 */
+.input::-ms-reveal {
+  display: none;
+}
+
+.input.withAction {
+  padding-inline-end: calc(var(--size-touch) + var(--space-4));
+}
+
+/* 44px 버튼을 48px 칸 안의 오른쪽 끝에 같은 여백으로 둔다 */
+.action {
+  position: absolute;
+  inset: calc((var(--size-field) - var(--size-touch)) / 2);
+  inset-inline-start: auto;
+}

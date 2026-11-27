@@ -12,7 +12,6 @@ import app.accountbook.category.Category;
 import app.accountbook.category.CategoryCommand;
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
-import app.accountbook.common.IdConflictException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
@@ -38,7 +37,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class TransactionServiceTest {
 
     static final LocalDate DAY = LocalDate.of(2026, 11, 18);
-    static final String DEVICE = "iphone-1";
+    static final String DEVICE = "iphone.safari";
 
     @Autowired TransactionService transactionService;
     @Autowired TransactionRepository transactionRepository;
@@ -91,6 +90,13 @@ class TransactionServiceTest {
     private void flushAndClear() {
         entityManager.flush();
         entityManager.clear();
+    }
+
+    /** DB에 저장된 라인의 ledger_id. 라인 수만큼 나온다. */
+    private List<UUID> ledgersOfLines(UUID transactionId) {
+        entityManager.flush();
+        return jdbc.queryForList("select ledger_id from transaction_line where transaction_id = ?", UUID.class,
+                transactionId);
     }
 
     @Test
@@ -302,6 +308,51 @@ class TransactionServiceTest {
     }
 
     @Test
+    void linesCarryTheLedgerOfTheirTransaction() {
+        User other = fixtures.user("other@example.com");
+        UUID otherLedgerId = fixtures.personalLedgerId(other);
+        Account othersCash = account(other, otherLedgerId, "현금", AccountType.CASH);
+
+        UUID expense = create(expense(UUID.randomUUID(), 12_000)).id();
+        UUID income = create(new Entry(UUID.randomUUID(), TransactionType.INCOME, DAY, null, bank.getId(),
+                salary.getId(), 50_000, false, "회사", null, null)).id();
+        UUID transfer = create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(), cash.getId(), 30_000,
+                null)).id();
+        UUID others = fixtures.expense(other, otherLedgerId, othersCash.getId(), null, DAY, 1_000).id();
+
+        assertThat(ledgersOfLines(expense)).containsExactly(ledgerId);
+        assertThat(ledgersOfLines(income)).containsExactly(ledgerId);
+        assertThat(ledgersOfLines(transfer)).containsExactly(ledgerId, ledgerId);
+        assertThat(ledgersOfLines(others)).containsExactly(otherLedgerId);
+    }
+
+    @Test
+    void linesCarryTheLedgerOfTheirTransactionAfterUpdate() {
+        UUID expense = create(expense(UUID.randomUUID(), 12_000)).id();
+        UUID transfer = create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(), cash.getId(), 30_000,
+                null)).id();
+        flushAndClear();
+
+        transactionService.update(owner.getId(), expense, 1, expense(expense, 15_000), DEVICE);
+        transactionService.update(owner.getId(), transfer, 1,
+                new Transfer(transfer, DAY, null, cash.getId(), bank.getId(), 40_000, null), DEVICE);
+
+        assertThat(ledgersOfLines(expense)).containsExactly(ledgerId);
+        assertThat(ledgersOfLines(transfer)).containsExactly(ledgerId, ledgerId);
+    }
+
+    @Test
+    void removingTransactionRemovesItsLines() {
+        UUID id = create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(), cash.getId(), 30_000, null)).id();
+        flushAndClear();
+
+        transactionRepository.deleteById(id);
+
+        assertThat(ledgersOfLines(id)).isEmpty();
+        assertThat(transactionRepository.findById(id)).isEmpty();
+    }
+
+    @Test
     void update_rejectsStaleVersion() {
         UUID id = UUID.randomUUID();
         create(expense(id, 12_000));
@@ -454,7 +505,7 @@ class TransactionServiceTest {
         ChangeLogView update = history.get(1);
         assertThat(update.before().at("/lines/0/amount").asLong()).isEqualTo(-12_000);
         assertThat(update.after().at("/lines/0/amount").asLong()).isEqualTo(-15_000);
-        assertThat(history.get(2).after().at("/status").asText()).isEqualTo("CANCELED");
+        assertThat(history.get(2).after().at("/status").asString()).isEqualTo("CANCELED");
         assertThat(history.get(3).after().at("/deleted").asBoolean()).isTrue();
         assertThat(history.get(4).after().at("/deleted").asBoolean()).isFalse();
         assertThat(history.get(4).after().at("/version").asLong()).isEqualTo(5);

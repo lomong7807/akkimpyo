@@ -1,0 +1,15 @@
+# 정적 파일과 SPA fallback만 내는 최소 설정이다.
+# TLS, /api 전달, 보안 헤더, 접근 로그는 #52에서.
+{
+	# 인증서를 발급하지 않고 관리 API도 열지 않는다.
+	auto_https off
+	admin off
+	persist_config off
+}
+
+# 컨테이너 안의 80만 연다.
+:80 {
+	root * /srv
+	try_files {path} /index.html
+	file_server
+}

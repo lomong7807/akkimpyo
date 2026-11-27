@@ -1,0 +1,78 @@
+.topBar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-height: calc(var(--size-topbar) + env(safe-area-inset-top));
+  padding-block: env(safe-area-inset-top) 0;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.ledgerName,
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ledgerName {
+  margin: 0;
+  font: var(--text-body-strong);
+}
+
+/* 누르는 영역 44px의 안쪽 여백만큼 당겨 화살표를 내용의 왼쪽 선에 가깝게 둔다 */
+.back {
+  flex: none;
+  margin-inline: calc(-1 * var(--space-12)) var(--space-4);
+}
+
+/* 동기화 상태 표시(B-04)는 오른쪽에 둔다. 누르는 영역 44px의 안쪽 여백만큼 당겨 아이콘을 내용의 오른쪽 선에 가깝게 둔다 */
+.sync {
+  flex: none;
+  margin-inline: auto calc(-1 * var(--space-8));
+}
+
+/* 하위 화면은 화면별 버튼이 오른쪽 끝이고 그 왼쪽에 둔다 */
+.subSync {
+  margin-inline: auto 0;
+}
+
+/* 글자 버튼의 안쪽 여백만큼 당겨 글자를 내용의 오른쪽 선에 맞춘다 */
+.action {
+  flex: none;
+  margin-inline: auto calc(-1 * var(--space-8));
+}
+
+.subSync + .action {
+  margin-inline-start: 0;
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding-bottom: var(--space-24);
+}
+
+/* 넓은 화면에는 상단 바가 없다. 하위 화면의 "뒤로"와 화면 이름은 내용 맨 위의 한 줄이 된다 */
+@media (width >= 1024px) {
+  .ledgerBar {
+    display: none;
+  }
+
+  .subSync {
+    display: none;
+  }
+
+  .titleBar {
+    position: static;
+    min-height: var(--size-topbar);
+    padding-block: 0;
+    border-bottom: 0;
+    background-color: transparent;
+  }
+}

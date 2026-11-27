@@ -1,0 +1,30 @@
+.chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: var(--size-chip);
+  padding-inline: var(--space-8);
+  border-radius: var(--radius-full);
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  white-space: nowrap;
+}
+
+/* 놓인 칸보다 길면 줄을 바꾼다. 높이는 24px부터 늘어나고 모서리는 그대로다 */
+.wrap {
+  max-width: 100%;
+  height: auto;
+  min-height: var(--size-chip);
+  /* 줄이 늘어도 글자 위아래 여백이 한 줄일 때와 같다 */
+  padding-block: max(0px, (var(--size-chip) - 1lh) / 2);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* 오류 칩("보낼 수 없음"). 테두리까지 높이 24px이다 */
+.danger {
+  border: 1px solid var(--color-danger);
+  background-color: var(--color-surface);
+  color: var(--color-danger);
+}

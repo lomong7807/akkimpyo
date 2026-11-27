@@ -1,0 +1,14 @@
+.size20,
+.size24 {
+  flex: none;
+}
+
+.size20 {
+  width: var(--size-icon-20);
+  height: var(--size-icon-20);
+}
+
+.size24 {
+  width: var(--size-icon-24);
+  height: var(--size-icon-24);
+}
