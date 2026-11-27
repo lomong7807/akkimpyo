@@ -143,6 +143,22 @@ class TransactionListPlanTest {
         }
     }
 
+    /**
+     * 달력의 날짜별 합계(#66)는 그 달만 읽는다. 큰 장부의 11월(1일~27일)은 약 150건이고, 어느 훑기도 그보다 크게
+     * 늘지 않는다. 라인은 거래 id의 인덱스로 거래마다 찾는다.
+     */
+    @Test
+    void 날짜별_합계는_큰_장부에서_그_달의_거래만_읽는다() {
+        List<Statement> daily = statements("날짜별 합계 2026-11", () -> assertThat(
+                listQuery.dailyTotals(BIG_OWNER, BIG_LEDGER, YearMonth.of(2026, 11))).hasSize(27));
+
+        Statement sums = pick(daily, Kind.MONTH_DAYS);
+        String custom = explain(sums, "force_custom_plan");
+        assertThat(custom).contains("ix_transaction_ledger_occurred_on").doesNotContain("Seq Scan");
+        assertThat(mostRowsReadByAScan(custom)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG).isLessThan(500);
+        assertThat(explain(sums, "force_generic_plan")).doesNotContain("Seq Scan");
+    }
+
     /** 앱의 문장을 그대로 PREPARE하고 받은 값으로 실행한 계획. 비교용으로 인덱스를 끈 계획의 비용도 남긴다. */
     private String explain(Statement statement, String planCacheMode) {
         String name = "list_plan_" + PREPARED.incrementAndGet();
@@ -173,6 +189,13 @@ class TransactionListPlanTest {
 
     /** 큰 장부의 한 쪽을 실제로 읽고, 그때 Hibernate가 보낸 문장과 그 값을 순서대로. */
     private List<Statement> statements(TransactionScope scope, TransactionKey after) {
+        return statements(scope + (after == null ? " 첫 쪽" : " 다음 쪽"), () -> assertThat(
+                listQuery.page(BIG_OWNER, BIG_LEDGER, scope, after, TransactionListQuery.MAX_LIMIT).items())
+                .hasSize(TransactionListQuery.MAX_LIMIT));
+    }
+
+    /** call이 Hibernate로 보낸 문장과 그 값을 순서대로. */
+    private List<Statement> statements(String label, Runnable call) {
         Logger sqlLog = (Logger) LoggerFactory.getLogger("org.hibernate.SQL");
         Logger bindLog = (Logger) LoggerFactory.getLogger("org.hibernate.orm.jdbc.bind");
         Level sqlLevel = sqlLog.getLevel();
@@ -183,17 +206,14 @@ class TransactionListPlanTest {
         bindLog.addAppender(appender);
         sqlLog.setLevel(Level.DEBUG);
         bindLog.setLevel(Level.TRACE);
-        TransactionPage page;
         try {
-            page = listQuery.page(BIG_OWNER, BIG_LEDGER, scope, after, TransactionListQuery.MAX_LIMIT);
+            call.run();
         } finally {
             sqlLog.setLevel(sqlLevel);
             bindLog.setLevel(bindLevel);
             sqlLog.detachAppender(appender);
             bindLog.detachAppender(appender);
         }
-        assertThat(page.items()).hasSize(TransactionListQuery.MAX_LIMIT);
-        String label = scope + (after == null ? " 첫 쪽" : " 다음 쪽");
         List<Statement> statements = new ArrayList<>();
         for (ILoggingEvent event : appender.list) {
             String message = event.getFormattedMessage().strip();
@@ -218,6 +238,32 @@ class TransactionListPlanTest {
                 .matcher(plan);
         assertThat(matcher.find()).as(plan).isTrue();
         return Long.parseLong(matcher.group(1));
+    }
+
+    /**
+     * 훑기 노드마다 실제로 읽은 행(내놓은 행과 조건으로 거른 행을 더해 loops를 곱한 값) 가운데 가장 큰 값.
+     * 장부 전체를 읽는 계획이면 Seq Scan이 아니어도 여기서 큰 장부의 거래 수만큼 나온다.
+     */
+    private static long mostRowsReadByAScan(String plan) {
+        Pattern node = Pattern.compile("actual time=\\S+ rows=(\\d+)(?:\\.\\d+)? loops=(\\d+)");
+        Pattern removed = Pattern.compile("Rows Removed by (?:Filter|Index Recheck): (\\d+)");
+        long most = 0;
+        long rows = 0;
+        long loops = 0;
+        for (String line : plan.lines().toList()) {
+            Matcher read = node.matcher(line);
+            Matcher filtered = removed.matcher(line);
+            if (read.find()) {
+                boolean scan = line.contains("Scan");
+                rows = scan ? Long.parseLong(read.group(1)) : 0;
+                loops = scan ? Long.parseLong(read.group(2)) : 0;
+            } else if (filtered.find()) {
+                rows += Long.parseLong(filtered.group(1));
+            }
+            most = Math.max(most, rows * loops);
+        }
+        assertThat(most).as(plan).isPositive();
+        return most;
     }
 
     private String plan(String title, String explain) {
@@ -257,6 +303,10 @@ class TransactionListPlanTest {
             if (sql.contains("left join transaction_line") && sql.contains("fetch first")) {
                 return Kind.PAGE;
             }
+            if (sql.contains("sum(") && sql.contains("occurred_on>=") && sql.contains("group by")
+                    && sql.substring(sql.indexOf("group by")).contains("occurred_on")) {
+                return Kind.MONTH_DAYS;
+            }
             if (sql.contains("sum(") && sql.contains("occurred_on>=")) {
                 return Kind.TOTALS;
             }
@@ -267,8 +317,8 @@ class TransactionListPlanTest {
         }
     }
 
-    /** 쪽(거래와 라인), 범위 합계, 날마다 합계. */
+    /** 쪽(거래와 라인), 범위 합계, 쪽에 나온 날마다 합계, 달력의 날짜별 합계(달 범위를 날마다 묶는다). */
     private enum Kind {
-        PAGE, TOTALS, DAYS
+        PAGE, TOTALS, DAYS, MONTH_DAYS
     }
 }

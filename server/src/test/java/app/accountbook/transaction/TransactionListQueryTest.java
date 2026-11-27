@@ -275,6 +275,81 @@ class TransactionListQueryTest {
         assertThat(page(new Day(busy.plusDays(1)), null, 50).totals()).isEqualTo(new Totals(0, 0));
     }
 
+    /**
+     * 달력의 날짜별 합계(#66): 날마다 P-205로 세고, 합계에 드는 거래가 있는 날만 날짜 순으로 준다. 다른 장부의 같은 날
+     * 거래는 섞이지 않는다. 날마다의 합을 더하면 거래 목록의 달 합계와 같다. 환불이 더 큰 날의 지출은 음수 그대로다(#46).
+     */
+    @Test
+    void 날짜별_합계는_P_205로_세고_합계에_드는_거래가_있는_날만_날짜_순으로_준다() {
+        UUID bank = fixtures.account(owner, ledgerId, "은행", AccountType.BANK, 0, LocalDate.of(2024, 1, 1)).getId();
+        LocalDate day = LocalDate.of(2026, 11, 18);
+        fixtures.expense(owner, ledgerId, cash, null, day, 12_000);
+        fixtures.refund(owner, ledgerId, cash, null, day, 2_000);
+        fixtures.income(owner, ledgerId, bank, null, day, 3_000_000);
+        fixtures.transfer(owner, ledgerId, bank, cash, day, 50_000);
+        fixtures.cancel(owner, fixtures.expense(owner, ledgerId, cash, null, day, 7_000));
+        fixtures.delete(owner, fixtures.expense(owner, ledgerId, cash, null, day, 8_000));
+        UUID pending = fixtures.expense(owner, ledgerId, cash, null, day, 900).id();
+        fixtures.transfer(owner, ledgerId, bank, cash, LocalDate.of(2026, 11, 2), 5_000);
+        fixtures.cancel(owner, fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2026, 11, 3), 1_000));
+        fixtures.delete(owner, fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2026, 11, 4), 1_000));
+        fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2026, 11, 10), 1_000);
+        fixtures.refund(owner, ledgerId, cash, null, LocalDate.of(2026, 11, 10), 3_000);
+        fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2026, 11, 30), 4_000);
+        fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2026, 10, 31), 100_000);
+        fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2026, 12, 1), 100_000);
+        User other = fixtures.user("list-other@example.com");
+        UUID otherLedger = fixtures.personalLedgerId(other);
+        UUID otherCash = fixtures.account(other, otherLedger, "현금", AccountType.CASH, 0, day).getId();
+        fixtures.expense(other, otherLedger, otherCash, null, day, 55_000);
+        entityManager.flush();
+        jdbc.update("update transaction set status = 'PENDING' where id = ?", pending);
+
+        List<DayTotals> days = dailyTotals(NOVEMBER.month());
+
+        assertThat(days).containsExactly(new DayTotals(LocalDate.of(2026, 11, 10), 0, -2_000),
+                new DayTotals(day, 3_000_000, 10_900), new DayTotals(LocalDate.of(2026, 11, 30), 0, 4_000));
+        assertThat(new Totals(days.stream().mapToLong(DayTotals::income).sum(),
+                days.stream().mapToLong(DayTotals::expense).sum()))
+                .as("날마다의 합은 목록의 달 합계").isEqualTo(page(NOVEMBER, null, 50).totals());
+        assertThat(dailyTotals(YearMonth.of(2026, 9))).as("거래가 없는 달").isEmpty();
+    }
+
+    @Test
+    void 날짜별_합계의_달에는_1일과_말일이_들고_윤년과_평년의_2월도_같다() {
+        for (LocalDate on : List.of(LocalDate.of(2024, 1, 31), LocalDate.of(2024, 2, 1), LocalDate.of(2024, 2, 29),
+                LocalDate.of(2024, 3, 1), LocalDate.of(2025, 2, 28), LocalDate.of(2025, 3, 1),
+                LocalDate.of(2025, 12, 31), LocalDate.of(2026, 1, 1))) {
+            expense(on, null);
+        }
+
+        assertThat(dates(YearMonth.of(2024, 1))).containsExactly(LocalDate.of(2024, 1, 31));
+        assertThat(dates(YearMonth.of(2024, 2))).containsExactly(LocalDate.of(2024, 2, 1), LocalDate.of(2024, 2, 29));
+        assertThat(dates(YearMonth.of(2024, 3))).containsExactly(LocalDate.of(2024, 3, 1));
+        assertThat(dates(YearMonth.of(2025, 2))).containsExactly(LocalDate.of(2025, 2, 28));
+        assertThat(dates(YearMonth.of(2025, 3))).containsExactly(LocalDate.of(2025, 3, 1));
+        assertThat(dates(YearMonth.of(2025, 12))).containsExactly(LocalDate.of(2025, 12, 31));
+        assertThat(dates(YearMonth.of(2026, 1))).containsExactly(LocalDate.of(2026, 1, 1));
+    }
+
+    /** 달이 없으면 REQUIRED, 범위는 거래 목록의 달과 같다. */
+    @Test
+    void 날짜별_합계의_달은_꼭_있어야_하고_범위는_거래_목록과_같다() {
+        clock.stopAt(Instant.parse("2026-11-30T14:59:59Z")); // 서울 11-30, 1년 뒤는 2027-11-30
+
+        InvalidRequestException missing = catchThrowableOfType(InvalidRequestException.class,
+                () -> listQuery.dailyTotals(owner.getId(), ledgerId, null));
+        assertThat(missing.field()).isEqualTo("month");
+        assertThat(missing.code()).isEqualTo(FieldErrorCode.REQUIRED);
+        assertOutOfRange("month", () -> listQuery.dailyTotals(owner.getId(), ledgerId, YearMonth.of(1999, 12)));
+        assertOutOfRange("month", () -> listQuery.dailyTotals(owner.getId(), ledgerId, YearMonth.of(2027, 12)));
+        assertThatNoException().isThrownBy(() -> dailyTotals(YearMonth.of(2000, 1)));
+        assertThatNoException().isThrownBy(() -> dailyTotals(YearMonth.of(2027, 11)));
+
+        clock.stopAt(Instant.parse("2026-11-30T15:00:00Z")); // 서울 12-01, 1년 뒤는 2027-12-01
+        assertThatNoException().isThrownBy(() -> dailyTotals(YearMonth.of(2027, 12)));
+    }
+
     @Test
     void limit은_1부터_50까지이고_달은_2000_01부터_장부_시간대로_1년_뒤의_날이_속한_달까지다() {
         clock.stopAt(Instant.parse("2026-11-30T14:59:59Z")); // 서울 11-30, 1년 뒤는 2027-11-30
@@ -318,6 +393,16 @@ class TransactionListQueryTest {
         entityManager.flush();
         entityManager.clear();
         return listQuery.page(owner.getId(), ledgerId, scope, after, limit);
+    }
+
+    private List<DayTotals> dailyTotals(YearMonth month) {
+        entityManager.flush();
+        entityManager.clear();
+        return listQuery.dailyTotals(owner.getId(), ledgerId, month);
+    }
+
+    private List<LocalDate> dates(YearMonth month) {
+        return dailyTotals(month).stream().map(DayTotals::date).toList();
     }
 
     /** 첫 쪽부터 다음 키를 따라 끝까지 받은 거래 id. */

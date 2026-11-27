@@ -18,6 +18,7 @@ import jakarta.persistence.TypedQuery;
 import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
@@ -74,6 +75,23 @@ public class TransactionListQuery {
     private static final String AFTER_UNTIMED = " and p.occurredOn <= :afterOn"
             + " and (p.occurredOn < :afterOn or (p.occurredTime is null and p.id < :afterId))";
 
+    /**
+     * 날마다의 P-205 합계. %s는 날짜 조건이다. 쪽에 나온 날({@link TransactionPage#days()})과 달력의 날짜별 합계
+     * ({@link #dailyTotals})가 같이 쓴다. 합계에 드는 라인이 없는 날은 행이 없다.
+     */
+    private static final String DAY_SUMS = """
+            select t.type, cast(sum(l.amount) as BigInteger), t.occurredOn
+              from TransactionLine l
+              join l.transaction t
+             where l.ledgerId = :ledgerId
+               and t.ledgerId = :ledgerId
+               and %s
+               and t.type <> :transfer
+               and t.deletedAt is null
+               and t.status <> :canceled
+             group by t.occurredOn, t.type
+            """;
+
     private final EntityManager entityManager;
     private final LedgerAccess ledgerAccess;
     private final LedgerRepository ledgerRepository;
@@ -113,6 +131,26 @@ public class TransactionListQuery {
                 days(ledgerId, items));
     }
 
+    /**
+     * 달력의 날짜별 합계(F-222, #66 응답 계약). 그 달에서 합계에 드는 거래가 있는 날만 날짜 순으로 주고, 이체·취소·휴지통
+     * 거래만 있는 날은 없다. 날마다의 값은 {@link TransactionPage#days()}와 같은 문장으로 세므로 같은 날이면 같다. 날짜는
+     * 거래의 날짜 그대로다. 구성원 확인이 달 검사보다 먼저고, 달의 범위는 {@link #page}의 달과 같다.
+     *
+     * @param month 없으면 {@code month}의 {@code REQUIRED}다
+     */
+    public List<DayTotals> dailyTotals(UUID actorId, UUID ledgerId, YearMonth month) {
+        ledgerAccess.requireMember(actorId, ledgerId);
+        if (month == null) {
+            throw new InvalidRequestException("month", FieldErrorCode.REQUIRED, "조회할 달이 없습니다.");
+        }
+        DateRange range = range(new Month(month), zoneOf(ledgerId));
+        Map<LocalDate, Map<TransactionType, Long>> sums = daySums(entityManager.createQuery(
+                        DAY_SUMS.formatted("t.occurredOn >= :from and t.occurredOn < :until"), Tuple.class)
+                .setParameter("from", range.from())
+                .setParameter("until", range.until()), ledgerId);
+        return sums.keySet().stream().sorted().map(date -> dayTotals(date, sums)).toList();
+    }
+
     /** 범위 전체의 P-205 합계. */
     private Totals totals(UUID ledgerId, DateRange range) {
         Map<TransactionType, Long> sums = sums(entityManager.createQuery("""
@@ -140,28 +178,24 @@ public class TransactionListQuery {
         if (dates.isEmpty()) {
             return List.of();
         }
-        Map<LocalDate, Map<TransactionType, Long>> sums = sums(entityManager.createQuery("""
-                        select t.type, cast(sum(l.amount) as BigInteger), t.occurredOn
-                          from TransactionLine l
-                          join l.transaction t
-                         where l.ledgerId = :ledgerId
-                           and t.ledgerId = :ledgerId
-                           and t.occurredOn in :dates
-                           and t.type <> :transfer
-                           and t.deletedAt is null
-                           and t.status <> :canceled
-                         group by t.occurredOn, t.type
-                        """, Tuple.class)
-                .setParameter("dates", dates), ledgerId).stream()
+        Map<LocalDate, Map<TransactionType, Long>> sums = daySums(entityManager.createQuery(
+                        DAY_SUMS.formatted("t.occurredOn in :dates"), Tuple.class)
+                .setParameter("dates", dates), ledgerId);
+        return dates.stream().map(date -> dayTotals(date, sums)).toList();
+    }
+
+    /** {@link #DAY_SUMS}의 행을 날짜와 종류로 묶은 합. */
+    private static Map<LocalDate, Map<TransactionType, Long>> daySums(TypedQuery<Tuple> query, UUID ledgerId) {
+        return sums(query, ledgerId).stream()
                 .collect(Collectors.groupingBy(row -> row.get(2, LocalDate.class),
                         Collectors.toMap(row -> row.get(0, TransactionType.class), TransactionListQuery::sum)));
-        return dates.stream()
-                .map(date -> {
-                    Map<TransactionType, Long> day = sums.getOrDefault(date, Map.of());
-                    return new DayTotals(date, day.getOrDefault(TransactionType.INCOME, 0L),
-                            expense(day.getOrDefault(TransactionType.EXPENSE, 0L)));
-                })
-                .toList();
+    }
+
+    /** 그날의 합계. 합계에 드는 라인이 없는 날은 0이다. */
+    private static DayTotals dayTotals(LocalDate date, Map<LocalDate, Map<TransactionType, Long>> sums) {
+        Map<TransactionType, Long> day = sums.getOrDefault(date, Map.of());
+        return new DayTotals(date, day.getOrDefault(TransactionType.INCOME, 0L),
+                expense(day.getOrDefault(TransactionType.EXPENSE, 0L)));
     }
 
     /**

@@ -62,11 +62,11 @@ record TransactionListRequest(TransactionScope scope, int limit, TransactionKey 
             return Optional.empty();
         }
         if (month != null) {
-            Optional<TransactionScope> parsed = parsed(MONTH, month, text -> new Month(YearMonth.parse(text)));
+            Optional<YearMonth> parsed = month(month);
             if (parsed.isEmpty()) {
-                errors.add(invalidFormat("month", "month는 YYYY-MM입니다."));
+                errors.add(invalidMonth());
             }
-            return parsed;
+            return parsed.<TransactionScope>map(Month::new);
         }
         if (date != null) {
             Optional<TransactionScope> parsed = parsed(DATE, date, text -> new Day(LocalDate.parse(text)));
@@ -76,6 +76,16 @@ record TransactionListRequest(TransactionScope scope, int limit, TransactionKey 
             return parsed;
         }
         return Optional.of(new WholeLedger());
+    }
+
+    /** {@code month} 쿼리 값({@code YYYY-MM}). 달력의 날짜별 합계(#66)도 같은 형식으로 읽는다. 틀리면 빈 값이다. */
+    static Optional<YearMonth> month(String text) {
+        return parsed(MONTH, text, YearMonth::parse);
+    }
+
+    /** {@link #month}가 읽지 못한 값의 오류. */
+    static InvalidRequestException invalidMonth() {
+        return invalidFormat("month", "month는 YYYY-MM입니다.");
     }
 
     /** 모양이 맞고 값으로 읽히면 그 값. 13월, 평년의 2월 29일처럼 모양만 맞는 글자도 형식 오류다. */

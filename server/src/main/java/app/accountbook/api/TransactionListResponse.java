@@ -1,6 +1,7 @@
 package app.accountbook.api;
 
 import app.accountbook.transaction.TransactionPage;
+import app.accountbook.transaction.TransactionPage.DayTotals;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +22,7 @@ record TransactionListResponse(List<TransactionResponse> items, String nextCurso
         return new TransactionListResponse(page.items().stream().map(tx -> TransactionResponse.of(tx, names)).toList(),
                 nextCursor,
                 page.totals() == null ? null : new Totals(page.totals().income(), page.totals().expense()),
-                page.days().stream().map(day -> new Day(day.date(), day.income(), day.expense())).toList());
+                page.days().stream().map(Day::of).toList());
     }
 
     /** 스프링이 응답 객체를 로그에 남길 때 가맹점, 메모, 이름이 나가지 않게 한다(ADR 001 결정 10). */
@@ -33,6 +34,11 @@ record TransactionListResponse(List<TransactionResponse> items, String nextCurso
     record Totals(long income, long expense) {
     }
 
+    /** 그날의 합계. 달력의 날짜별 합계(#66, {@link DailyTotalsResponse})도 같은 모양이다. */
     record Day(LocalDate date, long income, long expense) {
+
+        static Day of(DayTotals day) {
+            return new Day(day.date(), day.income(), day.expense());
+        }
     }
 }
