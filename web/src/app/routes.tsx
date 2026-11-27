@@ -3,13 +3,14 @@ import { MainScreen } from '../components/Screen'
 import HomePage from '../features/home/HomePage'
 import ClearStaleCaret from './ClearStaleCaret'
 import LedgerLayout from './LedgerLayout'
-import { accountsItem, categoriesItem, homeItem, moreItem, statsItem, transactionsItem } from './navigation'
+import { accountsItem, categoriesItem, exportItem, homeItem, moreItem, statsItem, transactionsItem } from './navigation'
 import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
 import {
   accountAddScreen,
   accountsScreen,
   categoriesScreen,
+  exportScreen,
   loginScreen,
   monthlyStatsScreen,
   moreScreen,
@@ -82,6 +83,8 @@ export const routes: RouteObject[] = [
                     handle: { navigationItem: accountsItem, fullScreen: true },
                   },
                   { path: '/categories', element: <categoriesScreen.Screen />, handle: { navigationItem: categoriesItem } },
+                  // K-01(#240). 하단 탭은 더보기, 넓은 화면은 사이드바의 "내보내기"를 강조한다
+                  { path: '/export', element: <exportScreen.Screen />, handle: { navigationItem: exportItem } },
                   // 사이드바 항목이 없다. 주소로 열면 하단 탭은 더보기를 강조한다(00-common 6.2)
                   { path: '/pending', element: <pendingScreen.Screen /> },
                   // 고쳐서 보내기(planner #237 P1). 1B 임시: 넓은 화면에서도 B-05 오른쪽 칸이 아닌 한 칸이다(#244)

@@ -92,6 +92,13 @@ export const categoriesScreen = lazyScreen(() => import('../features/categories/
   headingLevel: 2,
 })
 
+/** K-01 내보내기(#240). 받아 오는 데이터가 없어(장부 이름은 기기에 있다) 뼈대가 없다 */
+export const exportScreen = lazyScreen(() => import('../features/export/ExportPage'), {
+  Frame: subScreen('내보내기', '/more'),
+  Placeholder: Loading,
+  headingLevel: 2,
+})
+
 /** B-05. 기기 데이터라 뼈대가 없다(#236) */
 export const pendingScreen = lazyScreen(() => import('../features/pending/PendingPage'), {
   Frame: subScreen('보내지 않은 입력', '/more'),

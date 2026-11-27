@@ -139,6 +139,7 @@ describe('의존 방향: app → features → components, api → device, 그리
     ['app에서 app', 'src/app/sample.ts', value('./navigation')],
     ['main에서 app', 'src/main.ts', value('./app/App')],
     ['features에서 api의 request', feature, value('../../api/request')],
+    ['features에서 api의 fileRequest(파일로 받기)', feature, value('../../api/fileRequest')],
     ['features에서 api의 session', feature, value('../../api/session')],
     ['features에서 api의 apiError', feature, value('../../api/apiError')],
     ['features에서 api의 apiError의 타입', feature, type('../../api/apiError')],

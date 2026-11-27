@@ -1,0 +1,64 @@
+/* K-01. 칸 사이는 16px, 칸과 "내보내기" 사이는 24px(designer #240 D3) */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  padding-top: var(--space-24);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+/* (1) 장부 이름 글자. 길면 줄을 바꿔 다 보인다 */
+.ledgerName {
+  margin: 0;
+  font: var(--text-body);
+  overflow-wrap: anywhere;
+}
+
+/* (3) 시작일 ~ 종료일. 두 칸은 같은 폭이고 오류 문구는 칸마다 아래에 둔다 */
+.range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  column-gap: var(--space-8);
+  align-items: start;
+}
+
+/* "~"를 칸(이름 아래)의 높이 가운데에 둔다. 이름 한 줄(text-label)과 이름 아래 간격 8px만큼 내린다. 글자를 키워도 같이 커진다 */
+.between {
+  padding-top: calc(1lh + var(--space-8));
+  font: var(--text-label);
+}
+
+.tilde {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-field);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* 거래가 없을 때의 안내(보조 글자). 오류가 아니다 */
+.notice {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+}
+
+/* 넓은 화면: 입력란 폭은 내용 영역 가운데 480px(작성자 판단 61, designer #240 D4) */
+@media (width >= 1024px) {
+  .form {
+    width: 100%;
+    max-width: var(--width-content-form);
+    margin-inline: auto;
+  }
+}
