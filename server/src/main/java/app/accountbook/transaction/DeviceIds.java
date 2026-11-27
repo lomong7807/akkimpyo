@@ -9,9 +9,10 @@ import java.util.stream.Stream;
 
 /**
  * 변경 이력에 남기는 기기 값의 규칙(P-216, ADR 007 결정 10). 형식이 틀리면 오류이고, 형식은 맞지만 목록에 없으면
- * {@value #UNKNOWN}으로 저장한다. 받은 값은 오류 문구에 넣지 않는다.
+ * {@value #UNKNOWN}으로 저장한다. 받은 값은 오류 문구에 넣지 않는다. 형식 검사는 api도 쓴다: 카테고리 삭제(#35)는 서비스가
+ * 기기 값을 옮기기 직전에야 보므로 api가 먼저 본다.
  */
-final class DeviceIds {
+public final class DeviceIds {
 
     static final String UNKNOWN = "unknown";
 
@@ -34,7 +35,7 @@ final class DeviceIds {
      * 요청의 형식 검증 단계에서 부른다. null은 기기 값이 없는 것이라 통과한다. 빈 문자열은 형식 오류다.
      * 입력란은 {@value #FIELD}이고, API가 기기 값을 받은 자리(헤더)의 이름으로 바꿔 알린다.
      */
-    static void requireValidFormat(String deviceId) {
+    public static void requireValidFormat(String deviceId) {
         if (deviceId != null && !FORMAT.matcher(deviceId).matches()) {
             throw new InvalidRequestException(FIELD, FieldErrorCode.INVALID_FORMAT,
                     "기기 값은 영문, 숫자와 . _ : - 만 쓴 1~64자여야 합니다.");

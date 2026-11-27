@@ -6,6 +6,7 @@ import static org.awaitility.Awaitility.await;
 import app.accountbook.account.AccountType;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.transaction.ChangeAction;
@@ -106,6 +107,20 @@ class CategoryDeleteRaceTest {
         assertThat(jdbc.queryForList("select action from change_log where transaction_id = ? order by version",
                 String.class, id)).containsExactly(ChangeAction.CREATE.name(), ChangeAction.CATEGORY_MOVE.name());
         assertThat(count("select version from transaction where id = ?", id)).isEqualTo(2);
+    }
+
+    /**
+     * 이름 바꾸기는 카테고리를 잠그지 않고 읽어, 지우는 중인 카테고리도 읽은 뒤 저장(UPDATE)에서 삭제의 커밋을 기다린다. 그때 0행이
+     * 되는 것을 500이 아니라 지운 카테고리와 같은 예외(404)로 알린다(#35, PR #370 architect 후속).
+     */
+    @Test
+    void 지우는_사이_이름을_바꾸면_삭제를_기다렸다가_지운_카테고리와_같이_거부된다() {
+        CompletableFuture<Category> renaming = whileUncommitted(
+                () -> categoryService.delete(owner.getId(), ledgerId, food, null, DEVICE),
+                () -> categoryService.rename(owner.getId(), ledgerId, food, "외식"));
+
+        assertThat(outcome(renaming)).isExactlyInstanceOf(NotLedgerMemberException.class);
+        assertThat(count("select count(*) from category where id = ?", food)).isZero();
     }
 
     // ---------------------------------------------------------------- 도우미

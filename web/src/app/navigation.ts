@@ -44,6 +44,8 @@ export const statsItem: MainNavigationItem = { label: '통계', to: '/stats/mont
 export const moreItem: MainNavigationItem = { label: '더보기', to: '/more', icon: DotsThree }
 export const accountsItem: NavigationItem = { label: '계좌', to: '/accounts' }
 export const categoriesItem: NavigationItem = { label: '카테고리', to: '/categories' }
+/** K-01(#240). 1·2단계 이름은 "내보내기"이고 3단계부터 "가져오기·내보내기"다(F-901, M-01 (6)) */
+export const exportItem: NavigationItem = { label: '내보내기', to: '/export' }
 /** 거래 입력(D-04)을 지출 유형으로 연다. 화면이 아니라 여는 버튼이라 강조하지 않는다. */
 export const quickEntryItem: NavigationItem = { label: '거래 입력', to: '/transactions/new' }
 
@@ -55,5 +57,5 @@ export const navigation: Navigation = {
   tabs: [homeItem, transactionsItem, QUICK_ENTRY, statsItem, moreItem],
   quickEntry: quickEntryItem,
   fallbackTab: moreItem,
-  sidebar: { main: [homeItem, transactionsItem, statsItem], more: [accountsItem, categoriesItem] },
+  sidebar: { main: [homeItem, transactionsItem, statsItem], more: [accountsItem, categoriesItem, exportItem] },
 }

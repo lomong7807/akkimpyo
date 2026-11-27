@@ -91,6 +91,7 @@
   --width-dialog: 30rem; /* 480 가운데 창 */
   --width-toast: 30rem; /* 480 토스트의 넓은 화면 최대 폭 */
   --width-welcome: 30rem; /* 480 첫 실행 안내(C-02)의 넓은 화면 폭 */
+  --width-content-form: 30rem; /* 480 입력이 적은 화면(K-01 등, 작성자 판단 61)의 넓은 화면 입력란 폭 */
 
   /* 높이 */
   --height-field-panel: 22.5rem; /* 360 칸 아래 펼친 판(고르기 목록)의 최대 높이 */
