@@ -62,11 +62,20 @@ const lastMonthOf = async (userId = 'user-1') => (await ledgerCopy(userId, LEDGE
 
 const payees = async () => (await lastMonthOf())?.data.items.map(({ payee }) => payee)
 
+/**
+ * 앱이 최근 한 달의 첫 쪽(장부 전체, 50건)을 보낼 때까지 기다린다. 받는 코드는 따로 싣는다(fetchLastMonth, #238).
+ * 그 조각이 오기 전에 기기를 읽으면(ledgerCopy가 모듈을 새로 불러온다) 늦게 온 조각이 새로 불러온 모듈과 이어져 이 탭의
+ * 로그인을 모른다(테스트에서만 생기는 일, #355에서 그 조각이 커져 드러났다).
+ */
+const untilLastMonthRequested = () =>
+  waitFor(() => expect(list.requests.some((sent) => sent.month === null && sent.limit === '50')).toBe(true))
+
 describe('남기는 때', () => {
   it('홈을 열면 오늘을 포함한 지난 31일을 받아 그 사용자·장부의 사본으로 남기고 받은 시각을 적는다', async () => {
     list.months.set('2026-11', [spend('2026-11-26', '오늘'), spend('2026-11-01', '이달 초')])
     list.months.set('2026-10', [spend('2026-10-27', '31일째'), spend('2026-10-26', '32일째')])
     await openHome()
+    await untilLastMonthRequested()
     await waitFor(async () => expect(await payees()).toEqual(['오늘', '이달 초', '31일째']))
     const kept = (await lastMonthOf())!
     expect(kept.data.from).toBe('2026-10-27')
@@ -86,6 +95,7 @@ describe('남기는 때', () => {
     setDeviceClock('2026-11-26T23:30:00Z', timeZone)
     list.months.set('2026-11', [spend('2026-11-26', '26일')])
     await openHome()
+    await untilLastMonthRequested()
     await waitFor(async () => expect((await lastMonthOf())?.data.to).toBe(to))
     expect((await lastMonthOf())!.data.from).toBe(from)
     expect(await payees()).toEqual(['26일'])
@@ -102,6 +112,7 @@ describe('남기는 때', () => {
     )
     list.months.set('2026-11', [spend('2026-11-26', '새로 받음')])
     await openHome()
+    await untilLastMonthRequested()
     await waitFor(async () => expect(await payees()).toEqual(['새로 받음']))
   })
 
@@ -145,6 +156,7 @@ describe('남기는 때', () => {
   it('사본을 읽기만 하고 다시 쓰지 않는다: 새 사본을 남겨 읽어 둔 사본을 다시 읽어도 받기와 쓰기가 이어지지 않는다', async () => {
     list.months.set('2026-11', [spend('2026-11-26', '오늘')])
     await openHome()
+    await untilLastMonthRequested()
     await waitFor(async () => expect(await payees()).toEqual(['오늘']))
     const receivedAt = (await lastMonthOf())!.receivedAt
     const requests = list.requests.length

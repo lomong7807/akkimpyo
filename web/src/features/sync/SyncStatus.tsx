@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router'
 import Icon from '../../components/Icon'
+import { CloudArrowUp, WarningCircle } from '../../components/icons'
 import { Link } from '../../components/Link'
 import { pendingSummary, PENDING_PATH, usePendingCounts } from './useSyncState'
 import styles from './SyncStatus.module.css'
@@ -21,13 +22,13 @@ export default function SyncStatus() {
       <span className={styles.spoken}>{pendingSummary(waiting + rejected, rejected)}</span>
       {rejected > 0 && (
         <span aria-hidden className={`${styles.part} ${styles.rejected}`}>
-          <Icon name="WarningCircle" size={20} />
+          <Icon icon={WarningCircle} size={20} />
           {`${rejected}건`}
         </span>
       )}
       {waiting > 0 && (
         <span aria-hidden className={styles.part}>
-          <Icon name="CloudArrowUp" size={20} />
+          <Icon icon={CloudArrowUp} size={20} />
           {`${waiting}건`}
         </span>
       )}

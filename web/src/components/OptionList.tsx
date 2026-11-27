@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { matchesName } from '../lib/nameSearch'
 import Icon from './Icon'
+import { Check, MagnifyingGlass } from './icons'
 import fieldStyles from './Field.module.css'
 import styles from './OptionList.module.css'
 
@@ -129,7 +130,7 @@ export default function OptionList({
         <span className={styles.label}>{option.label}</span>
         {selected && (
           <span className={styles.check}>
-            <Icon name="Check" size={20} />
+            <Icon icon={Check} size={20} />
           </span>
         )}
       </div>
@@ -155,7 +156,7 @@ export default function OptionList({
             onKeyDown={handleSearchKeyDown}
           />
           <span className={styles.searchIcon}>
-            <Icon name="MagnifyingGlass" size={20} />
+            <Icon icon={MagnifyingGlass} size={20} />
           </span>
         </div>
       )}

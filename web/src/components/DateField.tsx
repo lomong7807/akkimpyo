@@ -4,6 +4,7 @@ import Calendar from './Calendar'
 import Field, { type FieldLabels } from './Field'
 import FieldPopup from './FieldPopup'
 import Icon from './Icon'
+import { CalendarBlank } from './icons'
 import { useFieldPopup } from './useFieldPopup'
 import styles from './FieldButton.module.css'
 
@@ -45,7 +46,7 @@ export default function DateField({ value, onChange, readOnly = false, ref, ...l
             <span id={valueId} className="tabular-nums">
               {value && formatDate(value, today())}
             </span>
-            <Icon name="CalendarBlank" size={20} />
+            <Icon icon={CalendarBlank} size={20} />
           </button>
         )}
       </Field>

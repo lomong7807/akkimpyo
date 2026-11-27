@@ -8,7 +8,7 @@ import { accountOf, accountsBody, startAccounts, type Accounts } from './support
 import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
 import { startMockServer } from './support/mockServer'
-import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/useTransactionList'
+import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/transactionListQueries'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'

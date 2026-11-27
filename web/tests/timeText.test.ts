@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { basisText, currentTime, formatTimeText, isValidTime, normalizeTime, positionAfterTimeDigits } from '../src/lib/timeText'
+import { currentTime, formatTimeText, normalizeTime, positionAfterTimeDigits } from '../src/lib/timeInput'
+import { basisText, isValidTime } from '../src/lib/timeText'
 import { setDeviceClock } from './support/clock'
 
 describe('칸에 보일 글자', () => {

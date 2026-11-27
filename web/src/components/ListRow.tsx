@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import Icon, { type IconName } from './Icon'
+import Icon, { type IconSvg } from './Icon'
+import { CaretRight } from './icons'
 import { Link } from './Link'
 import styles from './ListRow.module.css'
 
@@ -10,7 +11,7 @@ export function ListGroup({ children }: { children: ReactNode }) {
 
 // 모양은 화면에서 덮어쓰지 않는다
 interface ListRowProps {
-  icon: IconName
+  icon: IconSvg
   children: ReactNode
 }
 
@@ -19,9 +20,9 @@ export function ListLink({ icon, to, children }: ListRowProps & { to: string }) 
   return (
     <li>
       <Link to={to} className={styles.row}>
-        <RowIcon name={icon} />
+        <RowIcon icon={icon} />
         <span className={styles.name}>{children}</span>
-        <RowIcon name="CaretRight" />
+        <RowIcon icon={CaretRight} />
       </Link>
     </li>
   )
@@ -32,17 +33,17 @@ export function ListButton({ icon, onClick, children }: ListRowProps & { onClick
   return (
     <li>
       <button type="button" className={styles.row} onClick={onClick}>
-        <RowIcon name={icon} />
+        <RowIcon icon={icon} />
         <span className={styles.name}>{children}</span>
       </button>
     </li>
   )
 }
 
-function RowIcon({ name }: { name: IconName }) {
+function RowIcon({ icon }: { icon: IconSvg }) {
   return (
     <span className={styles.icon}>
-      <Icon name={name} size={20} />
+      <Icon icon={icon} size={20} />
     </span>
   )
 }

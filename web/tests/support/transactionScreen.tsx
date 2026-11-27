@@ -9,6 +9,7 @@ import { accountOf, startAccounts } from './accounts'
 import { ledgerIdOf, startBackend } from './backend'
 import { categoryWithChildren, startCategories, startCategorySuggestions } from './categories'
 import { untilOpened } from './dialog'
+import { preloadLoginScreen } from './openApp'
 import { enableTestClock, setupUser } from './testClock'
 import { startTransactions } from './transactions'
 import { installLocks, createFakeLocks } from './webLocks'
@@ -80,6 +81,7 @@ export async function openApp(path: string) {
   window.history.replaceState(null, '', path)
   const { routes } = await import('../../src/app/routes')
   const { createQueryClient } = await import('../../src/app/queryClient')
+  await preloadLoginScreen()
   const router = createBrowserRouter(routes)
   render(
     <QueryClientProvider client={createQueryClient()}>

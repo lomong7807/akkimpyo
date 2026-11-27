@@ -4,6 +4,7 @@ import { Button } from '../../components/Button'
 import DateField from '../../components/DateField'
 import Field from '../../components/Field'
 import Icon from '../../components/Icon'
+import { CaretDown, CaretUp } from '../../components/icons'
 import SegmentedChoice from '../../components/SegmentedChoice'
 import TextAreaField from '../../components/TextAreaField'
 import { TextField } from '../../components/TextField'
@@ -191,7 +192,7 @@ export default function TransactionFields({
         >
           <span className={styles.moreLabel}>
             더 보기
-            <Icon name={moreOpen ? 'CaretUp' : 'CaretDown'} size={20} />
+            <Icon icon={moreOpen ? CaretUp : CaretDown} size={20} />
           </span>
         </Button>
       </div>

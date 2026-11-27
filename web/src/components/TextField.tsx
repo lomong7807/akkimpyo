@@ -1,6 +1,7 @@
 import { useState, type ComponentProps, type ReactNode } from 'react'
 import { Button } from './Button'
 import Field, { type FieldLabels } from './Field'
+import { Eye, EyeSlash } from './icons'
 import styles from './TextField.module.css'
 
 // 모양, 이름과 설명의 연결은 입력칸이 정한다. 화면에서 덮어쓸 수 있는 속성은 받지 않는다.
@@ -39,7 +40,7 @@ export function PasswordField(props: FieldProps) {
       action={
         <Button
           kind="icon"
-          icon={visible ? 'EyeSlash' : 'Eye'}
+          icon={visible ? EyeSlash : Eye}
           aria-label={visible ? `${label} 숨기기` : `${label} 보기`}
           onClick={() => setVisible(!visible)}
         />
