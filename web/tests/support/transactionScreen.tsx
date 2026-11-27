@@ -13,7 +13,7 @@ import { preloadLoginScreen } from './openApp'
 import { fetchScreenCodeFirst } from './screenCode'
 import { withShownLocation } from './shownScreen'
 import { enableTestClock, setupUser } from './testClock'
-import { startTransactions } from './transactions'
+import { startDuplicates, startTransactions } from './transactions'
 import { installLocks, createFakeLocks } from './webLocks'
 import { installMatchMedia } from './viewport'
 
@@ -61,7 +61,7 @@ export const categoryItems = [
 export const LEDGER = ledgerIdOf('user-1')
 export const LAST_ACCOUNT_KEY = 'akkimpyo-last-account'
 
-/** 로그인한 user-1의 장부에 계좌, 카테고리, 거래 만들기가 되는 가짜 서버 */
+/** 로그인한 user-1의 장부에 계좌, 카테고리, 거래 만들기, 중복 경고 조회가 되는 가짜 서버 */
 export function startServer(server: SetupServer) {
   installMatchMedia(390)
   installLocks(createFakeLocks())
@@ -73,7 +73,8 @@ export function startServer(server: SetupServer) {
   categories.items = [...categoryItems]
   const transactions = startTransactions(server, backend)
   const suggestions = startCategorySuggestions(server, backend)
-  return { backend, accounts, categories, transactions, suggestions }
+  const duplicates = startDuplicates(server, backend)
+  return { backend, accounts, categories, transactions, suggestions, duplicates }
 }
 
 /**

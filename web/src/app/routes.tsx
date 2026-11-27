@@ -3,7 +3,7 @@ import { MainScreen } from '../components/Screen'
 import HomePage from '../features/home/HomePage'
 import ClearStaleCaret from './ClearStaleCaret'
 import LedgerLayout from './LedgerLayout'
-import { accountsItem, categoriesItem, homeItem, moreItem, transactionsItem } from './navigation'
+import { accountsItem, categoriesItem, homeItem, moreItem, statsItem, transactionsItem } from './navigation'
 import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
 import {
@@ -11,6 +11,7 @@ import {
   accountsScreen,
   categoriesScreen,
   loginScreen,
+  monthlyStatsScreen,
   moreScreen,
   notFoundScreen,
   pendingFixScreen,
@@ -106,6 +107,12 @@ export const routes: RouteObject[] = [
                     path: '/transactions/:id/edit',
                     element: <transactionEditScreen.Screen />,
                     handle: { navigationItem: transactionsItem, fullScreen: true },
+                  },
+                  // E-01(#242). 1C의 카테고리별(E-02)·연 단위(E-05) 통계도 이 아래 주소에 같은 항목으로 둔다
+                  {
+                    path: '/stats/monthly',
+                    element: <monthlyStatsScreen.Screen />,
+                    handle: { navigationItem: statsItem },
                   },
                   { path: '*', element: <notFoundScreen.Screen /> },
                 ],

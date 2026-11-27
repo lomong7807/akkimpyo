@@ -16,9 +16,9 @@ public record MonthlySummary(long income, long expense, List<CategoryTotal> cate
 
     /**
      * 금액이 큰 순, 같으면 categoryId의 36자 표기 순(PostgreSQL uuid 순서와 같다). UUID.compareTo는 부호 있는 비교라
-     * 이 순서와 다르므로 쓰지 않는다.
+     * 이 순서와 다르므로 쓰지 않는다. 연 단위 통계({@link YearlySummary})도 쓴다.
      */
-    private static final Comparator<CategoryTotal> LARGEST_FIRST = Comparator
+    static final Comparator<CategoryTotal> LARGEST_FIRST = Comparator
             .comparingLong(CategoryTotal::total).reversed()
             .thenComparing(category -> category.categoryId().toString());
 

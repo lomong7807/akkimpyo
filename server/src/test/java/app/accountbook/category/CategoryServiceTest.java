@@ -3,19 +3,14 @@ package app.accountbook.category;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import app.accountbook.account.Account;
-import app.accountbook.account.AccountCommand;
-import app.accountbook.account.AccountService;
-import app.accountbook.account.AccountType;
 import app.accountbook.common.DuplicateCategoryNameException;
-import app.accountbook.common.InUseException;
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotLedgerOwnerException;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.user.User;
-import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,8 +22,9 @@ class CategoryServiceTest {
 
     @Autowired CategoryService categoryService;
     @Autowired CategoryRepository categoryRepository;
-    @Autowired AccountService accountService;
     @Autowired Fixtures fixtures;
+
+    static final String DEVICE = "iphone.safari";
 
     User owner;
     UUID ledgerId;
@@ -182,8 +178,10 @@ class CategoryServiceTest {
     void delete_rejectsSystemCategory() {
         Category uncategorized = categoryService.uncategorized(ledgerId, CategoryKind.EXPENSE);
 
-        assertThatThrownBy(() -> categoryService.delete(owner.getId(), uncategorized.getId()))
-                .isInstanceOf(InvalidRequestException.class);
+        assertThatThrownBy(() -> categoryService.delete(owner.getId(), ledgerId, uncategorized.getId(), null, DEVICE))
+                .isExactlyInstanceOf(InvalidStateException.class);
+        assertThatThrownBy(() -> categoryService.countAffectedTransactions(owner.getId(), ledgerId,
+                uncategorized.getId())).isExactlyInstanceOf(InvalidStateException.class);
         assertThat(categoryRepository.findById(uncategorized.getId())).isPresent();
     }
 
@@ -197,26 +195,41 @@ class CategoryServiceTest {
                 .isEqualTo("미분류");
     }
 
-    @Test
-    void delete_rejectsCategoryWithLines() {
-        Category food = expense("식비", null);
-        Account cash = accountService.create(owner.getId(), ledgerId,
-                new AccountCommand("현금", AccountType.CASH, 0, LocalDate.of(2026, 11, 1)));
-        fixtures.storedExpense(owner, ledgerId, cash.getId(), food.getId(), 12_000);
+    // --- 삭제 (P-222): 옮길 곳의 규칙과 미분류. 옮기기와 이력은 transaction.CategoryDeleteTest가 본다 ---
 
-        assertThatThrownBy(() -> categoryService.delete(owner.getId(), food.getId()))
-                .isInstanceOf(InUseException.class);
-        assertThat(categoryRepository.findById(food.getId())).isPresent();
+    @Test
+    void delete_rejectsTargetThatIsItselfItsChildOrOfOtherKind() {
+        Category food = expense("식비", null);
+        Category lunch = expense("점심", food.getId());
+
+        assertTargetError(food, food.getId(), FieldErrorCode.NOT_ALLOWED);
+        assertTargetError(food, lunch.getId(), FieldErrorCode.NOT_ALLOWED);
+        assertTargetError(food, categoryService.uncategorized(ledgerId, CategoryKind.INCOME).getId(),
+                FieldErrorCode.KIND_MISMATCH);
     }
 
+    /** 다른 장부의 것, 없는 것, 지운 것은 구분하지 않는다. */
     @Test
-    void delete_rejectsCategoryWithChildren() {
+    void delete_rejectsTargetOutsideLedger() {
+        User other = fixtures.user("other@example.com");
+        UUID othersFood = categoryService.create(other.getId(), fixtures.personalLedgerId(other),
+                new CategoryCommand("식비", CategoryKind.EXPENSE, null)).getId();
         Category food = expense("식비", null);
-        expense("점심", food.getId());
+        UUID deleted = expense("여가", null).getId();
+        categoryService.delete(owner.getId(), ledgerId, deleted, null, DEVICE);
 
-        assertThatThrownBy(() -> categoryService.delete(owner.getId(), food.getId()))
-                .isInstanceOf(InUseException.class);
-        assertThat(categoryRepository.findById(food.getId())).isPresent();
+        assertTargetError(food, othersFood, FieldErrorCode.NOT_FOUND);
+        assertTargetError(food, UUID.randomUUID(), FieldErrorCode.NOT_FOUND);
+        assertTargetError(food, deleted, FieldErrorCode.NOT_FOUND);
+    }
+
+    private void assertTargetError(Category category, UUID targetId, FieldErrorCode code) {
+        assertThatThrownBy(() -> categoryService.delete(owner.getId(), ledgerId, category.getId(), targetId, DEVICE))
+                .isInstanceOfSatisfying(InvalidRequestException.class, error -> {
+                    assertThat(error.field()).isEqualTo("targetCategoryId");
+                    assertThat(error.code()).isEqualTo(code);
+                });
+        assertThat(categoryRepository.findById(category.getId())).isPresent();
     }
 
     // --- 기본 카테고리 만들기 (P-223): 장부의 소유자만, 장부마다 한 번 ---

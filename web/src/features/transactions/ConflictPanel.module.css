@@ -200,3 +200,27 @@
   font: var(--text-body-strong);
   text-align: end;
 }
+
+/* F-209 맞는 거래 목록(D-04 (30)). 줄은 최신 거래 줄(.latest)과 같고, 첫 줄만 설명 아래 24px이며 줄 사이는 16px이다 */
+.duplicates {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.duplicates > .latest + .latest {
+  margin-top: var(--space-16);
+}
+
+/* 취소 거래의 칩. 거래 줄(0.4)처럼 둘째 줄 아래 4px이다 */
+.duplicateStatus {
+  display: flex;
+  margin: var(--space-4) 0 0;
+}
+
+/* "외 {N}건". 목록 아래 16px의 보조 글자다 */
+.more {
+  margin: var(--space-16) 0 0;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}
