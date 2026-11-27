@@ -2,6 +2,7 @@ package app.accountbook.account;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotLedgerMemberException;
@@ -18,6 +19,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
@@ -187,19 +189,25 @@ class AccountOpeningDateTest {
                 .isInstanceOf(NotLedgerMemberException.class);
     }
 
-    /** 검사 순서: 종류 → 기준일 → 시작 잔액 → 이름 → 이름 중복. */
+    /** 기준일은 다른 입력란의 오류와 함께 알린다. 같은 이름은 형식이 모두 맞을 때만 본다(#13). */
     @Test
-    void dateIsCheckedAfterTypeAndBeforeBalanceAndName() {
+    void dateIsReportedWithOtherFieldsAndBeforeDuplicateName() {
         create(ledgerId, SEOUL_TODAY);
         LocalDate outOfRange = LocalDate.of(1999, 12, 31);
 
-        assertThatThrownBy(() -> accountService.create(owner.getId(), ledgerId,
-                new AccountCommand("생활비", null, 0, outOfRange)))
-                .isInstanceOf(InvalidRequestException.class)
-                .hasMessage("계좌 종류가 없습니다.");
-        assertRejected(() -> accountService.create(owner.getId(), ledgerId,
-                new AccountCommand("  ", AccountType.BANK, Long.MAX_VALUE, outOfRange)));
+        assertThat(rejectedFields(new AccountCommand("생활비", null, 0, outOfRange)))
+                .containsExactly("type:REQUIRED", "openingDate:OUT_OF_RANGE");
+        assertThat(rejectedFields(new AccountCommand("  ", AccountType.BANK, Long.MAX_VALUE, outOfRange)))
+                .containsExactly("name:REQUIRED", "openingBalance:OUT_OF_RANGE", "openingDate:OUT_OF_RANGE");
+        assertThat(rejectedFields(new AccountCommand(null, null, (Long) null, null)))
+                .containsExactly("name:REQUIRED", "type:REQUIRED", "openingBalance:REQUIRED", "openingDate:REQUIRED");
         assertRejected(() -> accountService.create(owner.getId(), ledgerId, command("생활비", "1999-12-31")));
+    }
+
+    private List<String> rejectedFields(AccountCommand command) {
+        InvalidRequestException e = catchThrowableOfType(InvalidRequestException.class,
+                () -> accountService.create(owner.getId(), ledgerId, command));
+        return e.errors().stream().map(error -> error.field() + ":" + error.code()).toList();
     }
 
     /** 앱 검사를 거치지 않고 들어온 상한 밖의 기준일. 하한 밖은 DB 제약(ck_account_opening_date_min)이 막는다. */

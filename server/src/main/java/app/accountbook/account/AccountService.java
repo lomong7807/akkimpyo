@@ -1,6 +1,7 @@
 package app.accountbook.account;
 
 import app.accountbook.common.DuplicateAccountNameException;
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
@@ -13,8 +14,10 @@ import app.accountbook.ledger.LedgerRepository;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -48,6 +51,7 @@ public class AccountService {
      * 이름은 앞뒤 공백을 지운 1~50자이고 같은 장부 안에서 겹칠 수 없다(P-220).
      * 시작 잔액은 음수도 되고 크기는 9,999,999,999원까지다(F-502).
      * 기준일은 거래 날짜와 같은 범위다(P-206).
+     * 틀린 입력란은 모두 한 번에 알리고, 같은 이름은 나머지가 모두 맞을 때만 본다(#13).
      */
     @Transactional
     public Account create(UUID actorId, UUID ledgerId, AccountCommand cmd) {
@@ -113,24 +117,46 @@ public class AccountService {
         }
     }
 
-    /** 요청을 검증하고 공백을 지운 이름을 돌려준다. */
+    /** 요청을 검증하고 공백을 지운 이름을 돌려준다. 입력란마다 보고 틀린 것을 모두 모아 알린다. */
     private String validateAndNormalizeName(UUID ledgerId, AccountCommand cmd) {
         if (cmd == null) {
             throw new InvalidRequestException("계좌 정보가 없습니다.");
         }
+        List<InvalidRequestException> errors = new ArrayList<>();
+        String name = collect(errors, () -> Names.normalize(cmd.name()));
         if (cmd.type() == null) {
-            throw new InvalidRequestException("계좌 종류가 없습니다.");
+            errors.add(new InvalidRequestException("type", FieldErrorCode.REQUIRED, "계좌 종류가 없습니다."));
+        }
+        Long openingBalance = cmd.openingBalance();
+        if (openingBalance == null) {
+            errors.add(new InvalidRequestException("openingBalance", FieldErrorCode.REQUIRED, "시작 잔액이 없습니다."));
+        } else if (openingBalance < -MAX_OPENING_BALANCE || openingBalance > MAX_OPENING_BALANCE) {
+            // Math.abs는 Long.MIN_VALUE에서 음수를 돌려주므로 양 끝과 직접 비교한다.
+            errors.add(new InvalidRequestException("openingBalance", FieldErrorCode.OUT_OF_RANGE,
+                    "시작 잔액은 -9,999,999,999원부터 9,999,999,999원까지 입력할 수 있습니다."));
         }
         if (cmd.openingDate() == null) {
-            throw new InvalidRequestException("기준일이 없습니다.");
+            errors.add(new InvalidRequestException("openingDate", FieldErrorCode.REQUIRED, "기준일이 없습니다."));
+        } else {
+            collect(errors, () -> {
+                requireOpeningDateInRange(ledgerId, cmd.openingDate());
+                return null;
+            });
         }
-        requireOpeningDateInRange(ledgerId, cmd.openingDate());
-        // Math.abs는 Long.MIN_VALUE에서 음수를 돌려주므로 양 끝과 직접 비교한다.
-        if (cmd.openingBalance() < -MAX_OPENING_BALANCE || cmd.openingBalance() > MAX_OPENING_BALANCE) {
-            throw new InvalidRequestException(
-                    "시작 잔액은 -9,999,999,999원부터 9,999,999,999원까지 입력할 수 있습니다.");
+        if (!errors.isEmpty()) {
+            throw InvalidRequestException.ofAll(errors);
         }
-        return Names.normalize(cmd.name());
+        return name;
+    }
+
+    /** 규칙을 지나면 그 값을, 거부되면 오류를 모으고 null을 돌려준다. */
+    private static <T> T collect(List<InvalidRequestException> errors, Supplier<T> rule) {
+        try {
+            return rule.get();
+        } catch (InvalidRequestException e) {
+            errors.add(e);
+            return null;
+        }
     }
 
     /** "오늘"은 서버 시계의 지금을 그 장부의 시간대로 본 날짜다(P-202). */
@@ -138,6 +164,6 @@ public class AccountService {
         ZoneId ledgerZone = ledgerRepository.findById(ledgerId)
                 .map(Ledger::zoneId)
                 .orElseThrow(NotFoundException::new);
-        LedgerDates.requireInRange("기준일은", openingDate, clock, ledgerZone);
+        LedgerDates.requireInRange("openingDate", "기준일은", openingDate, clock, ledgerZone);
     }
 }

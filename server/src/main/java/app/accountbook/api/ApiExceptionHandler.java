@@ -96,9 +96,11 @@ class ApiExceptionHandler {
         return respond(ErrorCode.NOT_FOUND, e, request);
     }
 
+    /** 여러 입력란이 함께 틀렸으면 모두 담는다(#13). */
     @ExceptionHandler
     ResponseEntity<Problem> invalidRequest(InvalidRequestException e, HttpServletRequest request) {
-        return invalid(e.field(), e.code(), e, request);
+        return invalid(e.errors().stream().map(error -> InvalidField.of(error.field(), error.code())).distinct().toList(),
+                e, request);
     }
 
     @ExceptionHandler({DuplicateAccountNameException.class, DuplicateCategoryNameException.class})
