@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { connection } from '../../api/connection'
 import type { FieldErrors } from '../../components/useFormFields'
 import { today as todayOfDevice } from '../../lib/calendarDate'
@@ -7,6 +7,7 @@ import type { Account } from '../accounts/accounts'
 import type { Category } from '../categories/categories'
 import { useConnection } from '../connection/useConnection'
 import type { PanelFailure } from './ConflictPanel'
+import { duplicateQueryOf, findDuplicates, type DuplicateQuery } from './duplicates'
 import { isUncategorized } from './formDefaults'
 import { nameBookOf } from './listedText'
 import { isConnectionLoss, QUEUED_TOAST, queueNewTransaction } from './pendingTransactions'
@@ -33,6 +34,9 @@ import { useUpdateTransaction } from './useUpdateTransaction'
  * - 같은 id로 앞서 저장된 내 거래와 내용이 다르면(current 있는 409 ID_CONFLICT) 선택 판을 띄워 사용자가 고른다(ADR 006 결정 3)
  * - 연결이 없으면 요청 없이 기기에 쌓고, 요청 중에 연결이 끊기면 같은 id로 쌓는다(F-103, P-904). 서버 오류와 15초 지연은 쌓지
  *   않는다. 저장 버튼은 연결과 관계없이 누를 수 있다
+ * - 저장 버튼으로 보낼 때는 기기 검증 다음, 보내거나 쌓기 전에 같은 날짜·금액·가맹점의 거래를 묻는다(F-209, #241). 맞는 거래가
+ *   있으면 멈추고 중복 경고 판을 띄운다. "그래도 저장"은 묻지 않고 그대로 이어 간다. 실패 문구의 버튼과 선택 판의 버튼은 이미 물은
+ *   저장을 다시 보내는 것이라 묻지 않는다
  * 화면을 떠나거나 닫는 것은 화면이 정한다(onDone). 저장을 마치기 전에 화면이 사라지면 뒷일(쌓기, 실패 문구)을 하지 못하므로
  * 화면은 보내는 동안 떠나는 길을 막는다(D-04 useLeaveGuard, D-05 architect #233).
  */
@@ -50,7 +54,7 @@ export const SAVE_FAILED = '문제가 생겨 저장하지 못했어요. 잠시 �
 const SAVE_LOST = '연결이 끊겨 저장하지 못했어요. 연결되면 다시 시도해 주세요.'
 export const SAVE_OFFLINE = '연결되면 저장할 수 있어요'
 
-/** 저장 버튼, 실패 문구의 버튼("다시 시도", "새 거래로 저장"), 또는 선택 판의 주 버튼 */
+/** 저장 버튼(중복 경고 판의 "그래도 저장" 포함), 실패 문구의 버튼("다시 시도", "새 거래로 저장"), 또는 선택 판의 주 버튼 */
 export type Sender = 'save' | 'message' | 'choice'
 
 type Failure =
@@ -94,13 +98,26 @@ interface NewTransactionSaveOptions {
   onSending?: (from: Sender) => void
   /** 저장을 마쳤다(서버에 저장, 기기에 쌓음, 저장된 내용 그대로 둠). 보일 토스트와 남은 거래의 id. 화면이 떠나거나 닫는다 */
   onDone: (toast: string, savedId: string) => void
-  /** 실패를 보이기 시작했다(실패 문구, 칸 거부, 선택 판). D-05는 저장을 누르며 닫은 판을 같은 값으로 다시 연다 */
+  /** 실패나 판을 보이기 시작했다(실패 문구, 칸 거부, 선택 판, 중복 경고 판). D-05는 저장을 누르며 닫은 판을 같은 값으로 다시 연다 */
   onFailed?: () => void
+}
+
+/** 중복 경고 판(F-209, D-04 (30))에 보이는 맞는 거래 */
+export interface DuplicateWarning {
+  /** 서버(또는 기기 사본)가 준 순서(최근 저장 순)의 맞는 거래. 5건까지다 */
+  items: TransactionDetail[]
+  /** 판을 연 때의 기기의 오늘(날짜 표기, 00-common 3.2) */
+  today: string
+  /** 판을 연 횟수. 열 때마다 처음 초점을 판 제목에 둔다 */
+  openings: number
 }
 
 export type NewTransactionSave = ReturnType<typeof useNewTransactionSave>
 
-/** 새 거래 하나의 저장 상태. 화면은 버튼과 문구(SaveFailureMessages), 선택 판(SaveChoiceDialog, SaveParts.tsx)을 그린다 */
+/**
+ * 새 거래 하나의 저장 상태. 화면은 버튼과 문구(SaveFailureMessages), 선택 판(SaveChoiceDialog), 중복 경고 판(DuplicateWarningDialog,
+ * SaveParts.tsx)을 그린다
+ */
 export function useNewTransactionSave({
   form,
   owner,
@@ -126,6 +143,22 @@ export function useNewTransactionSave({
   // 선택 판. 닫히는 움직임 동안 내용이 남도록 열림을 따로 둔다
   const [choice, setChoice] = useState<Choice>()
   const [choiceOpen, setChoiceOpen] = useState(false)
+  // 중복 경고를 묻는 중이다. 저장 버튼에 처리 중 표시를 두고 칸을 잠근다(D-04 중복 경고)
+  const [checking, setChecking] = useState(false)
+  // 중복 경고 판. 닫히는 움직임 동안 내용이 남도록 열림을 따로 둔다
+  const [warning, setWarning] = useState<DuplicateWarning>()
+  const [warningOpen, setWarningOpen] = useState(false)
+  // "그래도 저장"으로 닫을 때는 움직임 없이 그 처리 안에서 뺀다. 모달이 남아 있으면 D-05가 그 처리 안에서 홈의 입력칸에 주는
+  // 초점을 받지 못한다(iPhone 키보드, Overlay의 instantClose)
+  const [warningClosesNow, setWarningClosesNow] = useState(false)
+  // 묻는 동안 화면이 사라지면 답이 와도 보내지 않는다(떠난 화면의 입력이 저장되지 않게)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const lists = useMemo(() => {
     if (!accounts || !categories) return undefined
     return {
@@ -135,9 +168,15 @@ export function useNewTransactionSave({
     }
   }, [accounts, categories])
 
-  const busy = creation.isPending || creation.isSuccess || queueing || updating.isPending || updating.isSuccess
+  const busy =
+    checking || creation.isPending || creation.isSuccess || queueing || updating.isPending || updating.isSuccess
 
-  function submit(transactionId = id, from: Sender = 'save') {
+  /**
+   * 검증하고 보낸다. 저장 버튼(`from` 'save')이면 보내기 전에 중복 경고를 묻는다. `confirmed`는 중복 경고 판의 "그래도 저장"이다.
+   * D-05는 onSending에서 판을 닫으므로 묻는 동안 판이 없고, 맞는 거래가 있으면 onFailed로 같은 값의 판을 다시 연다
+   * (iPhone은 누른 처리 안에서 입력칸에 초점을 줘야 키보드가 올라온다, #233).
+   */
+  function submit(transactionId = id, from: Sender = 'save', confirmed = false) {
     if (busy) return
     unfoldFor?.(validateTransaction(form.effective))
     if (!form.checkAll()) {
@@ -148,6 +187,16 @@ export function useNewTransactionSave({
     setSender(from)
     const transaction = toNewTransaction(form.effective, transactionId)
     onSending?.(from)
+    const query = from === 'save' && !confirmed ? duplicateQueryOf(transaction) : undefined
+    if (query) {
+      void checkThenSend(transaction, query)
+      return
+    }
+    send(transaction)
+  }
+
+  /** 기기에 쌓거나 보낸다 */
+  function send(transaction: NewTransaction) {
     if (connection() === 'offline') {
       void queue(transaction)
       return
@@ -156,9 +205,36 @@ export function useNewTransactionSave({
       { transaction, user: owner.userId },
       {
         onSuccess: finish,
-        onError: (error) => (isConnectionLoss(error) ? void queue(transaction) : showFailure(error, transactionId)),
+        onError: (error) => (isConnectionLoss(error) ? void queue(transaction) : showFailure(error, transaction.id)),
       },
     )
+  }
+
+  /**
+   * 같은 거래를 묻고(findDuplicates), 없으면 보낸다. 있으면 보내지 않고 판을 띄운다. 묻는 중에 연결이 끊겼으면 기기 사본으로 본
+   * 뒤 send가 기기에 쌓는다. 묻지 못하면 없는 것과 같다(planner #241 P3).
+   */
+  async function checkThenSend(transaction: NewTransaction, query: DuplicateQuery) {
+    setChecking(true)
+    const found = await findDuplicates(owner, query)
+    if (!mounted.current) return
+    setChecking(false)
+    if (found.length === 0) {
+      send(transaction)
+      return
+    }
+    onFailed?.()
+    setWarning((last) => ({ items: found, today: todayOfDevice(), openings: (last?.openings ?? 0) + 1 }))
+    setWarningClosesNow(false)
+    setWarningOpen(true)
+  }
+
+  /** 중복 경고 판의 "그래도 저장": 판을 닫고 저장 버튼을 누른 것과 같이 이어 간다(묻지 않는다, designer #241 D4) */
+  function saveAnyway() {
+    if (busy) return
+    setWarningClosesNow(true)
+    setWarningOpen(false)
+    submit(id, 'save', true)
   }
 
   /** 기기에 쌓는다. 쌓지 못하면 저장 위에 문구를 보이고 값을 둔다(designer Q8). */
@@ -312,6 +388,14 @@ export function useNewTransactionSave({
     choiceOpen,
     lists,
     closeChoice: () => setChoiceOpen(false),
+    /** 중복 경고 판(F-209). "닫기"는 판만 닫고 입력으로 돌아간다. 값은 그대로다 */
+    warning,
+    warningOpen,
+    warningClosesNow,
+    closeWarning: () => setWarningOpen(false),
+    saveAnyway,
+    /** 판의 "입력한 사람: 나"를 가르는 사용자(입력의 주인) */
+    me: owner.userId,
     keepSaved,
     fixSaved,
     saveChosenAsNew,
