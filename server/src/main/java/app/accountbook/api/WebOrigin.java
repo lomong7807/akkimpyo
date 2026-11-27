@@ -6,8 +6,9 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /**
- * 우리 웹의 출처(ADR 001 결정 5). 환경 변수로만 받고 기본값이 없다. 없거나 브라우저가 {@code Origin}으로 보내는 모양이 아니면
- * 서버가 뜨지 않는다. 글자 그대로 비교하므로 모양이 다르면 모든 요청이 거절되기 때문이다.
+ * 우리 웹의 출처(ADR 001 결정 5). 환경 변수로 받고 운영에는 기본값이 없다(local 프로파일만 웹 개발 서버의 출처를 둔다).
+ * 없거나 브라우저가 {@code Origin}으로 보내는 모양이 아니면 서버가 뜨지 않는다. 글자 그대로 비교하므로 모양이 다르면 모든
+ * 요청이 거절되기 때문이다.
  */
 @Component
 final class WebOrigin {

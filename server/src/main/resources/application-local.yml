@@ -7,3 +7,6 @@ spring:
 server:
   # 같은 망의 다른 기기에서 접속하지 못하게 이 컴퓨터 안에서만 연다.
   address: 127.0.0.1
+# 웹 개발 서버(web/vite.config.ts의 server.port)의 출처. 환경 변수 WEB_ORIGIN을 주면 그 값이 이긴다.
+# 운영(프로파일 없음)에는 기본값이 없다(WebOrigin). access token 서명 키는 local에도 기본값을 두지 않는다.
+WEB_ORIGIN: http://localhost:5173
