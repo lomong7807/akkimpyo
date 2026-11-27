@@ -172,25 +172,32 @@ export default function ExportPage() {
           </Field>
           {showRange && (
             <div className={styles.range}>
-              <DateField
-                ref={startField}
-                label="시작일"
-                value={range.from}
-                onChange={(date) => changeDate('from', date)}
-                readOnly={busy}
-                error={errors.from}
-              />
-              <span className={styles.between} aria-hidden="true">
-                <span className={styles.tilde}>~</span>
-              </span>
-              <DateField
-                ref={endField}
-                label="종료일"
-                value={range.to}
-                onChange={(date) => changeDate('to', date)}
-                readOnly={busy}
-                error={errors.to}
-              />
+              <div className={styles.rangeStart}>
+                <DateField
+                  ref={startField}
+                  label="시작일"
+                  value={range.from}
+                  onChange={(date) => changeDate('from', date)}
+                  readOnly={busy}
+                  error={errors.from}
+                />
+              </div>
+              {/* "~"는 종료일과 붙여 둔다. 글자를 키워 한 줄에 안 들어가면 "~ 종료일"이 다음 줄로 내려간다 */}
+              <div className={styles.rangeEnd}>
+                <span className={styles.between} aria-hidden="true">
+                  <span className={styles.tilde}>~</span>
+                </span>
+                <div className={styles.rangeField}>
+                  <DateField
+                    ref={endField}
+                    label="종료일"
+                    value={range.to}
+                    onChange={(date) => changeDate('to', date)}
+                    readOnly={busy}
+                    error={errors.to}
+                  />
+                </div>
+              </div>
             </div>
           )}
           <Field group label="형식">
