@@ -171,6 +171,80 @@ describe('건수, 보낼 수 없음, 지우기(#235, #236이 쓴다)', () => {
   })
 })
 
+describe('고쳐서 보내기의 줄 바꾸기(F-108, #237)', () => {
+  const rejection = { status: 400, code: 'VALIDATION_FAILED', fieldErrors: [{ field: 'amount', code: 'OUT_OF_RANGE' }], at: AT }
+
+  /** 쌓은 뒤 보낼 수 없음으로 바꾼 줄 */
+  async function rejected(queue: Awaited<ReturnType<typeof openQueue>>['queue'], n: number, queuedAt = AT) {
+    await queue.queueTransaction(item(n, 'user-1', queuedAt))
+    const seen = (await queue.readPending('user-1', id(n)))!
+    await queue.settlePending(seen, { kind: 'rejected', ...rejection })
+    return (await queue.readPending('user-1', id(n)))!
+  }
+
+  it('같은 id면 그 줄을 고친 본문의 대기로 바꾸고, 쌓은 시각은 그대로 둬 원래 순서 자리에 남는다', async () => {
+    const { queue } = await openQueue()
+    await queue.queueTransaction(item(1, 'user-1', AT))
+    const seen = await rejected(queue, 2, AT + 1)
+    await queue.queueTransaction(item(3, 'user-1', AT + 2))
+    const fixed = { ...expense(2), amount: 13000 }
+    expect(await queue.refilePending(seen, fixed)).toBe(true)
+    const rows = await queue.pendingOf('user-1')
+    expect(rows.map((row) => row.id)).toEqual([id(1), id(2), id(3)])
+    expect(rows[1]).toEqual({ ...seen, state: { kind: 'waiting' }, body: fixed })
+  })
+
+  it('새 id(current 없는 409)면 옛 줄을 지우고 새 id의 줄을 같은 쌓은 시각으로 넣는다', async () => {
+    const { queue } = await openQueue()
+    const seen = await rejected(queue, 1, AT)
+    await queue.queueTransaction(item(2, 'user-1', AT + 1))
+    const fixed = { ...expense(1), id: id(9) }
+    expect(await queue.refilePending(seen, fixed)).toBe(true)
+    const rows = await queue.pendingOf('user-1')
+    expect(rows.map((row) => [row.id, row.body.id, row.queuedAt, row.state.kind])).toEqual([
+      [id(9), id(9), AT, 'waiting'],
+      [id(2), id(2), AT + 1, 'waiting'],
+    ])
+    expect(await queue.readPending('user-1', id(1))).toBeUndefined()
+  })
+
+  it('그사이 다른 탭이 버렸으면 되살리지 않고 false다', async () => {
+    const { queue } = await openQueue()
+    const seen = await rejected(queue, 1)
+    await queue.removePending('user-1', id(1))
+    expect(await queue.refilePending(seen, { ...expense(1), amount: 13000 })).toBe(false)
+    expect(await queue.pendingOf('user-1')).toEqual([])
+  })
+
+  it('그사이 다른 탭이 먼저 고쳐 보냈으면(연 때의 줄과 다름) 덮어쓰지 않고 false다. 새 id여도 넣지 않는다', async () => {
+    const { queue } = await openQueue()
+    const seen = await rejected(queue, 1)
+    await queue.refilePending(seen, { ...expense(1), amount: 20000 })
+    expect(await queue.refilePending(seen, { ...expense(1), amount: 13000 })).toBe(false)
+    expect(await queue.refilePending(seen, { ...expense(1), id: id(9) })).toBe(false)
+    const rows = await queue.pendingOf('user-1')
+    expect(rows.map((row) => [row.id, row.body.amount])).toEqual([[id(1), 20000]])
+  })
+
+  it('바꾸면 같은 탭과 다른 탭에 대기열이 바뀌었다고 알린다', async () => {
+    const { queue } = await openQueue()
+    const seen = await rejected(queue, 1)
+    const here = vi.fn()
+    const stop = queue.onPendingChanged(here)
+    await queue.refilePending(seen, { ...expense(1), amount: 13000 })
+    expect(here).toHaveBeenCalledTimes(1)
+    stop()
+  })
+
+  it('저장소를 쓸 수 없으면 던진다(부른 쪽이 문구를 보인다)', async () => {
+    const { queue } = await openQueue()
+    const seen = await rejected(queue, 1)
+    vi.stubGlobal('indexedDB', undefined)
+    const fresh = await openQueue()
+    await expect(fresh.queue.refilePending(seen, expense(1))).rejects.toBeInstanceOf(fresh.db.DeviceUnavailable)
+  })
+})
+
 describe('바뀜 알림', () => {
   it('같은 탭과 다른 탭에 대기열이 바뀌었다는 것만 알린다(security: 내용은 싣지 않는다)', async () => {
     const sent: unknown[] = []

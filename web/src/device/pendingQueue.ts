@@ -117,6 +117,32 @@ export async function settlePending(seen: PendingTransaction, outcome: Outcome):
   return settled
 }
 
+/**
+ * 고쳐서 보내기(F-108, #237): 보낼 수 없음인 줄을 고친 본문의 대기로 바꾼다. 한 트랜잭션에서 다시 읽어, 고치는 화면을 연 때 본
+ * 줄(`seen`)과 모든 칸이 같을 때만 바꾼다. 그사이 버려졌거나 다른 탭이 먼저 고쳐 보냈으면 그대로 두고 false다.
+ * 쌓은 시각은 그대로 둬 원래 순서 자리에서 보낸다. 거래 id가 바뀌면(current 없는 409, ADR 006 결정 3) 옛 줄을 지우고 새 id의 줄을
+ * 같은 트랜잭션에서 넣는다(둘 다 있거나 둘 다 없는 때가 없게, architect #237). 탭 사이 잠금은 잡지 않는다. 보낼 수 없음 줄은
+ * 어느 탭의 보내기도 건드리지 않고, 버리기·다른 탭의 고치기와 겹치는 것은 위 비교가 막는다(architect #237).
+ */
+export async function refilePending(seen: PendingTransaction, body: PendingBody): Promise<boolean> {
+  const refiled = await transact(
+    ['queue'],
+    'readwrite',
+    async (transaction) => {
+      const store = transaction.objectStore('queue')
+      const row = pendingOfRow(await resultOf(store.get([seen.userId, seen.id])))
+      if (!row || !isSameRow(row, seen)) return false
+      if (body.id !== seen.id) store.delete([seen.userId, seen.id])
+      const next: PendingTransaction = { ...row, id: body.id, state: { kind: 'waiting' }, body }
+      store.put(next)
+      return true
+    },
+    { durability: 'strict' },
+  )
+  if (refiled) changed()
+  return refiled
+}
+
 /** 그 항목을 지운다(버리기 #236). 보내기 결과로 지울 때는 settlePending을 쓴다. */
 export async function removePending(userId: string, id: string): Promise<void> {
   await transact(['queue'], 'readwrite', (transaction) => void transaction.objectStore('queue').delete([userId, id]), {

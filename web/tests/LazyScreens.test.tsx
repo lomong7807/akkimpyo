@@ -1,6 +1,7 @@
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { meOf } from './support/backend'
+import { ledgerIdOf, meOf } from './support/backend'
+import { seedPending } from './support/device'
 import { startMockServer } from './support/mockServer'
 import { detailPath, editPath, lunch, startEditServer, untilDetail, untilEditForm } from './support/transactionEdit'
 import { amount, openApp, resetGlobals, type Opened } from './support/transactionScreen'
@@ -54,6 +55,35 @@ interface Split {
   addedAfterData?: string[]
   signedOut?: boolean
   noAccounts?: boolean
+  /** 앱을 열기 전에 기기에 둘 것 */
+  seed?: () => Promise<void>
+}
+
+/** 고쳐서 보내기(#237)로 열 보낼 수 없음 입력 */
+const rejectedId = '0193a000-0000-7000-8000-0000000000a1'
+
+async function seedRejected() {
+  const pending = {
+    userId: 'user-1',
+    ledgerId: ledgerIdOf('user-1'),
+    queuedAt: Date.parse('2026-11-26T12:00:00+09:00'),
+    body: {
+      id: rejectedId,
+      type: 'EXPENSE' as const,
+      occurredOn: '2026-11-26',
+      occurredTime: null,
+      accountId: '11111111-1111-4111-8111-111111111111',
+      categoryId: null,
+      amount: 5000,
+      payee: '거부된 입력',
+      memo: null,
+    },
+  }
+  await seedPending(pending)
+  vi.resetModules()
+  const { readPending, settlePending } = await import('../src/device/pendingQueue')
+  const seen = (await readPending('user-1', rejectedId))!
+  await settlePending(seen, { kind: 'rejected', status: 400, code: 'VALIDATION_FAILED', fieldErrors: [], at: pending.queuedAt })
 }
 
 const splits: Split[] = [
@@ -110,6 +140,14 @@ const splits: Split[] = [
     drawn: () => screen.findByText('보낼 입력이 없어요. 모두 보냈어요.'),
   },
   {
+    name: '고쳐서 보내기의 거래 입력',
+    module: '../src/features/pending/PendingFixPage',
+    path: `/pending/${rejectedId}/edit`,
+    drawn: () => screen.findByText(/^보내지 못한 이유: /),
+    fullScreen: true,
+    seed: seedRejected,
+  },
+  {
     name: '더보기',
     module: '../src/app/MoreRoute',
     path: '/more',
@@ -154,9 +192,10 @@ afterEach(() => {
   for (const split of splits) vi.doUnmock(split.module)
 })
 
-function prepare(split: Split) {
+async function prepare(split: Split) {
   if (split.signedOut) started.backend.cookieUser = undefined
   if (split.noAccounts) started.accounts.items = []
+  await split.seed?.()
 }
 
 /** 문이 로그인과 내 정보를 확인하고 그 화면의 틀을 그릴 때까지 기다린다 */
@@ -170,7 +209,7 @@ async function untilShell(split: Split) {
 
 describe.each(splits)('$name: 화면 코드를 받는 동안', (split) => {
   it('그 화면과 같은 상단 바가 보이고, 화면이 그려진 뒤에도 같다', async () => {
-    prepare(split)
+    await prepare(split)
     const release = hold(split.module)
     await openApp(split.path)
     setViewportWidth(390)
@@ -185,7 +224,7 @@ describe.each(splits)('$name: 화면 코드를 받는 동안', (split) => {
   it.runIf(!split.plain)(
     split.fullScreen ? '전체 화면 입력이라 하단 탭이 없다' : '공통 틀의 하단 탭이 그대로 남는다',
     async () => {
-      prepare(split)
+      await prepare(split)
       const release = hold(split.module)
       await openApp(split.path)
       setViewportWidth(390)
@@ -201,7 +240,7 @@ describe.each(splits)('$name: 화면 코드를 받는 동안', (split) => {
   )
 
   it('300ms가 지나도 오지 않으면 뼈대나 "불러오고 있어요"를 보인다', async () => {
-    prepare(split)
+    await prepare(split)
     const release = hold(split.module)
     await openApp(split.path)
     await untilShell(split)

@@ -75,6 +75,11 @@
   font: var(--text-secondary);
 }
 
+/* 보내지 못한 이유(D-04 (33)). 자리와 글자는 안내와 같고 색만 위험색이다(designer #237 D9) */
+.noticeDanger {
+  color: var(--color-danger);
+}
+
 .bottom {
   display: flex;
   flex-direction: column;

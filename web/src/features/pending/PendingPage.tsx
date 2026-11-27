@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useNavigate } from 'react-router'
 import { sessionUserId } from '../../api/session'
 import Amount from '../../components/Amount'
-import { Button } from '../../components/Button'
+import { Button, ButtonLink } from '../../components/Button'
 import ConfirmDialog, { type ConfirmFailure } from '../../components/ConfirmDialog'
 import EmptyState from '../../components/EmptyState'
 import ErrorMessage from '../../components/ErrorMessage'
@@ -29,14 +30,15 @@ import { useEveryMinute, useSyncedAt } from '../sync/useSyncState'
 import { detailOf, nameBookOf, titleOf, type NameBook } from '../transactions/listedText'
 import { pendingRow, usePendingRead } from '../transactions/pendingTransactions'
 import { discardPending } from './discardPending'
+import { fixOpeningOf } from './fixOpening'
 import { rejectionText } from './rejectionText'
 import styles from './Pending.module.css'
 
 /*
  * B-05 보내지 않은 입력 목록(화면설계서 00-common 6.6, F-106, F-107, F-109, P-226, #236). 이 기기에서 이 계정이 쌓은 입력을
  * 모든 장부에서 오래된 순으로 보인다. 기기 데이터라 뼈대 없이 바로 그린다. 연결이 없어도 목록이 보이고 버릴 수 있다.
- * 1B 임시: 보낼 수 없음 줄에는 "버리기"만 있고 줄을 눌러도 아무 일이 없다(ADR 006 결정 6). "고쳐서 보내기"와 줄 누르기는 #237,
- * current가 있는 409의 고르기는 #280이 넣는다(planner #236).
+ * 보낼 수 없음 줄은 "고쳐서 보내기"와 줄 누르기로 그 입력을 채운 거래 입력을 연다(F-108, #237, PendingFixPage). current가 있는
+ * 409 줄은 그 자리에 #280의 "비교해서 고르기"가 들어오므로 그때까지 "버리기"만 있다(designer #102).
  */
 
 /** 데이터 없음(F-106). 모두 보냈다는 뜻이라 권할 동작이 없어 버튼을 두지 않는다(작성자 판단 65) */
@@ -170,7 +172,9 @@ function useSendNow(): Sending {
   const [problem, setProblem] = useState<string>()
   const [announcement, setAnnouncement] = useState('')
 
-  useEffect(
+  // 화면이 그려지는 때(commit)에 바로 듣는다. useEffect는 그린 뒤에 늦게 돌 수 있어, 고쳐서 보내기(#237)로 돌아온 직후 끝난
+  // 보내기의 결과를 놓쳤다. 목록이 보이면 결과를 듣고 있다
+  useLayoutEffect(
     () =>
       onSendFinished((result, byUser) => {
         setProblem(problemOf(result))
@@ -216,13 +220,21 @@ interface PendingRowProps {
   onDiscard: () => void
 }
 
+/** 고쳐서 보내기로 여는 거래 입력의 주소(planner #237 P1) */
+function fixPathOf(id: string): string {
+  return `/pending/${id}/edit`
+}
+
 /**
  * (3) 입력 줄. 첫 줄은 "{장부 이름} · {날짜} · {유형}", 둘째 줄은 가맹점/내용(비었으면 카테고리 이름)과 금액, 이체는 "이체"와 그
- * 아래 "{보내는 계좌}에서 {받는 계좌}로". 셋째 줄은 상태 칩(4)과 버리기(5), 보낼 수 없음이면 그 아래 거부 이유(6).
- * 1B 동안 줄은 누를 수 없다(대기는 늘, 보낼 수 없음은 #237까지).
+ * 아래 "{보내는 계좌}에서 {받는 계좌}로". 셋째 줄은 상태 칩(4)과 오른쪽의 고쳐서 보내기(7)·버리기(5), 보낼 수 없음이면 그 아래
+ * 거부 이유(6). 고칠 수 있는 보낼 수 없음 줄은 줄 전체를 눌러도 고쳐서 보내기와 같다(F-108). 키보드는 고쳐서 보내기 버튼으로
+ * 하므로 줄은 초점을 받지 않는다(designer #237 D5). 대기 줄과 current가 있는 409 줄(#280)은 누를 수 없다.
+ * 지금 보내기 처리 중에는 버리기처럼 고쳐서 보내기와 줄 누르기도 막는다(designer #237 D5).
  */
 function PendingRow({ item, busy, discardRef, onDiscard }: PendingRowProps) {
   const id = useId()
+  const navigate = useNavigate()
   const { names, categories } = useNameBook(item.ledgerId)
   const ledgerName = useLedgerName(item.ledgerId)
   // 카테고리를 비운 입력은 그 장부의 미분류다(제목 "미분류")
@@ -233,9 +245,18 @@ function PendingRow({ item, busy, discardRef, onDiscard }: PendingRowProps) {
   const transfer = shown?.type === 'TRANSFER' ? detailOf(shown, names) : undefined
   const meta = [ledgerName, date, typeNames[type]].filter(Boolean).join(' · ')
   const rejected = item.state.kind === 'rejected' ? item.state : undefined
+  const fixable = useMemo(() => fixOpeningOf(item) !== undefined, [item])
+  const describedBy = `${id}-title ${shown ? `${id}-amount ` : ''}${id}-meta`
 
+  /** 줄 안의 버튼과 링크는 스스로 동작한다. 그 밖의 자리를 누르면 고쳐서 보내기와 같다 */
+  function pressRow(event: MouseEvent<HTMLLIElement>) {
+    if (busy || (event.target as Element).closest('a, button')) return
+    navigate(fixPathOf(item.id))
+  }
+
+  const className = [styles.row, fixable && styles.fixable, fixable && !busy && styles.pressable].filter(Boolean).join(' ')
   return (
-    <li className={styles.row}>
+    <li className={className} onClick={fixable ? pressRow : undefined}>
       <p id={`${id}-meta`} className={styles.meta}>
         {meta}
       </p>
@@ -252,14 +273,19 @@ function PendingRow({ item, busy, discardRef, onDiscard }: PendingRowProps) {
       {transfer && <p className={styles.meta}>{transfer}</p>}
       <div className={styles.status}>
         {rejected ? <StatusChip danger>보낼 수 없음</StatusChip> : <StatusChip>대기</StatusChip>}
-        <span className={styles.discard}>
-          <Button
-            ref={discardRef}
-            kind="text-danger"
-            disabled={busy}
-            aria-describedby={`${id}-title ${shown ? `${id}-amount ` : ''}${id}-meta`}
-            onClick={onDiscard}
-          >
+        <span className={styles.actions}>
+          {fixable && (
+            <ButtonLink
+              kind="text"
+              to={fixPathOf(item.id)}
+              aria-describedby={describedBy}
+              aria-disabled={busy || undefined}
+              onClick={busy ? ignoreWhileBusy : undefined}
+            >
+              고쳐서 보내기
+            </ButtonLink>
+          )}
+          <Button ref={discardRef} kind="text-danger" disabled={busy} aria-describedby={describedBy} onClick={onDiscard}>
             버리기
           </Button>
         </span>
@@ -267,6 +293,11 @@ function PendingRow({ item, busy, discardRef, onDiscard }: PendingRowProps) {
       {rejected && <p className={styles.reason}>{rejectionText(rejected)}</p>}
     </li>
   )
+}
+
+/** 지금 보내기 처리 중의 고쳐서 보내기. 링크라 비활성이 없어 누름을 막는다 */
+function ignoreWhileBusy(event: MouseEvent) {
+  event.preventDefault()
 }
 
 /** 목록에 보일 수 없는 본문(약속과 다름)이어도 버릴 수 있게 줄은 둔다. 그때의 제목 */

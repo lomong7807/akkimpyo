@@ -1,7 +1,7 @@
 /*
  * 보내지 않은 입력 목록(B-05, 00-common 6.6). 값은 designer #236 답이다: (1) 아래 16, 버튼 위 문구와 버튼 사이 8, 버튼 아래 24.
- * 줄은 거래 줄(0.4)과 같은 짜임이라 줄 사이 선이 없고 위아래 12, 줄 안의 줄 사이 4다. 1B 동안 줄은 누를 수 없어 누름 바탕과
- * 초점이 없다(버리기 버튼만 초점). 움직임 없음.
+ * 줄은 거래 줄(0.4)과 같은 짜임이라 줄 사이 선이 없고 위아래 12, 줄 안의 줄 사이 4다. 고칠 수 있는 보낼 수 없음 줄만 누를 수 있고
+ * 거래 줄처럼 누름 바탕이 깔린다. 초점은 줄 안의 버튼만 받는다(designer #237 D5). 움직임 없음.
  */
 
 /* (1) 마지막으로 맞춘 시각 */
@@ -73,8 +73,35 @@
 }
 
 /*
- * 셋째 줄: 왼쪽 상태 칩, 오른쪽 끝 버리기(누르는 영역 44px). 좁은 화면에서 글자를 키워 한 줄에 들지 않으면 버리기가 다음 줄
- * 오른쪽 끝으로 내려간다(320px 글자 200%)
+ * 고쳐서 보낼 수 있는 보낼 수 없음 줄(B-05 (7)). 누름 바탕이 거래 줄처럼 좌우 화면 끝까지 닿게 내용 여백만큼 넓히고 그만큼
+ * 안쪽 여백을 둬 글은 다른 줄과 같은 선에 있다(designer #237 D5)
+ */
+.fixable {
+  margin-inline: calc(-1 * var(--space-16));
+  padding-inline: var(--space-16);
+}
+
+/* 지금 보내기 처리 중에는 누를 수 없어 바탕도 없다. 줄 안의 버리기를 누를 때는 줄 바탕을 깔지 않는다 */
+.pressable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pressable:active:not(:has(.actions button:active)) {
+  background-color: var(--color-press);
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .pressable:hover:not(:has(.actions button:hover)) {
+    background-color: var(--color-press);
+  }
+}
+
+/*
+ * 셋째 줄: 왼쪽 상태 칩, 오른쪽 끝에 고쳐서 보내기와 버리기(누르는 영역 44px, 사이 간격 없이 글자 버튼 안쪽 여백 8+8). 좁은 화면에서
+ * 글자를 키워 한 줄에 들지 않으면 두 버튼이 함께 다음 줄 오른쪽 끝으로 내려가고, 그래도 넘치면 버리기가 그 아래 오른쪽 끝이다
+ * (320px 글자 200%, designer #237 D5)
  */
 .status {
   display: flex;
@@ -85,7 +112,10 @@
 }
 
 /* 글자 버튼의 안쪽 여백만큼 당겨 글자를 내용의 오른쪽 선에 맞춘다 */
-.discard {
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   margin-inline: auto calc(-1 * var(--space-8));
 }
 
