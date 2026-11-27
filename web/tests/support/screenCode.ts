@@ -18,8 +18,6 @@ let registered = false
 export function fetchScreenCodeFirst() {
   if (registered) return
   registered = true
-  // 임시(#291): 같은 러너에서 미리 받기를 끈 회차와 시간을 견준다. ready 전에 되돌린다
-  if (process.env.WARMUP291 === 'off') return
   beforeAll(async () => {
     // 테스트가 정적으로 불러 둔 앱 모듈과 섞이지 않게 앱을 새로 여는 것처럼 받는다
     vi.resetModules()

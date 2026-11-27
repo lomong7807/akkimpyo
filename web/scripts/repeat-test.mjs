@@ -8,8 +8,6 @@ import { join } from 'node:path'
 const times = Number(process.env.REPEAT ?? 5)
 // 함께 돌릴 CPU 부하 프로세스 수(#291의 부하 조건). 0이면 걸지 않는다
 const load = Number(process.env.LOAD ?? 0)
-// 미리 받기(tests/support/screenCode.ts)를 끄고 돌 회차. 같은 러너에서 켠 회차와 시간을 견준다
-const warmupOffRuns = new Set((process.env.WARMUP_OFF_RUNS ?? '').split(',').filter(Boolean).map(Number))
 // job 한도 10분에서 설치와 여유를 뺀 시간
 const budgetMs = 8 * 60_000
 const args = process.argv.slice(2)
@@ -33,7 +31,7 @@ for (let run = 1; run <= times; run += 1) {
   const result = spawnSync(
     'vitest',
     ['run', ...args, '--reporter=default', '--reporter=json', `--outputFile.json=${out}`],
-    { stdio: 'inherit', env: { ...process.env, WARMUP291: warmupOffRuns.has(run) ? 'off' : 'on' } },
+    { stdio: 'inherit' },
   )
   const wall = Math.round((Date.now() - runStarted) / 1000)
   for (const burner of burners) burner.kill()
@@ -58,7 +56,7 @@ for (let run = 1; run <= times; run += 1) {
     }
   }
   if (result.status !== 0) failedRuns += 1
-  lines.push(`REPEAT291 shard=${shard} load=${load} warmup=${warmupOffRuns.has(run) ? 'off' : 'on'} run=${run} exit=${result.status} wall=${wall}s failed=${failures.length}`)
+  lines.push(`REPEAT291 shard=${shard} load=${load} run=${run} exit=${result.status} wall=${wall}s failed=${failures.length}`)
   for (const failure of failures) lines.push(`REPEAT291-FAIL shard=${shard} run=${run} | ${failure}`)
 }
 
