@@ -279,13 +279,14 @@ function payeeOf({ body }: PendingTransaction): string {
  * 계좌·카테고리로 만든 것이라 보통 사본에 있다. 사본도 없을 때만(30일이 지나 지워짐 등) 서버에서 받는다. 받지 못하면 이름 없이 그린다.
  */
 function useNameBook(ledgerId: string): { names: NameBook; categories: Category[] } {
+  // 사본은 받은 시각과 함께 온다(#238). 여기서는 값만 쓴다. 읽는 중이면 undefined, 없으면 null이다
   const accountsCopy = useLedgerCopy(ledgerId, 'accounts', parseAccounts).data
   const categoriesCopy = useLedgerCopy(ledgerId, 'categories', parseCategories).data
   const accounts = useQuery({ ...accountsQuery(ledgerId), enabled: accountsCopy === null }).data
   const categories = useQuery({ ...categoriesQuery(ledgerId), enabled: categoriesCopy === null }).data
   return useMemo(() => {
-    const shownCategories = categories ?? categoriesCopy ?? NO_CATEGORIES
-    return { names: nameBookOf(accounts ?? accountsCopy ?? [], shownCategories), categories: shownCategories }
+    const shownCategories = categories ?? categoriesCopy?.value ?? NO_CATEGORIES
+    return { names: nameBookOf(accounts ?? accountsCopy?.value ?? [], shownCategories), categories: shownCategories }
   }, [accounts, accountsCopy, categories, categoriesCopy])
 }
 

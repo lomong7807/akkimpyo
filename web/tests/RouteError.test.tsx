@@ -1,8 +1,9 @@
-import { cleanup, screen } from '@testing-library/react'
+import { act, cleanup, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { RouteObject } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { startBackend } from './support/backend'
+import { goOffline, goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 
@@ -62,6 +63,18 @@ describe.each([
     expect(reload).toHaveBeenCalledTimes(1)
   })
 })
+
+it('공통 틀이 있는 화면에서 연결이 없으면 버튼 없이 "연결되면 자동으로 불러올게요."이고, 연결이 돌아오면 저절로 새로고침한다(#238)', async () => {
+  const reload = vi.fn()
+  await openBroken('*', '/어떤-주소')
+  vi.stubGlobal('location', { ...window.location, reload })
+  act(() => goOffline())
+  expect(screen.getByRole('main').textContent).toBe('불러오지 못했어요.연결되면 자동으로 불러올게요.')
+  expect(reload).not.toHaveBeenCalled()
+  act(() => goOnline())
+  expect(reload).toHaveBeenCalledTimes(1)
+})
+
 
 it('공통 틀이 있는 화면에서는 내용 자리만 바뀌고 틀은 그대로 보인다', async () => {
   await openBroken('*', '/어떤-주소')

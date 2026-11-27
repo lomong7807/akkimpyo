@@ -7,7 +7,7 @@ import { useAllPending } from '../transactions/pendingTransactions'
 
 /*
  * 동기화 상태(B-04, F-104, #235)를 기기 저장소에서 읽는다. 연결과 상관없이 바로 그린다. 바뀌면 로그인 영역(SignedInArea)이
- * 캐시를 무효로 만든다(대기열은 pendingKey, 맞춘 시각은 syncedKey).
+ * 캐시를 무효로 만든다(대기열은 pendingKey, 맞춘 시각은 기기 데이터의 키 앞부분 deviceKey로 읽어 둔 사본과 함께).
  */
 
 export interface PendingCounts {

@@ -1,6 +1,7 @@
-import { createElement, useEffect, useState, type ComponentType, type ReactNode } from 'react'
-import LoadFailure from '../components/LoadFailure'
+import { createElement, useEffect, useEffectEvent, useState, type ComponentType, type ReactNode } from 'react'
+import { onConnectionChange } from '../api/connection'
 import { ShellShownContext } from '../components/shellShown'
+import LoadFailureHere from '../features/connection/LoadFailureHere'
 
 /**
  * 화면 코드를 받지 못해 새로고침했다는 이 탭의 표시. 새로고침은 한 탭에서 한 번만 하고, 열린 화면이 자기 코드를 받으면 지운다
@@ -33,7 +34,8 @@ export interface LazyScreen {
  * (react-dom 19.3.1의 FALLBACK_THROTTLE_MS). 작은 화면 코드가 20ms에 와도 내용 자리가 300ms 비어 있게 된다.
  *
  * 받지 못하면(연결 없음, 배포로 화면 코드 파일이 없어짐) 틀 안에 "불러오지 못했어요."(F-907)를 둔다. 다시 시도는 같은 파일을
- * 다시 받고, 연결이 있는데도 또 받지 못하면 새 index.html을 받으러 새로고침한다(한 탭에 한 번).
+ * 다시 받고, 연결이 있는데도 또 받지 못하면 새 index.html을 받으러 새로고침한다(한 탭에 한 번). 연결이 없으면 버튼 없이
+ * "연결되면 자동으로 불러올게요."이고 연결이 돌아오면 저절로 다시 받는다(F-908, #238).
  */
 export function lazyScreen(load: () => Promise<{ default: ComponentType }>, shell: ScreenShell): LazyScreen {
   let loaded: ComponentType | undefined
@@ -77,6 +79,17 @@ export function lazyScreen(load: () => Promise<{ default: ComponentType }>, shel
       })
     }
 
+    // 받지 못한 채 연결이 돌아오면 저절로 다시 받는다(연결이 없는 동안에는 버튼이 없다)
+    const retryOnReconnect = useEffectEvent(() => {
+      if (!retrying) retry()
+    })
+    useEffect(() => {
+      if (!failed) return
+      return onConnectionChange((next) => {
+        if (next === 'online') retryOnReconnect()
+      })
+    }, [failed])
+
     if (screen) {
       const content = createElement(screen)
       return afterShell ? <ShellShownContext value>{content}</ShellShownContext> : content
@@ -84,7 +97,7 @@ export function lazyScreen(load: () => Promise<{ default: ComponentType }>, shel
     const { Frame, Placeholder, headingLevel } = shell
     return (
       <Frame>
-        {failed ? <LoadFailure headingLevel={headingLevel} busy={retrying} onRetry={retry} /> : <Placeholder />}
+        {failed ? <LoadFailureHere headingLevel={headingLevel} busy={retrying} onRetry={retry} /> : <Placeholder />}
       </Frame>
     )
   }

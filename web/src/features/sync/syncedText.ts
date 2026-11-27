@@ -1,5 +1,4 @@
-import { formatDate } from '../../lib/calendarDate'
-import { wallTimeNow, wallTimeOf } from '../../lib/clock'
+import { momentText } from '../../lib/timeText'
 
 /** 한 번도 맞추지 못했을 때(B-04 (2-3)) */
 export const NEVER_SYNCED = '아직 맞추지 않았어요'
@@ -14,10 +13,8 @@ export function syncedText(at: number | undefined): string {
 
 /**
  * 맞춘 시각(00-common 3.2). 기기의 시간대로 본 오늘이면 시각만("10:42"), 아니면 날짜와 시각("11월 19일 (목) 22:10")이다.
- * B-04 (2-3)과 보내지 않은 입력 목록(B-05 (1))이 쓴다.
+ * B-04 (2-3)과 보내지 않은 입력 목록(B-05 (1))이 쓴다. 글자는 연결이 없을 때의 기준 시각(#238)과 같은 momentText다.
  */
 export function syncedMoment(at: number): string {
-  const { date, time } = wallTimeOf(at)
-  const today = wallTimeNow().date
-  return date === today ? time : `${formatDate(date, today)} ${time}`
+  return momentText(at)
 }

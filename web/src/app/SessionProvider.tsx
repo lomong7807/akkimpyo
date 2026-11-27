@@ -77,6 +77,16 @@ export default function SessionProvider({ children }: { children: ReactNode }) {
     })
   }, [status])
 
+  // 로그인 여부를 확인하지 못했는데 연결이 돌아오면 저절로 다시 확인한다. 연결이 없는 동안 그 화면에는 버튼이 없다(00-common 4.1, #238)
+  useEffect(() => {
+    if (status !== 'unknown') return
+    return onConnectionChange((next) => {
+      if (next !== 'online') return
+      dispatch('retried')
+      void checkSession().then(dispatch)
+    })
+  }, [status])
+
   // 기기에 남기는 것이 생기므로 브라우저에 저장 유지를 요청한다(ADR 006 결정 7)
   useEffect(() => {
     if (status === 'signed-in' || status === 'unconfirmed') void askToKeepStorage()
