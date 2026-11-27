@@ -1,6 +1,6 @@
 /*
- * 동기화 상태 표시(B-04, 00-common 6.5). 2-2와 2-1을 한 덩어리로 묶어 자리를 44px 이상으로 잡는다. 안쪽 여백만큼 상단 바가
- * 바깥으로 당겨 아이콘을 내용의 오른쪽 선에 맞춘다(components/Screen). 움직임 없음.
+ * 동기화 상태 표시(B-04, 00-common 6.5). 2-2와 2-1을 한 덩어리로 묶어 누르는 자리를 44px 이상으로 잡는다. 안쪽 여백만큼 상단 바가
+ * 바깥으로 당겨 아이콘을 내용의 오른쪽 선에 맞춘다(components/Screen). 누르면 B-05(#236). 마우스 올림은 아이콘 버튼과 같다. 움직임 없음.
  */
 .syncStatus {
   display: flex;
@@ -10,6 +10,16 @@
   min-height: var(--size-touch);
   margin: 0;
   padding-inline: var(--space-8);
+  border-radius: var(--radius-10);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .syncStatus:hover {
+    background-color: var(--color-press);
+  }
 }
 
 /* 아이콘 20px과 "{N}건"(text-caption, 600) */

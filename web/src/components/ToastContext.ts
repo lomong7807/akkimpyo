@@ -12,6 +12,8 @@ export interface ToastOptions {
    * 저절로 끝난 일의 알림(자동 보내기의 200 알림, designer #235 Q1)에 쓴다.
    */
   behindAction?: boolean
+  /** 떠 있는 토스트가 있으면 무엇이든 걷지 않고 그것이 끝난 뒤에 보인다. 한 동작의 결과 둘을 차례로 알린다(지금 보내기의 200 알림, #236) */
+  afterShown?: boolean
 }
 
 type ShowToast = (message: string, action?: ToastAction, options?: ToastOptions) => void

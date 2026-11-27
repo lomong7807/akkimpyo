@@ -104,6 +104,12 @@ const splits: Split[] = [
     drawn: () => screen.findByRole('radio', { name: '지출' }),
   },
   {
+    name: '보내지 않은 입력',
+    module: '../src/features/pending/PendingPage',
+    path: '/pending',
+    drawn: () => screen.findByText('보낼 입력이 없어요. 모두 보냈어요.'),
+  },
+  {
     name: '더보기',
     module: '../src/app/MoreRoute',
     path: '/more',

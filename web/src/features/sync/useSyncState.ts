@@ -17,6 +17,18 @@ export interface PendingCounts {
   rejected: number
 }
 
+/** 보내지 않은 입력 목록(B-05)의 주소(00-common 12절). B-04, 사이드바 건수 줄(2-4), 홈·내역의 보내지 않음 줄이 간다 */
+export const PENDING_PATH = '/pending'
+
+/**
+ * B-04와 사이드바 건수 줄(2-4)의 이름(00-common 6.5). 보낼 수 없음이 없으면 둘째 구절을 뺀다. 누르면 목록으로 가므로
+ * ", 목록 보기"를 붙인다(designer #235 Q3, #236).
+ */
+export function pendingSummary(total: number, rejected: number): string {
+  const counts = rejected > 0 ? `보내지 않은 입력 ${total}건, 그중 보낼 수 없음 ${rejected}건` : `보내지 않은 입력 ${total}건`
+  return `${counts}, 목록 보기`
+}
+
 /** 이 기기에서 이 계정이 쌓은 보내지 않은 입력의 건수(모든 장부 합계) */
 export function usePendingCounts(): PendingCounts {
   const all = useAllPending()

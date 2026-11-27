@@ -44,7 +44,7 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
   const showToast = useCallback((message: string, action?: ToastAction, options?: ToastOptions) => {
     afterModals(() =>
       setToast((last) => {
-        if (options?.behindAction && last?.action) return { ...last, next: message }
+        if ((options?.behindAction && last?.action) || (options?.afterShown && last)) return { ...last, next: message }
         return { id: (last?.id ?? 0) + 1, message, action, next: last?.next }
       }),
     )

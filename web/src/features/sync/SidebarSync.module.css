@@ -1,16 +1,35 @@
-/* 2-4: "보내지 않은 입력 {N}건"(color-text-secondary), 보낼 수 없음이 있으면 아랫줄(color-danger). 줄 자리 44px 이상 */
+/*
+ * 2-4: "보내지 않은 입력 {N}건"(color-text-secondary), 보낼 수 없음이 있으면 아랫줄(color-danger). 누르면 B-05로 가는 줄이고
+ * 누르는 자리는 44px 이상이다. 눌림과 마우스 올림은 사이드바의 다른 줄처럼 color-press 바탕이다(owner 결정 2). 움직임 없음.
+ */
 .counts {
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-height: var(--size-touch);
   padding-inline: var(--space-8);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.counts:active {
+  background-color: var(--color-press);
+}
+
+@media (hover: hover) {
+  .counts:hover {
+    background-color: var(--color-press);
+  }
 }
 
 .count {
-  margin: 0;
   color: var(--color-text-secondary);
   font: var(--text-secondary);
+}
+
+/* 지금 화면(B-05)이면 다른 사이드바 줄처럼 색만 바꾼다. 보낼 수 없음 줄은 위험색 그대로다 */
+.counts[aria-current] .count:not(.rejected) {
+  color: var(--color-accent);
 }
 
 .rejected {
