@@ -5,6 +5,8 @@ import app.accountbook.common.NotFoundException;
 import app.accountbook.transaction.CreateResult;
 import app.accountbook.transaction.IdConflictException;
 import app.accountbook.transaction.TransactionCommand;
+import app.accountbook.transaction.TransactionListQuery;
+import app.accountbook.transaction.TransactionPage;
 import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.UserService;
@@ -19,9 +21,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 장부의 거래(F-201~F-204, #14)와 상세(F-224, #15). 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가 한 번 더 한다. */
+/** 장부의 거래(F-201~F-204, #14)와 목록·상세(F-215, F-224, #15). 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가 한 번 더 한다. */
 @RestController
 @RequestMapping(path = "/api/v1/ledgers/{ledgerId}/transactions", produces = MediaType.APPLICATION_JSON_VALUE)
 class TransactionController {
@@ -32,11 +35,33 @@ class TransactionController {
     static final String UNKNOWN_DEVICE = "unknown";
 
     private final TransactionService transactionService;
+    private final TransactionListQuery transactionListQuery;
     private final UserService userService;
 
-    TransactionController(TransactionService transactionService, UserService userService) {
+    TransactionController(TransactionService transactionService, TransactionListQuery transactionListQuery,
+                          UserService userService) {
         this.transactionService = transactionService;
+        this.transactionListQuery = transactionListQuery;
         this.userService = userService;
+    }
+
+    /**
+     * 거래 목록의 한 쪽(F-215, F-113, F-222, #15 응답 계약). {@code month}면 그 달, {@code date}면 그날, 둘 다 없으면 장부
+     * 전체(장부 시간대의 오늘까지)다. 쿼리 값의 형식 오류는 여기서, 범위 오류는 서비스가 400으로 거절한다. 구성원이 아니면
+     * 쿼리 값이 틀려도 {@link LedgerMemberInterceptor}가 먼저 404로 답한다. 이름은 쪽마다 한 번 읽는다.
+     */
+    @GetMapping
+    TransactionListResponse list(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                                 @RequestParam(name = "month", required = false) String month,
+                                 @RequestParam(name = "date", required = false) String date,
+                                 @RequestParam(name = "limit", required = false) String limit,
+                                 @RequestParam(name = "cursor", required = false) String cursor) {
+        TransactionListRequest request = TransactionListRequest.of(ledgerId, month, date, limit, cursor);
+        TransactionPage page = transactionListQuery.page(actorId, ledgerId, request.scope(), request.after(),
+                request.limit());
+        String nextCursor = page.next() == null ? null
+                : TransactionCursor.encode(ledgerId, request.scope(), page.next());
+        return TransactionListResponse.of(page, userService.memberDisplayNames(actorId, ledgerId), nextCursor);
     }
 
     /**
