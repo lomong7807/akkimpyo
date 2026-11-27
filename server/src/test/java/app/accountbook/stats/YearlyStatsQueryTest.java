@@ -176,7 +176,9 @@ class YearlyStatsQueryTest {
         assertThat(categories).hasSize(10);
         assertThat(categories.subList(0, 3)).containsExactly(
                 new CategoryTotal(salary.getId(), CategoryKind.INCOME, 10_000),
-                new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 4_000),
+                new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 4_000,
+                        List.of(new CategoryTotal(lunch.getId(), CategoryKind.EXPENSE, 3_000),
+                                new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 1_000))),
                 new CategoryTotal(uncategorized, CategoryKind.EXPENSE, 700));
         assertThat(categories.getLast()).isEqualTo(new CategoryTotal(gift.getId(), CategoryKind.EXPENSE, -2_000));
         assertThat(categories).extracting(CategoryTotal::categoryId).doesNotContain(lunch.getId(), cafe.getId());
@@ -213,7 +215,10 @@ class YearlyStatsQueryTest {
                 .toList());
         assertThat(summary.income()).isEqualTo(monthly.stream().mapToLong(MonthlySummary::income).sum());
         assertThat(summary.expense()).isEqualTo(monthly.stream().mapToLong(MonthlySummary::expense).sum());
-        assertThat(summary.categories()).containsExactlyInAnyOrderElementsOf(addUp(monthly));
+        // 하위별 금액은 yearly_listsEveryTopLevelCategoryOfTheYear가 본다.
+        assertThat(summary.categories())
+                .extracting(category -> new CategoryTotal(category.categoryId(), category.kind(), category.total()))
+                .containsExactlyInAnyOrderElementsOf(addUp(monthly));
         assertThat(summary.months()).filteredOn(month -> month.income() != 0 || month.expense() != 0)
                 .extracting(month -> month.month().getMonthValue()).containsExactly(1, 2, 3, 7, 12);
     }

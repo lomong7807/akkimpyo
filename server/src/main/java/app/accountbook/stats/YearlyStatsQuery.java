@@ -27,9 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
  * 연 단위 통계(F-304, P-224). 대상 라인과 규칙은 월별 통계({@link MonthlyStatsQuery})와 같고 범위만 그해 1월 1일부터
  * 다음 해 1월 1일 앞까지다. 장부 시간대의 날짜인 occurred_on으로 나누므로 12월 31일은 그해, 1월 1일은 다음 해다.
  *
- * <p>그해의 라인을 한 문장으로 달·최상위 카테고리별로 묶어 읽는다(달마다 따로 묻지 않는다). 연 합계와 그해의 카테고리별 합계는
- * 그 결과를 더해 만든다. 라인과 거래에 장부 조건을 각각 걸고 카테고리에는 걸지 않는 까닭은 월별 통계와 같다. 거래는
- * 장부·날짜 인덱스로 그해만 읽는다(TransactionListPlanTest).
+ * <p>그해의 라인을 한 문장으로 달·라인의 카테고리별로 묶어 읽는다(달마다 따로 묻지 않는다). 연 합계와 그해의 카테고리별
+ * 합계(하위별 금액 포함)는 그 결과를 더해 만든다. 라인과 거래에 장부 조건을 각각 걸고 카테고리에는 걸지 않는 까닭은 월별
+ * 통계와 같다. 거래는 장부·날짜 인덱스로 그해만 읽는다(TransactionListPlanTest).
  */
 @Component
 @Transactional(readOnly = true)
@@ -62,7 +62,7 @@ public class YearlyStatsQuery {
         requireInRange(year,
                 ledgerRepository.findById(ledgerId).map(Ledger::zoneId).orElseThrow(NotFoundException::new));
         Map<Month, List<CategoryTotal>> byMonth = entityManager.createQuery("""
-                        select extract(month from t.occurredOn), coalesce(c.parentId, c.id), c.kind,
+                        select extract(month from t.occurredOn), coalesce(c.parentId, c.id), c.id, c.kind,
                                cast(sum(l.amount) as BigInteger)
                           from TransactionLine l
                           join l.transaction t
@@ -72,7 +72,7 @@ public class YearlyStatsQuery {
                            and t.occurredOn >= :from and t.occurredOn < :until
                            and t.deletedAt is null
                            and t.status <> :canceled
-                         group by extract(month from t.occurredOn), coalesce(c.parentId, c.id), c.kind
+                         group by extract(month from t.occurredOn), c.parentId, c.id, c.kind
                         having sum(l.amount) <> 0
                         """, Tuple.class)
                 .setParameter("ledgerId", ledgerId)
@@ -81,8 +81,8 @@ public class YearlyStatsQuery {
                 .setParameter("canceled", TransactionStatus.CANCELED)
                 .getResultList().stream()
                 .collect(Collectors.groupingBy(row -> Month.of(row.get(0, Number.class).intValue()),
-                        Collectors.mapping(row -> CategoryTotal.of(row.get(1, UUID.class),
-                                row.get(2, CategoryKind.class), row.get(3, BigInteger.class).longValueExact()),
+                        Collectors.mapping(row -> CategoryTotal.ofLine(row.get(1, UUID.class), row.get(2, UUID.class),
+                                row.get(3, CategoryKind.class), row.get(4, BigInteger.class).longValueExact()),
                                 Collectors.toList())));
         return YearlySummary.of(year, byMonth);
     }
