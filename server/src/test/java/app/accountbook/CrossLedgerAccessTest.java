@@ -35,6 +35,7 @@ import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
 import app.accountbook.transaction.TransactionExportQuery;
+import app.accountbook.transaction.TransactionHistoryQuery;
 import app.accountbook.transaction.TransactionListQuery;
 import app.accountbook.transaction.TransactionPage.DayTotals;
 import app.accountbook.transaction.TransactionScope.Day;
@@ -103,6 +104,7 @@ class CrossLedgerAccessTest {
     @Autowired TransactionService transactionService;
     @Autowired TransactionListQuery transactionListQuery;
     @Autowired TransactionTrashQuery transactionTrashQuery;
+    @Autowired TransactionHistoryQuery transactionHistoryQuery;
     @Autowired CategorySuggestionQuery categorySuggestionQuery;
     @Autowired TransactionExportQuery transactionExportQuery;
     @Autowired BalanceQuery balanceQuery;
@@ -189,6 +191,7 @@ class CrossLedgerAccessTest {
         transactionService = recorded(transactionService);
         transactionListQuery = recorded(transactionListQuery);
         transactionTrashQuery = recorded(transactionTrashQuery);
+        transactionHistoryQuery = recorded(transactionHistoryQuery);
         categorySuggestionQuery = recorded(categorySuggestionQuery);
         transactionExportQuery = recorded(transactionExportQuery);
         balanceQuery = recorded(balanceQuery);
@@ -313,6 +316,10 @@ class CrossLedgerAccessTest {
                         (actor, tx) -> transactionService.history(actor, tx)),
                 denied("조회: 변경 이력(삭제한 거래)", NotFoundException.class, bDeleted.id(),
                         (actor, tx) -> transactionService.history(actor, tx)),
+                denied("조회: 변경 이력(B의 장부 경로)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionHistoryQuery.history(actor, ledger, bExpense.id())),
+                foreign("조회: A의 장부 경로로 B의 거래 변경 이력", NotFoundException.class, bExpense.id(), aExpense.id(),
+                        (actor, tx) -> transactionHistoryQuery.history(actor, ledgerA, tx)),
                 denied("조회: 휴지통", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionTrashQuery.page(actor, ledger, null)),
                 denied("조회: 거래 목록(달)", NotLedgerMemberException.class, ledgerB,
