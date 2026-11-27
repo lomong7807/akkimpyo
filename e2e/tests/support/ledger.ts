@@ -155,6 +155,161 @@ export async function expectHomeBalances(page: Page, byType: [string, string][],
   await expect(summary.getByRole('definition')).toHaveText([...byType.map(([, amount]) => amount), total])
 }
 
+/** 홈의 이번 달 합계(C-01 (2))가 보이는 값. 화면에 보이는 글자 그대로("12,300원", "+50,000원", "-12,300원")다 */
+export interface MonthTotals {
+  expense: string
+  income: string
+  /** 수입 - 지출. 0이 아니면 부호를 늘 붙인다(01 작성자 판단 37) */
+  difference: string
+}
+
+/**
+ * 홈의 이번 달 합계(C-01 (2), F-111). 머리 줄 "{달} 합계" 구역에 지출(큰 숫자), 수입, 차액 순서다. 수입이 0원이면 부호 없이
+ * "0원"이다(02 0.2). 계산은 P-205(이체, 취소, 삭제를 뺀다). 큰 지출 숫자는 폭에 따라 고르는 두 벌이고 작은 짝은 화면 읽기에
+ * 숨기므로(aria-hidden), 화면 읽기에 보이는 것(aria snapshot)으로 본다.
+ */
+export async function expectMonthTotals(page: Page, monthName: string, { expense, income, difference }: MonthTotals) {
+  await expect(page).toHaveURL('/home')
+  await expect(page.getByRole('region', { name: `${monthName} 합계`, exact: true })).toMatchAriaSnapshot(
+    lines([
+      '- term: "지출"',
+      `- definition: ${quoted(expense)}`,
+      '- term: "수입"',
+      `- definition: ${quoted(income)}`,
+      '- term: "차액"',
+      `- definition: ${quoted(difference)}`,
+    ]),
+  )
+}
+
+/**
+ * 주 메뉴의 "내역"으로 내역(D-01)을 연다. 처음 열면 이번 달(기기의 오늘이 속한 달)이고 주소에 그 달을 담는다(D-01 (1)).
+ * 달 이름은 달 이동 가운데의 화면 제목(h1)이다(00-common 5.9).
+ */
+export async function openHistory(page: Page, month: string, monthName: string) {
+  await mainMenu(page).getByRole('link', { name: '내역', exact: true }).click()
+  await expectHistoryAt(page, month, monthName)
+}
+
+/** 내역(D-01)의 달 이동 "이전 달"로 지난달을 연다(00-common 5.9). 주소의 달이 바뀐다 */
+export async function moveHistoryToPreviousMonth(page: Page, month: string, monthName: string) {
+  await page.getByRole('button', { name: '이전 달', exact: true }).click()
+  await expectHistoryAt(page, month, monthName)
+}
+
+async function expectHistoryAt(page: Page, month: string, monthName: string) {
+  await expect(page).toHaveURL(`/transactions?month=${month}`)
+  await expect(page.getByRole('heading', { level: 1, name: monthName, exact: true })).toBeVisible()
+}
+
+/** 내역의 날짜 묶음 하나(D-01 (7)·(8)) */
+export interface HistoryDay {
+  /** 날짜 묶음 머리의 날짜 "11월 27일 (금)"(02 0.3) */
+  dayName: string
+  /** 그날 합계 [이름, 금액]. 지출만 있으면 지출만이다(02 0.5) */
+  sums: [string, string][]
+  /** 거래 줄 링크의 이름. 제목, 금액, 날짜, 시각, 둘째 줄("카테고리 · 계좌")을 띄어 잇는다(02 0.4) */
+  rows: string[]
+}
+
+/**
+ * 내역(D-01)에 보이는 그 달: 수입·지출 합계 (4), 날짜 묶음 머리와 그날 합계 (7), 그 날짜를 이름으로 하는 목록 안의 거래 줄 (8).
+ * 목록에는 적은 줄만 있다. 화면 읽기에 보이는 차례(aria snapshot)로 본다.
+ */
+export async function expectHistoryMonth(page: Page, totals: { income: string; expense: string }, days: HistoryDay[]) {
+  const dayLines = days.flatMap(({ dayName, sums, rows }) => [
+    `- heading ${quoted(dayName)} [level=2]`,
+    ...sums.flatMap(([name, amount]) => [`- term: ${quoted(name)}`, `- definition: ${quoted(amount)}`]),
+    `- list ${quoted(dayName)}:`,
+    '  - /children: equal',
+    ...rows.flatMap((row) => ['  - listitem:', `    - link ${quoted(row)}`]),
+  ])
+  await expect(page.getByRole('main')).toMatchAriaSnapshot(
+    lines([
+      '- term: "수입"',
+      `- definition: ${quoted(totals.income)}`,
+      '- term: "지출"',
+      `- definition: ${quoted(totals.expense)}`,
+      ...dayLines,
+    ]),
+  )
+}
+
+/** 그 달에 거래가 없다(D-01 데이터 없음): 합계는 둘 다 0원이고 목록 자리에 "{달}에 입력한 거래가 없어요"다 */
+export async function expectEmptyHistoryMonth(page: Page, monthName: string) {
+  await expect(page.getByRole('main')).toMatchAriaSnapshot(
+    lines(['- term: "수입"', '- definition: "0원"', '- term: "지출"', '- definition: "0원"']),
+  )
+  await expect(page.getByText(`${monthName}에 입력한 거래가 없어요`, { exact: true })).toBeVisible()
+}
+
+/** 홈의 최근 거래(C-01 (8))에서 그 줄을 눌러 거래 상세(D-06)를 연다. 줄 링크의 이름은 내역의 거래 줄과 같다(02 0.4) */
+export async function openRecentTransaction(page: Page, row: string) {
+  await page.getByRole('region', { name: '최근 거래', exact: true }).getByRole('link', { name: row, exact: true }).click()
+  await expectTransactionDetail(page)
+}
+
+async function expectTransactionDetail(page: Page) {
+  await expect(page.getByRole('heading', { level: 1, name: '거래 상세' })).toBeVisible()
+  await expect(page).toHaveURL(/\/transactions\/[0-9a-f-]{36}$/)
+}
+
+/**
+ * 거래 상세(D-06)의 "수정"(1)으로 거래 수정(D-04)을 열어 금액만 바꿔 저장한다(F-208). 칸은 받은 거래의 값으로 채워진다.
+ * 채워지기 전에 치면 채울 때 덮이므로 원래 금액이 보인 뒤에 친다. 저장하면 토스트 "저장했어요"이고 앞 화면(상세)으로 돌아가며,
+ * 상세의 금액(2)이 바꾼 값이다.
+ */
+export async function changeAmount(page: Page, from: string, to: string) {
+  await page.getByRole('link', { name: '수정', exact: true }).click()
+  await expect(page.getByRole('heading', { level: 1, name: '거래 수정' })).toBeVisible()
+  const amount = page.getByRole('textbox', { name: '금액' })
+  await expect(amount).toHaveValue(from)
+  await amount.fill(digitsOf(to))
+  await expect(amount).toHaveValue(to)
+  await page.getByRole('button', { name: '저장', exact: true }).click()
+
+  await expect(toast(page, '저장했어요')).toBeVisible()
+  await expectTransactionDetail(page)
+  await expect(page.getByRole('main').getByText(`${to}원`, { exact: true })).toBeVisible()
+}
+
+/** 하위 화면 상단 바의 "뒤로"로 앞 화면으로 돌아간다(00-common 6.1) */
+export async function pressBack(page: Page) {
+  await page.getByRole('button', { name: '뒤로', exact: true }).click()
+}
+
+/**
+ * 거래 상세(D-06)의 "삭제"(21)로 확인 창 "이 거래를 삭제할까요?"를 열고 "삭제"한다(F-227). 성공하면 이전 화면으로 돌아가고
+ * 토스트 "휴지통으로 옮겼어요"와 "되돌리기"다. 되돌리기가 있는 토스트는 8초 동안 보인다(00-common 5.7).
+ */
+export async function deleteTransaction(page: Page) {
+  await page.getByRole('button', { name: '삭제', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '이 거래를 삭제할까요?' })
+  await dialog.getByRole('button', { name: '삭제', exact: true }).click()
+
+  await expect(dialog).toBeHidden()
+  await expect(undoButton(page)).toBeVisible()
+}
+
+/** 삭제 직후 토스트의 "되돌리기"로 복원한다(F-230). 성공하면 토스트 "되돌렸어요"다(00-common 5.7) */
+export async function undoDelete(page: Page) {
+  await undoButton(page).click()
+  await expect(toast(page, '되돌렸어요')).toBeVisible()
+}
+
+function undoButton(page: Page): Locator {
+  return toast(page, '휴지통으로 옮겼어요').getByRole('button', { name: '되돌리기', exact: true })
+}
+
+/** aria snapshot 틀의 글. JSON 문자열은 YAML의 큰따옴표 문자열이기도 하다 */
+function quoted(text: string): string {
+  return JSON.stringify(text)
+}
+
+function lines(template: string[]): string {
+  return template.join('\n')
+}
+
 /**
  * 로그아웃한다. 휴대폰은 하단 탭의 더보기(M-01) 맨 아래, 넓은 화면은 사이드바 맨 아래의 "로그아웃"이다(1A 임시 자리).
  * 이 기기에 보내지 않은 입력이 없으므로 확인 없이 로그인(A-02)으로 간다(F-016. 있을 때만 "로그아웃할까요?"를 묻는다).
