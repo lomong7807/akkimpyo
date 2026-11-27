@@ -20,6 +20,8 @@ import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.common.NotLedgerOwnerException;
 import app.accountbook.common.StaleVersionException;
 import app.accountbook.ledger.LedgerAccess;
+import app.accountbook.ledger.LedgerMembership;
+import app.accountbook.ledger.LedgerService;
 import app.accountbook.stats.BalanceQuery;
 import app.accountbook.stats.MonthlyStatsQuery;
 import app.accountbook.stats.MonthlySummary;
@@ -33,6 +35,8 @@ import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionType;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.User;
+import app.accountbook.user.UserProfile;
+import app.accountbook.user.UserService;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -90,6 +94,8 @@ class CrossLedgerAccessTest {
     @Autowired BalanceQuery balanceQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
     @Autowired LedgerAccess ledgerAccess;
+    @Autowired LedgerService ledgerService;
+    @Autowired UserService userService;
     @Autowired Fixtures fixtures;
     @Autowired EntityManager entityManager;
     @Autowired JdbcTemplate jdbc;
@@ -170,6 +176,8 @@ class CrossLedgerAccessTest {
         balanceQuery = recorded(balanceQuery);
         monthlyStatsQuery = recorded(monthlyStatsQuery);
         ledgerAccess = recorded(ledgerAccess);
+        ledgerService = recorded(ledgerService);
+        userService = recorded(userService);
     }
 
     @TestFactory
@@ -178,6 +186,7 @@ class CrossLedgerAccessTest {
                 rows().map(row -> dynamicTest(row.label(), () -> verify(row))),
                 Stream.of(
                         dynamicTest("구성원 확인: 예외 없이 답하는 isMember", this::verifyIsMember),
+                        dynamicTest("내 정보: 대상 없이 호출자의 것만 답한다", this::verifyOwnInfo),
                         dynamicTest("표가 호출자를 받는 공개 메서드를 모두 다룬다", this::verifyTableCoversInventory)));
     }
 
@@ -186,6 +195,22 @@ class CrossLedgerAccessTest {
         assertThat(asA(() -> ledgerAccess.isMember(a, ledgerB))).as("A가 B의 장부").isFalse();
         assertThat(ledgerAccess.isMember(a, missing)).as("A가 없는 장부").isFalse();
         assertThat(ledgerAccess.isMember(b, ledgerB)).as("대조: B가 자기 장부").isTrue();
+        assertThat(snapshot()).isEqualTo(baseline);
+    }
+
+    /**
+     * 내 정보와 내 장부 목록(#30)은 대상 id를 받지 않아 표의 줄 모양에 맞지 않는다. 호출자 말고 다른 사람을
+     * 가리킬 길이 없으므로, A가 부른 결과가 A의 것뿐이고 B의 값이 없는지를 값으로 본다.
+     */
+    void verifyOwnInfo() {
+        UserProfile profile = asA(() -> userService.profile(a));
+        assertThat(profile.email()).isEqualTo("a@example.com");
+        assertThat(profile.toString()).doesNotContain(secretsOfB);
+        List<LedgerMembership> ledgers = asA(() -> ledgerService.memberships(a));
+        assertThat(ledgers).extracting(LedgerMembership::ledgerId).containsExactly(ledgerA);
+        assertThat(ledgers.toString()).doesNotContain(secretsOfB);
+        assertThat(ledgerService.memberships(b)).as("대조: B는 자기 장부").extracting(LedgerMembership::ledgerId)
+                .containsExactly(ledgerB);
         assertThat(snapshot()).isEqualTo(baseline);
     }
 

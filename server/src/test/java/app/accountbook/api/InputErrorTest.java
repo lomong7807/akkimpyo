@@ -76,6 +76,12 @@ class InputErrorTest {
     static Stream<Arguments> wrongTypes() {
         return Stream.of(
                 argumentSet("수 자리에 글자", "{\"name\":\"a\",\"amount\":\"abc\"}", "amount:INVALID_FORMAT"),
+                argumentSet("글자로 적은 수", "{\"name\":\"a\",\"amount\":\"5\"}", "amount:INVALID_FORMAT"),
+                argumentSet("정수 자리에 소수", "{\"name\":\"a\",\"amount\":1.9}", "amount:INVALID_FORMAT"),
+                argumentSet("글자 자리에 수", "{\"name\":1,\"amount\":1}", "name:INVALID_FORMAT"),
+                argumentSet("정해진 값 자리에 수", "{\"name\":\"a\",\"amount\":1,\"kind\":0}", "kind:INVALID_FORMAT"),
+                argumentSet("목록 안에 글자로 적은 수", "{\"name\":\"a\",\"amount\":1,\"lines\":[{\"amount\":\"1\"}]}",
+                        "lines[0].amount:INVALID_FORMAT"),
                 argumentSet("수 자리에 객체", "{\"name\":\"a\",\"amount\":{}}", "amount:INVALID_FORMAT"),
                 argumentSet("글자 자리에 객체", "{\"name\":{},\"amount\":1}", "name:INVALID_FORMAT"),
                 argumentSet("날짜가 아니다", "{\"name\":\"a\",\"amount\":1,\"occurredOn\":\"2026-02-30\"}",

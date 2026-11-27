@@ -2,14 +2,19 @@ package app.accountbook.user;
 
 import app.accountbook.category.CategoryService;
 import app.accountbook.common.DuplicateEmailException;
+import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
+import app.accountbook.common.NotFoundException;
 import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.ledger.LedgerRole;
+import java.util.Optional;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -20,12 +25,19 @@ public class UserService {
     /** V1의 이름 없는 UNIQUE (email)에 PostgreSQL이 붙인 제약 이름. */
     private static final String EMAIL_UNIQUE_CONSTRAINT = "users_email_key";
 
+    private static final String LOGIN_FAILED = "로그인 실패: {}";
+    private static final String UNKNOWN_ACCOUNT = "알 수 없는 계정";
+
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
+
     private final UserRepository userRepository;
     private final LedgerRepository ledgerRepository;
     private final LedgerMemberRepository memberRepository;
     private final CategoryService categoryService;
     private final PasswordHasher passwordHasher;
     private final TransactionTemplate transactionTemplate;
+    /** 비교할 저장값이 없을 때 대신 비교하는 값. 저장하는 값과 같은 방식으로 만들고, 맞다고 나와도 쓰지 않는다. */
+    private final String decoyHash;
 
     UserService(UserRepository userRepository, LedgerRepository ledgerRepository,
                 LedgerMemberRepository memberRepository, CategoryService categoryService,
@@ -36,6 +48,7 @@ public class UserService {
         this.categoryService = categoryService;
         this.passwordHasher = passwordHasher;
         this.transactionTemplate = transactionTemplate;
+        this.decoyHash = passwordHasher.hash("decoy1" + UUID.randomUUID());
     }
 
     /**
@@ -62,9 +75,54 @@ public class UserService {
                 saveWithPersonalLedger(User.of(email, passwordHash, displayName)));
     }
 
+    /**
+     * 로그인의 확인(F-009). 이메일과 비밀번호가 맞으면 사용자 id이고, 아니면 이유를 나누지 않고 빈 값이다(P-105).
+     * 이메일은 가입과 같은 방식({@link EmailNormalizer})으로, 비밀번호는 NFKC로 맞춰 비교한다.
+     * 걸린 시간으로 가입 여부가 드러나지 않게, 맞는 사용자가 없거나 저장값이 비교할 수 없는 모양이어도 가짜 저장값과 비교한다(ADR 001 결정 7).
+     * 비교할 수 없는 비밀번호({@link PasswordPolicy#isComparable})는 비교하지 않으므로, 가려 줄 비교가 없는 조회도 하지 않는다.
+     * 비교와 그 자리를 기다리는 동안 DB 연결을 잡지 않도록 이 메서드를 트랜잭션 안에서 부르지 않는다.
+     * 자리가 나지 않으면 {@link PasswordHashBusyException}이다.
+     *
+     * <p>실패는 사용자 id로 남긴다. 찾은 사용자가 없으면 알 수 없는 계정이고 입력한 값은 남기지 않는다(ADR 001 결정 10).
+     */
+    public Optional<UUID> authenticate(String rawEmail, String rawPassword) {
+        if (!PasswordPolicy.isComparable(rawPassword)) {
+            log.info(LOGIN_FAILED, UNKNOWN_ACCOUNT);
+            return Optional.empty();
+        }
+        Optional<User> found = findByEmail(rawEmail);
+        Optional<User> comparable = found.filter(user -> StoredPasswordHash.isComparable(user.getPasswordHash()));
+        boolean matches = passwordHasher.matches(rawPassword,
+                comparable.map(User::getPasswordHash).orElse(decoyHash));
+        Optional<UUID> userId = comparable.filter(user -> matches).map(User::getId);
+        if (userId.isEmpty()) {
+            log.info(LOGIN_FAILED, found.map(user -> "사용자 " + user.getId()).orElse(UNKNOWN_ACCOUNT));
+        }
+        return userId;
+    }
+
     /** 이 id의 사용자가 있는가. 토큰의 사용자가 탈퇴로 지워졌는지 요청마다 본다(ADR 001 결정 1). 사용자의 값은 내주지 않는다. */
     public boolean exists(UUID userId) {
         return userRepository.existsById(userId);
+    }
+
+    /**
+     * 호출자 자신의 이메일과 표시 이름(#30, F-014). 다른 사용자의 값을 고를 인자는 없다.
+     * 토큰을 확인한 뒤 그 사이에 사용자가 지워졌으면 {@link NotFoundException}이다.
+     */
+    public UserProfile profile(UUID actorId) {
+        return userRepository.findById(actorId).map(UserProfile::of).orElseThrow(NotFoundException::new);
+    }
+
+    /** 형식이 틀린 이메일로 가입한 사람은 없다. */
+    private Optional<User> findByEmail(String rawEmail) {
+        String email;
+        try {
+            email = EmailNormalizer.normalize(rawEmail);
+        } catch (InvalidRequestException e) {
+            return Optional.empty();
+        }
+        return userRepository.findByEmail(email);
     }
 
     private User saveWithPersonalLedger(User newUser) {
