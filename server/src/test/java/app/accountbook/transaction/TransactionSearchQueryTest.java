@@ -25,7 +25,7 @@ import org.springframework.context.annotation.Import;
 
 /**
  * 거래 검색(F-223, P-232, #64)의 규칙: 가맹점·메모 부분 일치(대소문자 무시, 특수 글자는 글자 그대로), 금액 일치, 기간,
- * 필터, 합계, 다음 쪽. 시계는 서울 2026-11-27 12:00이다. 쿼리 값과 cursor는 {@code TransactionSearchTest}가 본다.
+ * 필터, 합계와 건수, 다음 쪽. 시계는 서울 2026-11-27 12:00이다. 쿼리 값과 cursor는 {@code TransactionSearchTest}가 본다.
  */
 @IntegrationTest
 @Import(StoppedClockConfig.class)
@@ -66,12 +66,12 @@ class TransactionSearchQueryTest {
     }
 
     @Test
-    void 가맹점과_메모를_대소문자_없이_부분_일치로_날짜_역순으로_찾고_삭제는_빠지며_취소는_목록에만_든다() {
+    void 가맹점과_메모를_대소문자_없이_부분_일치로_날짜_역순으로_찾고_삭제는_빠지며_취소는_목록과_건수에만_든다() {
         TransactionPage found = search("NOODLE", null, null, TransactionFilter.NONE);
 
         assertThat(ids(found)).containsExactly(future, canceled, noodle, october);
         assertThat(found.next()).isNull();
-        assertThat(found.totals()).isEqualTo(new Totals(0, 25_000));
+        assertThat(found.totals()).isEqualTo(new Totals(0, 25_000, 4L));
         assertThat(found.days()).isEmpty();
         assertThat(ids(search("12,000원", null, null, TransactionFilter.NONE))).as("메모의 글자와 금액")
                 .containsExactly(transfer, salary, noodle, october);
@@ -92,6 +92,8 @@ class TransactionSearchQueryTest {
             assertThat(ids(search(text, null, null, TransactionFilter.NONE))).as(text)
                     .containsExactly(transfer, salary, noodle, october);
         }
+        assertThat(search("12000", null, null, TransactionFilter.NONE).totals()).as("이체는 건수에만 든다")
+                .isEqualTo(new Totals(12_000, 24_000, 4L));
         assertThat(ids(search("99999999999", null, null, TransactionFilter.NONE))).isEmpty();
         assertThat(SearchMatch.amount("9999999999")).contains(9_999_999_999L);
         assertThat(SearchMatch.amount("0")).isEmpty();
@@ -103,7 +105,7 @@ class TransactionSearchQueryTest {
     void 기간은_양끝을_넣고_한쪽만_주면_그쪽만_제한하며_필터와_함께_쓴다() {
         TransactionPage november = search("noodle", NOV_1, NOV_30, TransactionFilter.NONE);
         assertThat(ids(november)).containsExactly(canceled, noodle);
-        assertThat(november.totals()).isEqualTo(new Totals(0, 12_000));
+        assertThat(november.totals()).isEqualTo(new Totals(0, 12_000, 2L));
         assertThat(ids(search("noodle", DAY, null, TransactionFilter.NONE))).containsExactly(future, canceled, noodle);
         assertThat(ids(search("noodle", null, DAY, TransactionFilter.NONE))).containsExactly(noodle, october);
         assertThat(ids(search(null, DAY, DAY, TransactionFilter.NONE))).containsExactly(noodle);
@@ -111,7 +113,7 @@ class TransactionSearchQueryTest {
         TransactionFilter income = new TransactionFilter(Set.of(), Set.of(), Set.of(TransactionType.INCOME), null);
         TransactionPage incomeOnly = search("12000", null, null, income);
         assertThat(ids(incomeOnly)).containsExactly(salary);
-        assertThat(incomeOnly.totals()).isEqualTo(new Totals(12_000, 0));
+        assertThat(incomeOnly.totals()).isEqualTo(new Totals(12_000, 0, 1L));
         TransactionFilter byCash = new TransactionFilter(Set.of(cash), Set.of(), Set.of(), TransactionStatus.CANCELED);
         assertThat(ids(search(null, null, null, byCash))).containsExactly(canceled);
     }
@@ -129,7 +131,7 @@ class TransactionSearchQueryTest {
     }
 
     @Test
-    void 결과가_51건이면_50건과_다음_쪽이_오고_다음_쪽에는_합계가_없다() {
+    void 결과가_51건이면_50건과_다음_쪽이_오고_건수는_전체이며_다음_쪽에는_합계가_없다() {
         for (int i = 0; i < 51; i++) {
             fixtures.expense(owner, ledgerId, cash, null, DAY.minusDays(i % 7), 777);
         }
@@ -140,7 +142,7 @@ class TransactionSearchQueryTest {
                 first.next());
 
         assertThat(first.items()).hasSize(50);
-        assertThat(first.totals()).isEqualTo(new Totals(0, 777 * 51));
+        assertThat(first.totals()).isEqualTo(new Totals(0, 777 * 51, 51L));
         assertThat(second.items()).hasSize(1);
         assertThat(second.next()).isNull();
         assertThat(second.totals()).isNull();
