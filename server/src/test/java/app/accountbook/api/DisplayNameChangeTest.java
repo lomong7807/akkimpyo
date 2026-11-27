@@ -71,9 +71,13 @@ class DisplayNameChangeTest {
         client = ServerClient.signedIn(port, me.getId(), NOW);
     }
 
-    /** HTTP 테스트는 롤백되지 않는다. 거래 수를 DB 전체로 세는 테스트가 있어 만든 거래를 지운다. */
+    /**
+     * HTTP 테스트는 롤백되지 않는다. 거래 수를 DB 전체로 세는 테스트가 있어 만든 거래를 지운다. 표시 이름이 모두 다르다고 보고
+     * 유일 제약을 거는 테스트(UserServiceTest)가 있어, 바꾼 이름은 가입 때의 겹치지 않는 이름으로 되돌린다.
+     */
     @AfterEach
-    void removeTransactions() {
+    void cleanUp() {
+        jdbc.update("update users set display_name = ? where id = ?", me.getDisplayName(), me.getId());
         ledgersWithTransactions.forEach(ledgerId -> {
             jdbc.update("delete from change_log where ledger_id = ?", ledgerId);
             jdbc.update("delete from transaction where ledger_id = ?", ledgerId);
