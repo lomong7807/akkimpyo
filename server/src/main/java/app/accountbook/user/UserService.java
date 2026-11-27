@@ -7,15 +7,18 @@ import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.ledger.Ledger;
+import app.accountbook.ledger.LedgerAccess;
 import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.ledger.LedgerRole;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +40,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final LedgerRepository ledgerRepository;
     private final LedgerMemberRepository memberRepository;
+    private final LedgerAccess ledgerAccess;
     private final CategoryService categoryService;
     private final PasswordHasher passwordHasher;
     private final TransactionTemplate transactionTemplate;
@@ -45,11 +49,12 @@ public class UserService {
     private final String decoyHash;
 
     UserService(UserRepository userRepository, LedgerRepository ledgerRepository,
-                LedgerMemberRepository memberRepository, CategoryService categoryService,
+                LedgerMemberRepository memberRepository, LedgerAccess ledgerAccess, CategoryService categoryService,
                 PasswordHasher passwordHasher, TransactionTemplate transactionTemplate, SignupAllowlist allowlist) {
         this.userRepository = userRepository;
         this.ledgerRepository = ledgerRepository;
         this.memberRepository = memberRepository;
+        this.ledgerAccess = ledgerAccess;
         this.categoryService = categoryService;
         this.passwordHasher = passwordHasher;
         this.transactionTemplate = transactionTemplate;
@@ -139,6 +144,17 @@ public class UserService {
             errors.add(e);
             return null;
         }
+    }
+
+    /**
+     * 장부의 지금 구성원의 표시 이름(사용자 id → 이름). 거래 응답의 사람 값(createdBy, paidBy, updatedBy)에 이름을 붙인다
+     * (ADR 002 2절, #14). 한 번에 읽어 거래 수와 무관하다. 호출자가 구성원이 아니면
+     * {@link app.accountbook.common.NotLedgerMemberException}이다. 구성원이 아닌 사람(탈퇴한 사람)의 이름은 주지 않는다.
+     */
+    public Map<UUID, String> memberDisplayNames(UUID actorId, UUID ledgerId) {
+        ledgerAccess.requireMember(actorId, ledgerId);
+        return userRepository.findMembersOf(ledgerId).stream()
+                .collect(Collectors.toUnmodifiableMap(User::getId, User::getDisplayName));
     }
 
     /** 형식이 틀린 이메일로 가입한 사람은 없다. */

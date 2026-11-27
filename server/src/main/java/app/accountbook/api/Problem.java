@@ -33,6 +33,7 @@ record Problem(String type, String title, int status, String detail, ErrorCode c
                 case TOO_LONG -> "허용 길이를 넘었다";
                 case DUPLICATE -> "이미 쓰이고 있는 값이다";
                 case NOT_ALLOWED -> "받을 수 없는 값이다";
+                case NOT_FOUND -> "가리킨 대상이 없다";
             };
         }
     }

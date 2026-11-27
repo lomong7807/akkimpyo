@@ -1,5 +1,6 @@
 package app.accountbook.transaction;
 
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.ledger.LedgerDates;
 import java.time.Clock;
@@ -18,7 +19,8 @@ final class TransactionLimits {
     /** 입력 금액은 부호 없는 크기다. 라인의 부호는 서비스가 거래 종류로 정한다. */
     static void requireAmountInRange(long amount) {
         if (amount < MIN_AMOUNT || amount > MAX_AMOUNT) {
-            throw new InvalidRequestException("금액은 1원부터 9,999,999,999원까지 입력할 수 있습니다.");
+            throw new InvalidRequestException("amount", FieldErrorCode.OUT_OF_RANGE,
+                    "금액은 1원부터 9,999,999,999원까지 입력할 수 있습니다.");
         }
     }
 
