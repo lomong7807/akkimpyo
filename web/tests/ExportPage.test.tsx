@@ -224,14 +224,19 @@ describe('내보내기', () => {
     expect(checked('형식')).toEqual(['엑셀(xlsx)'])
   })
 
-  it('누르게 한 바로 뒤에 객체 URL을 해제하고 임시 링크를 문서에서 뺀다', async () => {
+  it('임시 링크는 누르게 한 바로 뒤에 문서에서 빼고, 객체 URL은 1분 뒤에 해제한다(iPhone은 물은 뒤에 주소를 읽는다)', async () => {
     const { user } = await open()
     await user.click(exportButton())
     await untilSaved()
     const url = downloads.saved[0].href
+    expect(document.querySelector('a[download]')).toBeNull()
+    expect(downloads.steps).toEqual([`만듦 ${url}`, `누름 ${url}`])
+    holdClock()
+    await passTime(59_000)
+    expect(downloads.live()).toEqual([url])
+    await passTime(1_000)
     expect(downloads.steps).toEqual([`만듦 ${url}`, `누름 ${url}`, `해제 ${url}`])
     expect(downloads.live()).toEqual([])
-    expect(document.querySelector('a[download]')).toBeNull()
   })
 
   it('"기간 정하기"와 CSV를 고르면 고른 기간과 형식으로 보낸다', async () => {

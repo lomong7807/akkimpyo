@@ -66,7 +66,13 @@ export function fileNameOf(disposition: string | null): string | undefined {
   }
 }
 
-/** 받은 파일을 이름을 붙여 기기에 저장하게 한다. 객체 URL은 누르게 한 바로 뒤에 해제하고, 임시 링크도 바로 뺀다. */
+/**
+ * 객체 URL을 해제하기까지의 시간. iPhone Safari는 내려받을지 물은 뒤에 주소를 읽으므로 누르게 한 바로 뒤에 해제하면 파일을 받지
+ * 못할 수 있다(architect #240). 주소는 이 문서 안에서만 풀리고 그동안 다른 곳에서 읽을 수 없다.
+ */
+export const RELEASE_URL_AFTER_MS = 60_000
+
+/** 받은 파일을 이름을 붙여 기기에 저장하게 한다. 임시 링크는 바로 빼고, 객체 URL은 1분 뒤에 해제한다. */
 export function saveFile(file: Blob, name: string): void {
   const url = URL.createObjectURL(file)
   const link = document.createElement('a')
@@ -78,6 +84,6 @@ export function saveFile(file: Blob, name: string): void {
     link.click()
   } finally {
     link.remove()
-    URL.revokeObjectURL(url)
+    setTimeout(() => URL.revokeObjectURL(url), RELEASE_URL_AFTER_MS)
   }
 }
