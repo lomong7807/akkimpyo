@@ -8,6 +8,7 @@ import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
 import {
   accountAddScreen,
+  accountEditScreen,
   accountsScreen,
   categoriesScreen,
   loginScreen,
@@ -79,6 +80,12 @@ export const routes: RouteObject[] = [
                   {
                     path: '/accounts/new',
                     element: <accountAddScreen.Screen />,
+                    handle: { navigationItem: accountsItem, fullScreen: true },
+                  },
+                  // 1B 임시: 넓은 화면에서도 G-01 오른쪽 칸이 아닌 한 칸이다(#244)
+                  {
+                    path: '/accounts/:id/edit',
+                    element: <accountEditScreen.Screen />,
                     handle: { navigationItem: accountsItem, fullScreen: true },
                   },
                   { path: '/categories', element: <categoriesScreen.Screen />, handle: { navigationItem: categoriesItem } },

@@ -679,6 +679,40 @@ describe('서버가 거부함', () => {
     await waitFor(() => expect(errorOf(name())).toBe(nameDuplicate))
     expect(screen.queryByRole('alert')).toBeNull()
   })
+
+  it('다시 보낸 것이 같은 이름으로 거부되면 계좌 목록을 무효로 만들어, 닫고 돌아가면 앞서 저장된 계좌가 보인다(planner #243 P1)', async () => {
+    // 앞 요청은 서버에 저장됐지만 응답을 잃었다
+    const answers = [
+      () => {
+        accounts.items = [...accounts.items, accountOf('급여통장', 'BANK', 350000)]
+        return HttpResponse.error()
+      },
+      refuse(['name', 'DUPLICATE']),
+    ]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await openFromList()
+    await fillAndSave(user)
+    await screen.findByRole('alert')
+    act(() => goOnline())
+    await user.click(retryButton())
+    await waitFor(() => expect(errorOf(name())).toBe(nameDuplicate))
+    await untilUnshielded()
+    await user.click(closeButton())
+    await untilOpened()
+    await user.click(screen.getByRole('button', { name: '버리기' }))
+    await screen.findByRole('list', { name: '은행' })
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('list', { name: '은행' }))
+          .getAllByRole('listitem')
+          .map((row) => row.textContent),
+      ).toEqual([
+        '비상금1,000,000원',
+        '급여통장350,000원',
+      ]),
+    )
+    expect(accounts.requests).toHaveLength(2)
+  })
 })
 
 describe('연결이 없을 때(00-common 4.3, R1, #238)', () => {
