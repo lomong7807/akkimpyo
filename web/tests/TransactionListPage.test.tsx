@@ -8,6 +8,7 @@ import { installIntersectionObserver, type Intersection } from './support/inters
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { untilShown } from './support/shownScreen'
 import {
   accountField,
   id,
@@ -1038,6 +1039,8 @@ describe('저장한 뒤 돌아오면', () => {
     await screen.findByRole('navigation', { name: '주 메뉴' })
     await saveFromTab(opened)
     await waitFor(() => expect(addressOf(opened)).toBe('/more'))
+    // 저장 뒤 돌아간 더보기가 그려진 뒤에 하단 탭을 누른다. 주소는 화면보다 먼저 바뀐다(#291)
+    await untilShown(opened.router)
     await opened.user.click(within(screen.getByRole('navigation', { name: '주 메뉴' })).getByRole('link', { name: '내역' }))
     await waitFor(() => expect(savedRow()).toBeTruthy())
     await settle(200)

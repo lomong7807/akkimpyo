@@ -10,6 +10,7 @@ import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { untilShown } from './support/shownScreen'
 import { holdClock, passTime } from './support/testClock'
 import { createFakeLocks, installLocks, removeLocks } from './support/webLocks'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
@@ -466,11 +467,14 @@ describe('저장', () => {
   })
 
   it('토스트가 보이는 동안 다시 "추가"를 열면 토스트가 저장 버튼을 덮지 않게 걷는다', async () => {
-    const { user } = await openFromList()
-    await fillAndSave(user)
+    const opened = await openFromList()
+    await fillAndSave(opened.user)
     await waitFor(() => expect(screen.getByText("'급여통장' 계좌를 추가했어요")).toBeTruthy())
+    // 토스트는 목록이 그려지기 전에 보인다. 돌아간 목록이 그려진 뒤에 "추가"를 누른다(#291)
+    await waitFor(() => expect(path(opened)).toBe('/accounts'))
+    await untilShown(opened.router)
     await untilUnshielded()
-    await user.click(screen.getByRole('link', { name: '추가' }))
+    await opened.user.click(screen.getByRole('link', { name: '추가' }))
     await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
     expect(screen.queryByText("'급여통장' 계좌를 추가했어요")).toBeNull()
   })
