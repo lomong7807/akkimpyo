@@ -22,6 +22,16 @@ final class PasswordPolicy {
                         "비밀번호는 " + MIN_LENGTH + "~" + MAX_LENGTH + "자이고 영문과 숫자를 모두 포함해야 합니다."));
     }
 
+    /**
+     * 저장된 비밀번호와 비교해 볼 입력인가. 정규화할 수 있고 정규화한 값이 {@value #MAX_LENGTH}자 이하다. 너무 긴 입력을 해시하지 않으려고 본다.
+     * 나머지 규칙은 보지 않는다. 규칙을 바꿔도 전에 저장한 비밀번호로 로그인할 수 있어야 한다.
+     */
+    static boolean isComparable(String raw) {
+        return PasswordNormalizer.normalize(raw)
+                .filter(password -> length(password) <= MAX_LENGTH)
+                .isPresent();
+    }
+
     private static boolean isAllowed(String password) {
         return hasValidLength(password)
                 && password.chars().anyMatch(PasswordPolicy::isAsciiLetter)
@@ -29,8 +39,12 @@ final class PasswordPolicy {
     }
 
     private static boolean hasValidLength(String password) {
-        int length = password.codePointCount(0, password.length());
+        int length = length(password);
         return length >= MIN_LENGTH && length <= MAX_LENGTH;
+    }
+
+    private static int length(String password) {
+        return password.codePointCount(0, password.length());
     }
 
     private static boolean isAsciiLetter(int ch) {
