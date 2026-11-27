@@ -1,5 +1,6 @@
 package app.accountbook.auth;
 
+import app.accountbook.user.User;
 import app.accountbook.user.UserService;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -29,5 +30,14 @@ public class LoginService {
         String accessToken = issuer.issue(userId);
         log.info("로그인 성공: 사용자 {}", userId);
         return accessToken;
+    }
+
+    /**
+     * 가입 직후의 로그인(F-002, ADR 001 결정 3). 비밀번호를 다시 확인하지 않으므로 api의 가입이
+     * {@link UserService#createUser}가 방금 돌려준 사용자로만 부른다(SignupTest가 부르는 곳을 막는다).
+     * 가입과 한 트랜잭션이 아니다. 발급이 실패해도 가입은 남고 사용자는 로그인하면 된다(ADR 004).
+     */
+    public String loginNewUser(User newUser) {
+        return issuer.issue(newUser.getId());
     }
 }

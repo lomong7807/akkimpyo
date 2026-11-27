@@ -6,6 +6,7 @@ import app.accountbook.common.DuplicateAccountNameException;
 import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.FieldErrorCode;
+import app.accountbook.common.InvalidFieldsException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
@@ -100,6 +101,14 @@ class ApiExceptionHandler {
     @ExceptionHandler
     ResponseEntity<Problem> invalidRequest(InvalidRequestException e, HttpServletRequest request) {
         return invalid(e.field(), e.code(), e, request);
+    }
+
+    @ExceptionHandler
+    ResponseEntity<Problem> invalidFields(InvalidFieldsException e, HttpServletRequest request) {
+        List<InvalidField> fields = e.errors().stream()
+                .map(error -> InvalidField.of(error.field(), error.code()))
+                .toList();
+        return invalid(fields, e, request);
     }
 
     @ExceptionHandler({DuplicateAccountNameException.class, DuplicateCategoryNameException.class})
