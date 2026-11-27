@@ -13,6 +13,7 @@ import { goOffline, goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { renderRoutes } from './support/renderRoutes'
+import { untilShown } from './support/shownScreen'
 import { holdClock, passTime, setupUser } from './support/testClock'
 import { resetViewport, setViewportWidth } from './support/viewport'
 
@@ -946,6 +947,8 @@ describe('성공', () => {
     const { user, router } = openSignup()
     await fillAndSubmit(user)
     await vi.waitFor(() => expect(router.state.location.pathname).toBe('/welcome'))
+    // 주소는 화면보다 먼저 바뀐다. 환영이 그려진 뒤에 본다(#275, #291)
+    await untilShown(router)
     expect(screen.getByRole('heading', { level: 1, name: '환영' })).toBeTruthy()
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()

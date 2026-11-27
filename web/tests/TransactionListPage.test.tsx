@@ -974,6 +974,8 @@ describe('상세에서 뒤로 돌아오면', () => {
     const dom = recordDom()
     await act(() => opened.router.navigate(-1))
     await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-10'))
+    // 뒤로 가기(popstate)는 act 밖에서 온다. 주소는 화면보다 먼저 바뀌므로 목록이 그려진 뒤에 센다(#291)
+    await untilShown(opened.router)
     expect(allRows()).toHaveLength(51)
     await passTime(400)
     expect(dom.sawText(loading)).toBe(false)
