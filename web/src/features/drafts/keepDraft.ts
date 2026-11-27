@@ -1,15 +1,13 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
-import { useLocation } from 'react-router'
 import { keepDrafts, type Draft, type DraftForm } from '../../device/drafts'
 
 /*
  * 쓰던 값 보존(00-common 4.1, #234 C2, 설계 7절).
- * - 입력 화면은 열려 있는 동안 useKeepDraft로 "지금 값 꺼내기"를 등록한다. 바꾼 값이 없으면 꺼낼 것이 없다(떠나기 확인과 같은 기준)
+ * - 입력 화면은 열려 있는 동안 useKeepDraft(useKeepDraft.ts)로 "지금 값 꺼내기"를 등록한다. 바꾼 값이 없으면 꺼낼 것이 없다(떠나기 확인과 같은 기준)
  * - 로그인이 풀리는 순간(ended) 로그인 영역(SessionProvider)이 takeDrafts로 등록된 화면의 값을 꺼내 그 사용자의 것으로 남긴다
  * - 같은 계정으로 다시 로그인해 같은 주소로 돌아오면 그 화면이 useRestoredDraft(restoreDraft.ts)로 읽어 채우고 지운다
  */
 
-type Take = () => unknown
+export type Take = () => unknown
 
 const keepers = new Map<DraftForm, { path: string; take: Take }>()
 
@@ -43,20 +41,12 @@ export function keepOpenDrafts(userId: string, at: number): Promise<boolean> | u
 }
 
 /**
- * 이 화면이 열려 있는 동안 로그인이 풀리면 남길 값을 등록한다. `take`는 바꾼 값이 없으면 undefined를 준다.
- * 주소는 지금 화면의 경로와 쿼리다.
+ * 입력 화면 하나의 "지금 값 꺼내기"를 등록부에 둔다. 돌려받은 함수로 뺀다(그사이 같은 화면이 다시 등록했으면 그대로 둔다).
+ * 등록부는 로그인이 풀리는 순간 코드를 받을 틈 없이 읽어야 하므로 첫 화면 JS에 두고, 등록하는 훅은 입력 화면 조각에 둔다(#355).
  */
-export function useKeepDraft(form: DraftForm, take: Take): void {
-  const { pathname, search } = useLocation()
-  const latest = useRef(take)
-  useLayoutEffect(() => {
-    latest.current = take
-  })
-  useEffect(() => {
-    const keeper = { path: pathname + search, take: () => latest.current() }
-    keepers.set(form, keeper)
-    return () => {
-      if (keepers.get(form) === keeper) keepers.delete(form)
-    }
-  }, [form, pathname, search])
+export function registerKeeper(form: DraftForm, keeper: { path: string; take: Take }): () => void {
+  keepers.set(form, keeper)
+  return () => {
+    if (keepers.get(form) === keeper) keepers.delete(form)
+  }
 }

@@ -15,6 +15,7 @@ import {
   weeksOf,
 } from '../lib/calendarDate'
 import { Button } from './Button'
+import { CaretLeft, CaretRight } from './icons'
 import styles from './Calendar.module.css'
 
 const moves: Partial<Record<string, (date: string) => string>> = {
@@ -101,7 +102,7 @@ export default function Calendar({ value, focusVisible, onSelect }: CalendarProp
       <div className={styles.monthBar}>
         <span>
           {month > monthOf(range.first) && (
-            <Button kind="icon" icon="CaretLeft" aria-label="이전 달" onClick={(event) => changeMonth(event, -1)} />
+            <Button kind="icon" icon={CaretLeft} aria-label="이전 달" onClick={(event) => changeMonth(event, -1)} />
           )}
         </span>
         <p id={monthId} className={`${styles.month} tabular-nums`} aria-live="polite">
@@ -109,7 +110,7 @@ export default function Calendar({ value, focusVisible, onSelect }: CalendarProp
         </p>
         <span>
           {month < monthOf(range.last) && (
-            <Button kind="icon" icon="CaretRight" aria-label="다음 달" onClick={(event) => changeMonth(event, 1)} />
+            <Button kind="icon" icon={CaretRight} aria-label="다음 달" onClick={(event) => changeMonth(event, 1)} />
           )}
         </span>
       </div>

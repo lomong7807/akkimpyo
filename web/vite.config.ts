@@ -1,12 +1,16 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { reactRouterTreeShake } from './plugins/reactRouterTreeShake'
 import { serviceWorker } from './plugins/serviceWorkerPlugin'
 
 const backend = 'http://localhost:8080'
 
 export default defineConfig({
-  plugins: [react(), serviceWorker()],
+  // reactRouterTreeShake: react-router에서 앱이 쓰지 않는 부품이 첫 화면 JS에 남지 않게 한다(#355). 지우면 원래대로 돌아간다
+  plugins: [react(), reactRouterTreeShake(), serviceWorker()],
   build: {
+    // modulepreload를 모르는 옛 브라우저용 polyfill을 넣지 않는다(#355). 없어도 따로 싣는 조각의 미리 받기만 빠지고 동작은 같다
+    modulePreload: { polyfill: false },
     rolldownOptions: {
       output: {
         // 첫 화면이 받는 JS를 한 파일로 묶는다(#268). '$initial'은 entry(src/main.tsx)에서 정적 import로 닿는 모듈 전부다.
