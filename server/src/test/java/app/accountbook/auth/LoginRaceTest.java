@@ -24,7 +24,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 로그인이 계열을 만드는 트랜잭션은 사용자 행을 FOR SHARE로 잠그고 확인한 저장값을 다시 본다(ADR 001 결정 7, dba와 정함).
- * 비밀번호 바꾸기(#31)는 아직 없어, 같은 잠금(FOR NO KEY UPDATE)과 UPDATE를 테스트 트랜잭션이 직접 한다. 두 트랜잭션이
+ * 비밀번호 바꾸기와 같은 잠금(FOR NO KEY UPDATE)과 UPDATE를 테스트 트랜잭션이 직접 한다(실제 바꾸기와의 겹침은
+ * PasswordChangeRaceTest가 본다). 두 트랜잭션이
  * 실제로 커밋해야 하므로 테스트 트랜잭션 없이 돌고 커밋한 행은 끝에 지운다.
  */
 @IntegrationTest

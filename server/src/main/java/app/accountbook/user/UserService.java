@@ -34,6 +34,8 @@ public class UserService {
 
     private static final String LOGIN_FAILED = "로그인 실패: {}";
     private static final String UNKNOWN_ACCOUNT = "알 수 없는 계정";
+    private static final String CHANGE_FAILED = "비밀번호 바꾸기 실패: 사용자 {}, {}";
+    private static final String CURRENT_PASSWORD = "currentPassword";
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
@@ -143,6 +145,53 @@ public class UserService {
             log.info(LOGIN_FAILED, "사용자 " + check.userId() + ", 확인한 뒤 비밀번호가 바뀜");
         }
         return unchanged;
+    }
+
+    /**
+     * 비밀번호 바꾸기의 확인(#31, F-015). 빠진 현재 비밀번호(REQUIRED)와 새 비밀번호의 규칙({@link PasswordPolicy}) 오류를 모아
+     * 알리고, 형식이 맞을 때만 현재 비밀번호를 로그인처럼 NFKC로 맞춰 비교한다. 틀리거나 비교할 수 없는 입력(512자 초과 등)이면
+     * {@code currentPassword} INCORRECT다. 맞으면 새 해시를 확인할 때 본 저장값과 함께 준다. 트랜잭션 안에서 부르지 않는다.
+     */
+    public PasswordChange checkPasswordChange(UUID actorId, String rawCurrentPassword, String rawNewPassword) {
+        List<InvalidRequestException> errors = new ArrayList<>();
+        if (rawCurrentPassword == null || rawCurrentPassword.isEmpty()) {
+            errors.add(new InvalidRequestException(CURRENT_PASSWORD, FieldErrorCode.REQUIRED, "현재 비밀번호가 있어야 합니다."));
+        }
+        try {
+            PasswordPolicy.normalizeAndValidate(rawNewPassword);
+        } catch (InvalidRequestException e) {
+            errors.add(new InvalidRequestException("newPassword", e.code(), e.getMessage()));
+        }
+        if (!errors.isEmpty()) {
+            throw InvalidRequestException.ofAll(errors);
+        }
+        String stored = userRepository.findById(actorId).map(User::getPasswordHash).orElseThrow(NotFoundException::new);
+        if (!PasswordPolicy.isComparable(rawCurrentPassword) || !passwordHasher.matches(rawCurrentPassword, stored)) {
+            log.info(CHANGE_FAILED, actorId, "현재 비밀번호가 틀림");
+            throw incorrectCurrentPassword();
+        }
+        return new PasswordChange(actorId, stored, passwordHasher.hash(rawNewPassword));
+    }
+
+    /**
+     * 비밀번호 바꾸기의 저장. auth가 다른 계열의 폐기와 함께 연 트랜잭션 안에서 부른다(ADR 001 결정 7). 사용자 행을
+     * {@code FOR NO KEY UPDATE}로 잠가 로그인의 {@code FOR SHARE}와 서로 기다리고, 확인할 때 본 저장값이 그대로일 때만 바꾼다.
+     * 확인한 뒤 비밀번호가 바뀌었거나 사용자가 지워졌으면 아무것도 바꾸지 않고 {@code currentPassword} INCORRECT다.
+     */
+    public void changePassword(PasswordChange change) {
+        boolean unchanged = userRepository.lockPasswordHashForChange(change.userId())
+                .filter(change.storedHash()::equals).isPresent();
+        if (!unchanged) {
+            log.info(CHANGE_FAILED, change.userId(), "확인한 뒤 비밀번호가 바뀜");
+            throw incorrectCurrentPassword();
+        }
+        userRepository.updatePasswordHash(change.userId(), change.newHash());
+        log.info("비밀번호 바꿈: 사용자 {}", change.userId());
+    }
+
+    /** 문구에 입력값을 넣지 않는다. */
+    private static InvalidRequestException incorrectCurrentPassword() {
+        return new InvalidRequestException(CURRENT_PASSWORD, FieldErrorCode.INCORRECT, "현재 비밀번호가 맞지 않습니다.");
     }
 
     /** 이 id의 사용자가 있는가. 토큰의 사용자가 탈퇴로 지워졌는지 요청마다 본다(ADR 001 결정 1). 사용자의 값은 내주지 않는다. */

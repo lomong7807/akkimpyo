@@ -1,12 +1,15 @@
 package app.accountbook.api;
 
 import app.accountbook.auth.LoginService;
+import app.accountbook.auth.PasswordChangeService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,10 +24,12 @@ import org.springframework.web.bind.annotation.RestController;
 class AuthController {
 
     private final LoginService loginService;
+    private final PasswordChangeService passwordChangeService;
     private final RefreshCookie refreshCookie;
 
-    AuthController(LoginService loginService, RefreshCookie refreshCookie) {
+    AuthController(LoginService loginService, PasswordChangeService passwordChangeService, RefreshCookie refreshCookie) {
         this.loginService = loginService;
+        this.passwordChangeService = passwordChangeService;
         this.refreshCookie = refreshCookie;
     }
 
@@ -66,5 +71,18 @@ class AuthController {
     ResponseEntity<Void> logout(@RequestBody(required = false) Map<String, Object> ignored, HttpServletRequest http) {
         loginService.logout(refreshCookie.read(http));
         return refreshCookie.clear();
+    }
+
+    /**
+     * 비밀번호 바꾸기(#31): access token으로 인증하고 refresh 쿠키로는 지금 기기의 계열만 알아내 그 계열만 남긴다. 쿠키가 없거나
+     * 쓸 수 없으면 모두 폐기하고 그래도 204다. 지금 계열을 그대로 쓰므로 쿠키를 새로 굽지 않는다(ADR 001 결정 3·4).
+     */
+    @PostMapping(path = "/password", consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<Void> changePassword(@AuthenticationPrincipal UUID userId, @RequestBody PasswordChangeRequest request,
+                                        HttpServletRequest http) {
+        passwordChangeService.changePassword(userId, request.currentPassword(), request.newPassword(),
+                refreshCookie.read(http));
+        return ResponseEntity.noContent().build();
     }
 }

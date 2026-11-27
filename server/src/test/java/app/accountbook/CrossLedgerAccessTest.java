@@ -11,6 +11,7 @@ import app.accountbook.account.AccountService;
 import app.accountbook.account.AccountType;
 import app.accountbook.category.Category;
 import app.accountbook.category.CategoryCommand;
+import app.accountbook.auth.PasswordChangeService;
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
 import app.accountbook.common.AccountHasTransactionsException;
@@ -110,6 +111,7 @@ class CrossLedgerAccessTest {
     @Autowired LedgerAccess ledgerAccess;
     @Autowired LedgerService ledgerService;
     @Autowired UserService userService;
+    @Autowired PasswordChangeService passwordChangeService;
     @Autowired Fixtures fixtures;
     @Autowired EntityManager entityManager;
     @Autowired JdbcTemplate jdbc;
@@ -196,6 +198,7 @@ class CrossLedgerAccessTest {
         ledgerAccess = recorded(ledgerAccess);
         ledgerService = recorded(ledgerService);
         userService = recorded(userService);
+        passwordChangeService = recorded(passwordChangeService);
     }
 
     @TestFactory
@@ -229,6 +232,10 @@ class CrossLedgerAccessTest {
         assertThat(ledgers.toString()).doesNotContain(secretsOfB);
         assertThat(ledgerService.memberships(b)).as("대조: B는 자기 장부").extracting(LedgerMembership::ledgerId)
                 .containsExactly(ledgerB);
+        // 비밀번호 바꾸기(#31)도 대상 없이 호출자의 것만 본다. 틀린 현재 비밀번호로는 아무것도 바꾸지 않는다.
+        assertThat(asA(() -> userService.checkPasswordChange(a, "password1", "password2")).userId()).isEqualTo(a);
+        assertThat(asA(() -> catchThrowable(() -> passwordChangeService.changePassword(a, "wrong-pass1", "password2",
+                null)))).isInstanceOf(InvalidRequestException.class);
         assertThat(snapshot()).isEqualTo(baseline);
     }
 

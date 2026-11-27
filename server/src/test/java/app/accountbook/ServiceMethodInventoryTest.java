@@ -47,6 +47,9 @@ class ServiceMethodInventoryTest {
             "authenticate와 같은 로그인의 확인이고, 확인할 때 본 저장값을 user 밖에서 꺼낼 수 없는 채로 함께 준다(ADR 001 결정 7)",
             "UserService.lockUnchanged",
             "로그인이 계열을 만드는 트랜잭션에서 checkPassword가 준 결과를 돌려주는 것뿐이다. 사용자 행을 잠그고 참거짓만 답한다",
+            "UserService.changePassword",
+            "비밀번호 바꾸기(#31)의 저장. 호출자의 checkPasswordChange가 준 결과(그 사용자, 확인한 저장값, 새 해시)를 auth의 "
+                    + "트랜잭션에서 돌려주는 것뿐이다. 다른 사용자를 고를 인자가 없다",
             "LoginService.refresh",
             "갱신. 아직 호출자가 없다. 사용자 id를 받지 않고, refresh 쿠키가 쓸 수 있는 값일 때만 그 계열의 사용자 토큰을 준다",
             "LoginService.logout",
