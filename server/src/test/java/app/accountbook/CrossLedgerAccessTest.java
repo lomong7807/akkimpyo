@@ -26,6 +26,7 @@ import app.accountbook.ledger.LedgerService;
 import app.accountbook.stats.BalanceQuery;
 import app.accountbook.stats.MonthlyStatsQuery;
 import app.accountbook.stats.MonthlySummary;
+import app.accountbook.stats.YearlyStatsQuery;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.transaction.CategorySuggestionQuery;
@@ -50,6 +51,7 @@ import app.accountbook.user.UserProfile;
 import app.accountbook.user.UserService;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.YearMonth;
 import java.util.HashSet;
 import java.util.List;
@@ -109,6 +111,7 @@ class CrossLedgerAccessTest {
     @Autowired TransactionExportQuery transactionExportQuery;
     @Autowired BalanceQuery balanceQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
+    @Autowired YearlyStatsQuery yearlyStatsQuery;
     @Autowired LedgerAccess ledgerAccess;
     @Autowired LedgerService ledgerService;
     @Autowired UserService userService;
@@ -196,6 +199,7 @@ class CrossLedgerAccessTest {
         transactionExportQuery = recorded(transactionExportQuery);
         balanceQuery = recorded(balanceQuery);
         monthlyStatsQuery = recorded(monthlyStatsQuery);
+        yearlyStatsQuery = recorded(yearlyStatsQuery);
         ledgerAccess = recorded(ledgerAccess);
         ledgerService = recorded(ledgerService);
         userService = recorded(userService);
@@ -304,6 +308,8 @@ class CrossLedgerAccessTest {
         assertThat(summary.expense()).isEqualTo(1_100);
         assertThat(summary.income()).isZero();
         assertThat(summary.categories()).extracting(total -> total.categoryId()).containsExactly(aFood);
+        assertThat(yearlyStatsQuery.yearly(a, ledgerA, Year.of(2026)).categories())
+                .extracting(total -> total.categoryId()).containsExactly(aFood);
     }
 
     // ---------------------------------------------------------------- 표
@@ -358,6 +364,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> balanceQuery.balances(actor, ledger)),
                 denied("조회: 월 통계", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, NOVEMBER)),
+                denied("조회: 연 통계", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> yearlyStatsQuery.yearly(actor, ledger, Year.of(2026))),
                 denied("구성원 확인: B의 장부", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> ledgerAccess.requireMember(actor, ledger)),
                 denied("소유자 확인: B의 장부", NotLedgerOwnerException.class, ledgerB,
@@ -518,6 +526,10 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, null)),
                 denied("순서: B의 장부 월 통계를 범위 밖 달로", notMember, ledgerB, invalid,
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, YearMonth.of(1999, 12))),
+                denied("순서: B의 장부 연 통계를 해 없이", notMember, ledgerB, invalid,
+                        (actor, ledger) -> yearlyStatsQuery.yearly(actor, ledger, null)),
+                denied("순서: B의 장부 연 통계를 범위 밖 해로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> yearlyStatsQuery.yearly(actor, ledger, Year.of(1999))),
                 denied("순서: B의 장부 거래 목록을 범위 밖 limit으로", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 0)),
                 denied("순서: B의 장부에 101자 가맹점으로 중복 경고", notMember, ledgerB, invalid, (actor, ledger) ->

@@ -4,6 +4,7 @@ import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import app.accountbook.stats.MonthlyStatsQuery;
+import app.accountbook.stats.YearlyStatsQuery;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.support.StoppedClockConfig;
 import app.accountbook.support.StoppedClockConfig.StoppedClock;
@@ -16,11 +17,13 @@ import ch.qos.logback.core.read.ListAppender;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.Year;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,11 +67,20 @@ class TransactionListPlanTest {
      * 운영 크기에서는 라인 테이블이 커서 Nested Loop다(큰 데이터의 확인은 #171). 그래서 이 노드만 읽은 행 상한에서 뺀다.
      */
     private static final String LINE_SEQ_SCAN = "Seq Scan on transaction_line";
+    /**
+     * 한 해의 거래(약 2,200건)와 라인을 잇는 계획. 이 데이터에서는 거래마다 라인을 찾는 Nested Loop가 비싸, 라인 테이블을
+     * 통째로 읽는 Hash Join이나 거래 id 인덱스를 처음부터 읽는 Merge Join을 고를 수 있고, 둘의 비용은 라인 테이블의 쪽 수에
+     * 따라 뒤집힐 수 있다({@link #LINE_SEQ_SCAN}과 같은 까닭). 운영 크기에서는 라인 테이블이 커서 Nested Loop다(#171).
+     * 그래서 라인 테이블을 거래 id로 잇는 훑기는 모두 상한에서 뺀다. 라인을 카테고리 인덱스로 읽는 계획(#16이 막은 것)은 센다.
+     */
+    private static final Predicate<String> NOT_LINE_BY_TRANSACTION = line -> !line.contains(LINE_SEQ_SCAN)
+            && !line.contains("ix_transaction_line_transaction");
     private static final Pattern BIND = Pattern.compile("binding parameter \\((\\d+):[^)]*\\) <- \\[(.*)]");
     private static final AtomicInteger PREPARED = new AtomicInteger();
 
     @Autowired TransactionListQuery listQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
+    @Autowired YearlyStatsQuery yearlyStatsQuery;
     @Autowired StoppedClock clock;
     @Autowired JdbcTemplate jdbc;
 
@@ -188,6 +200,23 @@ class TransactionListPlanTest {
     }
 
     /**
+     * 연 단위 통계(#10)는 한 문장으로 그해만 읽는다. 큰 장부의 2025년은 2,190건이다(2만 건 가운데). 조건은 월별 통계와 같고
+     * 범위만 한 해다. 거래는 장부·날짜 인덱스로 그해만 읽고, 라인은 {@link #NOT_LINE_BY_TRANSACTION}의 훑기를 뺀 상한을 본다.
+     */
+    @Test
+    void 연_단위_통계는_큰_장부에서_그해의_거래만_한_문장으로_읽는다() {
+        List<Statement> yearly = statements("연 단위 통계 2025", () -> assertThat(
+                yearlyStatsQuery.yearly(BIG_OWNER, BIG_LEDGER, Year.of(2025)).expense()).isEqualTo(2_190_000));
+
+        Statement sums = pick(yearly, Kind.YEAR_MONTHS);
+        String custom = explain(sums, "force_custom_plan");
+        assertThat(custom).contains("ix_transaction_ledger_occurred_on");
+        assertThat(mostRowsRead(custom, NOT_LINE_BY_TRANSACTION)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG)
+                .isLessThan(3_000);
+        assertThat(explain(sums, "force_generic_plan")).doesNotContain("Seq Scan");
+    }
+
+    /**
      * 중복 경고(#59)는 새 인덱스 없이 장부·날짜 인덱스로 그날의 거래만 읽는다(큰 장부의 하루는 약 6건). 그날의 거래에
      * 가맹점을 넣어 라인까지 읽게 한다. 읽은 행 상한은 날짜별 합계와 같은 방식이다({@link #LINE_SEQ_SCAN}).
      */
@@ -293,6 +322,11 @@ class TransactionListPlanTest {
      * 읽는 계획이면 Seq Scan이 아니어도 여기서 큰 장부의 거래 수만큼 나온다.
      */
     private static long mostRowsReadExceptLineSeqScan(String plan) {
+        return mostRowsRead(plan, line -> !line.contains(LINE_SEQ_SCAN));
+    }
+
+    /** 훑기 노드 가운데 counted가 받는 줄만 세는 {@link #mostRowsReadExceptLineSeqScan}. */
+    private static long mostRowsRead(String plan, Predicate<String> counted) {
         Pattern node = Pattern.compile("actual time=\\S+ rows=(\\d+)(?:\\.\\d+)? loops=(\\d+)");
         Pattern removed = Pattern.compile("Rows Removed by (?:Filter|Index Recheck): (\\d+)");
         long most = 0;
@@ -302,7 +336,7 @@ class TransactionListPlanTest {
             Matcher read = node.matcher(line);
             Matcher filtered = removed.matcher(line);
             if (read.find()) {
-                boolean scan = line.contains("Scan") && !line.contains(LINE_SEQ_SCAN);
+                boolean scan = line.contains("Scan") && counted.test(line);
                 rows = scan ? Long.parseLong(read.group(1)) : 0;
                 loops = scan ? Long.parseLong(read.group(2)) : 0;
             } else if (filtered.find()) {
@@ -354,6 +388,9 @@ class TransactionListPlanTest {
             if (sql.contains("left join transaction_line") && sql.contains("fetch first")) {
                 return Kind.PAGE;
             }
+            if (sql.contains("sum(") && sql.contains("extract(")) {
+                return Kind.YEAR_MONTHS;
+            }
             if (sql.contains("sum(") && sql.contains("occurred_on>=") && sql.contains("group by")
                     && sql.substring(sql.indexOf("group by")).contains("occurred_on")) {
                 return Kind.MONTH_DAYS;
@@ -368,8 +405,11 @@ class TransactionListPlanTest {
         }
     }
 
-    /** 쪽(거래와 라인), 범위 합계, 쪽에 나온 날마다 합계, 달력의 날짜별 합계(달 범위를 날마다 묶는다), 중복 경고. */
+    /**
+     * 쪽(거래와 라인), 범위 합계, 쪽에 나온 날마다 합계, 달력의 날짜별 합계(달 범위를 날마다 묶는다), 중복 경고, 연 단위
+     * 통계(한 해를 달마다 묶는다).
+     */
     private enum Kind {
-        PAGE, TOTALS, DAYS, MONTH_DAYS, DUPLICATES
+        PAGE, TOTALS, DAYS, MONTH_DAYS, DUPLICATES, YEAR_MONTHS
     }
 }
