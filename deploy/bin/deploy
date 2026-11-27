@@ -584,7 +584,7 @@ digest_of() {
 
 # finish_failed 결과 단계 글: 실패를 남기고 끝낸다. 같은 배포 파일로는 다시 하지 않는다.
 finish_failed() {
-  phase=done
+  phase=finished
   { desired_text; printf '\nstep=%s\nat=%s\n' "$2" "$(date +%s)"; } | state_put failed
   rm -f -- "$DEPLOY_STATE_DIR/pending"
   record_history "$1" "$2"
@@ -619,7 +619,7 @@ on_exit() {
   trap - EXIT
   set +e
   if ((rc != 0)) && [[ $phase == deploy ]]; then
-    phase=done
+    phase=finished
     { desired_text; printf '\nstep=%s\nat=%s\n' "$step" "$(date +%s)"; } | state_put failed
     rm -f -- "$DEPLOY_STATE_DIR/pending"
     record_history 중단 "$step"
@@ -703,7 +703,7 @@ $(printf -- '- %s\n' "${env_problems[@]}")"
   read_current
   is_current || failed_after_swap "$step(도는 이미지나 SW_DISABLE이 배포 파일과 다르다)"
 
-  phase=done
+  phase=finished
   rm -f -- "$DEPLOY_STATE_DIR/pending" "$DEPLOY_STATE_DIR/failed"
   record_history 성공
   cleanup_images "$SERVER_REPOSITORY" "$D_SERVER" "$P_SERVER"
