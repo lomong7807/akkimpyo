@@ -137,7 +137,7 @@ public class CategoryService {
     }
 
     /**
-     * 상위가 이 장부에 없으면(다른 장부의 것, 지운 것 포함) NOT_FOUND, 하위면 TOO_DEEP, 구분이 다르면 TYPE_MISMATCH,
+     * 상위가 이 장부에 없으면(다른 장부의 것, 지운 것 포함) NOT_FOUND, 하위면 TOO_DEEP, 구분이 다르면 KIND_MISMATCH,
      * 미분류면 NOT_ALLOWED다(#44). 구분이 없으면 구분은 비교하지 않는다(그 오류는 {@code kind}에 따로 있다).
      */
     private Optional<InvalidRequestException> parentError(UUID ledgerId, CategoryKind kind, UUID parentId) {
@@ -152,7 +152,7 @@ public class CategoryService {
                     "카테고리는 2단계까지만 만들 수 있습니다."));
         }
         if (kind != null && parent.get().getKind() != kind) {
-            return Optional.of(new InvalidRequestException("parentId", FieldErrorCode.TYPE_MISMATCH,
+            return Optional.of(new InvalidRequestException("parentId", FieldErrorCode.KIND_MISMATCH,
                     "상위 분류와 수입·지출 구분이 같아야 합니다."));
         }
         if (parent.get().isSystem()) {

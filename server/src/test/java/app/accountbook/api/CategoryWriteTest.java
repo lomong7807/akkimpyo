@@ -126,7 +126,7 @@ class CategoryWriteTest {
                 arguments("parentId", "@남의것", "parentId:NOT_FOUND"),
                 arguments("parentId", "@지운것", "parentId:NOT_FOUND"),
                 arguments("parentId", "@점심", "parentId:TOO_DEEP"),
-                arguments("parentId", "@용돈", "parentId:TYPE_MISMATCH"),
+                arguments("parentId", "@용돈", "parentId:KIND_MISMATCH"),
                 arguments("parentId", "@미분류", "parentId:NOT_ALLOWED"));
     }
 

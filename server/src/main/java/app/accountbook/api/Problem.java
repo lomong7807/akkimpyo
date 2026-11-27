@@ -44,7 +44,7 @@ record Problem(String type, String title, int status, String detail, ErrorCode c
                 case NOT_ALLOWED -> "받을 수 없는 값이다";
                 case NOT_FOUND -> "가리킨 대상이 없다";
                 case TOO_DEEP -> "더 깊이 둘 수 없다";
-                case TYPE_MISMATCH -> "구분이 맞지 않는다";
+                case KIND_MISMATCH -> "상위와 구분(kind)이 다르다";
             };
         }
     }

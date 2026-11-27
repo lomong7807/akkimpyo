@@ -13,6 +13,6 @@ public enum FieldErrorCode {
     NOT_FOUND,
     /** 고른 상위가 하위 카테고리다. 카테고리는 2단계까지다(P-221, #44). */
     TOO_DEEP,
-    /** 고른 상위와 수입·지출 구분이 다르다(P-221, #44). */
-    TYPE_MISMATCH
+    /** 고른 상위와 수입·지출 구분({@code kind})이 다르다(P-221, #44). */
+    KIND_MISMATCH
 }
