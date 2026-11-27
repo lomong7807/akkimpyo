@@ -646,7 +646,8 @@ notice() {
   if ((${#problems[@]} > 0)); then
     rm -f -- "$DEPLOY_STATE_DIR/pending"
     alert_once precheck "배포 파일이 바뀌었지만 교체하지 않는다. 고치면 다음 확인 때 다시 본다.
-$(printf -- '- %s\n' "${problems[@]}")커밋: ${file_commit:0:12} ${pr:+(#$pr)}"
+$(printf -- '- %s\n' "${problems[@]}")
+커밋: ${file_commit:0:12} ${pr:+(#$pr)}"
     exit 1
   fi
   clear_alert precheck
