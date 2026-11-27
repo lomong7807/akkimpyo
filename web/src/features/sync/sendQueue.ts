@@ -1,9 +1,10 @@
 import { ApiError } from '../../api/apiError'
 import { currentUserId } from '../../api/session'
 import { pendingOf, readPending, settlePending, type Outcome, type PendingTransaction } from '../../device/pendingQueue'
-import { markSent } from '../../device/syncedAt'
+import { markSent } from '../../device/markSent'
 import { now } from '../../lib/clock'
-import { createTransaction, needsResendNotice, type NewTransaction } from '../transactions/transactions'
+import type { NewTransaction } from '../transactions/transactions'
+import { createTransaction, needsResendNotice } from '../transactions/transactionWrites'
 import { withQueueLock } from './queueLock'
 
 /*

@@ -2,7 +2,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { currentUserId } from '../../api/session'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { ledgerScope } from '../me/ledgerKey'
-import { isInvalidState, isNotFound, staleVersionOf, updateTransaction, type TransactionUpdate } from './transactions'
+import { isNotFound } from './transactionDetail'
+import type { TransactionUpdate } from './transactions'
+import { isInvalidState, staleVersionOf, updateTransaction } from './transactionWrites'
 import { transactionKey } from './useTransactionDetail'
 
 export interface TransactionEdit {

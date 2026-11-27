@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ListButton, ListGroup, ListLink } from '../src/components/ListRow'
+import { Info, SignOut } from '../src/components/icons'
 import { readCssRule } from './support/cssRule'
 import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
@@ -12,12 +13,12 @@ function renderRows(onClick = () => {}) {
   render(
     <MemoryRouter>
       <ListGroup>
-        <ListLink icon="Info" to="/accounts">
+        <ListLink icon={Info} to="/accounts">
           계좌
         </ListLink>
       </ListGroup>
       <ListGroup>
-        <ListButton icon="SignOut" onClick={onClick}>
+        <ListButton icon={SignOut} onClick={onClick}>
           로그아웃
         </ListButton>
       </ListGroup>

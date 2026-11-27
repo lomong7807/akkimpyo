@@ -25,3 +25,8 @@ export function SignupFrame({ children }: { children: ReactNode }) {
     </div>
   )
 }
+
+/** 틀 없이 내용 자리만 둔다. 바깥 라우트가 이미 틀을 그리는 화면(로그인은 PlainLayout 안)이 쓴다 */
+export function NoFrame({ children }: { children: ReactNode }) {
+  return children
+}

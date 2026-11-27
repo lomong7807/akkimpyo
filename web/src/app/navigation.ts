@@ -1,4 +1,5 @@
-import type { IconName } from '../components/Icon'
+import type { IconSvg } from '../components/Icon'
+import { DotsThree, House, ListBullets } from '../components/icons'
 
 export interface NavigationItem {
   label: string
@@ -7,7 +8,7 @@ export interface NavigationItem {
 }
 
 export interface MainNavigationItem extends NavigationItem {
-  icon: IconName
+  icon: IconSvg
 }
 
 /** 하단 탭에서 거래 입력 칸(빠른 입력 버튼, B-03)이 놓이는 자리 */
@@ -36,9 +37,9 @@ export interface ScreenHandle {
   fullScreen?: boolean
 }
 
-export const homeItem: MainNavigationItem = { label: '홈', to: '/home', icon: 'House' }
-export const transactionsItem: MainNavigationItem = { label: '내역', to: '/transactions', icon: 'ListBullets' }
-export const moreItem: MainNavigationItem = { label: '더보기', to: '/more', icon: 'DotsThree' }
+export const homeItem: MainNavigationItem = { label: '홈', to: '/home', icon: House }
+export const transactionsItem: MainNavigationItem = { label: '내역', to: '/transactions', icon: ListBullets }
+export const moreItem: MainNavigationItem = { label: '더보기', to: '/more', icon: DotsThree }
 export const accountsItem: NavigationItem = { label: '계좌', to: '/accounts' }
 export const categoriesItem: NavigationItem = { label: '카테고리', to: '/categories' }
 /** 거래 입력(D-04)을 지출 유형으로 연다. 화면이 아니라 여는 버튼이라 강조하지 않는다. */

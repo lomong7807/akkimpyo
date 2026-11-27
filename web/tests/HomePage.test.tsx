@@ -23,7 +23,7 @@ import {
   startServer,
   type Opened,
 } from './support/transactionScreen'
-import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/useTransactionList'
+import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/transactionListQueries'
 import { monthOf, today } from '../src/lib/calendarDate'
 import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'

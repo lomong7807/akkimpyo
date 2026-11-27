@@ -1,6 +1,6 @@
 import type { ComponentProps, MouseEvent, ReactNode } from 'react'
-import { Link, type LinkProps } from 'react-router'
-import Icon, { type IconName } from './Icon'
+import Icon, { type IconSvg } from './Icon'
+import { Link, type LinkProps } from './Link'
 import styles from './Button.module.css'
 
 type ButtonLook =
@@ -13,7 +13,7 @@ type ButtonLook =
     }
   | {
       kind: 'icon'
-      icon: IconName
+      icon: IconSvg
       'aria-label': string
       children?: never
     }
@@ -77,7 +77,7 @@ export function Button({
       aria-busy={busy || undefined}
       onClick={inactive ? ignoreClick : onClick}
     >
-      <span className={styles.content}>{icon ? <Icon name={icon} size={24} /> : children}</span>
+      <span className={styles.content}>{icon ? <Icon icon={icon} size={24} /> : children}</span>
       {busy && <span className={`status-motion ${styles.spinner}`} aria-hidden="true" />}
     </button>
   )
@@ -87,7 +87,7 @@ export function Button({
 export function ButtonLink({ kind, icon, children, ...rest }: ButtonLinkProps) {
   return (
     <Link {...rest} className={classNameOf(kind)}>
-      <span className={styles.content}>{icon ? <Icon name={icon} size={24} /> : children}</span>
+      <span className={styles.content}>{icon ? <Icon icon={icon} size={24} /> : children}</span>
     </Link>
   )
 }
