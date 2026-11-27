@@ -44,6 +44,14 @@ class StatsController {
         return MonthlyStatsResponse.of(parsed, monthlyStatsQuery.monthly(actorId, ledgerId, parsed));
     }
 
+    /** 달의 카테고리별 통계(F-302, #48 응답 계약). 계산은 월별 통계와 같은 조회다. */
+    @GetMapping("/categories")
+    CategoryStatsResponse categories(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                                     @RequestParam(name = "month", required = false) String month) {
+        YearMonth parsed = month(month);
+        return CategoryStatsResponse.of(parsed, monthlyStatsQuery.monthly(actorId, ledgerId, parsed));
+    }
+
     /** 없으면 null(조회가 {@code REQUIRED}로 거절한다). */
     private static YearMonth month(String month) {
         return month == null ? null

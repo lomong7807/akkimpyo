@@ -165,7 +165,10 @@ class MonthlyStatsQueryTest {
                 .as("28일").isEqualTo(28);
     }
 
-    /** 하위 카테고리의 지출은 상위 카테고리 하나로 모인다. 하위끼리 지워져 0이 된 상위는 넣지 않는다. */
+    /**
+     * 하위 카테고리의 지출은 상위 카테고리 하나로 모이고, 하위별 금액과 상위에 바로 넣은 금액은 펼친 금액에 있다(F-302).
+     * 하위끼리 지워져 0이 된 상위는 넣지 않는다.
+     */
     @Test
     void monthly_addsSubcategoriesToTheirTopLevelCategory() {
         Category lunch = subcategory("점심", food);
@@ -179,8 +182,9 @@ class MonthlyStatsQueryTest {
         MonthlySummary summary = november();
 
         assertThat(summary.expense()).isEqualTo(4_000);
-        assertThat(summary.categories()).containsExactly(
-                new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 4_000));
+        assertThat(summary.categories()).containsExactly(new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 4_000,
+                List.of(new CategoryTotal(lunch.getId(), CategoryKind.EXPENSE, 3_000),
+                        new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 1_000))));
     }
 
     /** 환불이 지출보다 큰 카테고리는 음수 그대로 합계에 든다(P-205, F-302). 지출이 큰 카테고리에는 없다(F-301). */
