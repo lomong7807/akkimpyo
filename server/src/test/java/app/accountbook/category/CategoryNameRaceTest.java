@@ -50,7 +50,7 @@ class CategoryNameRaceTest {
         Category leisure = categoryService.create(owner.getId(), ledgerId,
                 new CategoryCommand("여가", CategoryKind.EXPENSE, null));
 
-        assertThatThrownBy(() -> categoryService.rename(owner.getId(), leisure.getId(), "식비"))
+        assertThatThrownBy(() -> categoryService.rename(owner.getId(), ledgerId, leisure.getId(), "식비"))
                 .isInstanceOf(DuplicateCategoryNameException.class);
     }
 }
