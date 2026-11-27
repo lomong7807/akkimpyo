@@ -90,7 +90,8 @@ class AccountListTest {
                 card + " 신용카드 CARD -62000 -50000 2026-11-01",
                 cash + " 지갑 CASH 30000 0 2026-11-20");
         assertThat(items.valueStream().toList()).allSatisfy(item -> {
-            assertThat(item.propertyNames()).containsExactly("id", "name", "type", "balance", "openingBalance", "openingDate");
+            assertThat(item.propertyNames()).containsExactly("id", "name", "type", "balance", "openingBalance", "openingDate",
+                    "hidden");
             assertThat(item.get("balance").isIntegralNumber()).as("금액은 JSON 정수다").isTrue();
             assertThat(item.get("openingBalance").isIntegralNumber()).as("금액은 JSON 정수다").isTrue();
         });

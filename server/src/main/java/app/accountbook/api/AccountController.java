@@ -10,6 +10,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,7 +20,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 장부의 계좌(F-501, F-502, F-503). 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가 한 번 더 한다. */
+/**
+ * 장부의 계좌(F-501, F-502, F-503, F-506, F-507, F-508). 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가
+ * 한 번 더 한다.
+ */
 @RestController
 @RequestMapping(path = "/api/v1/ledgers/{ledgerId}/accounts", produces = MediaType.APPLICATION_JSON_VALUE)
 class AccountController {
@@ -77,5 +81,32 @@ class AccountController {
             throw read.explain(e);
         }
         return AccountResponse.of(account, balanceQuery.balance(actorId, account.getId()));
+    }
+
+    /**
+     * 숨기기·다시 보이기(#43, F-506, F-507). 200이고 본문은 목록의 항목과 같다. 이미 그 상태면 바뀌는 것 없이 200이다.
+     * version은 없다(고치기와 같다). 이 장부의 계좌가 아니면 본문이 틀려도 404다.
+     */
+    @PutMapping(path = "/{accountId}/visibility", consumes = MediaType.APPLICATION_JSON_VALUE)
+    AccountResponse changeVisibility(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                                     @PathVariable UUID accountId, @RequestBody AccountRequest.Visibility request) {
+        AccountRequest.Visibility.Read read = request.read();
+        Account account;
+        try {
+            account = accountService.setHidden(actorId, ledgerId, accountId, read.hidden());
+        } catch (InvalidRequestException e) {
+            throw read.explain(e);
+        }
+        return AccountResponse.of(account, balanceQuery.balance(actorId, account.getId()));
+    }
+
+    /**
+     * 삭제(#43, F-508). 204다. 이 계좌를 쓰는 거래가 하나라도 있으면(휴지통·취소한 거래, 이체의 받는 쪽 포함) 409
+     * {@code ACCOUNT_HAS_TRANSACTIONS}이다. 이 장부의 계좌가 아니면(이미 지운 계좌 포함) 404다.
+     */
+    @DeleteMapping(path = "/{accountId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void delete(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId, @PathVariable UUID accountId) {
+        accountService.delete(actorId, ledgerId, accountId);
     }
 }

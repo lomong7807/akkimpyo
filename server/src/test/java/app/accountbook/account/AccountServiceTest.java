@@ -92,7 +92,7 @@ class AccountServiceTest {
         // 소프트 삭제된 거래의 라인도 계좌를 참조하는 것으로 본다.
         tx.markDeleted(Times.now());
 
-        assertThatThrownBy(() -> accountService.delete(owner.getId(), account.getId()))
+        assertThatThrownBy(() -> accountService.delete(owner.getId(), ledgerId, account.getId()))
                 .isInstanceOf(InUseException.class);
         assertThat(accountService.list(owner.getId(), ledgerId)).extracting(Account::getId)
                 .containsExactly(account.getId());
@@ -103,7 +103,7 @@ class AccountServiceTest {
         Account account = accountService.create(owner.getId(), ledgerId,
                 new AccountCommand("현금", AccountType.CASH, 0, LocalDate.of(2026, 11, 1)));
 
-        accountService.delete(owner.getId(), account.getId());
+        accountService.delete(owner.getId(), ledgerId, account.getId());
 
         assertThat(accountRepository.findById(account.getId())).isEmpty();
         assertThat(accountService.list(owner.getId(), ledgerId)).isEmpty();

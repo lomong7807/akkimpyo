@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
+import app.accountbook.common.AccountHasTransactionsException;
 import app.accountbook.common.FieldErrorCode;
-import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.stats.BalanceQuery;
@@ -235,7 +235,8 @@ class AccountVisibilityTest {
     void accountWithTrashedTransactionCannotBeDeletedButCanBeHidden() {
         fixtures.delete(owner, fixtures.expense(owner, ledgerId, bank, food, DAY, 1_000));
 
-        assertThatThrownBy(() -> accountService.delete(actor, bank)).isInstanceOf(InUseException.class);
+        assertThatThrownBy(() -> accountService.delete(actor, ledgerId, bank))
+                .isInstanceOf(AccountHasTransactionsException.class);
 
         assertThat(accountService.setHidden(actor, ledgerId, bank, true).isHidden()).isTrue();
         assertThat(accountRepository.findById(bank)).isPresent();
