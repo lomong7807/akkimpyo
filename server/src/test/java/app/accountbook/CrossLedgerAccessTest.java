@@ -41,6 +41,7 @@ import app.accountbook.transaction.TransactionScope.Day;
 import app.accountbook.transaction.TransactionScope.Month;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
 import app.accountbook.transaction.TransactionService;
+import app.accountbook.transaction.TransactionTrashQuery;
 import app.accountbook.transaction.TransactionType;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.User;
@@ -101,6 +102,7 @@ class CrossLedgerAccessTest {
     @Autowired CategoryService categoryService;
     @Autowired TransactionService transactionService;
     @Autowired TransactionListQuery transactionListQuery;
+    @Autowired TransactionTrashQuery transactionTrashQuery;
     @Autowired CategorySuggestionQuery categorySuggestionQuery;
     @Autowired TransactionExportQuery transactionExportQuery;
     @Autowired BalanceQuery balanceQuery;
@@ -186,6 +188,7 @@ class CrossLedgerAccessTest {
         categoryService = recorded(categoryService);
         transactionService = recorded(transactionService);
         transactionListQuery = recorded(transactionListQuery);
+        transactionTrashQuery = recorded(transactionTrashQuery);
         categorySuggestionQuery = recorded(categorySuggestionQuery);
         transactionExportQuery = recorded(transactionExportQuery);
         balanceQuery = recorded(balanceQuery);
@@ -270,7 +273,7 @@ class CrossLedgerAccessTest {
         assertThat(accountService.list(a, ledgerA)).extracting(Account::getId)
                 .containsExactlyInAnyOrder(aBank, aCash);
         assertThat(categoryService.list(a, ledgerA)).extracting(Category::getLedgerId).containsOnly(ledgerA);
-        assertThat(transactionService.listDeleted(a, ledgerA)).extracting(TransactionView::id)
+        assertThat(transactionTrashQuery.page(a, ledgerA, null).items()).extracting(TransactionView::id)
                 .containsExactly(aDeleted.id());
         assertThat(transactionListQuery.page(a, ledgerA, new WholeLedger(), null, 50).items())
                 .extracting(TransactionView::id).containsExactlyInAnyOrder(aExpense.id(), aTransfer.id());
@@ -311,7 +314,7 @@ class CrossLedgerAccessTest {
                 denied("조회: 변경 이력(삭제한 거래)", NotFoundException.class, bDeleted.id(),
                         (actor, tx) -> transactionService.history(actor, tx)),
                 denied("조회: 휴지통", NotLedgerMemberException.class, ledgerB,
-                        (actor, ledger) -> transactionService.listDeleted(actor, ledger)),
+                        (actor, ledger) -> transactionTrashQuery.page(actor, ledger, null)),
                 denied("조회: 거래 목록(달)", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 50)),
                 denied("조회: 거래 목록(하루)", NotLedgerMemberException.class, ledgerB,
