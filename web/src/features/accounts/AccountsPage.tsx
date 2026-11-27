@@ -1,6 +1,8 @@
 import { useId } from 'react'
 import Amount from '../../components/Amount'
+import { amountText } from '../../components/amountDisplay'
 import EmptyState from '../../components/EmptyState'
+import { Link } from '../../components/Link'
 import { SubScreen } from '../../components/Screen'
 import BasisTime from '../connection/BasisTime'
 import { useShown } from '../connection/deviceFirst'
@@ -11,11 +13,13 @@ import { accountTypes, parseAccounts, type Account } from './accounts'
 import AddAccountLink from './AddAccountLink'
 import AccountsSkeleton from './AccountsSkeleton'
 import { accountTypeNames } from './accountTypeNames'
+import { openedFromList } from './openedFromList'
 import { accountsKey, useAccounts } from './useAccounts'
 import styles from './Accounts.module.css'
 
 /**
- * G-01 계좌 목록. 1A에서 계좌 줄은 눌리지 않는다. 계좌 상세(G-03)가 들어오면 맞춘다.
+ * G-01 계좌 목록. 1B 동안 계좌 줄을 누르면 계좌 수정(G-02 수정 모드)이 열린다(planner #102). 1C에 계좌 상세(G-03)가 들어오면
+ * 같은 줄이 상세로 간다.
  * 기기에 남긴 계좌 목록이 있으면 받는 동안 먼저 보이고(00-common 4.5), 연결이 없거나 받지 못하면 그것을 읽기 전용으로 보이며
  * 자산 합계 위에 기준 시각을 붙인다(F-908).
  */
@@ -80,13 +84,30 @@ function AccountGroup({ name, accounts }: { name: string; accounts: Account[] })
       {/* Safari는 점을 없앤 목록을 목록으로 알리지 않으므로 role을 적는다 */}
       <ul role="list" aria-labelledby={headingId} className={styles.list}>
         {accounts.map((account) => (
-          <li key={account.id} className={`${styles.row} ${styles.account}`}>
-            <span className={styles.name}>{account.name}</span>
-            <Balance value={account.balance} />
+          <li key={account.id}>
+            <AccountLink account={account} />
           </li>
         ))}
       </ul>
     </div>
+  )
+}
+
+/**
+ * 계좌 줄(4). 줄 전체가 수정으로 가는 링크 하나이고 `>`는 두지 않는다(designer #243). 링크 이름은 "{이름} {잔액}, 수정"이다.
+ * 목록에서 열었다고 알려 저장하거나 닫으면 이 목록으로 돌아간다(방문 기록에 목록을 쌓지 않는다).
+ */
+function AccountLink({ account }: { account: Account }) {
+  return (
+    <Link
+      to={`/accounts/${account.id}/edit`}
+      state={openedFromList}
+      className={`${styles.row} ${styles.account} ${styles.link}`}
+      aria-label={`${account.name} ${amountText('balance', account.balance)}, 수정`}
+    >
+      <span className={styles.name}>{account.name}</span>
+      <Balance value={account.balance} />
+    </Link>
   )
 }
 
