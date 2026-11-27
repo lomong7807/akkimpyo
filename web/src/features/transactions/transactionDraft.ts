@@ -27,6 +27,27 @@ export interface FixTransactionDraft {
   values: TransactionValues
 }
 
+/**
+ * 홈의 한 줄 입력의 쓰던 값(C-01 예외 처리, D-05 예외 처리, architect #233 3). 입력칸의 글과, 결과 확인(D-05)이 열려 있었거나 보내는
+ * 중이었으면 그 거래 id(ADR 006)와 입력한 글, 칸 값이다. 같은 계정으로 홈에 돌아오면 글을 되돌리고 D-05를 같은 값으로 다시 연다
+ */
+export interface OneLineDraft {
+  text: string
+  result?: { id: string; text: string; values: TransactionValues }
+}
+
+export function oneLineDraftOf(saved: unknown): OneLineDraft | undefined {
+  if (typeof saved !== 'object' || saved === null) return undefined
+  const { text, result } = saved as Partial<Record<keyof OneLineDraft, unknown>>
+  if (typeof text !== 'string') return undefined
+  if (result === undefined) return { text }
+  if (typeof result !== 'object' || result === null) return undefined
+  const { id, text: resultText, values } = result as Record<string, unknown>
+  const checked = transactionValuesOf(values)
+  if (!isUuid(id) || typeof resultText !== 'string' || !checked) return undefined
+  return { text, result: { id, text: resultText, values: checked } }
+}
+
 export function fixTransactionDraftOf(saved: unknown): FixTransactionDraft | undefined {
   if (typeof saved !== 'object' || saved === null) return undefined
   const values = transactionValuesOf((saved as Partial<Record<keyof FixTransactionDraft, unknown>>).values)

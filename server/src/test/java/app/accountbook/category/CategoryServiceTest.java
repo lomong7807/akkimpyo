@@ -10,6 +10,7 @@ import app.accountbook.account.AccountType;
 import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotLedgerOwnerException;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
@@ -156,7 +157,7 @@ class CategoryServiceTest {
         expense("식비", null);
         Category leisure = expense("여가", null);
 
-        assertThatThrownBy(() -> categoryService.rename(owner.getId(), leisure.getId(), "식비"))
+        assertThatThrownBy(() -> categoryService.rename(owner.getId(), ledgerId, leisure.getId(), "식비"))
                 .isInstanceOf(DuplicateCategoryNameException.class);
     }
 
@@ -164,7 +165,7 @@ class CategoryServiceTest {
     void rename_rejectsNameOfTwentyOneCharacters() {
         Category food = expense("식비", null);
 
-        assertThatThrownBy(() -> categoryService.rename(owner.getId(), food.getId(), "가".repeat(21)))
+        assertThatThrownBy(() -> categoryService.rename(owner.getId(), ledgerId, food.getId(), "가".repeat(21)))
                 .isInstanceOf(InvalidRequestException.class);
     }
 
@@ -172,7 +173,7 @@ class CategoryServiceTest {
     void rename_toOwnNameIsNotDuplicate() {
         Category food = expense("식비", null);
 
-        Category renamed = categoryService.rename(owner.getId(), food.getId(), " 식비 ");
+        Category renamed = categoryService.rename(owner.getId(), ledgerId, food.getId(), " 식비 ");
 
         assertThat(renamed.getName()).isEqualTo("식비");
     }
@@ -190,8 +191,8 @@ class CategoryServiceTest {
     void rename_rejectsSystemCategory() {
         Category uncategorized = categoryService.uncategorized(ledgerId, CategoryKind.INCOME);
 
-        assertThatThrownBy(() -> categoryService.rename(owner.getId(), uncategorized.getId(), "기타 수입"))
-                .isInstanceOf(InvalidRequestException.class);
+        assertThatThrownBy(() -> categoryService.rename(owner.getId(), ledgerId, uncategorized.getId(), "기타 수입"))
+                .isInstanceOf(InvalidStateException.class);
         assertThat(categoryRepository.findById(uncategorized.getId()).orElseThrow().getName())
                 .isEqualTo("미분류");
     }
