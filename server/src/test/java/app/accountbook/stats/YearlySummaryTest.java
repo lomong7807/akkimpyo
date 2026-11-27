@@ -57,6 +57,24 @@ class YearlySummaryTest {
                 income(SALARY, 150_000), expense(FOOD, 8_000), expense(GIFT, -1_000));
     }
 
+    /**
+     * 하위별 금액은 그해로 더한다. 하위가 없던 달에 상위에 바로 넣은 금액도 맨 뒤의 상위 줄에 든다. 달마다 0이 된 최상위도
+     * 그 하위별 금액은 그해에 든다(3월의 점심과 바로 넣은 환불).
+     */
+    @Test
+    void of_addsSubcategoriesAcrossMonths() {
+        UUID lunch = UUID.fromString("00000000-0000-4000-8000-000000000005");
+        YearlySummary summary = YearlySummary.of(YEAR, Map.of(
+                Month.JANUARY, List.of(CategoryTotal.ofLine(FOOD, FOOD, CategoryKind.EXPENSE, -1_000)),
+                Month.FEBRUARY, List.of(CategoryTotal.ofLine(FOOD, lunch, CategoryKind.EXPENSE, -3_000)),
+                Month.MARCH, List.of(CategoryTotal.ofLine(FOOD, lunch, CategoryKind.EXPENSE, -500),
+                        CategoryTotal.ofLine(FOOD, FOOD, CategoryKind.EXPENSE, 500))));
+
+        assertThat(summary.categories()).containsExactly(new CategoryTotal(FOOD, CategoryKind.EXPENSE, 4_000,
+                List.of(expense(lunch, 3_500), expense(FOOD, 500))));
+        assertThat(summary.months().get(2).expense()).isZero();
+    }
+
     @Test
     void of_ordersEqualTotalsByIdText() {
         YearlySummary summary = YearlySummary.of(YEAR, Map.of(

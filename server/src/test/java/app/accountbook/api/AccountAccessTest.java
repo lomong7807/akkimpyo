@@ -147,6 +147,8 @@ class AccountAccessTest {
                         client.get("/api/v1/ledgers/" + ledger + "/stats/monthly?month=2026-11"), 200),
                 new Case("카테고리별 통계", (client, ledger) ->
                         client.get("/api/v1/ledgers/" + ledger + "/stats/categories?month=2026-11"), 200),
+                new Case("연 단위 통계", (client, ledger) ->
+                        client.get("/api/v1/ledgers/" + ledger + "/stats/yearly?year=2026"), 200),
                 new Case("내보내기", (client, ledger) -> client.get(exports(ledger, "2026-11-18")), 200),
                 new Case("내보내기(종료일이 앞섬)", (client, ledger) -> client.get(exports(ledger, "2026-11-17")), 400),
                 new Case("거래 만들기", (client, ledger) ->
