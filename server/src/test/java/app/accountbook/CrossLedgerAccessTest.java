@@ -33,6 +33,7 @@ import app.accountbook.transaction.StaleVersionException;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
+import app.accountbook.transaction.TransactionExportQuery;
 import app.accountbook.transaction.TransactionListQuery;
 import app.accountbook.transaction.TransactionPage.DayTotals;
 import app.accountbook.transaction.TransactionScope.Day;
@@ -100,6 +101,7 @@ class CrossLedgerAccessTest {
     @Autowired TransactionService transactionService;
     @Autowired TransactionListQuery transactionListQuery;
     @Autowired CategorySuggestionQuery categorySuggestionQuery;
+    @Autowired TransactionExportQuery transactionExportQuery;
     @Autowired BalanceQuery balanceQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
     @Autowired LedgerAccess ledgerAccess;
@@ -184,6 +186,7 @@ class CrossLedgerAccessTest {
         transactionService = recorded(transactionService);
         transactionListQuery = recorded(transactionListQuery);
         categorySuggestionQuery = recorded(categorySuggestionQuery);
+        transactionExportQuery = recorded(transactionExportQuery);
         balanceQuery = recorded(balanceQuery);
         monthlyStatsQuery = recorded(monthlyStatsQuery);
         ledgerAccess = recorded(ledgerAccess);
@@ -320,6 +323,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> categorySuggestionQuery.suggest(actor, ledger, "B단골식당")),
                 denied("조회: 날짜별 합계(달력)", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, NOVEMBER)),
+                denied("조회: 내보내기", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionExportQuery.transactions(actor, ledger, DAY, DAY)),
                 denied("조회: 계좌 잔액", NotLedgerMemberException.class, bBank,
                         (actor, account) -> balanceQuery.balance(actor, account)),
                 denied("조회: 장부의 모든 잔액", NotLedgerMemberException.class, ledgerB,
