@@ -2,6 +2,8 @@ package app.accountbook.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import app.accountbook.support.SignedInUser;
+import app.accountbook.support.TestAccessTokens;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.Socket;
@@ -10,6 +12,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -21,10 +24,28 @@ import tools.jackson.databind.json.JsonMapper;
 final class ServerClient {
 
     private final int port;
+    /** 요청마다 붙이는 Authorization 헤더의 값. 없으면 붙이지 않는다. */
+    private final String authorization;
     private final HttpClient http = HttpClient.newHttpClient();
 
+    /** {@link SignedInUser}로 로그인해 부른다. */
     ServerClient(int port) {
+        this(port, "Bearer " + TestAccessTokens.valid(SignedInUser.ID, Instant.now()));
+    }
+
+    private ServerClient(int port, String authorization) {
         this.port = port;
+        this.authorization = authorization;
+    }
+
+    /** 로그인하지 않고 부른다. Authorization 헤더는 부르는 쪽이 적는 것뿐이다. */
+    static ServerClient anonymous(int port) {
+        return new ServerClient(port, null);
+    }
+
+    /** {@link #raw}의 요청에 직접 적을 Authorization 헤더 한 줄. */
+    String authorizationLine() {
+        return "Authorization: " + authorization + "\r\n";
     }
 
     /** @param headers 이름, 값이 번갈아 나온다 */
@@ -34,6 +55,9 @@ final class ServerClient {
                         ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
         if (headers.length > 0) {
             request.headers(headers);
+        }
+        if (authorization != null) {
+            request.header("Authorization", authorization);
         }
         HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
         Map<String, List<String>> received = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);

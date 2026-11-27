@@ -99,7 +99,8 @@ class ErrorLogTest {
         server.get(ErrorProbeController.PATH + "/ledgers/" + PASSWORD);
         server.get(QUERY + "?version=" + PASSWORD);
         server.get(QUERY + "?version=1&limit=101&cursor=" + PASSWORD);
-        server.rawReply("GET " + QUERY + "?version=" + PASSWORD + "%zz HTTP/1.1\r\n" + HOST + "\r\n");
+        server.rawReply("GET " + QUERY + "?version=" + PASSWORD + "%zz HTTP/1.1\r\n" + HOST
+                + server.authorizationLine() + "\r\n");
         server.rawReply("GET " + ThrowingFilter.READ_PARAMETER + "?token=" + PASSWORD + "%zz HTTP/1.1\r\n" + HOST
                 + "\r\n");
         server.send(PASSWORD.toUpperCase(), BODY, null);
@@ -130,7 +131,8 @@ class ErrorLogTest {
 
     @Test
     void 깨진_쿠키의_값이_로그에_없다() throws Exception {
-        String request = "GET /nope HTTP/1.1\r\n" + HOST + "Cookie: __Secure-r=" + PASSWORD + " zz\r\n\r\n";
+        String request = "GET /nope HTTP/1.1\r\n" + HOST + server.authorizationLine()
+                + "Cookie: __Secure-r=" + PASSWORD + " zz\r\n\r\n";
         // Tomcat은 처음 만난 깨진 쿠키만 INFO로, 다음부터는 DEBUG로 남긴다. 먼저 돈 테스트에 따라 헛돌지 않게 수준도 본다.
         Level configured = TOMCAT_COOKIE.getLevel();
         assertThat(configured).isEqualTo(Level.WARN);
@@ -195,7 +197,7 @@ class ErrorLogTest {
     @Test
     void 응답을_보내기_시작한_뒤의_500도_요청_id와_함께_한_번_남는다() throws Exception {
         server.raw("GET " + ErrorProbeController.PATH + "/fail-after-flush HTTP/1.1\r\n" + HOST
-                + "X-Request-Id: log-once-3\r\n\r\n");
+                + server.authorizationLine() + "X-Request-Id: log-once-3\r\n\r\n");
 
         assertLoggedOnce("log-once-3", "보낸 뒤의 실패");
     }
