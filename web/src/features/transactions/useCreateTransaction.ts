@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { ledgerScope } from '../me/ledgerKey'
 import { rememberLastAccount } from './lastAccount'
-import { createTransaction, type NewTransaction } from './transactions'
+import type { NewTransaction } from './transactions'
+import { createTransaction } from './transactionWrites'
 
 export interface TransactionSave {
   transaction: NewTransaction

@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-route
 import Amount from '../../components/Amount'
 import { ButtonLink } from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
+import { CalendarBlank } from '../../components/icons'
 import { holdKeyboard } from '../../components/keyboardBridge'
 import MonthNavigation from '../../components/MonthNavigation'
 import { MainScreen } from '../../components/Screen'
@@ -22,7 +23,8 @@ import { canEdit } from '../me/me'
 import { DayGroup } from './DayGroup'
 import { calendarAddressOf } from './calendarAddress'
 import { groupByDate } from './groupByDate'
-import { keptMonthOf, useKeptLastMonth } from './lastMonth'
+import { keptMonthOf } from './keptMonth'
+import { useKeptLastMonth } from './lastMonth'
 import { nameBookOf, type NameBook } from './listedText'
 import { useListMemory } from './listMemory'
 import { mergeMonth, pendingRow, pendingSums, usePendingTransactions, withPendingDays } from './pendingTransactions'
@@ -94,7 +96,7 @@ export default function TransactionListPage() {
           {/* 켠 필터는 넘기지 않는다(F-222) */}
           <ButtonLink
             kind="icon"
-            icon="CalendarBlank"
+            icon={CalendarBlank}
             aria-label="달력"
             to={calendarAddressOf(month)}
             state={{ listKey: location.key }}

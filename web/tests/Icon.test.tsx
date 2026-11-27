@@ -1,7 +1,10 @@
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
-import Icon, { type IconName } from '../src/components/Icon'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import Icon from '../src/components/Icon'
+import * as icons from '../src/components/icons'
 import { readWebFile } from './support/webFile'
+
+type IconName = keyof typeof icons
 
 const files: Record<IconName, string> = {
   CalendarBlank: 'calendar-blank',
@@ -41,7 +44,7 @@ afterEach(cleanup)
 
 describe('Icon', () => {
   it.each(names)('%s는 레포에 둔 Phosphor Regular SVG와 같은 모양을 그린다', (name) => {
-    render(<Icon name={name} size={24} label={name} />)
+    render(<Icon icon={icons[name]} size={24} label={name} />)
     const icon = screen.getByRole('img', { name })
     expect(paths(icon).length).toBeGreaterThan(0)
     expect(paths(icon)).toEqual(paths(phosphorFile(name)))
@@ -49,12 +52,12 @@ describe('Icon', () => {
   })
 
   it('색은 둘레 글자의 색을 따른다', () => {
-    render(<Icon name="WarningCircle" size={20} label="오류" />)
+    render(<Icon icon={icons.WarningCircle} size={20} label="오류" />)
     expect(screen.getByRole('img', { name: '오류' }).getAttribute('fill')).toBe('currentColor')
   })
 
   it.each([20, 24] as const)('크기 %d은 그 크기의 토큰으로 그린다', (size) => {
-    render(<Icon name="Plus" size={size} label="더하기" />)
+    render(<Icon icon={icons.Plus} size={size} label="더하기" />)
     const style = getComputedStyle(screen.getByRole('img', { name: '더하기' }))
     expect(style.width).toBe(`var(--size-icon-${size})`)
     expect(style.height).toBe(`var(--size-icon-${size})`)
@@ -63,12 +66,17 @@ describe('Icon', () => {
   it('이름을 주지 않으면 장식이라 화면 낭독기가 읽지 않고, 버튼 이름만 읽힌다', () => {
     render(
       <button type="button" aria-label="닫기">
-        <Icon name="X" size={24} />
+        <Icon icon={icons.X} size={24} />
       </button>,
     )
     const button = screen.getByRole('button', { name: '닫기' })
     expect(screen.queryByRole('img')).toBeNull()
     expect(button.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('icons.ts의 아이콘이 아닌 글을 넘기면 개발 중과 테스트에서 바로 던진다(빈 아이콘을 그리지 않는다)', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => render(<Icon icon="Plus" size={24} />)).toThrow('components/icons.ts')
   })
 
   it('아이콘 라이선스(MIT) 표기가 있다', () => {

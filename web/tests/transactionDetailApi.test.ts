@@ -31,9 +31,10 @@ function lunch(changes: object = {}) {
 async function openSignedInTab() {
   vi.resetModules()
   const session = await import('../src/api/session')
-  const module = await import('../src/features/transactions/transactions')
+  const transactionDetail = await import('../src/features/transactions/transactionDetail')
+  const transactionWrites = await import('../src/features/transactions/transactionWrites')
   await session.login(credentials)
-  return { ...session, ...module }
+  return { ...session, ...transactionDetail, ...transactionWrites }
 }
 
 beforeEach(() => {

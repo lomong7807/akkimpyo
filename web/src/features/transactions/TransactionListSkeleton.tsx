@@ -1,4 +1,4 @@
-import { MonthNavigationSpace } from '../../components/MonthNavigation'
+import { MonthNavigationSpace } from '../../components/MonthNavigationSpace'
 import Skeleton, { SkeletonBar } from '../../components/Skeleton'
 import styles from './TransactionList.module.css'
 
