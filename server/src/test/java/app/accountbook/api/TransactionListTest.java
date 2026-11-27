@@ -263,13 +263,17 @@ class TransactionListTest {
     }
 
     @Test
-    void 구성원이_아닌_장부는_쿼리_값이_틀려도_404다() throws Exception {
+    void 구성원이_아닌_장부는_쿼리_값이_틀려도_404이고_토큰이_없으면_401이다() throws Exception {
         User stranger = user();
         UUID strangerLedger = fixtures.personalLedgerId(stranger);
 
         Reply reply = client.get("/api/v1/ledgers/" + strangerLedger + "/transactions?month=bad&cursor=bad");
 
         reply.assertProblem(404, "Not Found", "NOT_FOUND");
+        client.get("/api/v1/ledgers/" + strangerLedger + "/transactions?accountId=bad&type=x&status=y")
+                .assertProblem(404, "Not Found", "NOT_FOUND");
+        ServerClient.anonymous(port).get(path() + "?month=2026-11&accountId=" + cash + "&type=EXPENSE")
+                .assertProblem(401, "Unauthorized", "UNAUTHENTICATED");
     }
 
     private UUID expense(LocalDate on, String time) {
