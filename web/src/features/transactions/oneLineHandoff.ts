@@ -1,3 +1,4 @@
+import type { SuggestionState } from './categorySuggestion'
 import type { TransactionValues } from './transactionForm'
 
 /*
@@ -16,6 +17,8 @@ export interface EntryHandoff {
   /** 한 줄 입력칸에 쓴 글. 거래 입력을 떠나면 입력칸에 되돌린다 */
   text: string
   values: Partial<TransactionValues>
+  /** D-05의 카테고리 제안 상태. 거래 입력에서도 도움말을 잇고, 직접 고른 카테고리를 덮어쓰지 않는다(P-502) */
+  suggestion?: SuggestionState
 }
 
 let toEntry: (EntryHandoff & Owner & { mark: string }) | undefined
@@ -41,7 +44,7 @@ export function handOffToEntry(owner: Owner, handoff: EntryHandoff): { oneLineEn
 export function entryHandoffOf(state: unknown, owner: Owner): EntryHandoff | undefined {
   const mark = (state as { oneLineEntry?: unknown } | null)?.oneLineEntry
   if (!toEntry || mark !== toEntry.mark || !sameOwner(toEntry, owner)) return undefined
-  return { text: toEntry.text, values: toEntry.values }
+  return { text: toEntry.text, values: toEntry.values, suggestion: toEntry.suggestion }
 }
 
 /** 홈으로 돌아가면 한 줄 입력칸에 둘 글. 저장했으면 빈 글자다(D-04 성공 뒤 표) */

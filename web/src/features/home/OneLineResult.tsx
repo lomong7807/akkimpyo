@@ -44,6 +44,7 @@ import {
 } from '../transactions/transactionForm'
 import { AccountField, CategoryField } from '../transactions/TransactionPickers'
 import type { TransactionType } from '../transactions/transactions'
+import { useCategorySuggestion, type CategorySuggestion, type SuggestionState } from '../transactions/categorySuggestion'
 import { useNewTransactionSave, type Sender } from '../transactions/useNewTransactionSave'
 import { useTransactionForm, type TransactionForm } from '../transactions/useTransactionForm'
 import styles from './OneLineResult.module.css'
@@ -58,7 +59,8 @@ import styles from './OneLineResult.module.css'
  * - "저장"은 누른 처리 안에서 판을 닫고 입력칸을 비워 초점을 준 뒤 보낸다(iPhone 키보드). 실패하면 같은 값으로 다시 연다.
  *   보내는 동안에는 홈을 떠나는 이동을 막고(architect #233 1), 새 "입력"은 저장이 끝난 뒤에 연다(designer #233 6)
  * - 로그인이 풀리면 입력칸의 글과 열려 있거나 보내는 중인 값을 기기에 남기고, 같은 계정으로 홈에 돌아오면 다시 연다(architect #233 3)
- * - 1B 임시: 카테고리 제안(P-219)은 서버 #61 뒤에 넣는다. 그동안 카테고리는 미분류로 연다. 중복 경고(F-209)는 #241
+ * - 카테고리는 열 때 해석한 가맹점으로 제안한다(P-219, useCategorySuggestion). 가맹점을 고쳐 벗어나면 다시 제안하고, 직접 고른
+ *   뒤에는 하지 않는다. 1B 임시: 연결이 없으면 제안 없이 미분류다. 중복 경고(F-209)는 #241
  */
 
 const TITLE = '한 줄 입력 확인'
@@ -139,11 +141,14 @@ export default function OneLineResult({ request, text, setText, input }: OneLine
     if (restored.result) open({ text: restored.result.text, values: restored.result.values, id: restored.result.id })
   })
 
-  /** 판을 연다. 이미 보이면 그 자리(같은 방문 기록 항목)에서 내용만 바꾼다 */
+  /**
+   * 판을 연다. 이미 보이면 그 자리(같은 방문 기록 항목)에서 내용만 바꾼다. 저장의 뒷일(응답 뒤)에서도 부르므로 그린 때의 값이 아니라
+   * 지금의 표시로 본다
+   */
   function open(next: Omit<Session, 'key'>) {
     keys.current += 1
     setSession({ ...next, key: keys.current })
-    if (!shown) pushMark()
+    if (latest.current.mark === undefined) pushMark()
   }
 
   /**
@@ -247,10 +252,14 @@ export default function OneLineResult({ request, text, setText, input }: OneLine
   }
 
   /** "자세히": 지금 값(유형 포함)을 채운 거래 입력(D-04)을 연다. 이 판의 방문 기록 항목을 그 화면으로 바꾼다 */
-  function detail(values: TransactionValues, owner: { userId: string | undefined; ledgerId: string }) {
+  function detail(
+    values: TransactionValues,
+    owner: { userId: string | undefined; ledgerId: string },
+    suggestion: SuggestionState,
+  ) {
     const { session: opened, mark: closing, here: now } = latest.current
     if (!opened) return
-    const state = handOffToEntry(owner, { text: opened.text, values })
+    const state = handOffToEntry(owner, { text: opened.text, values, suggestion })
     void navigate('/transactions/new', { replace: closing !== undefined && now === closing, state })
   }
 
@@ -260,7 +269,7 @@ export default function OneLineResult({ request, text, setText, input }: OneLine
       key={session.key}
       session={session}
       shown={shown}
-      draft={draft}
+      draftRef={draft}
       onClose={close}
       onSending={startSending}
       onDone={finish}
@@ -273,16 +282,20 @@ export default function OneLineResult({ request, text, setText, input }: OneLine
 interface SessionProps {
   session: Session
   shown: boolean
-  draft: RefObject<(() => ResultDraft) | undefined>
+  draftRef: RefObject<(() => ResultDraft) | undefined>
   onClose: () => void
   onSending: (from: Sender) => void
   onDone: (toast: string) => void
   onFailed: () => void
-  onDetail: (values: TransactionValues, owner: { userId: string | undefined; ledgerId: string }) => void
+  onDetail: (
+    values: TransactionValues,
+    owner: { userId: string | undefined; ledgerId: string },
+    suggestion: SuggestionState,
+  ) => void
 }
 
 /** 판 하나: 칸과 저장. 판이 닫혀도(보내는 중) 남아 있다가 실패하면 같은 값으로 다시 그린다 */
-function OneLineSession({ session, shown, draft, onClose, onSending, onDone, onFailed, onDetail }: SessionProps) {
+function OneLineSession({ session, shown, draftRef, onClose, onSending, onDone, onFailed, onDetail }: SessionProps) {
   const ledger = useCurrentLedger()
   const navigate = useNavigate()
   const wide = useWideScreen()
@@ -304,11 +317,35 @@ function OneLineSession({ session, shown, draft, onClose, onSending, onDone, onF
     onDone,
     onFailed,
   })
+  // 되살린 판의 카테고리는 직접 골랐을 수 있어 덮어쓰지 않는다(P-502)
+  const restoredCategory = session.id !== undefined && (session.values.categoryId ?? '') !== ''
+  const suggestion = useCategorySuggestion({
+    form,
+    owner,
+    categories: categories.data,
+    frozen: save.busy,
+    initial: { picked: restoredCategory },
+  })
+  // 열 때 해석한 가맹점으로 제안한다(D-05 해석 규칙 5). 되살린 판은 남긴 값 그대로다
+  const suggestAtOpen = useEffectEvent(() => {
+    if (session.id === undefined) suggestion.suggest(session.values.payee ?? '')
+  })
+  useEffect(() => suggestAtOpen(), [])
+  // 수입으로 바꾸기 전의 지출 카테고리
+  const expenseCategory = useRef<string>(undefined)
+
+  /** 수입으로 바꾸면 카테고리가 수입의 미분류가 되고 제안 도움말이 사라진다. 지출로 돌아오면 그때의 카테고리로 돌아간다(D-05 (3)) */
+  function changeType(type: TransactionType) {
+    const { values, change } = form
+    if (values.type === 'EXPENSE') expenseCategory.current = values.categoryId
+    const back = type === 'EXPENSE' && expenseCategory.current !== undefined ? { categoryId: expenseCategory.current } : {}
+    change({ ...typeChange(values, type, (id) => categoryKindOf(categories.data, id)), ...back })
+  }
   const saveButton = useRef<HTMLButtonElement>(null)
   useLayoutEffect(() => {
-    draft.current = () => ({ id: save.id, text: session.text, values: form.values })
+    draftRef.current = () => ({ id: save.id, text: session.text, values: form.values })
     return () => {
-      draft.current = undefined
+      draftRef.current = undefined
     }
   })
 
@@ -322,7 +359,7 @@ function OneLineSession({ session, shown, draft, onClose, onSending, onDone, onF
   }
 
   function detail() {
-    if (!save.busy) onDetail(form.effective, owner)
+    if (!save.busy) onDetail(form.effective, owner, suggestion.state)
   }
 
   /** "저장된 거래 보기"(current를 읽지 못한 409). 확인 창 없이 입력을 버리고 그 거래로 간다(planner #102) */
@@ -332,7 +369,15 @@ function OneLineSession({ session, shown, draft, onClose, onSending, onDone, onF
     if (!save.busy) void navigate(path)
   }
 
-  const fields = <OneLineFields form={form} readOnly={save.busy} text={session.text} />
+  const fields = (
+    <OneLineFields
+      form={form}
+      readOnly={save.busy}
+      text={session.text}
+      suggestion={suggestion}
+      onTypeChange={changeType}
+    />
+  )
   const messages = <SaveFailureMessages save={save} onViewSaved={viewSaved} />
   const saveAction = (
     <Button ref={saveButton} kind="primary" type="submit" busy={save.saveBusy} disabled={save.messageBusy}>
@@ -425,27 +470,24 @@ interface FieldsProps {
   readOnly: boolean
   /** 입력한 글 */
   text: string
+  suggestion: Pick<CategorySuggestion, 'help' | 'suggest' | 'pick'>
+  onTypeChange: (type: TransactionType) => void
 }
 
 /** D-05 (2)~(8). 모양과 검증은 D-04의 같은 칸과 같다. 넓은 화면은 (4)~(6)이 한 줄, (7)~(8)이 한 줄이다 */
-function OneLineFields({ form, readOnly, text }: FieldsProps) {
+function OneLineFields({ form, readOnly, text, suggestion, onTypeChange }: FieldsProps) {
   const { values, effective, change, control, check } = form
-  const categories = useEntryCategories()
   const dateTimeId = useId()
   // 금액은 해석한 값으로 열린다. 고친 뒤에만 벗어날 때 검사한다(D-04와 같다)
   const amountTouched = useRef(false)
   const { error: accountError, ref: accountRef } = control('accountId')
   const { error: categoryError, ref: categoryRef } = control('categoryId')
 
-  function changeType(type: TransactionType) {
-    change(typeChange(values, type, (id) => categoryKindOf(categories.data, id)))
-  }
-
   return (
     <>
       <p className={styles.typed}>입력한 글: {text}</p>
       <div className={styles.fieldRow}>
-        <SegmentedChoice label="유형" options={typeOptions} value={values.type} onChange={changeType} readOnly={readOnly} />
+        <SegmentedChoice label="유형" options={typeOptions} value={values.type} onChange={onTypeChange} readOnly={readOnly} />
       </div>
       <div className={styles.fieldRow}>
         <AmountField
@@ -473,7 +515,10 @@ function OneLineFields({ form, readOnly, text }: FieldsProps) {
           readOnly={readOnly}
           count={{ current: payeeLength(values.payee), max: PAYEE_MAX }}
           onChange={(event) => change({ payee: event.target.value })}
-          onBlur={() => check('payee')}
+          onBlur={() => {
+            check('payee')
+            suggestion.suggest(values.payee)
+          }}
           onKeyDown={keepComposingEnter}
         />
         <CategoryField
@@ -481,8 +526,12 @@ function OneLineFields({ form, readOnly, text }: FieldsProps) {
           kind={values.type === 'INCOME' ? 'INCOME' : 'EXPENSE'}
           value={values.categoryId}
           error={categoryError}
+          help={suggestion.help}
           readOnly={readOnly}
-          onChange={(categoryId) => change({ categoryId }, { check: ['categoryId'] })}
+          onChange={(categoryId) => {
+            suggestion.pick()
+            change({ categoryId }, { check: ['categoryId'] })
+          }}
         />
       </div>
       <div className={styles.fieldRow}>

@@ -10,6 +10,7 @@ import { clampDate, isDate, selectableRange, today as todayOfDevice } from '../.
 import { useKeepDraft } from '../drafts/keepDraft'
 import { useRestoredDraft } from '../drafts/restoreDraft'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
+import { useCategorySuggestion } from './categorySuggestion'
 import { EntryCopiesContext, useEntryAccounts, useEntryCategories } from './entryLists'
 import { defaultAccountOf } from './formDefaults'
 import { useListMemory } from './listMemory'
@@ -65,6 +66,14 @@ export default function TransactionNewPage() {
     unfoldFor,
     onDone: leaveAfterSave,
   })
+  // 새 지출의 가맹점/내용을 벗어나면 카테고리를 제안한다(D-04 (4)). D-05의 "자세히"면 그 상태를 잇는다
+  const suggestion = useCategorySuggestion({
+    form,
+    owner,
+    categories: categories.data,
+    frozen: save.busy,
+    initial: handoff?.suggestion,
+  })
   const guard = useLeaveGuard({ parent: HOME, changed: form.changed, busy: save.busy })
   // 로그인이 풀리면 쓰던 값과 거래 id를 이 기기에 남기고, 같은 계정으로 이 주소에 돌아오면 채운다(00-common 4.1, #234 C2).
   // 저장은 사용자가 다시 누르고, 같은 id로 보낸다(앞 요청이 서버에 저장됐을 수 있다)
@@ -74,6 +83,8 @@ export default function TransactionNewPage() {
     if (!draft) return
     save.setId(draft.id)
     form.change(draft.values)
+    // 남긴 카테고리는 직접 골랐을 수 있다. 덮어쓰지 않는다(P-502)
+    if (draft.values.categoryId !== '') suggestion.pick()
     if (draft.values.memo !== '') setMoreOpen(true)
   })
 
@@ -114,7 +125,13 @@ export default function TransactionNewPage() {
           </>
         }
       >
-        <TransactionFields form={form} readOnly={save.busy} moreOpen={moreOpen} onMoreOpenChange={setMoreOpen} />
+        <TransactionFields
+          form={form}
+          readOnly={save.busy}
+          moreOpen={moreOpen}
+          onMoreOpenChange={setMoreOpen}
+          suggestion={suggestion}
+        />
       </FullScreenForm>
       <SaveChoiceDialog save={save} form={form} />
     </EntryCopiesContext>

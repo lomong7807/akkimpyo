@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Accounts } from './support/accounts'
+import type { CategorySuggestions } from './support/categories'
 import { delayed, meOf, type Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
 import { goOffline } from './support/connection'
@@ -19,6 +20,7 @@ import {
   categoryField,
   dateField,
   errorOf,
+  hasSuggestedHelp,
   id,
   LAST_ACCOUNT_KEY,
   LEDGER,
@@ -56,11 +58,12 @@ let backend: Backend
 let accounts: Accounts
 let transactions: Transactions
 let list: TransactionList
+let suggestions: CategorySuggestions
 
 beforeEach(() => {
   setDeviceClock(NOW)
   vi.stubGlobal('scrollTo', vi.fn())
-  ;({ backend, transactions, accounts } = startServer(server))
+  ;({ backend, transactions, accounts, suggestions } = startServer(server))
   list = startTransactionList(server, backend)
   installIntersectionObserver()
   localStorage.clear()
@@ -317,6 +320,121 @@ describe('결과 확인(D-05) 휴대폰 배치', () => {
     await user.click(saveButton())
     await waitFor(() => expect(transactions.sent).toHaveLength(1))
     expect(transactions.sent[0].body.occurredTime).toBeNull()
+  })
+})
+
+describe('카테고리 제안(D-05 (6), P-219)', () => {
+  beforeEach(() => {
+    suggestions.byPayee.set('점심', id.dining)
+    suggestions.byPayee.set('이마트', id.grocery)
+  })
+
+  it('해석한 가맹점으로 같은 가맹점에 쓴 지출의 카테고리를 채우고 칸 아래에 도움말을 보인다', async () => {
+    const { user } = await openHome()
+    await openResult(user)
+    await waitFor(() => expect(categoryField().textContent).toBe('외식'))
+    expect(hasSuggestedHelp()).toBe(true)
+    expect(suggestions.requests).toEqual(['점심'])
+    // 제안이 와도 초점은 저장에 있다
+    expect(document.activeElement).toBe(saveButton())
+  })
+
+  it('그런 지출이 없으면 미분류이고 도움말이 없다', async () => {
+    const { user } = await openHome()
+    await openResult(user, '택시 8000')
+    await settle()
+    expect(categoryField().textContent).toBe('미분류')
+    expect(hasSuggestedHelp()).toBe(false)
+    expect(suggestions.requests).toEqual(['택시'])
+  })
+
+  it('가맹점이 비어 있으면 묻지 않고 미분류다', async () => {
+    const { user } = await openHome()
+    await openResult(user, '12000')
+    await settle()
+    expect(categoryField().textContent).toBe('미분류')
+    expect(suggestions.requests).toEqual([])
+  })
+
+  it('카테고리를 바꾸면 도움말이 사라지고, 그 뒤에는 가맹점을 바꿔도 덮어쓰지 않는다', async () => {
+    const { user } = await openHome()
+    await openResult(user)
+    await waitFor(() => expect(categoryField().textContent).toBe('외식'))
+    await pick(user, categoryField(), '교통')
+    expect(hasSuggestedHelp()).toBe(false)
+    await user.clear(payee())
+    await user.type(payee(), '이마트')
+    await user.tab()
+    await settle()
+    expect(categoryField().textContent).toBe('교통')
+    expect(suggestions.requests).toEqual(['점심'])
+  })
+
+  it('가맹점을 바꾸고 칸을 벗어나면 같은 규칙으로 다시 제안한다', async () => {
+    const { user } = await openHome()
+    await openResult(user)
+    await waitFor(() => expect(categoryField().textContent).toBe('외식'))
+    await user.clear(payee())
+    await user.type(payee(), '이마트')
+    await user.tab()
+    await waitFor(() => expect(categoryField().textContent).toBe('장보기'))
+    expect(hasSuggestedHelp()).toBe(true)
+  })
+
+  it('수입으로 바꾸면 미분류이고 도움말이 없으며, 지출로 돌아오면 제안한 카테고리로 돌아간다', async () => {
+    const { user } = await openHome()
+    await openResult(user)
+    await waitFor(() => expect(categoryField().textContent).toBe('외식'))
+    await user.click(typeRadio('수입'))
+    expect(categoryField().textContent).toBe('미분류')
+    expect(hasSuggestedHelp()).toBe(false)
+    await user.click(typeRadio('지출'))
+    expect(categoryField().textContent).toBe('외식')
+    expect(hasSuggestedHelp()).toBe(true)
+  })
+
+  it('저장하면 제안한 카테고리로 보낸다', async () => {
+    const { user } = await openHome()
+    await openResult(user)
+    await waitFor(() => expect(categoryField().textContent).toBe('외식'))
+    await user.click(saveButton())
+    await waitFor(() => expect(transactions.sent).toHaveLength(1))
+    expect(transactions.sent[0].body).toMatchObject({ payee: '점심', categoryId: id.dining })
+  })
+
+  it('"자세히"는 제안한 카테고리와 도움말을 거래 입력에 넘긴다', async () => {
+    const { user } = await openHome()
+    await openResult(user)
+    await waitFor(() => expect(categoryField().textContent).toBe('외식'))
+    await user.click(detailButton())
+    await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+    await waitFor(() => expect(categoryField().textContent).toBe('외식'))
+    expect(hasSuggestedHelp()).toBe(true)
+  })
+
+  it('D-05에서 직접 고른 카테고리는 "자세히"로 연 거래 입력에서 가맹점을 바꿔도 덮어쓰지 않는다', async () => {
+    const { user } = await openHome()
+    await openResult(user)
+    await waitFor(() => expect(categoryField().textContent).toBe('외식'))
+    await pick(user, categoryField(), '교통')
+    await user.click(detailButton())
+    await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+    await waitFor(() => expect(categoryField().textContent).toBe('교통'))
+    await user.clear(payee())
+    await user.type(payee(), '이마트')
+    await user.tab()
+    await settle()
+    expect(categoryField().textContent).toBe('교통')
+    expect(suggestions.requests).toEqual(['점심'])
+  })
+
+  it('연결이 없으면 묻지 않고 미분류다(1B 임시)', async () => {
+    const { user } = await openHome()
+    goOffline()
+    await openResult(user)
+    await settle()
+    expect(categoryField().textContent).toBe('미분류')
+    expect(suggestions.requests).toEqual([])
   })
 })
 

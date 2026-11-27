@@ -8,6 +8,7 @@ import SegmentedChoice from '../../components/SegmentedChoice'
 import TextAreaField from '../../components/TextAreaField'
 import { TextField } from '../../components/TextField'
 import TimeField from '../../components/TimeField'
+import type { CategorySuggestion } from './categorySuggestion'
 import { enterToNext, keepComposingEnter } from './fieldKeys'
 import { categoryKindOf } from './formDefaults'
 import { useEntryCategories } from './entryLists'
@@ -41,6 +42,8 @@ interface TransactionFieldsProps {
    * 열 때 금액에 초점을 두지 않는다(D-04 (3)). 나머지 칸과 검사는 새 입력과 같다.
    */
   editing?: boolean
+  /** 새 지출의 카테고리 제안(D-04 (4), P-219). 수정과 고쳐서 보내기에는 없다 */
+  suggestion?: Pick<CategorySuggestion, 'help' | 'suggest' | 'pick'>
 }
 
 /** D-04 새 입력과 수정의 칸(유형, 금액, 가맹점/내용, 카테고리, 계좌, 날짜, 더 보기 아래의 시각과 메모) */
@@ -50,6 +53,7 @@ export default function TransactionFields({
   moreOpen,
   onMoreOpenChange,
   editing = false,
+  suggestion,
 }: TransactionFieldsProps) {
   const { values, effective, change, control, check } = form
   const categories = useEntryCategories()
@@ -128,7 +132,10 @@ export default function TransactionFields({
             readOnly={readOnly}
             count={{ current: payeeLength(values.payee), max: PAYEE_MAX }}
             onChange={(event) => change({ payee: event.target.value })}
-            onBlur={() => check('payee')}
+            onBlur={() => {
+              check('payee')
+              suggestion?.suggest(values.payee)
+            }}
             onKeyDown={keepComposingEnter}
           />
           <CategoryField
@@ -136,8 +143,12 @@ export default function TransactionFields({
             kind={values.type === 'INCOME' ? 'INCOME' : 'EXPENSE'}
             value={values.categoryId}
             error={categoryError}
+            help={suggestion?.help}
             readOnly={readOnly}
-            onChange={(categoryId) => picked('categoryId', categoryId)}
+            onChange={(categoryId) => {
+              suggestion?.pick()
+              picked('categoryId', categoryId)
+            }}
           />
         </>
       )}
