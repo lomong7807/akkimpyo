@@ -42,24 +42,6 @@ export function lazyScreen(load: () => Promise<{ default: ComponentType }>, shel
   let loading: Promise<ComponentType> | undefined
 
   function fetchScreen(): Promise<ComponentType> {
-    // 임시(#291): 화면 코드를 받는 데 걸린 시간을 잰다(tests/support/setup.ts가 찍는다). ready 전에 되돌린다
-    if (!loading) {
-      const started = performance.now()
-      const record = () => {
-        const store = globalThis as { __lazy291?: number[] }
-        ;(store.__lazy291 ??= []).push(Math.round(performance.now() - started))
-      }
-      loading = load().then(
-        (module) => {
-          record()
-          return (loaded = module.default)
-        },
-        (error: unknown) => {
-          loading = undefined
-          throw error
-        },
-      )
-    }
     loading ??= load().then(
       (module) => (loaded = module.default),
       (error: unknown) => {

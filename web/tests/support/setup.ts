@@ -1,10 +1,7 @@
 // jsdom에는 IndexedDB가 없다. 규격대로 도는 가짜를 전역에 둔다(devDependency, #234)
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
-import { appendFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterAll, afterEach, beforeEach, expect, vi } from 'vitest'
+import { afterAll, beforeEach, expect, vi } from 'vitest'
 import { connection } from '../../src/api/connection'
 import { DEFAULT_NOW, setDeviceClock } from './clock'
 import { reconnectStaticApp } from './staticConnection'
@@ -19,26 +16,6 @@ beforeEach(() => {
 // 앱을 새로 여는 테스트는 vi.resetModules()로 앱 모듈을 다시 읽는다. 시계 모듈까지 다시 읽으면 테스트가 정한 시계가 새 앱에
 // 닿지 않는다. 그대로 돌려주는 mock으로 두면 resetModules가 다시 읽지 않아 한 파일 안에서 하나를 나눠 쓴다.
 vi.mock(import('../../src/lib/clock'), (importOriginal) => importOriginal())
-
-// 임시(#291): 화면 코드를 받는 데 걸린 시간(src/app/lazyScreen)을 파일마다 첫 테스트와 나머지로 나눠 찍는다. ready 전에 되돌린다
-const lazyByTest: number[][] = []
-let lazySeen = 0
-afterEach(() => {
-  const all = (globalThis as { __lazy291?: number[] }).__lazy291 ?? []
-  lazyByTest.push(all.slice(lazySeen))
-  lazySeen = all.length
-})
-afterAll(() => {
-  const firstWith = lazyByTest.findIndex((loads) => loads.length > 0)
-  if (firstWith < 0) return
-  const rest = lazyByTest.slice(firstWith + 1).flat().sort((a, b) => a - b)
-  const file = (expect.getState().testPath ?? '').replace(/^.*\/tests\//, 'tests/')
-  const pick = (q: number) => rest[Math.min(rest.length - 1, Math.floor(rest.length * q))] ?? '-'
-  appendFileSync(
-    join(tmpdir(), 'lazy291.txt'),
-    `LAZY291 ${file} firstTest#${firstWith + 1}=[${lazyByTest[firstWith].join(',')}] rest n=${rest.length} p50=${pick(0.5)} p90=${pick(0.9)} max=${rest.at(-1) ?? '-'}\n`,
-  )
-})
 
 // 테스트마다 기기의 지금과 시간대를 정해 둔다. 테스트를 돌리는 기기의 시계와 시간대(TZ)를 보지 않는다(#225)
 beforeEach(() => setDeviceClock(DEFAULT_NOW))
