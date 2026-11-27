@@ -4,15 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import app.accountbook.account.Account;
+import app.accountbook.account.AccountService;
 import app.accountbook.account.AccountType;
 import app.accountbook.auth.LoginService;
+import app.accountbook.category.CategoryService;
 import app.accountbook.ledger.LedgerRole;
+import app.accountbook.ledger.LedgerService;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
-import app.accountbook.support.StoppedClockConfig;
 import app.accountbook.support.StoppedClockConfig.StoppedClock;
+import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.User;
+import app.accountbook.user.UserService;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -22,26 +26,26 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Import;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.support.StaticApplicationContext;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.support.TransactionTemplate;
 
-/** local 프로파일에서 데모 데이터 넣기·두 번 넣기·지우기(#349). 서비스가 만든 행을 JDBC로 세므로 세기 전에 flush한다. */
+/** 데모 데이터 넣기·지우기(#349). 컨텍스트를 늘리지 않게 공용 컨텍스트의 서비스와 local 환경으로 DemoSeed를 직접 만든다. */
 @IntegrationTest
-@ActiveProfiles(DemoSeed.PROFILE)
-@Import(StoppedClockConfig.class)
 class DemoSeedTest {
 
     /** 서울은 2026-03-01 00:30이고 UTC는 아직 2월 28일이다. */
     private static final Instant SEOUL_MARCH_FIRST = Instant.parse("2026-02-28T15:30:00Z");
     private static final String OTHER_EMAIL = "other-user@example.com";
 
-    @Autowired
-    DemoSeed seed;
+    private final StaticApplicationContext seedContext = new StaticApplicationContext();
+    private final ConfigurableEnvironment environment = seedContext.getEnvironment();
+    private DemoSeed seed;
 
     @Autowired
-    StoppedClock clock;
+    ApplicationContext app;
 
     @Autowired
     Fixtures fixtures;
@@ -55,12 +59,14 @@ class DemoSeedTest {
     @Autowired
     EntityManager entityManager;
 
-    @Autowired
-    ConfigurableEnvironment environment;
-
     @BeforeEach
-    void stopClock() {
+    void localSeed() {
+        environment.setActiveProfiles(DemoSeed.PROFILE);
+        StoppedClock clock = new StoppedClock();
         clock.stopAt(SEOUL_MARCH_FIRST);
+        seed = new DemoSeed(app.getBean(UserService.class), app.getBean(LedgerService.class),
+                app.getBean(AccountService.class), app.getBean(CategoryService.class),
+                app.getBean(TransactionService.class), jdbc, app.getBean(TransactionTemplate.class), seedContext, clock);
     }
 
     @Test
@@ -128,12 +134,9 @@ class DemoSeedTest {
         Map<String, Integer> before = rowCounts();
 
         environment.addActiveProfile("prod");
-        try {
-            assertThatThrownBy(seed::insert).isInstanceOf(IllegalStateException.class);
-            assertThatThrownBy(seed::remove).isInstanceOf(IllegalStateException.class);
-        } finally {
-            environment.setActiveProfiles(DemoSeed.PROFILE);
-        }
+
+        assertThatThrownBy(seed::insert).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(seed::remove).isInstanceOf(IllegalStateException.class);
         assertThat(rowCounts()).isEqualTo(before);
     }
 
