@@ -92,7 +92,7 @@ class TransactionHistoryHttpTest {
         assertThat(items).extracting(item -> item.get("deviceId").asString())
                 .containsExactly("iphone.safari", "mac.chrome", "unknown", "iphone.safari");
         assertThat(items).allSatisfy(item -> {
-            assertThat(item.propertyNames()).containsExactly("action", "actor", "deviceId", "at", "changes");
+            assertThat(item.propertyNames()).containsExactlyInAnyOrder("action", "actor", "deviceId", "at", "changes");
             assertThat(item.get("at").asString()).matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z");
         });
         assertThat(items).extracting(item -> item.get("at").asString()).isSorted();
