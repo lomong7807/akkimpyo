@@ -19,14 +19,8 @@ import {
   type TransactionField,
 } from './transactionForm'
 import { rejectedFields } from './transactionRejection'
-import {
-  idConflictOf,
-  needsResendNotice,
-  staleVersionOf,
-  type CreateResult,
-  type NewTransaction,
-  type TransactionDetail,
-} from './transactions'
+import type { CreateResult, NewTransaction, TransactionDetail } from './transactions'
+import { idConflictOf, needsResendNotice, staleVersionOf } from './transactionWrites'
 import { useCreateTransaction } from './useCreateTransaction'
 import type { TransactionForm } from './useTransactionForm'
 import { useUpdateTransaction } from './useUpdateTransaction'

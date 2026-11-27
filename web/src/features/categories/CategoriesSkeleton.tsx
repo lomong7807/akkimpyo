@@ -1,4 +1,4 @@
-import { SegmentedChoiceSpace } from '../../components/SegmentedChoice'
+import { SegmentedChoiceSpace } from '../../components/SegmentedChoiceSpace'
 import Skeleton, { SkeletonBar } from '../../components/Skeleton'
 import styles from './Categories.module.css'
 

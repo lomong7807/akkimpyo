@@ -6,7 +6,7 @@ import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { ledgerKey, LEDGER_LIST } from '../me/ledgerKey'
 import { ledgerPath } from '../me/ledgerPath'
 import { isDayTotal, type DayTotal } from './transactions'
-import { TRANSACTION_LIST_STALE_MS } from './useTransactionList'
+import { TRANSACTION_LIST_STALE_MS } from './transactionListQueries'
 
 /*
  * 달력용 날짜별 합계(#66의 응답 계약). 경로, 쿼리, 필드 이름은 이 파일에만 있다.

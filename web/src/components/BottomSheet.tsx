@@ -1,6 +1,7 @@
 import { useId, useRef, type ReactNode } from 'react'
 import { Button } from './Button'
 import { useDragDown } from './dragDown'
+import { X } from './icons'
 import Overlay from './Overlay'
 import styles from './BottomSheet.module.css'
 
@@ -36,7 +37,7 @@ export default function BottomSheet({
             <h2 id={titleId} className={styles.title} tabIndex={titleFocusable ? -1 : undefined}>
               {title}
             </h2>
-            <Button kind="icon" icon="X" aria-label="닫기" disabled={closeDisabled} onClick={onClose} />
+            <Button kind="icon" icon={X} aria-label="닫기" disabled={closeDisabled} onClick={onClose} />
           </div>
         </div>
         <div className={styles.content}>{children}</div>

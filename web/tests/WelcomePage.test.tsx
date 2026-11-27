@@ -16,6 +16,7 @@ import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { untilShown } from './support/shownScreen'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { createFakeLocks, installLocks, removeLocks } from './support/webLocks'
 
@@ -586,6 +587,8 @@ describe('계좌 만들기', () => {
     await act(() => opened.router.navigate(-1))
     await waitFor(() => expect(path(opened)).toBe('/home'))
     expect(opened.router.state.historyAction).toBe('REPLACE')
+    // 없음을 보는 곳이다. 주소는 화면보다 먼저 바뀌므로 홈이 그려진 뒤에 본다(#291)
+    await untilShown(opened.router)
     expect(screen.queryByRole('heading', { level: 1, name: firstTitle })).toBeNull()
   })
 

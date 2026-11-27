@@ -26,6 +26,14 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query(value = "update users set password_hash = :hash where id = :id", nativeQuery = true)
     void updatePasswordHash(@Param("id") UUID id, @Param("hash") String hash);
 
+    /**
+     * 표시 이름 칸만 고친다. 고친 행의 수(없는 사용자면 0)다. 엔터티를 저장하면 모든 칸을 다시 쓰므로, 읽은 뒤에 바뀐 비밀번호 해시를
+     * 읽었던 값으로 되돌릴 수 있다. 앞의 변경은 먼저 내보내고, 영속성 컨텍스트를 비워 이어서 읽는 값이 고친 뒤의 값이게 한다.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update User u set u.displayName = :displayName where u.id = :id")
+    int updateDisplayName(@Param("id") UUID id, @Param("displayName") String displayName);
+
     /** 장부의 구성원인 사용자를 한 번에 읽는다. */
     @Query("select u from User u join LedgerMember m on m.userId = u.id where m.ledgerId = :ledgerId")
     List<User> findMembersOf(UUID ledgerId);

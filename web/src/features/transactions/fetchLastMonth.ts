@@ -1,7 +1,8 @@
 import type { SenderCheck } from '../../api/request'
 import { addDays, monthOf, moveMonth } from '../../lib/calendarDate'
 import { KEPT_DAYS, type LastMonth } from './lastMonth'
-import { fetchLedgerPage, fetchMonthTotals, type DayTotal, type IncomeAndExpense, type ListedTransaction } from './transactions'
+import { fetchLedgerPage } from './transactionPages'
+import { fetchMonthTotals, type DayTotal, type IncomeAndExpense, type ListedTransaction } from './transactions'
 
 /*
  * 최근 한 달(P-902)을 서버에서 받는 곳은 여기 하나다(#238). 첫 화면 묶음을 늘리지 않으려고 쓸 때 따로 싣는다(architect #238).

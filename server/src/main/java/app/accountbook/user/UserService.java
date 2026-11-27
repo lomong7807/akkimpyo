@@ -32,6 +32,7 @@ public class UserService {
     /** V1의 이름 없는 UNIQUE (email)에 PostgreSQL이 붙인 제약 이름. */
     private static final String EMAIL_UNIQUE_CONSTRAINT = "users_email_key";
 
+    private static final String DISPLAY_NAME_FIELD = "displayName";
     private static final String LOGIN_FAILED = "로그인 실패: {}";
     private static final String UNKNOWN_ACCOUNT = "알 수 없는 계정";
     private static final String CHANGE_FAILED = "비밀번호 바꾸기 실패: 사용자 {}, {}";
@@ -81,8 +82,7 @@ public class UserService {
         String email = checked(errors, () -> EmailNormalizer.normalize(rawEmail));
         // 해시할 때도 같은 규칙을 본다. 여기서는 DB 조회와 해시보다 먼저 떨어뜨리려고 부른다.
         checked(errors, () -> PasswordPolicy.normalizeAndValidate(rawPassword));
-        String displayName = checked(errors,
-                () -> Names.normalize(rawDisplayName, User.DISPLAY_NAME_MAX_LENGTH, "displayName"));
+        String displayName = checked(errors, () -> normalizeDisplayName(rawDisplayName));
         if (!errors.isEmpty()) {
             throw InvalidRequestException.ofAll(errors);
         }
@@ -205,6 +205,30 @@ public class UserService {
      */
     public UserProfile profile(UUID actorId) {
         return userRepository.findById(actorId).map(UserProfile::of).orElseThrow(NotFoundException::new);
+    }
+
+    /**
+     * 호출자 자신의 표시 이름을 바꾸고 바뀐 값을 준다(#68, F-014). 다른 사용자를 고를 인자는 없고 이메일은 바꾸지 않는다(P-113).
+     * 규칙은 가입과 같다(P-101, {@link #normalizeDisplayName}). 같은 이름이어도 성공이다. 나중 저장이 덮어쓴다.
+     * 표시 이름 칸만 고쳐, 그 사이에 바뀐 비밀번호 해시를 되돌리지 않는다. 토큰을 확인한 뒤 사용자가 지워졌으면
+     * {@link NotFoundException}이다. 거래 응답의 사람 이름은 사본이 아니라 응답 때 읽는 값({@link #memberDisplayNames})이라
+     * 내가 속한 모든 장부에 바로 새 이름이 나온다.
+     */
+    public UserProfile changeDisplayName(UUID actorId, String rawDisplayName) {
+        String displayName = normalizeDisplayName(rawDisplayName);
+        UserProfile profile = transactionTemplate.execute(status -> {
+            if (userRepository.updateDisplayName(actorId, displayName) == 0) {
+                throw new NotFoundException();
+            }
+            return profile(actorId);
+        });
+        log.info("표시 이름 바꿈: 사용자 {}", actorId);
+        return profile;
+    }
+
+    /** 가입과 표시 이름 바꾸기가 같은 규칙을 쓴다(P-101): P-214의 이름 규칙으로 맞춘 1~20자. */
+    private static String normalizeDisplayName(String raw) {
+        return Names.normalize(raw, User.DISPLAY_NAME_MAX_LENGTH, DISPLAY_NAME_FIELD);
     }
 
     /** 규칙에 맞으면 맞춘 값, 아니면 오류를 모으고 null. */

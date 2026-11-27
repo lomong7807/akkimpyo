@@ -36,6 +36,7 @@ import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
 import app.accountbook.transaction.TransactionExportQuery;
+import app.accountbook.transaction.TransactionHistoryQuery;
 import app.accountbook.transaction.TransactionListQuery;
 import app.accountbook.transaction.TransactionPage.DayTotals;
 import app.accountbook.transaction.TransactionScope.Day;
@@ -104,6 +105,7 @@ class CrossLedgerAccessTest {
     @Autowired TransactionService transactionService;
     @Autowired TransactionListQuery transactionListQuery;
     @Autowired TransactionTrashQuery transactionTrashQuery;
+    @Autowired TransactionHistoryQuery transactionHistoryQuery;
     @Autowired CategorySuggestionQuery categorySuggestionQuery;
     @Autowired TransactionExportQuery transactionExportQuery;
     @Autowired BalanceQuery balanceQuery;
@@ -191,6 +193,7 @@ class CrossLedgerAccessTest {
         transactionService = recorded(transactionService);
         transactionListQuery = recorded(transactionListQuery);
         transactionTrashQuery = recorded(transactionTrashQuery);
+        transactionHistoryQuery = recorded(transactionHistoryQuery);
         categorySuggestionQuery = recorded(categorySuggestionQuery);
         transactionExportQuery = recorded(transactionExportQuery);
         balanceQuery = recorded(balanceQuery);
@@ -208,6 +211,7 @@ class CrossLedgerAccessTest {
                 Stream.of(
                         dynamicTest("구성원 확인: 예외 없이 답하는 isMember", this::verifyIsMember),
                         dynamicTest("내 정보: 대상 없이 호출자의 것만 답한다", this::verifyOwnInfo),
+                        dynamicTest("표시 이름 바꾸기: 대상 없이 호출자의 것만 바꾼다", this::verifyOwnDisplayName),
                         dynamicTest("표가 호출자를 받는 공개 메서드를 모두 다룬다", this::verifyTableCoversInventory)));
     }
 
@@ -236,6 +240,21 @@ class CrossLedgerAccessTest {
         assertThat(asA(() -> userService.checkPasswordChange(a, "password1", "password2")).userId()).isEqualTo(a);
         assertThat(asA(() -> catchThrowable(() -> passwordChangeService.changePassword(a, "wrong-pass1", "password2",
                 null)))).isInstanceOf(InvalidRequestException.class);
+        assertThat(snapshot()).isEqualTo(baseline);
+    }
+
+    /**
+     * 표시 이름 바꾸기(#68)도 대상 id를 받지 않는다. A가 부르면 A의 이름만 바뀌고 돌려준 값에 B의 것이 없다.
+     * 바꾼 것은 SAVEPOINT로 되돌린다.
+     */
+    void verifyOwnDisplayName() {
+        Throwable failure = rolledBack(() -> {
+            UserProfile profile = asA(() -> userService.changeDisplayName(a, "A새이름"));
+            assertThat(profile).isEqualTo(new UserProfile("a@example.com", "A새이름"));
+            assertThat(jdbc.queryForList("select display_name from users where id in (?, ?) order by email",
+                    String.class, a, b)).containsExactly("A새이름", "b");
+        });
+        assertThat(failure).isNull();
         assertThat(snapshot()).isEqualTo(baseline);
     }
 
@@ -320,6 +339,10 @@ class CrossLedgerAccessTest {
                         (actor, tx) -> transactionService.history(actor, tx)),
                 denied("조회: 변경 이력(삭제한 거래)", NotFoundException.class, bDeleted.id(),
                         (actor, tx) -> transactionService.history(actor, tx)),
+                denied("조회: 변경 이력(B의 장부 경로)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionHistoryQuery.history(actor, ledger, bExpense.id())),
+                foreign("조회: A의 장부 경로로 B의 거래 변경 이력", NotFoundException.class, bExpense.id(), aExpense.id(),
+                        (actor, tx) -> transactionHistoryQuery.history(actor, ledgerA, tx)),
                 denied("조회: 휴지통", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionTrashQuery.page(actor, ledger, null)),
                 denied("조회: 거래 목록(달)", NotLedgerMemberException.class, ledgerB,
