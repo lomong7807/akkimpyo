@@ -3,6 +3,7 @@ package app.accountbook.transaction;
 import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import app.accountbook.stats.MonthlyStatsQuery;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.support.StoppedClockConfig;
 import app.accountbook.support.StoppedClockConfig.StoppedClock;
@@ -60,6 +61,7 @@ class TransactionListPlanTest {
     private static final AtomicInteger PREPARED = new AtomicInteger();
 
     @Autowired TransactionListQuery listQuery;
+    @Autowired MonthlyStatsQuery monthlyStatsQuery;
     @Autowired StoppedClock clock;
     @Autowired JdbcTemplate jdbc;
 
@@ -153,6 +155,19 @@ class TransactionListPlanTest {
                 listQuery.dailyTotals(BIG_OWNER, BIG_LEDGER, YearMonth.of(2026, 11))).hasSize(27));
 
         Statement sums = pick(daily, Kind.MONTH_DAYS);
+        String custom = explain(sums, "force_custom_plan");
+        assertThat(custom).contains("ix_transaction_ledger_occurred_on").doesNotContain("Seq Scan");
+        assertThat(mostRowsReadByAScan(custom)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG).isLessThan(500);
+        assertThat(explain(sums, "force_generic_plan")).doesNotContain("Seq Scan");
+    }
+
+    /** 월별 통계(#16)도 그 달만 읽는다. 달의 구간 조건이 날짜별 합계와 같고, 라인·거래·카테고리에 장부 조건이 있다. */
+    @Test
+    void 월별_통계는_큰_장부에서_그_달의_거래만_읽는다() {
+        List<Statement> monthly = statements("월별 통계 2026-11", () -> assertThat(
+                monthlyStatsQuery.monthly(BIG_OWNER, BIG_LEDGER, YearMonth.of(2026, 11)).expense()).isPositive());
+
+        Statement sums = pick(monthly, Kind.TOTALS);
         String custom = explain(sums, "force_custom_plan");
         assertThat(custom).contains("ix_transaction_ledger_occurred_on").doesNotContain("Seq Scan");
         assertThat(mostRowsReadByAScan(custom)).as("큰 장부 %d건 가운데 한 훑기가 읽은 행", BIG).isLessThan(500);
