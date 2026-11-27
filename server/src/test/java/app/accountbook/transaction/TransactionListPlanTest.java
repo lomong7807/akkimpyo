@@ -230,6 +230,30 @@ class TransactionListPlanTest {
         assertThat(explain(duplicates, "force_generic_plan")).doesNotContain("Seq Scan");
     }
 
+    /**
+     * 검색(#64)은 새 인덱스 없이 장부·날짜 인덱스로 좁힌다. 기간을 주면 쪽과 합계가 그 기간만 읽지만, 기간이 없으면 장부의
+     * 거래를 모두 훑는다(가맹점·메모의 부분 일치에 쓸 인덱스가 없다. 받아들일지는 perf·dba가 정한다). 맞는 거래가 없는
+     * 검색어라 쪽이 차서 멈추지 않는다. 숫자라 금액 조건도 든다.
+     */
+    @Test
+    void 검색은_기간을_주면_그_기간만_읽고_기간이_없으면_장부_전체를_훑는다() {
+        TransactionSearch month = new TransactionSearch("12345", LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30));
+        List<Statement> november = statements("검색 2026-11", () -> assertThat(listQuery.search(BIG_OWNER, BIG_LEDGER,
+                month, TransactionFilter.NONE, null).items()).isEmpty());
+        TransactionSearch always = new TransactionSearch("12345", null, null);
+        List<Statement> whole = statements("검색 기간 없음", () -> assertThat(listQuery.search(BIG_OWNER, BIG_LEDGER,
+                always, TransactionFilter.NONE, null).items()).isEmpty());
+
+        for (Kind kind : List.of(Kind.PAGE, Kind.TOTALS)) {
+            String custom = explain(pick(november, kind), "force_custom_plan");
+            assertThat(custom).contains("ix_transaction_ledger_occurred_on");
+            assertThat(mostRowsReadExceptLineSeqScan(custom)).as("%s: 큰 장부 %d건 가운데 한 훑기가 읽은 행", kind, BIG)
+                    .isLessThan(500);
+            assertThat(mostRowsReadExceptLineSeqScan(explain(pick(whole, kind), "force_custom_plan")))
+                    .as("%s: 기간 없는 검색은 큰 장부의 거래 %d건을 모두 읽는다", kind, BIG).isGreaterThanOrEqualTo(BIG);
+        }
+    }
+
     /** 앱의 문장을 그대로 PREPARE하고 받은 값으로 실행한 계획. 비교용으로 인덱스를 끈 계획의 비용도 남긴다. */
     private String explain(Statement statement, String planCacheMode) {
         String name = "list_plan_" + PREPARED.incrementAndGet();
@@ -345,7 +369,7 @@ class TransactionListPlanTest {
         return String.join("\n", lines);
     }
 
-    /** JDBC의 ? 자리를 PREPARE의 $1, $2...로 바꾼다. Hibernate의 문장에는 문자열 상수가 없다. */
+    /** JDBC의 ? 자리를 PREPARE의 $1, $2...로 바꾼다. 문장의 문자열 상수는 검색의 이스케이프 글자 '!'뿐이다. */
     private static String numbered(String sql) {
         StringBuilder out = new StringBuilder();
         int n = 0;

@@ -49,6 +49,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>필터({@link TransactionFilter}, #62)는 쪽과 합계에 같이 걸린다. 조건은 {@link #transactionFilter}와
  * {@link #lineFilter}의 고정된 조각에서 고르고 값은 바인딩한다. 쪽은 맞는 라인이 있는 거래를 주고, 합계는 맞는 라인의
  * 금액만 더한다(카테고리 필터의 나눈 거래, F-217).
+ *
+ * <p>검색({@link #search}, #64)은 같은 쪽과 합계 질의에 검색어 조건({@link SearchMatch})을 더한 것이다.
  */
 @Component
 @Transactional(readOnly = true)
@@ -101,6 +103,9 @@ public class TransactionListQuery {
 
     private static final int MAX_DUPLICATES = 5;
 
+    /** 종료일 없는 검색의 끝. 받는 날짜의 끝(#57, #64)과 같다. */
+    private static final LocalDate LAST_DATE = LocalDate.of(9999, 12, 31);
+
     /**
      * 중복 경고(#59). 남은 %s는 빼는 거래의 조건이다. 장부·날짜 인덱스로 그날의 거래만 읽는다. 지출·수입의 라인은 하나이고
      * 그 금액의 크기가 응답의 {@code amount}다(환불 포함). 자르기와 라인 읽기는 {@link #PAGE}와 같다.
@@ -151,11 +156,41 @@ public class TransactionListQuery {
         }
         DateRange range = range(scope, zoneOf(ledgerId));
         TransactionFilter resolved = resolved(ledgerId, filter);
-        List<Transaction> found = find(ledgerId, range, resolved, after, limit + 1);
+        List<Transaction> found = find(ledgerId, range, resolved, null, after, limit + 1);
         List<TransactionView> items = views(found.subList(0, Math.min(limit, found.size())));
-        Totals totals = after != null || scope instanceof WholeLedger ? null : totals(ledgerId, range, resolved);
+        Totals totals = after != null || scope instanceof WholeLedger ? null : totals(ledgerId, range, resolved, null);
         return new TransactionPage(items, found.size() > limit ? TransactionKey.of(items.getLast()) : null, totals,
                 days(ledgerId, items, resolved));
+    }
+
+    /**
+     * 거래 검색(F-223, P-232, #64 응답 계약). 검색어({@link SearchMatch}), 기간, 필터에 모두 맞는 거래를 {@link #page}와 같은
+     * 순서로 {@value #MAX_LIMIT}건씩 준다. 휴지통의 거래는 빠지고 취소한 거래는 든다. 합계는 첫 쪽에만 있고 조건 전체의
+     * P-205다. 날마다 합계는 없다. 기간이 없으면 장부의 모든 날짜(미래 포함)라 장부 전체를 훑을 수 있다(새 인덱스 없음).
+     * 구성원 확인이 조건 검사보다 먼저다.
+     *
+     * @param search 검색어, 기간, 필터가 모두 없으면 {@code q}의 {@code REQUIRED}, 시작일이 종료일보다 뒤면 {@code to}의
+     *               {@code NOT_ALLOWED}다
+     * @param filter {@link #page}와 같다
+     * @param after  앞 쪽의 {@link TransactionPage#next()}. 첫 쪽이면 null
+     */
+    public TransactionPage search(UUID actorId, UUID ledgerId, TransactionSearch search, TransactionFilter filter,
+                                  TransactionKey after) {
+        ledgerAccess.requireMember(actorId, ledgerId);
+        if (search.text() == null && search.from() == null && search.to() == null
+                && filter.equals(TransactionFilter.NONE)) {
+            throw new InvalidRequestException("q", FieldErrorCode.REQUIRED, "검색어, 기간, 필터 가운데 하나는 있어야 합니다.");
+        }
+        if (search.from() != null && search.to() != null && search.from().isAfter(search.to())) {
+            throw new InvalidRequestException("to", FieldErrorCode.NOT_ALLOWED, "종료일은 시작일과 같거나 뒤여야 합니다.");
+        }
+        DateRange range = new DateRange(search.from() == null ? LedgerDates.MIN_DATE : search.from(),
+                (search.to() == null ? LAST_DATE : search.to()).plusDays(1));
+        TransactionFilter resolved = resolved(ledgerId, filter);
+        List<Transaction> found = find(ledgerId, range, resolved, search.text(), after, MAX_LIMIT + 1);
+        List<TransactionView> items = views(found.subList(0, Math.min(MAX_LIMIT, found.size())));
+        return new TransactionPage(items, found.size() > MAX_LIMIT ? TransactionKey.of(items.getLast()) : null,
+                after == null ? totals(ledgerId, range, resolved, search.text()) : null, List.of());
     }
 
     /**
@@ -211,9 +246,9 @@ public class TransactionListQuery {
         return views(query.getResultList().stream().distinct().toList());
     }
 
-    /** 범위 전체에서 필터에 맞는 라인의 P-205 합계. */
-    private Totals totals(UUID ledgerId, DateRange range, TransactionFilter filter) {
-        Map<TransactionType, Long> sums = sums(entityManager.createQuery("""
+    /** 범위 전체에서 필터와 검색어(목록이면 null)에 맞는 라인의 P-205 합계. */
+    private Totals totals(UUID ledgerId, DateRange range, TransactionFilter filter, String text) {
+        Map<TransactionType, Long> sums = sums(SearchMatch.bind(entityManager.createQuery("""
                         select t.type, cast(sum(l.amount) as BigInteger)
                           from TransactionLine l
                           join l.transaction t
@@ -224,7 +259,7 @@ public class TransactionListQuery {
                            and t.deletedAt is null
                            and t.status <> :canceled
                          group by t.type
-                        """.formatted(sumFilter(filter)), Tuple.class)
+                        """.formatted(sumFilter(filter) + SearchMatch.condition(text, "t")), Tuple.class), text)
                 .setParameter("from", range.from())
                 .setParameter("until", range.until()), ledgerId, filter).stream()
                 .collect(Collectors.toMap(row -> row.get(0, TransactionType.class), TransactionListQuery::sum));
@@ -296,11 +331,13 @@ public class TransactionListQuery {
         };
     }
 
-    private List<Transaction> find(UUID ledgerId, DateRange range, TransactionFilter filter, TransactionKey after,
-                                   int size) {
+    /** @param text 검색어. 목록이면 null */
+    private List<Transaction> find(UUID ledgerId, DateRange range, TransactionFilter filter, String text,
+                                   TransactionKey after, int size) {
         String next = after == null ? "" : after.occurredTime() == null ? AFTER_UNTIMED : AFTER_TIMED;
-        TypedQuery<Transaction> query = bind(entityManager.createQuery(PAGE.formatted(pageFilter(filter) + next),
-                        Transaction.class), filter)
+        TypedQuery<Transaction> query = SearchMatch.bind(bind(entityManager.createQuery(
+                PAGE.formatted(pageFilter(filter) + SearchMatch.condition(text, "p") + next), Transaction.class),
+                filter), text)
                 .setParameter("ledgerId", ledgerId)
                 .setParameter("from", range.from())
                 .setParameter("until", range.until())
