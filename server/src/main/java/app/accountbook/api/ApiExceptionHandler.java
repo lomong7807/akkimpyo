@@ -2,6 +2,7 @@ package app.accountbook.api;
 
 import app.accountbook.api.Problem.InvalidField;
 import app.accountbook.auth.InvalidCredentialsException;
+import app.accountbook.auth.RefreshRejectedException;
 import app.accountbook.common.DuplicateAccountNameException;
 import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.DuplicateEmailException;
@@ -126,6 +127,12 @@ class ApiExceptionHandler {
     @ExceptionHandler
     ResponseEntity<Problem> invalidCredentials(InvalidCredentialsException e, HttpServletRequest request) {
         return respond(ErrorCode.INVALID_CREDENTIALS, HttpHeaders.WWW_AUTHENTICATE, SecurityConfig.CHALLENGE, e, request);
+    }
+
+    /** 갱신의 401은 다른 401과 같다. refresh 쿠키를 지우는 Set-Cookie를 붙이지 않는다(security 결정, #26). */
+    @ExceptionHandler
+    ResponseEntity<Problem> refreshRejected(RefreshRejectedException e, HttpServletRequest request) {
+        return respond(ErrorCode.UNAUTHENTICATED, HttpHeaders.WWW_AUTHENTICATE, SecurityConfig.CHALLENGE, e, request);
     }
 
     @ExceptionHandler
