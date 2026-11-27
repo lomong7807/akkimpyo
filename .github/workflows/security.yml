@@ -1,6 +1,6 @@
 name: Security
 
-# ci.yml과 달리 paths-ignore를 두지 않는다. 문서에도 비밀값이 들어갈 수 있다.
+# server.yml, web.yml과 달리 paths 조건을 두지 않는다. 문서에도 비밀값이 들어갈 수 있다.
 on:
   pull_request:
   push:
@@ -63,7 +63,7 @@ jobs:
           fi
 
   osv:
-    name: osv (web, server dependencies)
+    name: osv (web, e2e, server dependencies)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -76,7 +76,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      # basic 캐시의 키는 Gradle 파일 해시라서 ci.yml의 server job과 같다. main push에서 이 job이 먼저 저장하면
+      # basic 캐시의 키는 Gradle 파일 해시라서 server.yml의 server job과 같다. main push에서 이 job이 먼저 저장하면
       # 테스트 의존성이 빠진 캐시가 그 키를 차지하므로 읽기만 한다.
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
@@ -124,6 +124,7 @@ jobs:
         run: |
           "$RUNNER_TEMP/osv-scanner" scan source \
             --lockfile web/package-lock.json \
+            --lockfile e2e/package-lock.json \
             --lockfile "$RUNNER_TEMP/osv-server/gradle.lockfile"
 
   # main에 들어온 커밋이 머지된 PR에서 왔는지 본다. 직접 push를 막지는 못하고 실패로 알리기만 한다.
