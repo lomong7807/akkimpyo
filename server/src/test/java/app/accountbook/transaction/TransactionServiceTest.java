@@ -86,6 +86,11 @@ class TransactionServiceTest {
         return transactionService.create(owner.getId(), ledgerId, cmd, DEVICE);
     }
 
+    /** 이 장부의 거래 수. 테이블 전체를 세지 않아 커밋하는 테스트의 흔적이 남아도 깨지지 않는다(#14 테스트 보강). */
+    private long storedCount() {
+        return jdbc.queryForObject("select count(*) from transaction where ledger_id = ?", Long.class, ledgerId);
+    }
+
     /** 영속성 컨텍스트를 비워 다음 조회가 DB에 저장된 값을 읽게 한다. */
     private void flushAndClear() {
         entityManager.flush();
@@ -172,7 +177,7 @@ class TransactionServiceTest {
         flushAndClear();
         TransactionView second = transactionService.create(owner.getId(), ledgerId, cmd, "macbook-1");
 
-        assertThat(transactionRepository.count()).isEqualTo(1);
+        assertThat(storedCount()).isEqualTo(1);
         assertThat(transactionService.history(owner.getId(), id)).hasSize(1);
         assertThat(first.version()).isEqualTo(1);
         assertThat(second.version()).isEqualTo(1);
@@ -210,7 +215,7 @@ class TransactionServiceTest {
                 .isInstanceOf(InvalidRequestException.class);
         assertThatThrownBy(() -> create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(), cash.getId(), 0, null)))
                 .isInstanceOf(InvalidRequestException.class);
-        assertThat(transactionRepository.count()).isZero();
+        assertThat(storedCount()).isZero();
     }
 
     @Test
@@ -231,7 +236,7 @@ class TransactionServiceTest {
         assertThatThrownBy(() -> create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(),
                 othersCash.getId(), 10_000, null)))
                 .isInstanceOf(InvalidRequestException.class);
-        assertThat(transactionRepository.count()).isZero();
+        assertThat(storedCount()).isZero();
     }
 
     @Test
@@ -272,7 +277,7 @@ class TransactionServiceTest {
         assertThatThrownBy(() -> transactionService.create(outsider.getId(), ledgerId,
                 expense(UUID.randomUUID(), 12_000), DEVICE))
                 .isInstanceOf(NotLedgerMemberException.class);
-        assertThat(transactionRepository.count()).isZero();
+        assertThat(storedCount()).isZero();
     }
 
     @Test
