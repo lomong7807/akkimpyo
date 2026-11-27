@@ -23,6 +23,7 @@ import { useConnection } from '../connection/useConnection'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { useKeptCopy, type Kept } from '../me/ledgerCopy'
 import { canEdit } from '../me/me'
+import { monthlyStatsAddressOf } from '../stats/statsAddress'
 import { DayGroup } from '../transactions/DayGroup'
 import { groupByDate } from '../transactions/groupByDate'
 import { useKeptLastMonth, type LastMonth } from '../transactions/lastMonth'
@@ -81,8 +82,8 @@ function keptFrom<T>(kept: Kept<LastMonth> | null | undefined, pick: (value: Las
  * 기기에 남긴 값(최근 한 달, 계좌, 카테고리)이 있으면 받는 동안 뼈대 대신 먼저 보이고(00-common 4.5), 연결이 없거나 새로 받지
  * 못하면 그 값을 기준 시각과 함께 보인다(F-908, P-902). 합계와 잔액은 마지막으로 서버와 맞춘 값이라 보내지 않은 입력을 넣지 않는다.
  * 홈을 열면 최근 한 달을 받아 기기에 남긴다(#238).
- * 맨 위는 한 줄 입력(C-01 (1), #233)이고 보기 전용에게는 없다.
- * 1A 임시: 이번 달 합계는 눌리지 않고 머리 줄에 화살표가 없다(월별 통계 E-01은 1B). 숨긴 계좌가 없다.
+ * 맨 위는 한 줄 입력(C-01 (1), #233)이고 보기 전용에게는 없다. 이번 달 합계를 누르면 이번 달 월별 통계(E-01, #242)다.
+ * 1A 임시: 숨긴 계좌가 없다.
  * 예산·진행 중 이벤트·확인할 거래는 2·3단계다.
  * 넓은 화면은 한 줄 입력(전체 폭) 아래 두 칸이다: 왼쪽에 합계와 계좌 잔액, 오른쪽에 최근 거래.
  */
@@ -227,26 +228,54 @@ interface MonthTotalsProps extends SectionProps {
 }
 
 /**
- * (2) 이번 달 합계(F-111). 지출만 큰 숫자이고 수입과 차액은 그 아래 줄이다(designer 결정 14). 1A에는 눌리지 않는다.
+ * (2) 이번 달 합계(F-111). 지출만 큰 숫자이고 수입과 차액은 그 아래 줄이다(designer 결정 14).
  * 보내지 않은 입력은 합계에 더하지 않으므로(작성자 판단 43), 이번 달에 1건 이상이면 차액 아래에 그 건수를 알린다. 같은
- * 화면의 그날 합계(보이는 보내지 않음 줄을 더함)와 다른 까닭을 그 자리에서 알린다(designer #234 B). 누를 곳은 없다(#236).
+ * 화면의 그날 합계(보이는 보내지 않음 줄을 더함)와 다른 까닭을 그 자리에서 알린다(designer #234 B). 그 알림만 누를 곳은 없다(#236).
+ * 합계가 보이면 구역 전체가 이번 달 월별 통계(E-01)로 가는 링크 하나다(planner 2026-11-25, #242). 모양은 계좌 잔액과 같고
+ * 링크 이름에 머리 줄, 세 값, 기준 시각, 보내지 않은 입력 알림을 차례로 담는다(designer #242).
  */
 function MonthTotals({ month, label, totals, basis, state, queries, skeletonShown }: MonthTotalsProps) {
   const headingId = useId()
   const pending = usePendingTransactions()
   const pendingCount = useMemo(() => pendingCountInMonth(pending, month), [pending, month])
+  if (state === 'ready') {
+    const pendingNote = pendingCount > 0 ? `보내지 않은 입력 ${pendingCount}건은 아직 합계에 없어요` : undefined
+    const name = [
+      label,
+      `지출 ${wonOf(totals!.expense)}`,
+      `수입 ${totals!.income > 0 ? '+' : ''}${wonOf(totals!.income)}`,
+      `차액 ${signedWonOf(totals!.income - totals!.expense)}`,
+      basis === undefined ? undefined : basisText(basis),
+      pendingNote,
+    ]
+      .filter((part) => part !== undefined)
+      .join(', ')
+    return (
+      <section aria-labelledby={headingId} className={`${styles.section} ${styles.linkSection}`}>
+        <Link to={monthlyStatsAddressOf(month)} className={styles.sectionLink} aria-label={name}>
+          <div className={styles.head}>
+            <h2 id={headingId} className={styles.heading}>
+              {label}
+            </h2>
+            {basis !== undefined && <BasisTime at={basis} className={styles.basis} />}
+            <span className={styles.caret}>
+              <Icon icon={CaretRight} size={20} />
+            </span>
+          </div>
+          <div className={styles.body}>
+            <Figures totals={totals!} />
+            {pendingNote && <p className={styles.pendingNote}>{pendingNote}</p>}
+          </div>
+        </Link>
+      </section>
+    )
+  }
   return (
     <section aria-labelledby={headingId} className={styles.section}>
       <SectionHead id={headingId} basis={basis}>
         {label}
       </SectionHead>
       <SectionBody>
-        {state === 'ready' && (
-          <>
-            <Figures totals={totals!} />
-            {pendingCount > 0 && <p className={styles.pendingNote}>보내지 않은 입력 {pendingCount}건은 아직 합계에 없어요</p>}
-          </>
-        )}
         {state === 'failed' && <SectionFailure queries={queries} />}
         {state === 'loading' && (
           <SkeletonSpace shown={skeletonShown}>
@@ -416,6 +445,11 @@ function sumOf(accounts: Account[]): number {
 /** 링크 이름에 넣는 금액. 화면의 잔액과 같은 글자다("-612,400원"). */
 function wonOf(value: number): string {
   return `${formatAmount(Math.abs(value), value < 0)}원`
+}
+
+/** 링크 이름에 넣는 차액. 화면의 차액과 같이 양수에 "+"를 붙인다(작성자 판단 37). */
+function signedWonOf(value: number): string {
+  return `${value > 0 ? '+' : ''}${wonOf(value)}`
 }
 
 interface RecentSectionProps extends SectionProps {

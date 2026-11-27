@@ -66,7 +66,7 @@ class CategoryWriteTest {
         User stranger = user();
         refs.put("@남의것", create(stranger, fixtures.personalLedgerId(stranger), "남의식비", CategoryKind.EXPENSE, null));
         refs.put("@지운것", create(owner, ledgerId, "지운분류", CategoryKind.EXPENSE, null));
-        categoryService.delete(owner.getId(), refs.get("@지운것"));
+        categoryService.delete(owner.getId(), ledgerId, refs.get("@지운것"), null, null);
         refs.put("@없는것", UUID.randomUUID());
     }
 
