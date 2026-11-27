@@ -117,6 +117,10 @@ class AccountAccessTest {
                 new Case("계좌 고치기(같은 내용)", (client, ledger) -> putAccount(client, ledger, bBankAsIs), 200),
                 new Case("계좌 고치기(틀린 본문)", (client, ledger) -> putAccount(client, ledger, "{\"name\":1}"), 400),
                 new Case("카테고리 목록", (client, ledger) -> client.get(categories(ledger)), 200),
+                new Case("중복 경고", (client, ledger) -> client.get(transactions(ledger)
+                        + "/duplicates?occurredOn=2026-11-18&amount=1000&payee=B"), 200),
+                new Case("중복 경고(금액 없음)", (client, ledger) ->
+                        client.get(transactions(ledger) + "/duplicates?occurredOn=2026-11-18"), 400),
                 new Case("카테고리 제안", (client, ledger) -> client.get(suggestions(ledger) + "?payee=B"), 200),
                 new Case("카테고리 제안(101자 가맹점)", (client, ledger) ->
                         client.get(suggestions(ledger) + "?payee=" + "x".repeat(101)), 400),

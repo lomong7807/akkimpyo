@@ -3,6 +3,7 @@ package app.accountbook.transaction;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotFoundException;
+import app.accountbook.common.UserText;
 import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerAccess;
 import app.accountbook.ledger.LedgerDates;
@@ -92,6 +93,28 @@ public class TransactionListQuery {
              group by t.occurredOn, t.type
             """;
 
+    private static final int MAX_DUPLICATES = 5;
+
+    /**
+     * 중복 경고(#59). 남은 %s는 빼는 거래의 조건이다. 장부·날짜 인덱스로 그날의 거래만 읽는다. 지출·수입의 라인은 하나이고
+     * 그 금액의 크기가 응답의 {@code amount}다(환불 포함). 자르기와 라인 읽기는 {@link #PAGE}와 같다.
+     */
+    private static final String DUPLICATES = """
+            select t from Transaction t left join fetch t.lines
+             where t.ledgerId = :ledgerId
+               and t.id in (select d.id from Transaction d join d.lines l
+                             where d.ledgerId = :ledgerId
+                               and l.ledgerId = :ledgerId
+                               and d.occurredOn = :occurredOn
+                               and d.type <> :transfer
+                               and d.deletedAt is null%s
+                               and abs(l.amount) = :amount
+                               and %s
+                             order by d.createdAt desc, d.id desc
+                             limit :size)
+             order by t.createdAt desc, t.id desc
+            """.formatted("%s", PayeeMatch.sameAs("d.payee"));
+
     private final EntityManager entityManager;
     private final LedgerAccess ledgerAccess;
     private final LedgerRepository ledgerRepository;
@@ -119,13 +142,7 @@ public class TransactionListQuery {
         }
         DateRange range = range(scope, zoneOf(ledgerId));
         List<Transaction> found = find(ledgerId, range, after, limit + 1);
-        List<Transaction> shown = found.subList(0, Math.min(limit, found.size()));
-        Map<UUID, Edit> edits = lastEdits(shown);
-        List<TransactionView> items = shown.stream()
-                .map(tx -> TransactionView.of(tx, Optional.ofNullable(edits.get(tx.getId()))
-                        .map(Edit::actorId)
-                        .orElse(null)))
-                .toList();
+        List<TransactionView> items = views(found.subList(0, Math.min(limit, found.size())));
         Totals totals = after != null || scope instanceof WholeLedger ? null : totals(ledgerId, range);
         return new TransactionPage(items, found.size() > limit ? TransactionKey.of(items.getLast()) : null, totals,
                 days(ledgerId, items));
@@ -149,6 +166,39 @@ public class TransactionListQuery {
                 .setParameter("from", range.from())
                 .setParameter("until", range.until()), ledgerId);
         return sums.keySet().stream().sorted().map(date -> dayTotals(date, sums)).toList();
+    }
+
+    /**
+     * 중복 경고(P-218, F-209, #59 응답 계약). 같은 장부에서 날짜, 금액, 가맹점({@link PayeeMatch})이 모두 같은 지출·수입을
+     * 저장한 시각이 늦은 것부터 {@value #MAX_DUPLICATES}건까지 준다. 저장한 시각이 같으면 id가 큰 것이 먼저다. 다른 구성원이
+     * 넣은 거래도 들고, 휴지통의 거래는 빠지며 취소한 거래는 든다. 이체는 가맹점이 없어 대상이 아니다. 조회만 한다.
+     * 구성원 확인이 금액과 가맹점 검사보다 먼저다. 날짜의 범위는 보지 않는다(저장이 따로 본다).
+     *
+     * @param amount  화면이 입력한 크기. 거래 만들기와 같은 범위 밖이면 {@code amount}의 {@code OUT_OF_RANGE}다
+     * @param payee   비었거나 공백류뿐이면 결과가 없다. 길거나 쓸 수 없는 글자는 저장할 때와 같은 {@code payee}의 오류다
+     * @param exclude 결과에서 뺄 거래(수정 저장에서 그 거래 자신). 없으면 null
+     */
+    public List<TransactionView> duplicates(UUID actorId, UUID ledgerId, LocalDate occurredOn, long amount,
+                                            String payee, UUID exclude) {
+        ledgerAccess.requireMember(actorId, ledgerId);
+        TransactionLimits.requireAmountInRange(amount);
+        String normalized = UserText.payee(payee, TransactionService.PAYEE_MAX_LENGTH);
+        if (normalized == null) {
+            return List.of();
+        }
+        TypedQuery<Transaction> query = entityManager.createQuery(
+                        DUPLICATES.formatted(exclude == null ? "" : " and d.id <> :exclude"), Transaction.class)
+                .setParameter("ledgerId", ledgerId)
+                .setParameter("occurredOn", occurredOn)
+                .setParameter("transfer", TransactionType.TRANSFER)
+                .setParameter("amount", amount)
+                .setParameter("size", MAX_DUPLICATES);
+        PayeeMatch.bind(query, normalized);
+        if (exclude != null) {
+            query.setParameter("exclude", exclude);
+        }
+        // 라인을 함께 읽어 거래 하나가 라인 수만큼의 행으로 온다. 같은 거래는 같은 객체다.
+        return views(query.getResultList().stream().distinct().toList());
     }
 
     /** 범위 전체의 P-205 합계. */
@@ -250,6 +300,16 @@ public class TransactionListQuery {
         }
         // 라인을 함께 읽어 거래 하나가 라인 수만큼의 행으로 온다. 같은 거래는 같은 객체다.
         return query.getResultList().stream().distinct().toList();
+    }
+
+    /** 읽은 순서 그대로의 읽기 모델. 고친 사람은 {@link #lastEdits}다. */
+    private List<TransactionView> views(List<Transaction> txs) {
+        Map<UUID, Edit> edits = lastEdits(txs);
+        return txs.stream()
+                .map(tx -> TransactionView.of(tx, Optional.ofNullable(edits.get(tx.getId()))
+                        .map(Edit::actorId)
+                        .orElse(null)))
+                .toList();
     }
 
     /**
