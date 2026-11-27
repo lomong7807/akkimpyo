@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import app.accountbook.support.IntegrationTest;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -15,7 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.PessimisticLockingFailureException;
+
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +32,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Timeout(60)
 class LoginRaceTest {
 
-    private static final String EMAIL = "marker-login-race@example.com";
     private static final String PASSWORD = "password1";
     /** PASSWORD의 저장값(LoginTest와 같다). */
     private static final String STORED = "$argon2id$v=19$m=256,t=1,p=1$YWNjb3VudC1ib29rLXRzdA"
@@ -44,15 +44,22 @@ class LoginRaceTest {
     @Autowired TransactionTemplate transactionTemplate;
 
     private final UUID userId = UUID.randomUUID();
+    /** 테스트마다 다르게 해, 한 테스트가 남긴 행이 다음 테스트의 준비를 막지 않게 한다. */
+    private final String email = "marker-login-race-" + userId + "@example.com";
+    /** 다른 스레드의 로그인. 테스트가 중간에 실패해도 끝을 기다린 뒤 지운다. */
+    private CompletableFuture<LoginTokens> login;
 
     @BeforeEach
     void insertUser() {
         jdbc.update("insert into users (id, email, password_hash, display_name, created_at) values (?, ?, ?, 'race', now())",
-                userId, EMAIL, STORED);
+                userId, email, STORED);
     }
 
     @AfterEach
     void deleteCommittedRows() {
+        if (login != null) {
+            login.handle((tokens, error) -> null).orTimeout(TIMEOUT.toSeconds(), TimeUnit.SECONDS).join();
+        }
         RefreshTokenRows.deleteUser(jdbc, userId);
     }
 
@@ -60,14 +67,12 @@ class LoginRaceTest {
     void 확인한_뒤_비밀번호가_바뀌어_커밋되면_로그인은_실패하고_아무것도_폐기하거나_만들지_않는다() {
         IssuedRefreshToken cookie = refreshTokens.issue(userId);
 
-        CompletableFuture<LoginTokens> login = transactionTemplate.execute(status -> {
+        transactionTemplate.executeWithoutResult(status -> {
             jdbc.queryForObject("select id from users where id = ? for no key update", UUID.class, userId);
             jdbc.update("update users set password_hash = 'changed' where id = ?", userId);
             // 로그인은 커밋 전의 저장값으로 확인을 통과한 뒤 사용자 행 잠금에서 기다린다.
-            CompletableFuture<LoginTokens> waiting =
-                    CompletableFuture.supplyAsync(() -> loginService.login(EMAIL, PASSWORD, cookie.value()));
+            login = CompletableFuture.supplyAsync(() -> loginService.login(email, PASSWORD, cookie.value()));
             awaitAnotherConnectionBlockedByThisTransaction();
-            return waiting;
         });
 
         assertThatThrownBy(() -> login.orTimeout(TIMEOUT.toSeconds(), TimeUnit.SECONDS).join())
@@ -80,17 +85,17 @@ class LoginRaceTest {
     /** 사용자 행 잠금은 계열을 넣는 같은 트랜잭션에서 잡아 커밋까지 쥔다. 계열 표를 막아 로그인을 그 INSERT에 세워 두고 본다. */
     @Test
     void 로그인은_사용자_행_잠금을_계열을_넣을_때까지_쥔다() {
-        CompletableFuture<LoginTokens> login = transactionTemplate.execute(status -> {
+        transactionTemplate.executeWithoutResult(status -> {
             jdbc.execute("lock table refresh_token_family in share mode");
-            CompletableFuture<LoginTokens> waiting =
-                    CompletableFuture.supplyAsync(() -> loginService.login(EMAIL, PASSWORD, null));
+            login = CompletableFuture.supplyAsync(() -> loginService.login(email, PASSWORD, null));
             awaitAnotherConnectionBlockedByThisTransaction();
             jdbc.execute("savepoint probe");
+            // 55P03 lock_not_available: 로그인이 쥔 FOR SHARE와 부딪힌다. 예외의 형은 번역기에 따라 달라 SQLSTATE로 본다.
             assertThatThrownBy(() -> jdbc.queryForObject(
                     "select id from users where id = ? for no key update nowait", UUID.class, userId))
-                    .isInstanceOf(PessimisticLockingFailureException.class);
+                    .rootCause().isInstanceOfSatisfying(SQLException.class,
+                            cause -> assertThat(cause.getSQLState()).isEqualTo("55P03"));
             jdbc.execute("rollback to savepoint probe");
-            return waiting;
         });
 
         assertThat(login.orTimeout(TIMEOUT.toSeconds(), TimeUnit.SECONDS).join().refreshToken().userId())
