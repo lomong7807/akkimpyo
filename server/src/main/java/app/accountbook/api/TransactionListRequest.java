@@ -94,7 +94,7 @@ record TransactionListRequest(TransactionScope scope, int limit, TransactionKey 
     }
 
     /** 모양이 맞고 값으로 읽히면 그 값. 13월, 평년의 2월 29일처럼 모양만 맞는 글자도 형식 오류다. */
-    private static <T> Optional<T> parsed(Pattern shape, String text, Function<String, T> parser) {
+    static <T> Optional<T> parsed(Pattern shape, String text, Function<String, T> parser) {
         if (!shape.matcher(text).matches()) {
             return Optional.empty();
         }

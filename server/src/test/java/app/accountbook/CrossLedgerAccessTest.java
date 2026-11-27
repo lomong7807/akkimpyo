@@ -317,6 +317,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Day(DAY), null, 50)),
                 denied("조회: 거래 목록(장부 전체)", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new WholeLedger(), null, 50)),
+                denied("조회: 중복 경고", NotLedgerMemberException.class, ledgerB, (actor, ledger) ->
+                        transactionListQuery.duplicates(actor, ledger, DAY, 73_100, "B단골식당", null)),
                 denied("조회: 가맹점의 최근 카테고리 제안", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> categorySuggestionQuery.suggest(actor, ledger, "B단골식당")),
                 denied("조회: 날짜별 합계(달력)", NotLedgerMemberException.class, ledgerB,
@@ -479,6 +481,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, YearMonth.of(1999, 12))),
                 denied("순서: B의 장부 거래 목록을 범위 밖 limit으로", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 0)),
+                denied("순서: B의 장부에 101자 가맹점으로 중복 경고", notMember, ledgerB, invalid, (actor, ledger) ->
+                        transactionListQuery.duplicates(actor, ledger, DAY, 73_100, "가".repeat(101), null)),
                 denied("순서: B의 장부에 101자 가맹점으로 카테고리 제안", notMember, ledgerB, invalid,
                         (actor, ledger) -> categorySuggestionQuery.suggest(actor, ledger, "가".repeat(101))),
                 denied("순서: B의 장부 날짜별 합계를 범위 밖 달로", notMember, ledgerB, invalid,
