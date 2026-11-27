@@ -105,6 +105,15 @@ class ApiExceptionHandler {
                 e, request);
     }
 
+    /** 같은 장부에서 내가 만든 거래와 내용이 다를 때만 {@code current}가 있다. 그 밖은 모두 같은 응답이다. */
+    @ExceptionHandler
+    ResponseEntity<Problem> idConflict(TransactionIdConflict e, HttpServletRequest request) {
+        log.debug("{} {}", ErrorCode.ID_CONFLICT, e.getClass().getSimpleName());
+        return ResponseEntity.status(ErrorCode.ID_CONFLICT.status())
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(Problem.of(ErrorCode.ID_CONFLICT, RequestId.of(request), List.of(), e.current()));
+    }
+
     @ExceptionHandler({DuplicateAccountNameException.class, DuplicateCategoryNameException.class})
     ResponseEntity<Problem> duplicateName(RuntimeException e, HttpServletRequest request) {
         return invalid("name", FieldErrorCode.DUPLICATE, e, request);

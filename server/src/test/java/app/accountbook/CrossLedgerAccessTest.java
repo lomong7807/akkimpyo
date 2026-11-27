@@ -303,7 +303,9 @@ class CrossLedgerAccessTest {
                 denied("구성원 확인: B의 장부", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> ledgerAccess.requireMember(actor, ledger)),
                 denied("소유자 확인: B의 장부", NotLedgerOwnerException.class, ledgerB,
-                        (actor, ledger) -> ledgerAccess.requireOwner(actor, ledger)));
+                        (actor, ledger) -> ledgerAccess.requireOwner(actor, ledger)),
+                denied("조회: 구성원의 표시 이름", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> userService.memberDisplayNames(actor, ledger)));
     }
 
     /** 생성: B의 장부에 만들기. 요청 내용은 B가 보내면 그대로 통과하는 것이다. */

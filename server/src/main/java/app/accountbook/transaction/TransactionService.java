@@ -6,6 +6,7 @@ import app.accountbook.category.Category;
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryRepository;
 import app.accountbook.category.CategoryService;
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.StaleVersionException;
@@ -47,6 +48,12 @@ public class TransactionService {
 
     static final int PAYEE_MAX_LENGTH = 100;
     static final int MEMO_MAX_LENGTH = 500;
+
+    /** 기기 값의 형식 오류를 알리는 입력란({@code deviceId} 인자). API는 기기 값을 받은 자리의 이름으로 바꿔 알린다. */
+    public static final String DEVICE_ID_FIELD = DeviceIds.FIELD;
+
+    /** 어느 입력란도 아닌 요청 본문 전체의 오류(ADR 002 4절). */
+    private static final String WHOLE_BODY = "";
 
     /** V1 마이그레이션의 거래 기본키 제약 이름. */
     private static final String ID_CONSTRAINT = "transaction_pkey";
@@ -129,7 +136,7 @@ public class TransactionService {
         // 기다리므로 여기서는 기록이 보인다.
         requireNotPurged(content.id());
         appendLog(tx, ChangeAction.CREATE, actorId, deviceId, null);
-        return new CreateResult(TransactionView.of(tx), true);
+        return new CreateResult(TransactionView.of(tx, actorId), true);
     }
 
     /** 완전히 지운 거래의 id는 어느 장부의 것이었든 다시 쓸 수 없다(ADR 007 결정 7). */
@@ -207,15 +214,15 @@ public class TransactionService {
     /** 삭제된 거래도 돌려준다(deleted=true). */
     @Transactional(readOnly = true)
     public TransactionView get(UUID actorId, UUID txId) {
-        return TransactionView.of(loadAccessible(actorId, txId));
+        return view(loadAccessible(actorId, txId));
     }
 
-    /** 휴지통: 최근에 지운 순. */
+    /** 휴지통: 최근에 지운 순. 고친 사람을 거래마다 한 번씩 읽는다. 목록을 API로 낼 때(#15, #38) 한 번에 읽게 고친다. */
     @Transactional(readOnly = true)
     public List<TransactionView> listDeleted(UUID actorId, UUID ledgerId) {
         ledgerAccess.requireMember(actorId, ledgerId);
         return transactionRepository.findByLedgerIdAndDeletedAtIsNotNullOrderByDeletedAtDesc(ledgerId).stream()
-                .map(TransactionView::of)
+                .map(this::view)
                 .toList();
     }
 
@@ -232,11 +239,11 @@ public class TransactionService {
      * 같은 id의 거래가 있을 때의 판정(ADR 006 결정 3). 재전송이면 그 거래의 지금 내용을 돌려준다.
      * 만든 뒤 고쳐졌으면(version 2 이상) 내용을 비교하지 않는다. 다른 기기가 고친 뒤의 재전송이 충돌로 보이지 않게 한다.
      */
-    private static TransactionView replay(Transaction existing, UUID actorId, UUID ledgerId, Content requested) {
+    private TransactionView replay(Transaction existing, UUID actorId, UUID ledgerId, Content requested) {
         if (!existing.getLedgerId().equals(ledgerId) || !actorId.equals(existing.getCreatedBy())) {
             throw IdConflictException.unusableId();
         }
-        TransactionView current = TransactionView.of(existing);
+        TransactionView current = view(existing);
         boolean neverChanged = existing.getVersion() == Transaction.INITIAL_VERSION;
         if (neverChanged && !Content.of(existing).sameAs(requested)) {
             throw IdConflictException.differentContent(current);
@@ -258,7 +265,19 @@ public class TransactionService {
         tx.applyVersion(expectedVersion + 1, now);
         change.accept(now);
         appendLog(tx, action, actorId, deviceId, before);
-        return TransactionView.of(tx);
+        return TransactionView.of(tx, actorId);
+    }
+
+    /**
+     * 읽은 거래의 읽기 모델. 고친 사람은 그 거래의 version까지의 마지막 이력을 남긴 사람이다(ADR 002 2절). 거래를 읽은 뒤
+     * 다른 요청이 고쳐 이력이 늘어도 읽은 내용과 어긋나지 않는다. 탈퇴로 비워졌으면 null이다(ADR 007 결정 5).
+     */
+    private TransactionView view(Transaction tx) {
+        UUID updatedBy = changeLogRepository
+                .findFirstByTransactionIdAndVersionLessThanEqualOrderByVersionDesc(tx.getId(), tx.getVersion())
+                .map(ChangeLog::getActorId)
+                .orElse(null);
+        return TransactionView.of(tx, updatedBy);
     }
 
     /** 거래가 이 변경 뒤의 내용과 version이 된 다음에 부른다. 이력의 후 값과 번호가 그 값이다. */
@@ -309,7 +328,7 @@ public class TransactionService {
      */
     private Content normalize(UUID ledgerId, TransactionCommand cmd, UUID defaultPaidBy) {
         return switch (cmd) {
-            case null -> throw new InvalidRequestException("거래 정보가 없습니다.");
+            case null -> throw new InvalidRequestException(WHOLE_BODY, FieldErrorCode.REQUIRED, "거래 정보가 없습니다.");
             case Entry entry -> normalizeEntry(ledgerId, entry, defaultPaidBy);
             case Transfer transfer -> normalizeTransfer(ledgerId, transfer);
         };
@@ -319,16 +338,19 @@ public class TransactionService {
     private Content normalizeEntry(UUID ledgerId, Entry entry, UUID defaultPaidBy) {
         requireHeader(entry.id(), entry.occurredOn());
         requireDateInRange(ledgerId, entry.occurredOn());
+        if (entry.type() == null) {
+            throw new InvalidRequestException("type", FieldErrorCode.REQUIRED, "거래 종류가 없습니다.");
+        }
         if (entry.type() != TransactionType.EXPENSE && entry.type() != TransactionType.INCOME) {
-            throw new InvalidRequestException("지출 또는 수입만 입력할 수 있습니다.");
+            throw new InvalidRequestException("type", FieldErrorCode.NOT_ALLOWED, "지출 또는 수입만 입력할 수 있습니다.");
         }
         TransactionLimits.requireAmountInRange(entry.amount());
         if (entry.refund() && entry.type() == TransactionType.INCOME) {
-            throw new InvalidRequestException("환불은 지출에만 표시할 수 있습니다.");
+            throw new InvalidRequestException("refund", FieldErrorCode.NOT_ALLOWED, "환불은 지출에만 표시할 수 있습니다.");
         }
         String payee = UserText.payee(entry.payee(), PAYEE_MAX_LENGTH);
         String memo = UserText.memo(entry.memo(), MEMO_MAX_LENGTH);
-        requireAccountGiven(entry.accountId());
+        requireAccountGiven("accountId", entry.accountId());
         UUID categoryId = entry.categoryId() == null
                 ? categoryService.uncategorized(ledgerId, categoryKind(entry)).getId()
                 : entry.categoryId();
@@ -346,10 +368,10 @@ public class TransactionService {
         requireDateInRange(ledgerId, transfer.occurredOn());
         TransactionLimits.requireAmountInRange(transfer.amount());
         String memo = UserText.memo(transfer.memo(), MEMO_MAX_LENGTH);
-        requireAccountGiven(transfer.fromAccountId());
-        requireAccountGiven(transfer.toAccountId());
+        requireAccountGiven("fromAccountId", transfer.fromAccountId());
+        requireAccountGiven("toAccountId", transfer.toAccountId());
         if (transfer.fromAccountId().equals(transfer.toAccountId())) {
-            throw new InvalidRequestException("같은 계좌로는 이체할 수 없습니다.");
+            throw new InvalidRequestException("toAccountId", FieldErrorCode.NOT_ALLOWED, "같은 계좌로는 이체할 수 없습니다.");
         }
         return new Content(transfer.id(), TransactionType.TRANSFER, transfer.occurredOn(),
                 Transaction.storableTime(transfer.occurredTime()), null, memo, null,
@@ -359,12 +381,12 @@ public class TransactionService {
 
     /**
      * 참조 검증: 계좌와 카테고리가 이 장부에 있는지, 카테고리의 수입·지출 구분이 맞는지, 결제한 사람이 구성원인지.
-     * {@link #normalize}를 통과한 요청에만 쓴다.
+     * {@link #normalize}를 통과한 요청에만 쓴다. 없거나 다른 장부의 것은 구분하지 않고 그 입력란의 {@code NOT_FOUND}다.
      */
     private void requireReferences(UUID ledgerId, TransactionCommand cmd) {
         switch (cmd) {
             case Entry entry -> {
-                requireAccountInLedger(ledgerId, entry.accountId());
+                requireAccountInLedger(ledgerId, "accountId", entry.accountId());
                 if (entry.categoryId() != null) {
                     requireCategoryInLedger(ledgerId, categoryKind(entry), entry.categoryId());
                 }
@@ -373,8 +395,8 @@ public class TransactionService {
                 }
             }
             case Transfer transfer -> {
-                requireAccountInLedger(ledgerId, transfer.fromAccountId());
-                requireAccountInLedger(ledgerId, transfer.toAccountId());
+                requireAccountInLedger(ledgerId, "fromAccountId", transfer.fromAccountId());
+                requireAccountInLedger(ledgerId, "toAccountId", transfer.toAccountId());
             }
         }
     }
@@ -383,18 +405,18 @@ public class TransactionService {
         return entry.type() == TransactionType.EXPENSE ? CategoryKind.EXPENSE : CategoryKind.INCOME;
     }
 
-    private static void requireAccountGiven(UUID accountId) {
+    private static void requireAccountGiven(String field, UUID accountId) {
         if (accountId == null) {
-            throw new InvalidRequestException("계좌가 없습니다.");
+            throw new InvalidRequestException(field, FieldErrorCode.REQUIRED, "계좌가 없습니다.");
         }
     }
 
     private static void requireHeader(UUID id, LocalDate occurredOn) {
         if (id == null) {
-            throw new InvalidRequestException("거래 id가 없습니다.");
+            throw new InvalidRequestException("id", FieldErrorCode.REQUIRED, "거래 id가 없습니다.");
         }
         if (occurredOn == null) {
-            throw new InvalidRequestException("거래 날짜가 없습니다.");
+            throw new InvalidRequestException("occurredOn", FieldErrorCode.REQUIRED, "거래 날짜가 없습니다.");
         }
     }
 
@@ -406,28 +428,30 @@ public class TransactionService {
         TransactionLimits.requireDateInRange(occurredOn, clock, ledgerZone);
     }
 
-    private void requireAccountInLedger(UUID ledgerId, UUID accountId) {
+    private void requireAccountInLedger(UUID ledgerId, String field, UUID accountId) {
         boolean inLedger = accountRepository.findById(accountId)
                 .map(Account::getLedgerId)
                 .filter(ledgerId::equals)
                 .isPresent();
         if (!inLedger) {
-            throw new InvalidRequestException("장부에 없는 계좌입니다.");
+            throw new InvalidRequestException(field, FieldErrorCode.NOT_FOUND, "장부에 없는 계좌입니다.");
         }
     }
 
     private void requireCategoryInLedger(UUID ledgerId, CategoryKind kind, UUID categoryId) {
         Category category = categoryRepository.findById(categoryId)
                 .filter(candidate -> candidate.getLedgerId().equals(ledgerId))
-                .orElseThrow(() -> new InvalidRequestException("장부에 없는 카테고리입니다."));
+                .orElseThrow(() -> new InvalidRequestException("categoryId", FieldErrorCode.NOT_FOUND,
+                        "장부에 없는 카테고리입니다."));
         if (category.getKind() != kind) {
-            throw new InvalidRequestException("거래 종류와 카테고리의 수입·지출 구분이 다릅니다.");
+            throw new InvalidRequestException("categoryId", FieldErrorCode.NOT_ALLOWED,
+                    "거래 종류와 카테고리의 수입·지출 구분이 다릅니다.");
         }
     }
 
     private void requirePayer(UUID ledgerId, UUID paidBy) {
         if (!ledgerAccess.isMember(paidBy, ledgerId)) {
-            throw new InvalidRequestException("결제한 사람은 장부 구성원이어야 합니다.");
+            throw new InvalidRequestException("paidBy", FieldErrorCode.NOT_ALLOWED, "결제한 사람은 장부 구성원이어야 합니다.");
         }
     }
 

@@ -342,7 +342,7 @@ class UserAuthenticateTest {
     }
 
     private UserService service(PasswordHasher passwordHasher) {
-        return new UserService(users, mock(), mock(), mock(), passwordHasher, mock(), mock());
+        return new UserService(users, mock(), mock(), mock(), mock(), passwordHasher, mock(), mock());
     }
 
     /** EMAIL로 가입한 사용자. 여기까지 만든 해시는 세지 않는다. */

@@ -13,6 +13,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -127,9 +128,15 @@ final class ServerClient {
             assertThat(this.status).as(body).isEqualTo(status);
             assertThat(header("Content-Type")).isEqualTo("application/problem+json");
             JsonNode problem = json();
-            assertThat(problem.propertyNames()).containsExactlyInAnyOrderElementsOf(code.equals("VALIDATION_FAILED")
-                    ? Set.of("type", "title", "status", "detail", "code", "requestId", "fieldErrors")
-                    : Set.of("type", "title", "status", "detail", "code", "requestId"));
+            Set<String> names = new HashSet<>(Set.of("type", "title", "status", "detail", "code", "requestId"));
+            if (code.equals("VALIDATION_FAILED")) {
+                names.add("fieldErrors");
+            }
+            // 같은 장부에서 내가 만든 거래와 내용이 다를 때만 있다(ADR 006 결정 3). 있는지는 부르는 쪽이 본다.
+            if (code.equals("ID_CONFLICT") && problem.has("current")) {
+                names.add("current");
+            }
+            assertThat(problem.propertyNames()).containsExactlyInAnyOrderElementsOf(names);
             assertThat(problem.get("type").asString()).isEqualTo("about:blank");
             assertThat(problem.get("title").asString()).isEqualTo(title);
             assertThat(problem.get("status").isInt()).isTrue();

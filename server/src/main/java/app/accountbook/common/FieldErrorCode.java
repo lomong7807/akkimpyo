@@ -8,5 +8,7 @@ public enum FieldErrorCode {
     TOO_LONG,
     DUPLICATE,
     /** 형식은 맞지만 규칙상 받을 수 없는 값이나 조합. */
-    NOT_ALLOWED
+    NOT_ALLOWED,
+    /** 가리킨 계좌나 카테고리가 이 장부에 없다(그사이 지워진 것 포함). 404가 아니라 그 입력란의 오류다(#14). */
+    NOT_FOUND
 }

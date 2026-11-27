@@ -29,9 +29,9 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 다른 장부 접근 거부(#19의 표를 계좌·카테고리 API의 HTTP로, #13, #34). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
+ * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #34, #14). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
  * 없는 id와 같은 404이고, 응답에 B의 값이 없으며, DB가 그대로다. 대조로 B 자신은 같은 요청이 열린다(틀린 본문이면 400).
- * 틀린 본문과 B가 이미 쓰는 이름도 404라, 장부가 있는지와 그 안의 이름을 알 수 없다.
+ * 틀린 본문과 B가 이미 쓰는 이름도 404라, 장부가 있는지와 그 안의 이름을 알 수 없다. B의 거래 id로 만들어도 409가 아니라 404다.
  */
 @LedgerApiTest
 class AccountAccessTest {
@@ -48,6 +48,9 @@ class AccountAccessTest {
     private ServerClient a;
     private ServerClient b;
     private UUID ledgerB;
+    private UUID bBank;
+    private UUID bFood;
+    private UUID bExpense;
     private final Map<String, UUID> targets = new LinkedHashMap<>();
     private List<String> secretsOfB;
 
@@ -60,10 +63,10 @@ class AccountAccessTest {
 
         User userB = fixtures.user(UUID.randomUUID().toString().substring(0, 18) + "@example.com");
         ledgerB = fixtures.personalLedgerId(userB);
-        UUID bBank = fixtures.account(userB, ledgerB, "B월급통장", AccountType.BANK, 5_432_100, DAY).getId();
-        UUID bFood = categoryService.create(userB.getId(), ledgerB,
+        bBank = fixtures.account(userB, ledgerB, "B월급통장", AccountType.BANK, 5_432_100, DAY).getId();
+        bFood = categoryService.create(userB.getId(), ledgerB,
                 new CategoryCommand("B식비", CategoryKind.EXPENSE, null)).getId();
-        UUID bExpense = fixtures.expense(userB, ledgerB, bBank, bFood, DAY, 73_100).id();
+        bExpense = fixtures.expense(userB, ledgerB, bBank, bFood, DAY, 73_100).id();
         b = ServerClient.signedIn(port, userB.getId(), NOW);
 
         targets.put("B의 장부", ledgerB);
@@ -97,7 +100,7 @@ class AccountAccessTest {
     }
 
     /** 장부 자리에 무엇을 넣는지만 다른 요청들과, 장부의 주인(B)이 같은 요청을 하면 받는 상태. */
-    private static List<Case> cases() {
+    private List<Case> cases() {
         String created = "{\"name\":\"새 계좌\",\"type\":\"CASH\",\"openingBalance\":0,\"openingDate\":\"2026-11-18\"}";
         String sameName = created.replace("새 계좌", "B월급통장");
         return List.of(
@@ -106,7 +109,22 @@ class AccountAccessTest {
                 new Case("계좌 추가(틀린 본문)", (client, ledger) -> client.postJson(accounts(ledger), "{\"name\":1}"), 400),
                 new Case("계좌 추가(B가 쓰는 이름)", (client, ledger) -> client.postJson(accounts(ledger), sameName), 400),
                 new Case("계좌 추가(JSON이 아님)", (client, ledger) -> client.postJson(accounts(ledger), "{"), 400),
-                new Case("카테고리 목록", (client, ledger) -> client.get(categories(ledger)), 200));
+                new Case("카테고리 목록", (client, ledger) -> client.get(categories(ledger)), 200),
+                new Case("거래 만들기", (client, ledger) ->
+                        client.postJson(transactions(ledger), expense(UUID.randomUUID())), 201),
+                new Case("거래 만들기(B의 거래 id에 다른 내용)", (client, ledger) ->
+                        client.postJson(transactions(ledger), expense(bExpense)), 409),
+                new Case("거래 만들기(틀린 본문)", (client, ledger) ->
+                        client.postJson(transactions(ledger), "{\"amount\":\"x\"}"), 400),
+                new Case("거래 만들기(공백뿐인 본문)", (client, ledger) -> client.postJson(transactions(ledger), " "), 400),
+                new Case("거래 만들기(틀린 기기 값)", (client, ledger) -> client.send("POST", transactions(ledger),
+                        expense(UUID.randomUUID()), "Content-Type", "application/json", "X-Akkimpyo-Device", "a b"), 400));
+    }
+
+    /** B의 계좌와 카테고리를 쓴 지출. B의 거래와 금액이 달라 같은 id면 내용이 다르다. */
+    private String expense(UUID id) {
+        return "{\"id\":\"" + id + "\",\"type\":\"EXPENSE\",\"occurredOn\":\"2026-11-18\",\"accountId\":\"" + bBank
+                + "\",\"categoryId\":\"" + bFood + "\",\"amount\":1000}";
     }
 
     private void verifyDenied(Request request, UUID ledger) throws Exception {
@@ -141,6 +159,10 @@ class AccountAccessTest {
 
     private static String categories(UUID ledger) {
         return "/api/v1/ledgers/" + ledger + "/categories";
+    }
+
+    private static String transactions(UUID ledger) {
+        return "/api/v1/ledgers/" + ledger + "/transactions";
     }
 
     @FunctionalInterface
