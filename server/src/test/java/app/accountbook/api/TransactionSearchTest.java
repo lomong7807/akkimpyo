@@ -77,9 +77,9 @@ class TransactionSearchTest {
         assertThat(page.get("items")).hasSize(1);
         assertThat(page.get("items").get(0)).isEqualTo(client.get(path() + "/" + id).json());
         assertThat(page.get("nextCursor").isNull()).isTrue();
-        assertThat(page.get("totals")).isEqualTo(JSON.readTree("{\"income\":0,\"expense\":12000}"));
+        assertThat(page.get("totals")).isEqualTo(JSON.readTree("{\"count\":1,\"income\":0,\"expense\":12000}"));
         assertThat(search("q=" + encoded("  ") + "&type=INCOME").json().get("totals")).as("빈 검색어는 없는 것이다")
-                .isEqualTo(JSON.readTree("{\"income\":3000,\"expense\":0}"));
+                .isEqualTo(JSON.readTree("{\"count\":1,\"income\":3000,\"expense\":0}"));
     }
 
     /** 다음 쪽은 같은 검색어·기간·필터에서 받은 cursor로만 이어진다. 거래 목록(#15)의 cursor도 받지 않는다. */
@@ -94,7 +94,7 @@ class TransactionSearchTest {
         JsonNode second = search(query + cursor).json();
 
         assertThat(first.get("items")).hasSize(50);
-        assertThat(first.get("totals").get("expense").asLong()).isEqualTo(777 * 51);
+        assertThat(first.get("totals")).isEqualTo(JSON.readTree("{\"count\":51,\"income\":0,\"expense\":39627}"));
         assertThat(second.get("items")).hasSize(1);
         assertThat(second.get("nextCursor").isNull()).isTrue();
         assertThat(second.get("totals").isNull()).isTrue();
