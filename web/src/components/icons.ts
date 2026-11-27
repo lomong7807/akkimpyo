@@ -10,6 +10,7 @@ export { default as CaretDown } from '../assets/icons/phosphor/caret-down.svg?ra
 export { default as CaretLeft } from '../assets/icons/phosphor/caret-left.svg?raw'
 export { default as CaretRight } from '../assets/icons/phosphor/caret-right.svg?raw'
 export { default as CaretUp } from '../assets/icons/phosphor/caret-up.svg?raw'
+export { default as ChartBar } from '../assets/icons/phosphor/chart-bar.svg?raw'
 export { default as Check } from '../assets/icons/phosphor/check.svg?raw'
 export { default as CloudArrowUp } from '../assets/icons/phosphor/cloud-arrow-up.svg?raw'
 export { default as DotsThree } from '../assets/icons/phosphor/dots-three.svg?raw'
