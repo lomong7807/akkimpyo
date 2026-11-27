@@ -1,5 +1,6 @@
 package app.accountbook.transaction;
 
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Objects;
 
@@ -11,6 +12,14 @@ public sealed interface TransactionScope {
 
         public Month {
             Objects.requireNonNull(month, "month");
+        }
+    }
+
+    /** 하루(달력에서 고른 날, #66). 미래 날짜도 된다. */
+    record Day(LocalDate date) implements TransactionScope {
+
+        public Day {
+            Objects.requireNonNull(date, "date");
         }
     }
 

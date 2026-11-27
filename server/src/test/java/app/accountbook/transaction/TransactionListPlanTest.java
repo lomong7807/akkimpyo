@@ -1,0 +1,243 @@
+package app.accountbook.transaction;
+
+import static java.util.stream.Collectors.joining;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import app.accountbook.support.IntegrationTest;
+import app.accountbook.support.StoppedClockConfig;
+import app.accountbook.support.StoppedClockConfig.StoppedClock;
+import app.accountbook.transaction.TransactionScope.Month;
+import app.accountbook.transaction.TransactionScope.WholeLedger;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+/**
+ * 거래 목록의 쪽 질의가 장부 크기에 비례해 읽지 않는다(#15, docs/db/schema-standards.md 4절). 장부 1,000개가 섞인 DB의
+ * 큰 장부(거래 2만 건, 10년치)에서 앱이 보낸 문장을 그 값 그대로 {@code EXPLAIN (ANALYZE, BUFFERS)}로 본다.
+ * 계획을 흔들리지 않게 하는 방법은 {@code LookupIndexPlanTest}와 같다: 고정 id를 SQL로 만들고, 테이블마다 3만 행 이하라
+ * ANALYZE가 모든 행을 읽으며, ANALYZE를 테스트 트랜잭션 안에서 한다. 계획은 "[plan] " 줄로 빌드 로그에 남는다.
+ */
+@IntegrationTest
+@Import(StoppedClockConfig.class)
+class TransactionListPlanTest {
+
+    private static final int LEDGERS = 1_000;
+    /** 큰 장부(1번)의 거래 수. 2026-11-27부터 3,650일 앞까지 고르게, 넷에 하나는 시각 없음. */
+    private static final int BIG = 20_000;
+    /** 나머지 장부마다의 거래 수. 2026년 11월에 있다. */
+    private static final int SMALL = 10;
+
+    private static final int USER = 1;
+    private static final int LEDGER = 2;
+    private static final int MEMBER = 3;
+    private static final int ACCOUNT = 4;
+    private static final int CATEGORY = 5;
+    private static final int TRANSACTION = 6;
+    private static final int LINE = 7;
+
+    private static final UUID BIG_OWNER = id(USER, 1);
+    private static final UUID BIG_LEDGER = id(LEDGER, 1);
+    private static final String INDEX_BACKWARD = "Index Scan Backward using ix_transaction_ledger_occurred_on";
+    private static final Pattern BIND = Pattern.compile("binding parameter \\((\\d+):[^)]*\\) <- \\[(.*)]");
+    private static final AtomicInteger PREPARED = new AtomicInteger();
+
+    @Autowired TransactionListQuery listQuery;
+    @Autowired StoppedClock clock;
+    @Autowired JdbcTemplate jdbc;
+
+    @BeforeEach
+    void seedManyLedgersAndAnalyze() {
+        clock.stopAt(Instant.parse("2026-11-27T03:00:00Z"));
+        jdbc.update("""
+                insert into users (id, email, password_hash, display_name, created_at)
+                select %s, 'list-plan-' || g || '@example.com', 'hash', 'u' || g, now() from generate_series(1, %d) g
+                """.formatted(idSql(USER, "g"), LEDGERS));
+        jdbc.update("insert into ledger (id, name, created_at) select %s, 'l' || g, now() from generate_series(1, %d) g"
+                .formatted(idSql(LEDGER, "g"), LEDGERS));
+        jdbc.update("""
+                insert into ledger_member (id, ledger_id, user_id, role, created_at)
+                select %s, %s, %s, 'OWNER', now() from generate_series(1, %d) g
+                """.formatted(idSql(MEMBER, "g"), idSql(LEDGER, "g"), idSql(USER, "g"), LEDGERS));
+        jdbc.update("""
+                insert into account (id, ledger_id, name, type, opening_balance, opening_date, created_at)
+                select %s, %s, 'a', 'BANK', 0, date '2016-01-01', now() from generate_series(1, %d) g
+                """.formatted(idSql(ACCOUNT, "g"), idSql(LEDGER, "g"), LEDGERS));
+        jdbc.update("""
+                insert into category (id, ledger_id, kind, name, parent_id, system, created_at)
+                select %s, %s, 'EXPENSE', 'c', null, false, now() from generate_series(1, %d) g
+                """.formatted(idSql(CATEGORY, "g"), idSql(LEDGER, "g"), LEDGERS));
+        // 거래 번호 n: 큰 장부는 1..BIG, 나머지 장부 l(2..)은 BIG + (l - 2) * SMALL + t.
+        insertTransactions("1", "generate_series(1, %d) t".formatted(BIG), "t",
+                "date '2026-11-27' - mod(t, 3650)");
+        insertTransactions("l", "generate_series(2, %d) l, generate_series(1, %d) t".formatted(LEDGERS, SMALL),
+                "%d + (l - 2) * %d + t".formatted(BIG, SMALL), "date '2026-11-01' + mod(t, 27)");
+        jdbc.execute("analyze users, ledger, ledger_member, account, category, transaction, transaction_line");
+    }
+
+    private void insertTransactions(String ledger, String rows, String n, String date) {
+        jdbc.update("""
+                insert into transaction (id, ledger_id, type, occurred_on, occurred_time, status, created_by, paid_by,
+                                         version, created_at, updated_at)
+                select %s, %s, 'EXPENSE', %s,
+                       case when mod(%s, 4) = 0 then null else time '00:00' + mod(%s, 1440) * interval '1 minute' end,
+                       'POSTED', %s, %s, 1, now(), now()
+                from %s
+                """.formatted(idSql(TRANSACTION, n), idSql(LEDGER, ledger), date, n, n, idSql(USER, ledger),
+                idSql(USER, ledger), rows));
+        jdbc.update("""
+                insert into transaction_line (id, transaction_id, ledger_id, account_id, category_id, amount, created_at)
+                select %s, %s, %s, %s, %s, -1000, now() from %s
+                """.formatted(idSql(LINE, n), idSql(TRANSACTION, n), idSql(LEDGER, ledger), idSql(ACCOUNT, ledger),
+                idSql(CATEGORY, ledger), rows));
+    }
+
+    /** 홈의 최근 거래와 오프라인 사본(#238)이 쓰는 장부 전체 모드: 첫 쪽과, 시각 있는 키 뒤의 쪽. */
+    @Test
+    void 장부_전체_모드는_큰_장부에서도_인덱스를_거꾸로_읽다가_쪽이_차면_멈춘다() {
+        Statement first = pageStatement(new WholeLedger(), null);
+        Statement after = pageStatement(new WholeLedger(),
+                new TransactionKey(LocalDate.of(2026, 6, 1), LocalTime.of(12, 0), UUID.randomUUID()));
+
+        for (Statement statement : List.of(first, after)) {
+            String custom = explain(statement, "force_custom_plan");
+            // 비트맵 훑기는 장부의 거래를 모두 모은 뒤 정렬한다. 바깥 질의도 쪽의 id로만 찾아야 한다.
+            assertThat(custom).contains(INDEX_BACKWARD).doesNotContain("Seq Scan", "Bitmap Heap Scan");
+            assertThat(rowsReadFromIndex(custom)).as("큰 장부 %d건 가운데 읽은 거래", BIG).isLessThan(500);
+            assertThat(explain(statement, "force_generic_plan")).doesNotContain("Seq Scan");
+        }
+    }
+
+    /** 달 모드는 그 달만 읽는다. 큰 장부의 한 달은 약 165건이다. */
+    @Test
+    void 달_모드는_큰_장부에서_그_달의_거래만_읽는다() {
+        Statement month = pageStatement(new Month(YearMonth.of(2026, 11)), null);
+
+        String custom = explain(month, "force_custom_plan");
+
+        assertThat(custom).contains("ix_transaction_ledger_occurred_on").doesNotContain("Seq Scan");
+        assertThat(explain(month, "force_generic_plan")).doesNotContain("Seq Scan");
+    }
+
+    /** 앱의 문장을 그대로 PREPARE하고 받은 값으로 실행한 계획. 비교용으로 인덱스를 끈 계획의 비용도 남긴다. */
+    private String explain(Statement statement, String planCacheMode) {
+        String name = "list_plan_" + PREPARED.incrementAndGet();
+        jdbc.execute("prepare " + name + " as " + numbered(statement.sql()));
+        String execute = "execute " + name + statement.values().stream()
+                .map(value -> "'" + value.replace("'", "''") + "'")
+                .collect(joining(", ", "(", ")"));
+        jdbc.execute("set local plan_cache_mode = " + planCacheMode);
+        String plan = plan(statement.label() + ": " + planCacheMode, "explain (analyze, buffers) " + execute);
+        jdbc.execute("set local plan_cache_mode = force_custom_plan");
+        if (planCacheMode.equals("force_custom_plan")) {
+            jdbc.execute("set local enable_indexscan = off");
+            jdbc.execute("set local enable_bitmapscan = off");
+            plan(statement.label() + ": 비교용, 인덱스를 끈 계획", "explain " + execute);
+            jdbc.execute("set local enable_indexscan = on");
+            jdbc.execute("set local enable_bitmapscan = on");
+        }
+        jdbc.execute("deallocate " + name);
+        return plan;
+    }
+
+    /** 큰 장부의 한 쪽을 실제로 읽고, 그때 Hibernate가 보낸 쪽 질의와 그 값. */
+    private Statement pageStatement(TransactionScope scope, TransactionKey after) {
+        Logger sqlLog = (Logger) LoggerFactory.getLogger("org.hibernate.SQL");
+        Logger bindLog = (Logger) LoggerFactory.getLogger("org.hibernate.orm.jdbc.bind");
+        Level sqlLevel = sqlLog.getLevel();
+        Level bindLevel = bindLog.getLevel();
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        sqlLog.addAppender(appender);
+        bindLog.addAppender(appender);
+        sqlLog.setLevel(Level.DEBUG);
+        bindLog.setLevel(Level.TRACE);
+        TransactionPage page;
+        try {
+            page = listQuery.page(BIG_OWNER, BIG_LEDGER, scope, after, TransactionListQuery.MAX_LIMIT);
+        } finally {
+            sqlLog.setLevel(sqlLevel);
+            bindLog.setLevel(bindLevel);
+            sqlLog.detachAppender(appender);
+            bindLog.detachAppender(appender);
+        }
+        assertThat(page.items()).hasSize(TransactionListQuery.MAX_LIMIT);
+        String sql = null;
+        List<String> values = new ArrayList<>();
+        for (ILoggingEvent event : appender.list) {
+            String message = event.getFormattedMessage().strip();
+            Matcher bind = BIND.matcher(message);
+            if (event.getLoggerName().equals("org.hibernate.SQL")) {
+                if (sql != null) {
+                    break;
+                }
+                sql = message.contains("fetch first") ? message : null;
+            } else if (sql != null && bind.matches()) {
+                assertThat(Integer.parseInt(bind.group(1))).isEqualTo(values.size() + 1);
+                values.add(bind.group(2));
+            }
+        }
+        assertThat(sql).as("쪽 질의").isNotNull();
+        assertThat(sql.chars().filter(c -> c == '?').count()).as(sql).isEqualTo(values.size());
+        print(scope + " 쪽 질의", List.of(sql));
+        return new Statement(scope + (after == null ? " 첫 쪽" : " 다음 쪽"), sql, values);
+    }
+
+    /** 인덱스 훑기 노드가 실제로 내놓은 행 수. */
+    private static long rowsReadFromIndex(String plan) {
+        Matcher matcher = Pattern.compile(Pattern.quote(INDEX_BACKWARD) + ".*?actual time=\\S+ rows=(\\d+)")
+                .matcher(plan);
+        assertThat(matcher.find()).as(plan).isTrue();
+        return Long.parseLong(matcher.group(1));
+    }
+
+    private String plan(String title, String explain) {
+        List<String> lines = jdbc.queryForList(explain, String.class);
+        print(title, lines);
+        return String.join("\n", lines);
+    }
+
+    /** JDBC의 ? 자리를 PREPARE의 $1, $2...로 바꾼다. Hibernate의 문장에는 문자열 상수가 없다. */
+    private static String numbered(String sql) {
+        StringBuilder out = new StringBuilder();
+        int n = 0;
+        for (char c : sql.toCharArray()) {
+            out.append(c == '?' ? "$" + ++n : String.valueOf(c));
+        }
+        return out.toString();
+    }
+
+    /** build.gradle이 "[plan] "으로 시작하는 줄만 빌드 로그에 옮긴다. */
+    private static void print(String title, List<String> texts) {
+        System.out.println("[plan] ==== " + title + " ====");
+        texts.stream().flatMap(String::lines).forEach(line -> System.out.println("[plan] " + line));
+    }
+
+    private static UUID id(int table, long n) {
+        return UUID.fromString("0000000%d-0000-4000-8000-%012x".formatted(table, n));
+    }
+
+    private static String idSql(int table, String n) {
+        return "('0000000" + table + "-0000-4000-8000-' || lpad(to_hex(" + n + "), 12, '0'))::uuid";
+    }
+
+    private record Statement(String label, String sql, List<String> values) {
+    }
+}

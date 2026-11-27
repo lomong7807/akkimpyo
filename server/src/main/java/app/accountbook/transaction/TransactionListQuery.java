@@ -7,6 +7,7 @@ import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerAccess;
 import app.accountbook.ledger.LedgerDates;
 import app.accountbook.ledger.LedgerRepository;
+import app.accountbook.transaction.TransactionScope.Day;
 import app.accountbook.transaction.TransactionScope.Month;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
 import jakarta.persistence.EntityManager;
@@ -27,7 +28,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 거래 목록(F-215, F-113, #15). 휴지통의 거래는 빠지고 취소한 거래는 들어간다. 순서는 {@link TransactionKey}이고 요청으로
+ * 거래 목록(F-215, F-113, F-222, #15). 휴지통의 거래는 빠지고 취소한 거래는 들어간다. 순서는 {@link TransactionKey}이고 요청으로
  * 바꾸지 않는다. 다음 쪽은 OFFSET이 아니라 앞 쪽 마지막 거래의 키 뒤부터 준다. 그사이 거래가 더해지거나 지워져도 이미 받은
  * 거래가 다시 오거나, 받지 않은 거래 가운데 남아 있는 것이 빠지지 않는다.
  *
@@ -110,6 +111,10 @@ public class TransactionListQuery {
             case Month month -> {
                 LedgerDates.requireMonthInRange("month", month.month(), clock, ledgerZone);
                 yield new DateRange(month.month().atDay(1), month.month().plusMonths(1).atDay(1));
+            }
+            case Day day -> {
+                LedgerDates.requireInRange("date", "날짜는", day.date(), clock, ledgerZone);
+                yield new DateRange(day.date(), day.date().plusDays(1));
             }
             case WholeLedger wholeLedger ->
                     new DateRange(LedgerDates.MIN_DATE, LedgerDates.today(clock, ledgerZone).plusDays(1));

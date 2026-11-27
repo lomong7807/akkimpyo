@@ -7,12 +7,14 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import app.accountbook.account.AccountType;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.ledger.LedgerDates;
 import app.accountbook.ledger.LedgerRole;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.support.StoppedClockConfig;
 import app.accountbook.support.StoppedClockConfig.StoppedClock;
 import app.accountbook.transaction.TransactionCommand.Entry;
+import app.accountbook.transaction.TransactionScope.Day;
 import app.accountbook.transaction.TransactionScope.Month;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
 import app.accountbook.user.User;
@@ -25,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -191,6 +194,27 @@ class TransactionListQueryTest {
     }
 
     @Test
+    void 하루는_그날의_거래만_같은_순서와_다음_키_규칙으로_주고_날짜는_장부_시간대로_1년_뒤까지다() {
+        LocalDate day = LocalDate.of(2026, 11, 30); // 미래 날짜도 된다
+        for (String time : new String[] {"10:00", null, "09:00", null, "10:00"}) {
+            expense(day, time);
+        }
+        expense(day.minusDays(1), "23:59");
+        expense(day.plusDays(1), "00:00");
+
+        for (int limit = 1; limit <= 3; limit++) {
+            assertThat(walk(new Day(day), limit)).as("limit " + limit).containsExactlyElementsOf(expected(day::equals));
+        }
+        assertOutOfRange("date", () -> listQuery.page(owner.getId(), ledgerId, new Day(LocalDate.of(1999, 12, 31)),
+                null, 1));
+        // 서울 11-27의 1년 뒤는 2027-11-27이다.
+        assertOutOfRange("date", () -> listQuery.page(owner.getId(), ledgerId, new Day(LocalDate.of(2027, 11, 28)),
+                null, 1));
+        assertThatNoException().isThrownBy(() -> page(new Day(LocalDate.of(2027, 11, 27)), null, 1));
+        assertThatNoException().isThrownBy(() -> page(new Day(LedgerDates.MIN_DATE), null, 1));
+    }
+
+    @Test
     void limit은_1부터_50까지이고_달은_2000_01부터_장부_시간대로_1년_뒤의_날이_속한_달까지다() {
         clock.stopAt(Instant.parse("2026-11-30T14:59:59Z")); // 서울 11-30, 1년 뒤는 2027-11-30
 
@@ -217,8 +241,12 @@ class TransactionListQueryTest {
 
     /** 만든 거래 가운데 그 달의 것을 목록 순서로. 지운 거래는 부르는 쪽이 뺀다. */
     private List<UUID> expected(Month month) {
+        return expected(date -> YearMonth.from(date).equals(month.month()));
+    }
+
+    private List<UUID> expected(Predicate<LocalDate> inScope) {
         return made.stream()
-                .filter(key -> YearMonth.from(key.occurredOn()).equals(month.month()))
+                .filter(key -> inScope.test(key.occurredOn()))
                 .sorted(LIST_ORDER)
                 .map(TransactionKey::id)
                 .toList();
