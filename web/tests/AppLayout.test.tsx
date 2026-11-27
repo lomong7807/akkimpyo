@@ -6,6 +6,7 @@ import type { MainNavigationItem, Navigation, NavigationItem } from '../src/app/
 import { MainScreen, SubScreen } from '../src/components/Screen'
 import { readCssRule } from './support/cssRule'
 import { renderRoutes } from './support/renderRoutes'
+import { untilShown } from './support/shownScreen'
 import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
@@ -503,6 +504,8 @@ describe.each([
     const router = open('/transactions/7', { width })
     fireEvent.click(menuLink('홈'))
     await vi.waitFor(() => expect(router.state.location.pathname).toBe('/home'))
+    // 주소는 화면보다 먼저 바뀐다. 홈이 그려진 뒤에 강조를 본다(#291)
+    await untilShown(router)
     expect(currentNames()).toEqual(['홈'])
   })
 

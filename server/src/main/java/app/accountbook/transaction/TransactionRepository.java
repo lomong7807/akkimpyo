@@ -1,7 +1,6 @@
 package app.accountbook.transaction;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -25,9 +24,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     int advanceVersion(@Param("id") UUID id, @Param("expectedVersion") long expectedVersion,
                        @Param("updatedAt") Instant updatedAt);
 
-    @EntityGraph(attributePaths = "lines")
-    List<Transaction> findByLedgerIdAndDeletedAtIsNotNullOrderByDeletedAtDesc(UUID ledgerId);
-
     /**
      * 거래와 라인을 한 문장으로 읽는다. 한 문장은 한 시점의 값을 보므로, 거래와 라인을 따로 읽을 때처럼 그사이 커밋된
      * 수정이나 완전 삭제가 섞이지 않는다(#202). 영속성 컨텍스트에 이미 있는 거래는 DB 값으로 바꾸지 않고 그것을 주므로,
@@ -35,4 +31,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
      */
     @EntityGraph(attributePaths = "lines")
     Optional<Transaction> findWithLinesById(UUID id);
+
+    /** 그 장부에 있는 거래인가. 휴지통의 거래도 있다. 완전히 지운 거래는 행이 없다. */
+    boolean existsByIdAndLedgerId(UUID id, UUID ledgerId);
 }
