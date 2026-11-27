@@ -1,0 +1,50 @@
+name: Deploy PR
+
+# 배포는 deploy/production.env가 main에서 바뀐 것만으로 일어난다(#52). 그래서 그 파일을 바꾸는 PR은 그 파일 하나만 바꿔야 한다.
+# 형식은 서버의 배포 스크립트와 같은 검사(deploy/bin/deploy --check)로 본다. 그 파일만 바꾼 PR이면 검사 코드는 main의 것이다.
+# secret을 쓰지 않고 레포를 읽기만 한다.
+on:
+  pull_request:
+    paths:
+      - 'deploy/production.env'
+      - '.github/workflows/deploy-pr.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy-file:
+    name: deploy-file (배포 PR은 deploy/production.env 하나만, 형식 검사)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")
+          if ! grep -qx 'deploy/production.env' <<<"$changed"; then
+            echo "deploy/production.env를 바꾸지 않은 PR이다. 배포 PR이 아니라 검사할 것이 없다."
+            exit 0
+          fi
+          others=$(grep -vx 'deploy/production.env' <<<"$changed" || true)
+          if [[ -n $others ]]; then
+            echo "::error::배포 PR은 deploy/production.env 하나만 바꾼다. 같이 바뀐 파일:"
+            printf '%s\n' "$others"
+            exit 1
+          fi
+          deploy/bin/deploy --check deploy/production.env

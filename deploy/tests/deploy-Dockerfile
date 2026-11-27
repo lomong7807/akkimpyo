@@ -1,0 +1,11 @@
+# 배포 스크립트 시험(deploy-suite)을 돌리는 환경. 운영 서버와 같은 Ubuntu 도구(GNU coreutils, flock, git, OpenSSH)를 쓴다.
+# 백업 시험의 Dockerfile과 같은 기본 이미지다. 시험용 이미지를 만들고(buildx) 띄우려고(compose) 플러그인을 더한다.
+FROM docker:29.9.2-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb AS docker
+
+FROM ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client shellcheck systemd tzdata \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=docker /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-compose \
+    /usr/local/libexec/docker/cli-plugins/
