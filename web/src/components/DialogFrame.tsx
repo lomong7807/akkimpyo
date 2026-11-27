@@ -11,6 +11,10 @@ interface DialogFrameProps {
   busy?: boolean
   /** 안의 내용이 제목에 초점을 줄 수 있게 한다. 비교가 있어 길어지는 판이 처음 초점을 제목에 둔다(designer #239) */
   titleFocusable?: boolean
+  /**
+   * 닫을 때 움직임 없이 그 처리 안에서 뺀다(Overlay). 닫은 처리 안에서 뒤 화면의 입력칸에 초점을 줘야 할 때 쓴다(D-05 저장)
+   */
+  instantClose?: boolean
   onClose: () => void
   children: ReactNode
 }
@@ -25,6 +29,7 @@ export default function DialogFrame({
   title,
   busy = false,
   titleFocusable = false,
+  instantClose = false,
   onClose,
   children,
 }: DialogFrameProps) {
@@ -33,13 +38,20 @@ export default function DialogFrame({
   const close = busy ? ignore : onClose
   if (wide) {
     return (
-      <CenterDialog open={open} title={title} titleFocusable={titleFocusable} onClose={close}>
+      <CenterDialog open={open} title={title} titleFocusable={titleFocusable} instantClose={instantClose} onClose={close}>
         {children}
       </CenterDialog>
     )
   }
   return (
-    <BottomSheet open={open} title={title} closeDisabled={busy} titleFocusable={titleFocusable} onClose={close}>
+    <BottomSheet
+      open={open}
+      title={title}
+      closeDisabled={busy}
+      titleFocusable={titleFocusable}
+      instantClose={instantClose}
+      onClose={close}
+    >
       <div className={styles.inSheet}>{children}</div>
     </BottomSheet>
   )

@@ -33,7 +33,7 @@ import { EntryCopiesContext, useEntryAccounts, useEntryCategories } from '../tra
 import { enterToNext, isComposingKey, keepComposingEnter } from '../transactions/fieldKeys'
 import { categoryKindOf, defaultAccountOf } from '../transactions/formDefaults'
 import { handOffToEntry, newMark } from '../transactions/oneLineHandoff'
-import { SaveChoiceDialog, SaveFailureMessages } from '../transactions/SaveParts'
+import { DuplicateWarningDialog, SaveChoiceDialog, SaveFailureMessages } from '../transactions/SaveParts'
 import { oneLineDraftOf, type OneLineDraft } from '../transactions/transactionDraft'
 import {
   newTransactionValues,
@@ -60,7 +60,9 @@ import styles from './OneLineResult.module.css'
  *   보내는 동안에는 홈을 떠나는 이동을 막고(architect #233 1), 새 "입력"은 저장이 끝난 뒤에 연다(designer #233 6)
  * - 로그인이 풀리면 입력칸의 글과 열려 있거나 보내는 중인 값을 기기에 남기고, 같은 계정으로 홈에 돌아오면 다시 연다(architect #233 3)
  * - 카테고리는 열 때 해석한 가맹점으로 제안한다(P-219, useCategorySuggestion). 가맹점을 고쳐 벗어나면 다시 제안하고, 직접 고른
- *   뒤에는 하지 않는다. 1B 임시: 연결이 없으면 제안 없이 미분류다. 중복 경고(F-209)는 #241
+ *   뒤에는 하지 않는다. 1B 임시: 연결이 없으면 제안 없이 미분류다
+ * - 중복 경고(F-209, #241)는 "저장"으로 판을 닫은 뒤 묻는다. 맞는 거래가 있으면 실패할 때처럼 같은 값으로 다시 열고 그 위에 경고
+ *   판을 띄운다. "그래도 저장"은 저장을 누른 것과 같이 판을 닫고 입력칸에 초점을 준 뒤 보낸다(designer #241 D5)
  */
 
 const TITLE = '한 줄 입력 확인'
@@ -454,6 +456,7 @@ function OneLineSession({
         </Overlay>
       )}
       <SaveChoiceDialog save={save} form={form} />
+      <DuplicateWarningDialog save={save} />
     </EntryCopiesContext>
   )
 }
