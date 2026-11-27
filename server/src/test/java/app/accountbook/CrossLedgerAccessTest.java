@@ -202,6 +202,7 @@ class CrossLedgerAccessTest {
                 Stream.of(
                         dynamicTest("구성원 확인: 예외 없이 답하는 isMember", this::verifyIsMember),
                         dynamicTest("내 정보: 대상 없이 호출자의 것만 답한다", this::verifyOwnInfo),
+                        dynamicTest("표시 이름 바꾸기: 대상 없이 호출자의 것만 바꾼다", this::verifyOwnDisplayName),
                         dynamicTest("표가 호출자를 받는 공개 메서드를 모두 다룬다", this::verifyTableCoversInventory)));
     }
 
@@ -226,6 +227,21 @@ class CrossLedgerAccessTest {
         assertThat(ledgers.toString()).doesNotContain(secretsOfB);
         assertThat(ledgerService.memberships(b)).as("대조: B는 자기 장부").extracting(LedgerMembership::ledgerId)
                 .containsExactly(ledgerB);
+        assertThat(snapshot()).isEqualTo(baseline);
+    }
+
+    /**
+     * 표시 이름 바꾸기(#68)도 대상 id를 받지 않는다. A가 부르면 A의 이름만 바뀌고 돌려준 값에 B의 것이 없다.
+     * 바꾼 것은 SAVEPOINT로 되돌린다.
+     */
+    void verifyOwnDisplayName() {
+        Throwable failure = rolledBack(() -> {
+            UserProfile profile = asA(() -> userService.changeDisplayName(a, "A새이름"));
+            assertThat(profile).isEqualTo(new UserProfile("a@example.com", "A새이름"));
+            assertThat(jdbc.queryForList("select display_name from users where id in (?, ?) order by email",
+                    String.class, a, b)).containsExactly("A새이름", "b");
+        });
+        assertThat(failure).isNull();
         assertThat(snapshot()).isEqualTo(baseline);
     }
 
