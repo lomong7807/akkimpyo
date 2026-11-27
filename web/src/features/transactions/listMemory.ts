@@ -13,11 +13,19 @@ export interface ListMemory {
   rememberSaved(id: string): void
   /** 저장 뒤 돌아간 화면이 그려진 뒤에 부른다. 그 뒤에 연 내역은 강조하지 않는다. */
   forgetSaved(): void
+  /**
+   * 달력(D-02)에서 옮긴 달을 그 달력을 연 내역의 방문 기록 항목(`listKey`, 그 항목의 location.key)에 넘긴다(D-02 (1),
+   * architect #300 B). 넘긴 값은 하나이고 새로 넘기면 바뀐다.
+   */
+  handOffMonth(listKey: string, month: string): void
+  /** 그 항목(`listKey`)에 넘긴 달. 다른 항목이면 없다. 다른 화면을 거쳐 연 내역 주소의 달을 덮지 않게 하기 위해서다. */
+  handedMonth(listKey: string): string | undefined
 }
 
 export function createListMemory(): ListMemory {
   let month: string | undefined
   let saved: string | undefined
+  let handed: { listKey: string; month: string } | undefined
   return {
     month: () => month,
     rememberMonth(next) {
@@ -30,6 +38,10 @@ export function createListMemory(): ListMemory {
     forgetSaved() {
       saved = undefined
     },
+    handOffMonth(listKey, next) {
+      handed = { listKey, month: next }
+    },
+    handedMonth: (listKey) => (handed?.listKey === listKey ? handed.month : undefined),
   }
 }
 

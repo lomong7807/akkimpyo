@@ -33,7 +33,6 @@ record ExportRow(LocalDate date, LocalTime time, String type, long amount, Strin
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
     private static final Map<TransactionType, String> TYPES = Map.of(
             TransactionType.EXPENSE, "지출", TransactionType.INCOME, "수입", TransactionType.TRANSFER, "이체");
-    /** 내부 용어 표(기능정의서 1.4)의 한글 이름. */
     private static final Map<TransactionStatus, String> STATUSES = Map.of(
             TransactionStatus.PENDING, "승인 대기", TransactionStatus.POSTED, "완료", TransactionStatus.CANCELED, "취소");
     /** 1단계의 환불은 지출 입력의 "환불"뿐이다(P-209). 돌려받음(P-210)은 아직 저장하지 않는다(#46). */

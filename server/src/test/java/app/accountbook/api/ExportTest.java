@@ -22,8 +22,6 @@ import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -56,25 +54,21 @@ class ExportTest {
     private UUID ledgerId;
     private UUID cash;
     private ServerClient client;
-    /** HTTP 테스트는 롤백되지 않는다. 거래를 만든 장부를 적어 두고 끝나면 지운다. */
-    private final List<UUID> ledgers = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
         clock.stopAt(NOW);
         owner = user();
         ledgerId = fixtures.personalLedgerId(owner);
-        ledgers.add(ledgerId);
         cash = fixtures.account(owner, ledgerId, "현금", AccountType.CASH, 0, OCT_1).getId();
         client = ServerClient.signedIn(port, owner.getId(), NOW);
     }
 
+    /** HTTP 테스트는 롤백되지 않는다. 거래는 이 장부에만 만든다. */
     @AfterEach
     void removeTransactions() {
-        ledgers.forEach(ledger -> {
-            jdbc.update("delete from change_log where ledger_id = ?", ledger);
-            jdbc.update("delete from transaction where ledger_id = ?", ledger);
-        });
+        jdbc.update("delete from change_log where ledger_id = ?", ledgerId);
+        jdbc.update("delete from transaction where ledger_id = ?", ledgerId);
     }
 
     @Test
@@ -163,11 +157,13 @@ class ExportTest {
                 Map.entry("format=csv&from=2026-02-29&to=2026-10-31", new String[] {"from:INVALID_FORMAT"}),
                 Map.entry("format=csv&from=&to=", new String[] {"from:INVALID_FORMAT", "to:INVALID_FORMAT"}),
                 Map.entry("format=csv&from=2026-10-01&to=2026-10-31&to=2026-11-30", new String[] {"to:INVALID_FORMAT"}),
+                Map.entry("format=csv&from=0000-12-31&to=2026-10-31", new String[] {"from:OUT_OF_RANGE"}),
+                Map.entry("format=csv&from=2026-10-01&to=0000-01-01", new String[] {"to:OUT_OF_RANGE"}),
                 Map.entry("format=csv&from=2026-10-31&to=2026-10-30", new String[] {"to:NOT_ALLOWED"}));
         for (Map.Entry<String, String[]> query : rejected.entrySet()) {
             client.get(path() + "?" + query.getKey(), "Accept", "text/csv").assertFieldErrors(query.getValue());
         }
-        assertNoContent(client.get(path() + "?format=csv&from=2026-10-31&to=2026-10-31", "Accept", "application/json"));
+        assertNoContent(client.get(path() + "?format=csv&from=0001-01-01&to=9999-12-31", "Accept", "application/json"));
     }
 
     @Test

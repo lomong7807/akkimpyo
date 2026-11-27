@@ -21,7 +21,6 @@ final class ExportFileName {
     private ExportFileName() {
     }
 
-    /** @param extension 점 없는 확장자({@code csv}) */
     static String of(String ledgerName, LocalDate from, LocalDate to, String extension) {
         String name = replace(ledgerName, c -> RESERVED.indexOf(c) >= 0 || Character.isISOControl(c) ? '_' : c);
         return name + "_" + DAY.format(from) + "_" + DAY.format(to) + "." + extension;

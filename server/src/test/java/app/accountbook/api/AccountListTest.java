@@ -72,7 +72,7 @@ class AccountListTest {
     }
 
     @Test
-    void 만든_순서대로_이름_종류_잔액_기준일을_돌려준다() throws Exception {
+    void 만든_순서대로_이름_종류_잔액_시작_잔액_기준일을_돌려준다() throws Exception {
         UUID bank = fixtures.account(owner, ledgerId, "월급통장", AccountType.BANK, 100_000, OPENING).getId();
         UUID card = fixtures.account(owner, ledgerId, "신용카드", AccountType.CARD, -50_000, OPENING).getId();
         UUID cash = fixtures.account(owner, ledgerId, "지갑", AccountType.CASH, 0, LocalDate.of(2026, 11, 20)).getId();
@@ -86,12 +86,13 @@ class AccountListTest {
         JsonNode items = client.get(path()).json().get("items");
 
         assertThat(items.valueStream().map(AccountListTest::describe)).containsExactly(
-                bank + " 월급통장 BANK 70000 2026-11-01",
-                card + " 신용카드 CARD -62000 2026-11-01",
-                cash + " 지갑 CASH 30000 2026-11-20");
+                bank + " 월급통장 BANK 70000 100000 2026-11-01",
+                card + " 신용카드 CARD -62000 -50000 2026-11-01",
+                cash + " 지갑 CASH 30000 0 2026-11-20");
         assertThat(items.valueStream().toList()).allSatisfy(item -> {
-            assertThat(item.propertyNames()).containsExactly("id", "name", "type", "balance", "openingDate");
+            assertThat(item.propertyNames()).containsExactly("id", "name", "type", "balance", "openingBalance", "openingDate");
             assertThat(item.get("balance").isIntegralNumber()).as("금액은 JSON 정수다").isTrue();
+            assertThat(item.get("openingBalance").isIntegralNumber()).as("금액은 JSON 정수다").isTrue();
         });
     }
 
@@ -127,6 +128,6 @@ class AccountListTest {
 
     private static String describe(JsonNode item) {
         return String.join(" ", item.get("id").asString(), item.get("name").asString(), item.get("type").asString(),
-                item.get("balance").asString(), item.get("openingDate").asString());
+                item.get("balance").asString(), item.get("openingBalance").asString(), item.get("openingDate").asString());
     }
 }

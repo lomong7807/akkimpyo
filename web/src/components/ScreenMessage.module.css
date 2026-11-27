@@ -25,3 +25,14 @@
   align-items: center;
   gap: var(--space-8);
 }
+
+/* 같은 오류가 되풀이될 때의 "마지막으로 맞춘 시각 {시각}"(00-common 4.3, 3.2). 오류 문구 바로 아래 4px, 동작과는 24px */
+.description:has(+ .note) {
+  margin-bottom: var(--space-4);
+}
+
+.note {
+  margin: 0 0 var(--space-24);
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}
