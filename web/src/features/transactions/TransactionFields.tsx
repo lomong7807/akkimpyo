@@ -2,13 +2,14 @@ import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
 import AmountField from '../../components/AmountField'
 import { Button } from '../../components/Button'
 import DateField from '../../components/DateField'
+import Field from '../../components/Field'
 import Icon from '../../components/Icon'
 import SegmentedChoice from '../../components/SegmentedChoice'
 import TextAreaField from '../../components/TextAreaField'
 import { TextField } from '../../components/TextField'
 import TimeField from '../../components/TimeField'
-import { useCategories } from '../categories/useCategories'
 import { categoryKindOf } from './formDefaults'
+import { useEntryCategories } from './entryLists'
 import { AccountField, CategoryField } from './TransactionPickers'
 import { MEMO_MAX, memoLength, PAYEE_MAX, payeeLength, typeChange, type TransactionField } from './transactionForm'
 import type { TransactionType } from './transactions'
@@ -24,6 +25,9 @@ const typeOptions: { value: TransactionType; label: string }[] = [
 /** 계좌 칸의 이름(D-04 (6), (17)) */
 const accountLabels: Record<TransactionType, string> = { EXPENSE: '계좌', INCOME: '들어온 계좌', TRANSFER: '보내는 계좌' }
 
+/** 수정에서 유형 아래의 도움말(D-04 (2), P-213) */
+const TYPE_FIXED = '유형은 바꿀 수 없어요. 바꾸려면 삭제하고 새로 입력해 주세요.'
+
 interface TransactionFieldsProps {
   form: TransactionForm
   /** 보내는 중이라 바꿀 수 없다 */
@@ -31,6 +35,11 @@ interface TransactionFieldsProps {
   /** "더 보기"를 펼쳤다 */
   moreOpen: boolean
   onMoreOpenChange: (open: boolean) => void
+  /**
+   * 저장된 거래를 고친다(D-04 수정). 유형은 바꿀 수 없어 고르기 대신 이름만 글자로 보이고(P-213),
+   * 열 때 금액에 초점을 두지 않는다(D-04 (3)). 나머지 칸과 검사는 새 입력과 같다.
+   */
+  editing?: boolean
 }
 
 /** 엔터를 그 칸의 동작으로 받는지. 한글을 조합하는 중과 Ctrl·Cmd를 함께 누른 저장은 빼고 본다. */
@@ -39,18 +48,26 @@ function isPlainEnter(event: KeyboardEvent): boolean {
   return event.key === 'Enter' && !composing && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
 }
 
-/** D-04 새 입력의 칸(유형, 금액, 가맹점/내용, 카테고리, 계좌, 날짜, 더 보기 아래의 시각과 메모) */
-export default function TransactionFields({ form, readOnly, moreOpen, onMoreOpenChange }: TransactionFieldsProps) {
+/** D-04 새 입력과 수정의 칸(유형, 금액, 가맹점/내용, 카테고리, 계좌, 날짜, 더 보기 아래의 시각과 메모) */
+export default function TransactionFields({
+  form,
+  readOnly,
+  moreOpen,
+  onMoreOpenChange,
+  editing = false,
+}: TransactionFieldsProps) {
   const { values, effective, change, control, check } = form
-  const categories = useCategories()
+  const categories = useEntryCategories()
   const transfer = values.type === 'TRANSFER'
   const foldedId = useId()
   const amount = useRef<HTMLInputElement>(null)
   // 금액은 열리면 앱이 초점을 준다. 한 번도 쓰지 않은 채 다른 칸으로 가면 벗어난 검사를 하지 않고 저장할 때 검사한다
   const amountTouched = useRef(false)
 
-  // 새 입력은 열리면 금액에 초점을 둔다. 빠른 입력이 누르는 순간 올려 둔 화면 키보드가 이어진다
-  useEffect(() => amount.current?.focus(), [])
+  // 새 입력은 열리면 금액에 초점을 둔다. 빠른 입력이 누르는 순간 올려 둔 화면 키보드가 이어진다. 수정은 두지 않는다
+  useEffect(() => {
+    if (!editing) amount.current?.focus()
+  }, [editing])
 
   /**
    * 고르는 칸은 고르면 바로 검사한다. 받는 계좌는 보내는 계좌와 같은지 고르는 즉시 본다(D-04 (18)). 받는 계좌를 고른 뒤
@@ -87,7 +104,14 @@ export default function TransactionFields({ form, readOnly, moreOpen, onMoreOpen
 
   return (
     <>
-      <SegmentedChoice label="유형" options={typeOptions} value={values.type} onChange={changeType} readOnly={readOnly} />
+      {editing ? (
+        // 다른 칸과 같은 틀에서 상자만 뺀 모양이다. 이름 아래 8px에 값 글자, 그 아래 4px에 도움말(designer 결정 #89)
+        <Field label="유형" help={TYPE_FIXED} group>
+          {() => <p className={styles.typeValue}>{typeOptions.find(({ value }) => value === values.type)?.label}</p>}
+        </Field>
+      ) : (
+        <SegmentedChoice label="유형" options={typeOptions} value={values.type} onChange={changeType} readOnly={readOnly} />
+      )}
       <AmountField
         {...control('amount')}
         ref={(element) => {

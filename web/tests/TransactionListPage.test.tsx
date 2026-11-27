@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, meOf, type Backend } from './support/backend'
+import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
 import { installIntersectionObserver, type Intersection } from './support/intersection'
 import { startMockServer } from './support/mockServer'
@@ -26,6 +27,7 @@ import {
   transferOf,
   type TransactionList,
 } from './support/transactionList'
+import { holdClock, passTime } from './support/testClock'
 import { savedOf, type Transactions } from './support/transactions'
 import { resetViewport, setViewportWidth } from './support/viewport'
 
@@ -40,13 +42,11 @@ let transactions: Transactions
 let list: TransactionList
 let intersection: Intersection
 
-/** 기기의 지금. 시각은 기기의 시간대다. */
-function deviceNow(...parts: [number, number, number, number?, number?, number?]) {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(...(parts as [number, number, number])) })
-}
+const NOW = '2026-11-26T12:30:00+09:00'
 
 beforeEach(() => {
-  deviceNow(2026, 10, 26, 12, 30)
+  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)는 공용 시계(testClock)다
+  setDeviceClock(NOW)
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   list = startTransactionList(server, backend)
@@ -164,16 +164,21 @@ describe('주소와 고른 달', () => {
     ])
   })
 
-  describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles'])('기기의 시간대가 %s일 때 기본 달은 기기의 오늘을 따른다', (timeZone) => {
-    beforeEach(() => vi.stubEnv('TZ', timeZone))
-
+  // 시간대마다 그 시간대의 시각을 오프셋으로 적는다(11월 말~1월이라 로스앤젤레스는 겨울 시간 −08:00)
+  describe.each([
+    ['Asia/Seoul', '+09:00'],
+    ['UTC', 'Z'],
+    ['America/Los_Angeles', '-08:00'],
+    ['Pacific/Kiritimati', '+14:00'],
+    ['Pacific/Pago_Pago', '-11:00'],
+  ])('기기의 시간대가 %s일 때 기본 달은 기기의 오늘을 따른다', (timeZone, offset) => {
     it.each([
-      [[2026, 10, 30, 23, 59, 59], '2026-11'],
-      [[2026, 11, 1, 0, 0, 0], '2026-12'],
-      [[2026, 11, 31, 23, 59, 59], '2026-12'],
-      [[2027, 0, 1, 0, 0, 0], '2027-01'],
-    ] as const)('지금이 %j(월은 0부터)이면 %s', async (now, month) => {
-      deviceNow(...(now as unknown as [number, number, number, number, number, number]))
+      ['2026-11-30T23:59:59', '2026-11'],
+      ['2026-12-01T00:00:00', '2026-12'],
+      ['2026-12-31T23:59:59', '2026-12'],
+      ['2027-01-01T00:00:00', '2027-01'],
+    ])('지금이 그 시간대로 %s이면 %s', async (now, month) => {
+      setDeviceClock(`${now}${offset}`, timeZone)
       const opened = await openApp('/transactions')
       await waitFor(() => expect(addressOf(opened)).toBe(`/transactions?month=${month}`))
     })
@@ -284,7 +289,7 @@ describe('달 이동(00-common 5.9)', () => {
     list.response = (sent) => (sent.month === '2026-10' ? slow.respond() : undefined)
     const bar = monthHeading().parentElement
     await opened.user.click(monthButton('이전 달')!)
-    await settle(350)
+    await passTime(350)
     expect(screen.getByText(loading)).toBeTruthy()
     expect(monthHeading().parentElement).toBe(bar)
     expect(monthHeading().textContent).toBe('10월')
@@ -434,7 +439,7 @@ describe('날짜 묶음 머리(0.5)', () => {
   })
 
   it('머리는 위 16px, 아래 4px이다', () => {
-    expect(readCssRule(CSS, '.dayHead')).toContain('padding: var(--space-16) var(--space-16) var(--space-4)')
+    expect(readCssRule(CSS, '.dayHead')).toContain('padding: var(--space-16) var(--row-inset, var(--space-16)) var(--space-4)')
   })
 })
 
@@ -605,7 +610,7 @@ describe('거래 줄(0.4)', () => {
     await openList()
     const [row] = rowsOf('11월 26일 (목)')
     expect(styleOf(row).minHeight).toBe('var(--size-row)')
-    expect(readCssRule(CSS, '.row')).toContain('padding: var(--space-8) var(--space-16)')
+    expect(readCssRule(CSS, '.row')).toContain('padding: var(--space-8) var(--row-inset, var(--space-16))')
     expect(readCssRule(CSS, '.row')).not.toContain('border')
     expect(readCssRule(CSS, '.row:active')).toContain('background-color: var(--color-press)')
     expect(readCssRule(CSS, '.row:hover')).toContain('background-color: var(--color-press)')
@@ -622,8 +627,14 @@ describe('거래 줄(0.4)', () => {
   })
 })
 
-describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles'])('기기의 시간대가 %s일 때 달의 경계', (timeZone) => {
-  beforeEach(() => vi.stubEnv('TZ', timeZone))
+describe.each([
+  ['Asia/Seoul', '+09:00'],
+  ['UTC', 'Z'],
+  ['America/Los_Angeles', '-08:00'],
+  ['Pacific/Kiritimati', '+14:00'],
+  ['Pacific/Pago_Pago', '-11:00'],
+])('기기의 시간대가 %s일 때 달의 경계', (timeZone, offset) => {
+  beforeEach(() => setDeviceClock(`2026-11-26T12:30:00${offset}`, timeZone))
 
   const on = (occurredOn: string, payee: string) =>
     expenseOf({ occurredOn, occurredTime: '00:00', accountId: id.card, categoryId: id.food, amount: 1000, payee })
@@ -713,7 +724,7 @@ describe('이어 불러오기(00-common 5.10)', () => {
     await intersection.show()
     await intersection.hide()
     await intersection.show()
-    await settle(350)
+    await passTime(350)
     expect(pageRequests().filter(({ cursor }) => cursor)).toHaveLength(1)
     const shapes = main().querySelectorAll('div[aria-hidden="true"]')
     expect(shapes).toHaveLength(1)
@@ -774,7 +785,7 @@ describe('첫 불러오기', () => {
     await screen.findByRole('heading', { level: 1 })
     expect(screen.queryByText(loading)).toBeNull()
     expect(main().querySelector('div[aria-hidden="true"]')).toBeNull()
-    await settle(350)
+    await passTime(350)
     expect(screen.getByText(loading)).toBeTruthy()
     const shape = main().querySelector('div[aria-hidden="true"]')!
     const kinds = [...shape.children].map((child) => /_(totals|dayHead|row)_/.exec(child.className)?.[1])
@@ -791,7 +802,7 @@ describe('첫 불러오기', () => {
     list.response = () => slow.respond()
     await openApp('/transactions?month=2026-11')
     await screen.findByRole('heading', { level: 1 })
-    await settle(350)
+    await passTime(350)
     const shape = main().querySelector('div[aria-hidden="true"]')!
     const row = shape.lastElementChild!
     // 시각 칸, 제목과 금액의 첫 줄, 둘째 줄
@@ -868,7 +879,8 @@ describe('거래가 없는 달(4.2)', () => {
     }
     await screen.findByRole('heading', { level: 1, name: '거래 입력' })
     expect(opened.router.state.location.pathname).toBe('/transactions/new')
-    expect(screen.getByRole('radio', { name: '지출' }).getAttribute('aria-checked')).toBe('true')
+    // 화면 코드를 받는 동안의 틀(#251)에도 같은 제목이 있으므로 칸이 나오기를 기다린다
+    expect((await screen.findByRole('radio', { name: '지출' })).getAttribute('aria-checked')).toBe('true')
   })
 
   it('보기 전용 구성원에게는 문장만 보이고 버튼이 없다', async () => {
@@ -883,8 +895,11 @@ describe('거래가 없는 달(4.2)', () => {
 })
 
 describe('받아 둔 목록을 다시 받는 때', () => {
-  /** 기기의 시계를 `seconds`초 앞으로 보낸다. 캐시가 오래됐는지는 이 시계로 정한다. */
-  const advance = (seconds: number) => vi.setSystemTime(Date.now() + seconds * 1000)
+  /**
+   * `seconds`초가 지난 것으로 한다. 캐시가 오래됐는지는 라이브러리의 시계(Date)로 정한다. 받은 때부터 센 초를 정확히 맞추도록
+   * 그 테스트는 목록을 받기 전에 시계를 멈추고(holdClock) 이것으로만 보낸다.
+   */
+  const advance = (seconds: number) => passTime(seconds * 1000)
 
   async function openTwoPages() {
     list.months.set('2026-11', manyItems(51))
@@ -896,9 +911,10 @@ describe('받아 둔 목록을 다시 받는 때', () => {
   }
 
   it('받은 지 30초 안에 돌아오면 다시 받지 않는다', async () => {
+    holdClock()
     const opened = await openTwoPages()
     const before = pageRequests().length
-    advance(29)
+    await advance(29)
     await act(() => opened.router.navigate('/transactions?month=2026-11'))
     await settle(100)
     expect(allRows()).toHaveLength(51)
@@ -906,9 +922,10 @@ describe('받아 둔 목록을 다시 받는 때', () => {
   })
 
   it('30초가 지나 돌아오면 불러온 쪽을 모두 차례로 다시 받는다', async () => {
+    holdClock()
     const opened = await openTwoPages()
     const before = pageRequests().length
-    advance(31)
+    await advance(31)
     await act(() => opened.router.navigate('/transactions?month=2026-11'))
     await waitFor(() => expect(pageRequests()).toHaveLength(before + 2))
     expect(pageRequests().slice(before).map(({ cursor }) => cursor)).toEqual([null, '2026-11|50'])
@@ -916,14 +933,15 @@ describe('받아 둔 목록을 다시 받는 때', () => {
 
   // 창에 다시 초점이 오면(탭으로 돌아오면) 브라우저가 visibilitychange를 보낸다
   it('30초가 지난 뒤 창에 초점이 오면 다시 받고, 30초 안이면 받지 않는다', async () => {
+    holdClock()
     putNovember()
     await openList()
     const before = pageRequests().length
-    advance(29)
+    await advance(29)
     await act(async () => window.dispatchEvent(new Event('visibilitychange')))
     await settle(100)
     expect(pageRequests()).toHaveLength(before)
-    advance(2)
+    await advance(2)
     await act(async () => window.dispatchEvent(new Event('visibilitychange')))
     await waitFor(() => expect(pageRequests()).toHaveLength(before + 1))
   })
@@ -950,11 +968,13 @@ describe('상세에서 뒤로 돌아오면', () => {
     const target = allRows()[50]
     await opened.user.click(target)
     await waitFor(() => expect(opened.router.state.location.pathname).toMatch(/^\/transactions\/0190/))
+    // 상세의 코드가 와서 목록에 있던 값을 먼저 보인 뒤부터 본다. 그 전은 상세의 틀이다(#251)
+    await screen.findByText('날짜·시각')
     const dom = recordDom()
     await act(() => opened.router.navigate(-1))
     await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-10'))
     expect(allRows()).toHaveLength(51)
-    await settle(400)
+    await passTime(400)
     expect(dom.sawText(loading)).toBe(false)
     expect(dom.sawElement('div[aria-hidden="true"]')).toBe(false)
   })
@@ -992,7 +1012,7 @@ describe('저장한 뒤 돌아오면', () => {
     expect(pageRequests().length).toBeGreaterThan(requestsBefore)
     expect(allRows().filter((row) => /_highlighted_/.test(row.className))).toHaveLength(1)
     expect(styleOf(savedRow()!).backgroundColor).toBe('var(--color-surface)')
-    await act(() => new Promise((resolve) => setTimeout(resolve, 1100)))
+    await passTime(1100)
     expect(savedRow()!.className).not.toMatch(/_highlighted_/)
   })
 
@@ -1032,7 +1052,7 @@ describe('저장한 뒤 돌아오면', () => {
     setViewportWidth(390)
     expect(styleOf(history).marginInline).toBe('calc(-1 * var(--bleed))')
     expect(row.className).toMatch(/_row_/)
-    expect(readCssRule(CSS, '.row')).toContain('padding: var(--space-8) var(--space-16)')
+    expect(readCssRule(CSS, '.row')).toContain('padding: var(--space-8) var(--row-inset, var(--space-16))')
     setViewportWidth(1280)
     expect(styleOf(history).getPropertyValue('--bleed')).toBe('0px')
   })
@@ -1041,11 +1061,11 @@ describe('저장한 뒤 돌아오면', () => {
 describe('하단 탭과 사이드바의 "내역"', () => {
   const tabBar = () => screen.getByRole('navigation', { name: '주 메뉴' })
 
-  it('하단 탭은 내역, 거래 입력, 더보기 칸이고 내역은 ListBullets 24px이다', async () => {
+  it('하단 탭은 홈, 내역, 거래 입력, 더보기 칸이고 내역은 ListBullets 24px이다', async () => {
     await openList()
     const cells = within(tabBar()).getAllByRole('listitem')
-    expect(cells.map((cell) => cell.textContent)).toEqual(['내역', '', '더보기'])
-    const link = within(cells[0]).getByRole('link', { name: '내역' })
+    expect(cells.map((cell) => cell.textContent)).toEqual(['홈', '내역', '', '더보기'])
+    const link = within(cells[1]).getByRole('link', { name: '내역' })
     expect(link.getAttribute('href')).toBe('/transactions')
     const icon = link.querySelector('svg')!
     expect(styleOf(icon).width).toBe('var(--size-icon-24)')

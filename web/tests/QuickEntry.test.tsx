@@ -5,7 +5,9 @@ import { holdKeyboard } from '../src/components/keyboardBridge'
 import { canEdit } from '../src/features/me/me'
 import { meOf, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
+import { setDeviceClock } from './support/clock'
 import { startMockServer } from './support/mockServer'
+import { passTime } from './support/testClock'
 import { readWebFile } from './support/webFile'
 import {
   amount,
@@ -15,6 +17,7 @@ import {
   saveButton,
   startServer,
   typeRadio,
+  untilDefaultAccount,
   type Opened,
 } from './support/transactionScreen'
 import type { Transactions } from './support/transactions'
@@ -25,7 +28,7 @@ let backend: Backend
 let transactions: Transactions
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12, 30) })
+  setDeviceClock('2026-11-26T12:30:00+09:00')
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, transactions } = startServer(server))
   localStorage.clear()
@@ -53,23 +56,26 @@ async function openAt(address: string, width = 390) {
 }
 
 async function untilForm(opened: Opened) {
-  await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+  await untilDefaultAccount()
   expect(path(opened)).toBe('/transactions/new')
 }
 
 describe('하단 탭의 거래 입력 칸(휴대폰 배치)', () => {
-  it('1A는 내역, 거래 입력, 더보기 세 칸이 같은 폭으로 놓인다(거래 입력은 칸 순서의 자리)', async () => {
+  it('1A는 홈, 내역, 거래 입력, 더보기 네 칸이 같은 폭으로 놓인다(거래 입력은 칸 순서의 자리)', async () => {
     await openAt('/more')
     const cells = within(tabBar()).getAllByRole('listitem')
-    expect(cells.map((cell) => cell.textContent)).toEqual(['내역', '', '더보기'])
-    expect(cells[1].contains(quickEntry())).toBe(true)
+    expect(cells.map((cell) => cell.textContent)).toEqual(['홈', '내역', '', '더보기'])
+    expect(cells[2].contains(quickEntry())).toBe(true)
     expect(styleOf(within(tabBar()).getByRole('list')).gridAutoColumns).toBe('minmax(0, 1fr)')
   })
 
   it('44px 강조색 바탕, 모서리 10px, 강조색 위 글자색의 Plus 24px이고 그림자와 글자가 없으며 칸 가운데에 있다', async () => {
     await openAt('/more')
     const style = styleOf(quickEntry())
-    expect([style.width, style.height]).toEqual(['var(--size-quick-entry)', 'var(--size-quick-entry)'])
+    const rule = readCssRule('src/app/TabBar.module.css', '.quickEntry')
+    // 정사각형이고 크기는 토큰 값(44px)과 칸 폭 중 작은 것이다. 칸은 자기 폭을 재는 컨테이너다(아래 테스트)
+    expect(rule).toContain('width: min(var(--size-quick-entry), 100cqi);')
+    expect(rule).toContain('height: min(var(--size-quick-entry), 100cqi);')
     expect(style.backgroundColor).toBe('var(--color-accent)')
     expect(style.color).toBe('var(--color-on-accent)')
     expect(style.borderRadius).toBe('var(--radius-10)')
@@ -79,6 +85,19 @@ describe('하단 탭의 거래 입력 칸(휴대폰 배치)', () => {
     const icon = quickEntry().querySelector('svg')!
     expect(styleOf(icon).width).toBe('var(--size-icon-24)')
     expect(icon.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  // designer 검토(#90): 320px 글자 200%에서 버튼(88px)이 칸(64px)을 넘어 옆 칸의 아이콘을 가렸다
+  it('버튼은 칸 폭을 넘지 않는다: 칸이 토큰 값보다 좁으면 칸 폭의 정사각형이고 아이콘은 그대로 가운데다', async () => {
+    await openAt('/more')
+    const cell = quickEntry().parentElement!
+    expect(cell.tagName).toBe('LI')
+    expect(readCssRule('src/app/TabBar.module.css', '.tabs > li')).toContain('container-type: inline-size;')
+    const rule = readCssRule('src/app/TabBar.module.css', '.quickEntry')
+    expect(rule).toContain('justify-content: center;')
+    expect(rule).toContain('align-items: center;')
+    expect(rule).not.toMatch(/padding/)
+    expect(styleOf(quickEntry().querySelector('svg')!).width).toBe('var(--size-icon-24)')
   })
 
   it('접근성 이름은 "거래 입력"이고 지금 화면 표시를 받지 않는다', async () => {
@@ -208,7 +227,7 @@ describe('권한', () => {
     backend.meResponse = () =>
       HttpResponse.json({ ...meOf('user-1'), ledgers: [{ ...meOf('user-1').ledgers[0], role: 'VIEWER' }] })
     await openAt('/more')
-    expect(within(tabBar()).getAllByRole('listitem').map((cell) => cell.textContent)).toEqual(['내역', '더보기'])
+    expect(within(tabBar()).getAllByRole('listitem').map((cell) => cell.textContent)).toEqual(['홈', '내역', '더보기'])
     setViewportWidth(1280)
     expect(screen.queryByRole('link', { name: '거래 입력', hidden: true })).toBeNull()
   })
@@ -233,11 +252,10 @@ describe('키보드 올려 두기', () => {
     expect(bridge()).toBeNull()
   })
 
-  it('아무도 초점을 가져가지 않으면 잠시 뒤 걷는다', () => {
-    vi.useFakeTimers({ toFake: ['setTimeout'] })
+  it('아무도 초점을 가져가지 않으면 잠시 뒤 걷는다', async () => {
     holdKeyboard(new MouseEvent('click') as never)
     expect(bridge()).toBeTruthy()
-    vi.advanceTimersByTime(1000)
+    await passTime(1000)
     expect(bridge()).toBeNull()
   })
 

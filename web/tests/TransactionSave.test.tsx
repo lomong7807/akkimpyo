@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Accounts } from './support/accounts'
 import { delayed, type Backend } from './support/backend'
 import { untilOpened } from './support/dialog'
+import { setDeviceClock } from './support/clock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
@@ -34,6 +35,8 @@ import {
   type Opened,
   type User,
 } from './support/transactionScreen'
+import { holdClock, passTime } from './support/testClock'
+import { startTransactionDetail } from './support/transactionDetail'
 import { savedOf, type Transactions } from './support/transactions'
 import { resetViewport } from './support/viewport'
 
@@ -41,7 +44,8 @@ const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const failed = '문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
 const savedDifferently = '앞서 저장한 거래와 내용이 달라 저장하지 못했어요. 내역에서 확인해 주세요.'
 const idUnusable = '문제가 생겨 저장하지 못했어요. 새 거래로 저장해 주세요.'
-const resendNotice = '이미 저장된 거래가 있어요. 내역에서 확인해 주세요.'
+/** designer #239: 1A 문구를 바꾼다 */
+const resendNotice = '이미 저장된 거래라 저장된 내용으로 두었어요'
 
 const server = startMockServer()
 let backend: Backend
@@ -49,7 +53,7 @@ let accounts: Accounts
 let transactions: Transactions
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12, 30) })
+  setDeviceClock('2026-11-26T12:30:00+09:00')
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts, transactions } = startServer(server))
   localStorage.clear()
@@ -222,7 +226,7 @@ describe('같은 id를 다시 보냄(200)', () => {
     ['휴지통의 거래', { deletedAt: '2026-11-26T04:00:00.000Z' }],
     ['취소된 거래', { status: 'CANCELED' }],
     ['결제한 사람이 탈퇴한 거래', { paidBy: null }],
-  ])('%s이면 "이미 저장된 거래가 있어요."를 알리고 이전 화면으로 간다', async (_, changes) => {
+  ])('%s이면 "이미 저장된 거래라 저장된 내용으로 두었어요"를 알리고 이전 화면으로 간다', async (_, changes) => {
     transactions.response = ({ body, user }) => HttpResponse.json(savedOf(body, user, changes), { status: 200 })
     const opened = await openFromMore()
     await saveAmount(opened.user)
@@ -239,10 +243,10 @@ describe('같은 id를 다시 보냄(200)', () => {
 })
 
 describe('서버 오류와 지연', () => {
+  // 요청 중에 연결이 끊긴 새 거래(응답 없음)는 #234부터 같은 id로 기기에 쌓는다(P-904). OfflineSave.test.tsx가 본다
   it.each([
     ['500', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['429', () => problem(429, 'TOO_MANY_REQUESTS')],
     ['404', () => problem(404, 'NOT_FOUND')],
     ['모르는 칸만 온 400', refuse(['refund', 'NOT_ALLOWED'])],
@@ -272,11 +276,11 @@ describe('서버 오류와 지연', () => {
     transactions.response = delayed().respond
     const { user } = await openForm()
     await user.keyboard('12000')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
     fireEvent.click(saveButton())
-    await act(() => vi.advanceTimersByTimeAsync(14_900))
+    await passTime(14_900)
     expect(screen.queryByRole('alert')).toBeNull()
-    await act(() => vi.advanceTimersByTimeAsync(200))
+    await passTime(200)
     expect(screen.getByRole('alert').textContent).toBe(failed)
   })
 
@@ -292,7 +296,7 @@ describe('서버 오류와 지연', () => {
   })
 
   it('"다시 시도"는 같은 id로 보낸다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => HttpResponse.error(), undefined]
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => new HttpResponse('<html>', { status: 502 }), undefined]
     transactions.response = (sent) => answers.shift()?.() ?? HttpResponse.json(savedOf(sent.body), { status: 201 })
     const { user } = await openForm()
     await saveAmount(user)
@@ -428,10 +432,14 @@ describe('서버가 칸을 거부함(400)', () => {
   })
 })
 
+/*
+ * current가 보낸 거래의 것으로 온 409는 선택 판이다(IdConflictChoice.test.tsx). 아래 current는 보낸 거래와 id가 달라 약속과 다른
+ * 응답이다. 선택 판을 그릴 수 없어 1A처럼 그 거래를 보러 가게만 한다.
+ */
 describe('같은 id로 만들 수 없음(409 ID_CONFLICT)', () => {
   const savedId = '019a5f2e-8a7d-7b60-9c11-0b9f6c1e3d52'
 
-  it('앞서 저장한 내 거래가 있으면(current) 문구와 "저장된 거래 보기" 하나를 보이고 초점을 옮기지 않는다', async () => {
+  it('current가 보낸 거래의 것이 아니면 문구와 "저장된 거래 보기" 하나를 보이고 초점을 옮기지 않는다', async () => {
     transactions.response = ({ body }) => problem(409, 'ID_CONFLICT', { current: savedOf({ ...body, id: savedId }) })
     const { user } = await openForm()
     await user.keyboard('12000')
@@ -446,15 +454,33 @@ describe('같은 id로 만들 수 없음(409 ID_CONFLICT)', () => {
     expect(document.activeElement).toBe(payee())
   })
 
-  it('"저장된 거래 보기"는 그 거래의 주소로 가고, 쓰던 내용이 있으면 먼저 버릴지 묻는다', async () => {
-    transactions.response = ({ body }) => problem(409, 'ID_CONFLICT', { current: savedOf({ ...body, id: savedId }) })
-    const opened = await openForm()
+  it('"저장된 거래 보기"는 쓰던 내용이 있어도 묻지 않고 입력을 버려 그 거래의 상세로 간다(planner #102)', async () => {
+    const detail = startTransactionDetail(server, backend)
+    transactions.response = ({ body }) => {
+      const current = savedOf({ ...body, id: savedId })
+      detail.put(current)
+      return problem(409, 'ID_CONFLICT', { current })
+    }
+    const opened = await openFromMore()
     await saveAmount(opened.user)
     await opened.user.click(await screen.findByRole('link', { name: '저장된 거래 보기' }))
-    expect(discardQuestion()).toBeTruthy()
-    await untilOpened()
-    await opened.user.click(screen.getByRole('button', { name: '버리기' }))
     await waitFor(() => expect(path(opened)).toBe(`/transactions/${savedId}`))
+    expect(discardQuestion()).toBeNull()
+    expect(await screen.findByRole('heading', { level: 1, name: '거래 상세' })).toBeTruthy()
+    // 상세 요청은 상세 화면의 코드가 온 뒤에 나간다(#251)
+    await waitFor(() => expect(detail.requests.get.map(({ id }) => id)).toEqual([savedId]))
+  })
+
+  it('버린 입력 화면은 방문 기록에서 상세로 바뀌어, 상세에서 뒤로 가면 입력을 연 화면이다', async () => {
+    startTransactionDetail(server, backend)
+    transactions.response = ({ body }) => problem(409, 'ID_CONFLICT', { current: savedOf({ ...body, id: savedId }) })
+    const opened = await openFromMore()
+    await saveAmount(opened.user)
+    await opened.user.click(await screen.findByRole('link', { name: '저장된 거래 보기' }))
+    await waitFor(() => expect(path(opened)).toBe(`/transactions/${savedId}`))
+    await act(() => opened.router.navigate(-1))
+    await waitFor(() => expect(path(opened)).toBe('/more'))
+    expect(discardQuestion()).toBeNull()
   })
 
   it('current가 없으면 문구와 "새 거래로 저장" 하나를 보이고, 누르면 새 id로 보낸다', async () => {
@@ -489,6 +515,71 @@ describe('같은 id로 만들 수 없음(409 ID_CONFLICT)', () => {
     await saveAmount(user)
     expect((await screen.findByRole('alert')).textContent).toBe(idUnusable)
     expect(screen.queryByRole('link', { name: '저장된 거래 보기' })).toBeNull()
+  })
+})
+
+/* 다시 보내는 동안 문구를 남기고 누른 버튼만 도는 표시다(designer 검토 2026-11-26, 확인 창과 같다) */
+describe('다시 보내는 동안', () => {
+  async function failOnce(next: () => Response | Promise<Response>, first = () => problem(500, 'INTERNAL_ERROR')) {
+    const answers = [first, next]
+    transactions.response = () => answers.shift()!()
+    const opened = await openForm()
+    await saveAmount(opened.user)
+    await screen.findByRole('alert')
+    return opened
+  }
+
+  it('"다시 시도"를 누르면 문구를 둔 채 "다시 시도"만 도는 표시이고, 저장은 누를 수 없으며 초점은 "다시 시도"에 남는다', async () => {
+    const answer = delayed()
+    const { user } = await failOnce(answer.respond)
+    retryButton().focus()
+    await user.keyboard('{Enter}')
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect(saveButton().getAttribute('aria-busy')).toBeNull()
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true')
+    expect(document.activeElement).toBe(retryButton())
+    await user.click(saveButton())
+    expect(transactions.sent).toHaveLength(2)
+  })
+
+  it('저장을 다시 누르면 문구를 둔 채 저장만 도는 표시이고 "다시 시도"는 누를 수 없다', async () => {
+    const answer = delayed()
+    const { user } = await failOnce(answer.respond)
+    await user.click(saveButton())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(saveButton().getAttribute('aria-busy')).toBe('true')
+    expect(retryButton().getAttribute('aria-busy')).toBeNull()
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    await user.click(retryButton())
+    expect(transactions.sent).toHaveLength(2)
+  })
+
+  it('"새 거래로 저장"도 누른 그 버튼만 도는 표시다', async () => {
+    const answer = delayed()
+    const { user } = await failOnce(answer.respond, () => problem(409, 'ID_CONFLICT'))
+    await user.click(screen.getByRole('button', { name: '새 거래로 저장' }))
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(idUnusable)
+    expect(screen.getByRole('button', { name: '새 거래로 저장' }).getAttribute('aria-busy')).toBe('true')
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('또 실패하면 문구를 새로 그려 다시 읽히게 한다', async () => {
+    const { user } = await failOnce(() => problem(503, 'INTERNAL_ERROR'))
+    const first = screen.getByRole('alert')
+    await user.click(retryButton())
+    await waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().hasAttribute('aria-busy')).toBe(false)
+  })
+
+  it('성공하면 그대로 떠난다', async () => {
+    const { user } = await failOnce(() => HttpResponse.json(savedOf(transactions.sent[0].body), { status: 201 }))
+    await user.click(retryButton())
+    await waitFor(() => expect(toastText()).toBe('저장했어요'))
   })
 })
 

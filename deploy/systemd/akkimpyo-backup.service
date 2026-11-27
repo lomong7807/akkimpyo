@@ -1,0 +1,21 @@
+[Unit]
+Description=아낌표 DB 백업 (덤프, 암호화, Object Storage에 올리기)
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/akkimpyo/bin/backup
+TimeoutStartSec=30min
+UMask=0077
+# 평문은 메모리(tmpfs)인 /run 아래에만 둔다. 배포 스크립트가 부른 백업이 같은 폴더를 쓰고 있을 수 있으므로
+# 이 서비스가 끝날 때 폴더를 지우지 않는다(안의 평문은 스크립트가 지운다).
+RuntimeDirectory=akkimpyo-backup
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+StateDirectory=akkimpyo-backup
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes

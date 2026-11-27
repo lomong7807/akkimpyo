@@ -45,10 +45,16 @@ class ServiceMethodInventoryTest {
             "TransactionService가 구성원 확인 뒤에 부르는 내부용 조회. 다른 패키지에서 불러 공개 범위를 좁힐 수 없다",
             "UserService.createUser",
             "가입. 아직 호출자가 없다",
+            "UserService.exists",
+            "토큰의 사용자가 아직 있는지 요청마다 보는 조회(ADR 001 결정 1). 호출자를 정하기 전이고 있다/없다만 답한다",
+            "AccessTokenVerifier.verify",
+            "access token에서 호출자를 알아내는 메서드 자체다. 사용자 id를 받지 않는다",
             "TransactionAccountUsage.isUsed",
             "계좌 삭제 제한용 포트(AccountUsage) 구현. AccountService가 구성원 확인 뒤에 부른다",
             "TransactionCategoryUsage.isUsed",
-            "카테고리 삭제 제한용 포트(CategoryUsage) 구현. CategoryService가 구성원 확인 뒤에 부른다");
+            "카테고리 삭제 제한용 포트(CategoryUsage) 구현. CategoryService가 구성원 확인 뒤에 부른다",
+            "RequiredDbSettings.postProcessAfterInitialization",
+            "기동할 때 스프링이 부르는 BeanPostProcessor. DB 접속 변수가 있는지만 보고 장부 데이터를 다루지 않는다");
 
     @Test
     void 대상_클래스를_찾는다() {

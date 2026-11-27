@@ -1,10 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import OptionList, { type PickerSection } from '../src/components/OptionList'
 import PickerField from '../src/components/PickerField'
 import { readCssRule } from './support/cssRule'
+import { setupUser } from './support/testClock'
 import { readWebFile } from './support/webFile'
 import { untilOpened } from './support/dialog'
 import { installMatchMedia } from './support/viewport'
@@ -92,7 +92,7 @@ const shownOptions = () => within(listbox()).queryAllByRole('option').map((eleme
 const search = () => screen.getByRole<HTMLInputElement>('textbox', { name: '카테고리 이름 찾기' })
 
 async function open(props: Parameters<typeof Sample>[0] = {}) {
-  const user = userEvent.setup()
+  const user = setupUser()
   render(<Sample {...props} />)
   await user.click(field())
   await untilOpened()
@@ -123,7 +123,7 @@ describe('고르는 칸', () => {
   })
 
   it.each(['{Enter}', ' '])('키보드 %s로 연다', async (key) => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<Sample />)
     field().focus()
     await user.keyboard(key)
@@ -380,7 +380,7 @@ describe('넓은 화면의 펼친 판', () => {
 
   it('폭은 칸 폭과 320px 중 큰 값이다', async () => {
     viewport.resizeTo(WIDE)
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<Sample />)
     vi.spyOn(field(), 'getBoundingClientRect').mockReturnValue(new DOMRect(480, 100, 560, 48))
     await user.click(field())
@@ -420,7 +420,7 @@ describe('넓은 화면의 판이 펼치는 쪽', () => {
   async function openAt(windowHeight: number, top: number, content: number) {
     viewport.resizeTo(WIDE)
     vi.stubGlobal('innerHeight', windowHeight)
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<Sample />)
     vi.spyOn(field(), 'getBoundingClientRect').mockReturnValue(new DOMRect(480, top, 560, 48))
     vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(content)

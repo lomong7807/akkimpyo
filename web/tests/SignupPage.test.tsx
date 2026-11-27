@@ -1,17 +1,19 @@
 import { onlineManager } from '@tanstack/react-query'
-import { cleanup, fireEvent, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { useNavigate, type RouteObject } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { watchConnection } from '../src/api/connection'
 import { signup } from '../src/api/session'
 import { createQueryClient } from '../src/app/queryClient'
 import SignupPage from '../src/features/auth/SignupPage'
 import { delayed } from './support/backend'
 import { readCssRule } from './support/cssRule'
+import { goOffline, goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { renderRoutes } from './support/renderRoutes'
+import { holdClock, passTime, setupUser } from './support/testClock'
 import { resetViewport, setViewportWidth } from './support/viewport'
 
 vi.stubGlobal('scrollTo', vi.fn())
@@ -38,6 +40,8 @@ const nameUnusable = '쓸 수 없는 글자가 있어요. 모두 지우고 다�
 const duplicate = '이미 가입된 이메일이에요. 로그인해 주세요.'
 const notAllowed = '지금은 허용된 이메일만 가입할 수 있어요'
 const failed = '문제가 생겨 가입하지 못했어요. 잠시 후 다시 시도해 주세요.'
+const lost = '연결이 끊겨 가입하지 못했어요. 연결되면 다시 시도해 주세요.'
+const offlineReason = '연결되면 가입할 수 있어요'
 
 const email = () => screen.getByLabelText<HTMLInputElement>('이메일')
 const password = () => screen.getByLabelText<HTMLInputElement>('비밀번호')
@@ -93,7 +97,7 @@ function routesWith(initialEmail: string): RouteObject[] {
 
 function openSignup({ queryClient = createQueryClient(), initialEmail = '' } = {}) {
   const router = renderRoutes(routesWith(initialEmail), '/signup', queryClient)
-  return { user: userEvent.setup(), router }
+  return { user: setupUser(), router }
 }
 
 /** 가입 API의 응답을 정하고, 받은 본문을 모아 돌려준다. */
@@ -117,7 +121,7 @@ const refuse =
       fieldErrors: fieldErrors.map(([field, code]) => ({ field, code, message: '개발자가 읽는 글' })),
     })
 
-type User = ReturnType<typeof userEvent.setup>
+type User = ReturnType<typeof setupUser>
 
 const valid = { email: 'name@example.com', password: 'pass1234', confirm: 'pass1234', displayName: '이서연' }
 
@@ -359,6 +363,9 @@ describe('표시 이름 검사', () => {
     ['보이지 않는 글자뿐', '\u{3164}', nameUnusable],
     ['가운데의 보이지 않는 글자', '이\u{200B}서연', nameUnusable],
     ['가운데의 탭', '이\t서연', nameUnusable],
+    // 서버는 앞뒤의 공백류(Zs)만 지우고 탭과 U+0085는 거부한다(#220)
+    ['앞뒤의 탭', '\t이서연\t', nameUnusable],
+    ['끝의 U+0085', '이서연\u{85}', nameUnusable],
     ['홀로 선 U+FE0F', '이서연\u{FE0F}', nameUnusable],
     ['21자', '가'.repeat(21), nameTooLong],
     ['21자가 넘는 분해형', '가'.normalize('NFD').repeat(21), nameTooLong],
@@ -710,11 +717,51 @@ describe('서버가 거부함', () => {
   })
 })
 
+describe('연결이 없을 때(00-common 4.3, 1B #238)', () => {
+  /** 브라우저의 연결 신호를 앱이 받게 하고 테스트가 끝나면 멈춘다 */
+  function watch() {
+    onTestFinished(watchConnection())
+  }
+
+  it('가입 버튼은 비활성이고 바로 위에 "연결되면 가입할 수 있어요"를 보인다. 칸은 쓸 수 있고 엔터로도 보내지 않는다', async () => {
+    watch()
+    const bodies = respondToSignup(success)
+    const { user } = openSignup()
+    act(() => goOffline())
+    expect(signupButton().getAttribute('aria-disabled')).toBe('true')
+    expect(signupButton().previousElementSibling!.textContent).toBe(offlineReason)
+    await fill(user)
+    await user.click(signupButton())
+    await user.type(displayName(), '{Enter}')
+    expect(bodies).toEqual([])
+    expect(fields().map((input) => input.value)).toEqual(Object.values(valid))
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(signupButton().getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('요청 중에 끊기면 그 줄 대신 "연결이 끊겨 가입하지 못했어요."와 "다시 시도"(연결이 없는 동안 비활성)를 보이고 초점을 옮긴다', async () => {
+    watch()
+    const answers = [() => HttpResponse.error(), success]
+    const bodies = respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    expect((await screen.findByRole('alert')).textContent).toBe(lost)
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(document.activeElement).toBe(retryButton())
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    expect(fields().map((input) => input.value)).toEqual(Object.values(valid))
+    act(() => goOnline())
+    expect(retryButton().getAttribute('aria-disabled')).toBeNull()
+    await user.click(retryButton())
+    await vi.waitFor(() => expect(bodies).toHaveLength(2))
+  })
+})
+
 describe('서버 오류와 지연', () => {
   it.each([
     ['500', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['429', () => problem(429, 'TOO_MANY_REQUESTS')],
     ['403', () => problem(403, 'ORIGIN_NOT_ALLOWED')],
     ['400 MALFORMED_REQUEST', () => problem(400, 'MALFORMED_REQUEST')],
@@ -761,16 +808,12 @@ describe('서버 오류와 지연', () => {
     respondToSignup(delayed().respond)
     const { user } = openSignup()
     await fill(user)
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      fireEvent.click(signupButton())
-      await vi.advanceTimersByTimeAsync(14_900)
-      expect(screen.queryByRole('alert')).toBeNull()
-      await vi.advanceTimersByTimeAsync(200)
-      expect(screen.getByRole('alert').textContent).toBe(failed)
-    } finally {
-      vi.useRealTimers()
-    }
+    holdClock()
+    fireEvent.click(signupButton())
+    await passTime(14_900)
+    expect(screen.queryByRole('alert')).toBeNull()
+    await passTime(200)
+    expect(screen.getByRole('alert').textContent).toBe(failed)
   })
 
   it('저절로 다시 보내지 않는다', async () => {
@@ -782,10 +825,10 @@ describe('서버 오류와 지연', () => {
     expect(bodies).toHaveLength(1)
   })
 
-  it('브라우저가 연결 없음이라고 해도 멈춰 기다리지 않고 실패를 알린다', async () => {
+  it('TanStack이 연결 없음이라고 해도 멈춰 기다리지 않고 실패를 알린다', async () => {
     onlineManager.setOnline(false)
     try {
-      respondToSignup(() => HttpResponse.error())
+      respondToSignup(() => problem(500, 'INTERNAL_ERROR'))
       const { user } = openSignup()
       await fillAndSubmit(user)
       expect((await screen.findByRole('alert')).textContent).toBe(failed)
@@ -822,15 +865,66 @@ describe('서버 오류와 지연', () => {
     await vi.waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })
 
-  it('"다시 시도"가 사라진 동안 초점이 가입 버튼에 남는다', async () => {
-    const answers = [() => problem(500, 'INTERNAL_ERROR'), delayed().respond]
-    respondToSignup(() => answers.shift()!())
+  /* 다시 보내는 동안 문구를 남기고 누른 버튼만 도는 표시다(designer 규칙 #102, 계좌 추가·거래 입력과 같다) */
+  it('"다시 시도"로 다시 보내는 동안 문구를 둔 채 "다시 시도"만 돌고 가입은 누를 수 없으며 초점이 남는다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
+    const bodies = respondToSignup(() => answers.shift()!())
     const { user } = openSignup()
     await fillAndSubmit(user)
     await screen.findByRole('alert')
     await user.keyboard('{Enter}')
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull())
-    expect(document.activeElement).toBe(signupButton())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(retryButton().getAttribute('aria-busy')).toBe('true')
+    expect(signupButton().hasAttribute('aria-busy')).toBe(false)
+    expect(signupButton().getAttribute('aria-disabled')).toBe('true')
+    expect(document.activeElement).toBe(retryButton())
+    await user.click(signupButton())
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('가입을 다시 누르면 문구를 둔 채 가입만 도는 표시이고 "다시 시도"는 누를 수 없다', async () => {
+    const answer = delayed()
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), answer.respond]
+    const bodies = respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    await screen.findByRole('alert')
+    await user.click(signupButton())
+    await answer.arrived
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(signupButton().getAttribute('aria-busy')).toBe('true')
+    expect(retryButton().hasAttribute('aria-busy')).toBe(false)
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    await user.click(retryButton())
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('칸을 고치다 "다시 시도"를 눌러 또 실패하면 문구를 새로 그려 다시 읽히게 하고 초점이 "다시 시도"로 간다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    const first = await screen.findByRole('alert')
+    await user.type(displayName(), ' 둘')
+    // 마우스로 누르면 쓰던 칸에 초점이 남는다
+    await user.click(retryButton())
+    await vi.waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(screen.getByRole('alert').textContent).toBe(failed)
+    expect(document.activeElement).toBe(retryButton())
+  })
+
+  it('칸에서 엔터로 다시 보낸 것이 또 실패해도 초점이 "다시 시도"로 간다', async () => {
+    const answers = [() => problem(500, 'INTERNAL_ERROR'), () => problem(503, 'INTERNAL_ERROR')]
+    const bodies = respondToSignup(() => answers.shift()!())
+    const { user } = openSignup()
+    await fillAndSubmit(user)
+    const first = await screen.findByRole('alert')
+    await user.type(displayName(), '{Enter}')
+    await vi.waitFor(() => expect(screen.getByRole('alert')).not.toBe(first))
+    expect(bodies).toHaveLength(2)
+    expect(document.activeElement).toBe(retryButton())
   })
 
   it('거부된 뒤 다시 보낸 것이 서버 오류면 거부 문구를 지우고 실패를 알린다', async () => {
@@ -876,7 +970,7 @@ describe('성공', () => {
     const bodies = respondToSignup(success)
     const slowWelcome = { path: '/welcome', loader: () => new Promise(() => {}), element: null, hydrateFallbackElement: null }
     renderRoutes([{ path: '/signup', element: <Signup initialEmail="" /> }, slowWelcome], '/signup')
-    const user = userEvent.setup()
+    const user = setupUser()
     await fillAndSubmit(user)
     await vi.waitFor(() => expect(bodies).toHaveLength(1))
     await new Promise((resolve) => setTimeout(resolve, 30))

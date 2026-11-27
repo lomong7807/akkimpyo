@@ -8,6 +8,7 @@ import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.ledger.LedgerRole;
+import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -59,6 +60,11 @@ public class UserService {
         String passwordHash = passwordHasher.hash(rawPassword);
         return transactionTemplate.execute(status ->
                 saveWithPersonalLedger(User.of(email, passwordHash, displayName)));
+    }
+
+    /** 이 id의 사용자가 있는가. 토큰의 사용자가 탈퇴로 지워졌는지 요청마다 본다(ADR 001 결정 1). 사용자의 값은 내주지 않는다. */
+    public boolean exists(UUID userId) {
+        return userRepository.existsById(userId);
     }
 
     private User saveWithPersonalLedger(User newUser) {

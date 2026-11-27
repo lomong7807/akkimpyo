@@ -26,7 +26,7 @@ describe('뼈대, 빈 상태, 오류 상태의 타입', () => {
     ['뼈대의 style', '<Skeleton style={{ margin: 0 }}>{null}</Skeleton>', 'style'],
     ['막대의 className', '<SkeletonBar kind="name" text="body" className="a" />', 'className'],
     ['막대의 style', '<SkeletonBar kind="name" text="body" style={{ width: 1 }} />', 'style'],
-    ['막대의 없는 글자', '<SkeletonBar kind="name" text="hero" />', 'hero'],
+    ['막대의 없는 글자', '<SkeletonBar kind="name" text="caption" />', 'caption'],
     ['빈 상태의 className', '<EmptyState description="없어요." className="a" />', 'className'],
     ['빈 상태의 style', '<EmptyState description="없어요." style={{ margin: 0 }} />', 'style'],
     ['오류 상태의 className', '<LoadFailure onRetry={() => {}} className="a" />', 'className'],

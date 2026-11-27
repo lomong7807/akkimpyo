@@ -1,8 +1,11 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
+import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Accounts } from './support/accounts'
 import { ledgerIdOf, type Backend } from './support/backend'
 import { untilOpened, untilUnshielded } from './support/dialog'
+import { setDeviceClock } from './support/clock'
+import { goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import {
@@ -42,7 +45,7 @@ let accounts: Accounts
 let transactions: Transactions
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 26, 12, 30) })
+  setDeviceClock('2026-11-26T12:30:00+09:00')
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts, transactions } = startServer(server))
   localStorage.clear()
@@ -197,6 +200,8 @@ describe('가맹점/내용', () => {
   it.each([
     ['101자', '가'.repeat(101), '100자까지 쓸 수 있어요'],
     ['보이지 않는 글자', '올래\u{200B}국수', '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'],
+    // 서버는 앞뒤의 공백류(Zs)만 지우고 탭은 거부한다(#220)
+    ['끝의 탭', '올래국수\t', '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'],
   ])('%s이면 칸을 벗어날 때 문구를 보이고 저장하지 않는다', async (_, typed, message) => {
     const { user } = await openForm()
     await user.click(payee())
@@ -235,7 +240,7 @@ describe('가맹점/내용', () => {
 
   it.each([
     ['빈 글자', ''],
-    ['공백뿐', ' \u{3000}\t'],
+    ['공백류뿐', ' \u{3000}\u{A0}'],
   ])('%s이면 null로 보낸다', async (_, typed) => {
     const { user } = await openForm()
     if (typed) {
@@ -509,6 +514,21 @@ describe('계좌', () => {
       await opened.user.click(screen.getByRole('button', { name: '다시 시도' }))
       expect(await screen.findByRole('option', { name: '지갑' })).toBeTruthy()
     })
+
+    it('연결 오류이고 기기 사본도 없으면 판에 버튼 없이 "연결되면 자동으로 불러올게요."이고, 연결이 돌아오면 저절로 받는다(#238)', async () => {
+      accounts.response = () => HttpResponse.error()
+      const opened = await openApp('/transactions/new')
+      await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+      await waitFor(() => expect(accounts.requests.length).toBeGreaterThan(0))
+      await settle()
+      await opened.user.click(accountField())
+      await untilOpened()
+      expect(screen.getByText('연결되면 자동으로 불러올게요.')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull()
+      accounts.response = undefined
+      act(() => goOnline())
+      expect(await screen.findByRole('option', { name: '지갑' })).toBeTruthy()
+    })
   })
 })
 
@@ -534,11 +554,15 @@ describe('날짜', () => {
   })
 })
 
-describe.each(['Asia/Seoul', 'UTC', 'America/Los_Angeles'])('기기의 시간대가 %s일 때', (timeZone) => {
-  beforeEach(() => {
-    vi.stubEnv('TZ', timeZone)
-    vi.setSystemTime(new Date(2026, 10, 26, 23, 45, 30))
-  })
+// 시간대마다 그 시간대의 2026-11-26 23:45:30을 오프셋으로 적는다(11월이라 로스앤젤레스는 겨울 시간 −08:00)
+describe.each([
+  ['Asia/Seoul', '+09:00'],
+  ['UTC', 'Z'],
+  ['America/Los_Angeles', '-08:00'],
+  ['Pacific/Kiritimati', '+14:00'],
+  ['Pacific/Pago_Pago', '-11:00'],
+])('기기의 시간대가 %s일 때', (timeZone, offset) => {
+  beforeEach(() => setDeviceClock(`2026-11-26T23:45:30${offset}`, timeZone))
 
   it('기본 날짜와 시각은 기기의 지금이고 시간대 변환 없이 그대로 보낸다', async () => {
     const { user } = await openForm()
@@ -611,6 +635,10 @@ describe('더 보기', () => {
       await user.click(memo())
       await user.paste('가'.repeat(501))
     }, memo, '500자까지 쓸 수 있어요'],
+    ['메모(쓸 수 없는 글자)', async (user: User) => {
+      await user.click(memo())
+      await user.paste('회식\t2차')
+    }, memo, '쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.'],
   ] as const)('접힌 %s에 오류가 있으면 저장할 때 펼치고 그 칸으로 초점을 옮긴다', async (_, edit, field, message) => {
     const { user } = await openForm()
     await user.click(moreButton())
@@ -632,6 +660,20 @@ describe('더 보기', () => {
     await user.keyboard('{Enter}')
     expect(screen.getByText('401/500')).toBeTruthy()
     expect(memo().value.endsWith('\n')).toBe(true)
+  })
+
+  // 서버와 같이 줄바꿈(U+000A) 밖의 거부 글자를 미리 알린다(00-common 4.4의 문구, frontend 결정 #220)
+  it('메모에 쓸 수 없는 글자가 있으면 칸을 벗어날 때 문구를 보이고, 줄바꿈은 받는다', async () => {
+    const { user } = await openForm()
+    await user.click(moreButton())
+    await user.click(memo())
+    await user.paste('회식\u{200B}')
+    await user.tab()
+    expect(errorOf(memo())).toBe('쓸 수 없는 글자가 있어요. 모두 지우고 다시 써 주세요.')
+    await user.clear(memo())
+    await user.type(memo(), '회식{Enter}2차')
+    await user.tab()
+    expect(errorOf(memo())).toBeUndefined()
   })
 
   it('메모는 공백을 지우지 않고 보내며 빈 글자는 null이다', async () => {

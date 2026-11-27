@@ -10,9 +10,11 @@ const files: Record<IconName, string> = {
   CaretRight: 'caret-right',
   CaretUp: 'caret-up',
   Check: 'check',
+  CloudArrowUp: 'cloud-arrow-up',
   DotsThree: 'dots-three',
   Eye: 'eye',
   EyeSlash: 'eye-slash',
+  House: 'house',
   Info: 'info',
   ListBullets: 'list-bullets',
   MagnifyingGlass: 'magnifying-glass',
@@ -21,6 +23,7 @@ const files: Record<IconName, string> = {
   Tag: 'tag',
   Wallet: 'wallet',
   WarningCircle: 'warning-circle',
+  WifiSlash: 'wifi-slash',
   X: 'x',
 }
 const names = Object.keys(files) as IconName[]

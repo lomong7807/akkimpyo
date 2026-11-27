@@ -1,12 +1,31 @@
-import { screen } from '@testing-library/react'
+import { act, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse } from 'msw'
+import type { Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { startBackend, type Backend } from './support/backend'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 
 vi.stubGlobal('scrollTo', vi.fn())
+
+/**
+ * main이 만든 React 루트. 테스트마다 내린다. 남겨 두면 화면이 기기 저장소와 서버의 답을 받는 일이 파일이 끝난 뒤에도 이어져, jsdom을
+ * 정리한 다음에 React가 그리려다 `window is not defined`로 실패한다(CI #270, 띠·건수·맞춘 시각이 화면을 연 뒤 기기 저장소를 읽는다).
+ */
+const roots = vi.hoisted(() => [] as Root[])
+
+vi.mock(import('react-dom/client'), async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    createRoot: (...args: Parameters<typeof actual.createRoot>) => {
+      const root = actual.createRoot(...args)
+      roots.push(root)
+      return root
+    },
+  }
+})
 
 const server = startMockServer()
 
@@ -23,12 +42,13 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  act(() => roots.splice(0).forEach((root) => root.unmount()))
   document.body.replaceChildren()
 })
 
 describe('앱 시작', () => {
   it.each<[string, (backend: Backend) => void, string]>([
-    ['로그인한 기기', (backend) => (backend.cookieUser = 'user-1'), '찾을 수 없어요.'],
+    ['로그인한 기기', (backend) => (backend.cookieUser = 'user-1'), '홈'],
     ['로그인하지 않은 기기', () => {}, '로그인'],
     ['서버 오류', (backend) => (backend.refreshResponse = () => problem(500, 'INTERNAL_ERROR')), '불러오지 못했어요.'],
     ['연결 오류', (backend) => (backend.refreshResponse = () => HttpResponse.error()), '불러오지 못했어요.'],

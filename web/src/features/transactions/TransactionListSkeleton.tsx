@@ -1,3 +1,4 @@
+import { MonthNavigationSpace } from '../../components/MonthNavigation'
 import Skeleton, { SkeletonBar } from '../../components/Skeleton'
 import styles from './TransactionList.module.css'
 
@@ -18,12 +19,31 @@ export default function TransactionListSkeleton() {
           <SkeletonBar kind="amount" text="body" />
         </div>
       </div>
-      <div className={styles.dayHead}>
-        <SkeletonBar kind="name" text="label" />
-        <SkeletonBar kind="amount" text="label" />
-      </div>
+      <DayHeadSkeleton />
       <RowsSkeleton count={5} />
     </Skeleton>
+  )
+}
+
+/** 내역의 코드를 받는 동안(#251): 달 이동 자리를 비워 두고 그 아래에 첫 불러오기의 뼈대를 둔다. 배치는 내역 화면과 같다. */
+export function HistorySkeleton() {
+  return (
+    <div className={styles.history}>
+      <div className={styles.monthNavigation}>
+        <MonthNavigationSpace />
+      </div>
+      <TransactionListSkeleton />
+    </div>
+  )
+}
+
+/** 날짜 묶음 머리 모양의 뼈대. 날짜와 그날 합계 자리에 막대를 둔다. */
+export function DayHeadSkeleton() {
+  return (
+    <div className={styles.dayHead}>
+      <SkeletonBar kind="name" text="label" />
+      <SkeletonBar kind="amount" text="label" />
+    </div>
   )
 }
 

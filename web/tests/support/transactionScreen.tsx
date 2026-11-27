@@ -1,7 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import type { SetupServer } from 'msw/node'
+import { setTimeout as wait } from 'node:timers/promises'
 import { createBrowserRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { expect, vi } from 'vitest'
@@ -9,11 +9,15 @@ import { accountOf, startAccounts } from './accounts'
 import { ledgerIdOf, startBackend } from './backend'
 import { categoryWithChildren, startCategories } from './categories'
 import { untilOpened } from './dialog'
+import { enableTestClock, setupUser } from './testClock'
 import { startTransactions } from './transactions'
 import { installLocks, createFakeLocks } from './webLocks'
 import { installMatchMedia } from './viewport'
 
 /* 거래 입력(D-04) 화면 테스트가 함께 쓰는 가짜 서버, 찾기, 동작 */
+
+// 앱을 그리는 테스트는 공용 시계 하나로 돈다(docs/qa/test-strategy.md 8절 1)
+enableTestClock()
 
 export const id = {
   salary: '11111111-1111-4111-8111-111111111111',
@@ -81,7 +85,7 @@ export async function openApp(path: string) {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   )
-  return { router, user: userEvent.setup() }
+  return { router, user: setupUser() }
 }
 
 export type Opened = Awaited<ReturnType<typeof openApp>>
@@ -101,7 +105,11 @@ export const memo = () => screen.getByLabelText<HTMLTextAreaElement>('메모 (�
 export const saveButton = () => screen.getByRole('button', { name: '저장' })
 export const closeButton = () => screen.getByRole('button', { name: '닫기' })
 export const discardQuestion = () => screen.queryByRole('dialog', { name: '쓰던 내용을 버릴까요?' })
-export const settle = (ms = 50) => act(() => new Promise((resolve) => setTimeout(resolve, ms)))
+/**
+ * 응답이 다 오고 화면이 바뀔 만큼 실제로 기다린다. "일어나지 않음"을 볼 때 쓴다. 공용 시계는 그동안 따라 흐르고, 멈췄으면
+ * (holdClock) 멈춘 채다. 앱의 시계를 기다리는 곳에는 passTime을 쓴다.
+ */
+export const settle = (ms = 50) => act(() => wait(ms))
 export const path = ({ router }: Opened) => router.state.location.pathname
 
 /** 칸 아래에 이어진 오류 문구. 없으면 없다. */
@@ -114,8 +122,7 @@ export function errorOf(control: HTMLElement): string | undefined {
 /** 주소로 바로 연다. 계좌 목록을 받아 기본 계좌가 들어갈 때까지 기다린다. */
 export async function openForm(path = '/transactions/new') {
   const opened = await openApp(path)
-  await screen.findByRole('heading', { level: 1, name: '거래 입력' })
-  await waitFor(() => expect(accountField().textContent).not.toBe(''))
+  await untilDefaultAccount()
   return opened
 }
 
@@ -124,9 +131,20 @@ export async function openFromMore() {
   const opened = await openApp('/more')
   await screen.findByRole('main')
   await act(() => opened.router.navigate('/transactions/new'))
-  await screen.findByRole('heading', { level: 1, name: '거래 입력' })
-  await waitFor(() => expect(accountField().textContent).not.toBe(''))
+  await untilDefaultAccount()
   return opened
+}
+
+/**
+ * 거래 입력이 열리고 기본 계좌가 들어갈 때까지 기다린다. 화면 코드를 받는 동안의 틀에도 같은 제목이 있으므로 칸이 나오기를 기다린다(#251).
+ * 칸은 한 번만 찾아 그 글자를 지켜본다. 바뀔 때마다 역할로 다시 찾으면 화면 전체의 이름을 매번 다시 계산한다.
+ */
+export async function untilDefaultAccount() {
+  await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+  const field = await waitFor(accountField)
+  await waitFor(() => expect(field.textContent).not.toBe(''))
+  // 지켜본 칸이 바뀌지 않고 화면에 그대로 있다
+  expect(field.isConnected).toBe(true)
 }
 
 /** 고르기 판을 열어 이름이 `name`인 줄을 고른다. */
@@ -139,15 +157,15 @@ export async function pick(user: User, field: HTMLElement, name: string) {
 
 /** 금액을 넣고 저장한다. */
 export async function saveAmount(user: User, typed = '12000') {
-  await user.click(amount())
+  // 화면 코드를 받는 동안의 틀(#251)에는 칸이 없다
+  await user.click(await waitFor(amount))
   if (typed !== '') await user.keyboard(typed)
   await user.click(saveButton())
 }
 
-/** 화면을 다 쓴 뒤 저장소와 가짜 시계를 되돌린다. */
+/** 화면을 다 쓴 뒤 저장소를 되돌린다. 시계와 화면에서 빠진 뒤의 덮개는 공용 시계(testClock)가 정리한다. */
 export function resetGlobals() {
   vi.restoreAllMocks()
-  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 }

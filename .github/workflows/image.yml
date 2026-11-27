@@ -1,0 +1,88 @@
+name: Image
+
+# main에 머지될 때 서버·웹 이미지를 한 번 빌드해 커밋 SHA 태그로 ghcr.io에 올린다.
+# 문서만 바뀐 머지에서는 만들지 않는다. revision 라벨과 시각만 다른 같은 내용이기 때문이다.
+# 배포(#52)는 실행 요약에 출력한 digest를 쓴다.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'claudedocs/**'
+      - '**/*.md'
+
+permissions:
+  contents: read
+
+# 같은 커밋을 다시 돌린 것이 겹치면 뒤의 것이 기다린다. 진행 중인 실행은 취소하지 않는다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: false
+
+# shell을 적어야 pipefail이 켜진다.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  image:
+    name: image (linux/arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REVISION: ${{ github.sha }}
+      # image-check.yml과 같은 값을 쓴다. Dependabot이 갱신하지 않는다.
+      BUILDKIT_IMAGE: moby/buildkit:v0.35.1@sha256:baf6138eb8c37644800c7c913fba051e840ebb9ba13eaf92d92ef9a1712d0b4c
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create builder
+        run: |
+          docker buildx create --name image --use --bootstrap \
+            --driver docker-container --driver-opt "image=$BUILDKIT_IMAGE"
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      # 실행 사이에 이어지는 빌드 캐시는 쓰지 않는다. PR이나 다른 워크플로가 남긴 캐시가 들어올 길이 없다.
+      # 로그인하기 전에 둘 다 빌드한다. 의존성의 코드가 도는 동안 러너에 레지스트리 자격이 없고,
+      # 한쪽이 실패하면 둘 다 올리지 않는다.
+      - name: Build
+        run: docker buildx bake --file docker-bake.hcl --progress=plain --set '*.output=type=cacheonly'
+
+      - name: Log in to ghcr.io
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      # 같은 빌더에 남은 앞 단계의 결과를 올린다.
+      - name: Push
+        run: |
+          docker buildx bake --file docker-bake.hcl --progress=plain \
+            --set '*.output=type=registry,rewrite-timestamp=true' \
+            --metadata-file "$RUNNER_TEMP/image.json"
+
+      - name: Summary (아키텍처 확인, digest 출력)
+        run: |
+          {
+            echo "## 이미지"
+            echo
+            echo "커밋 \`$REVISION\`"
+            echo
+            echo "| 이미지 | 플랫폼 | digest |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for target in server web; do
+            image="$(jq -er ".${target}.\"image.name\"" "$RUNNER_TEMP/image.json")"
+            digest="$(jq -er ".${target}.\"containerimage.digest\"" "$RUNNER_TEMP/image.json")"
+            platform="$(docker buildx imagetools inspect "${image%:*}@$digest" --format '{{json .Image}}' \
+              | jq -er '"\(.os)/\(.architecture)"')"
+            echo "| \`${image%:*}\` | \`$platform\` | \`$digest\` |" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$platform" != linux/arm64 ]; then
+              echo "::error::$image 의 플랫폼이 linux/arm64가 아니라 $platform 이다"
+              exit 1
+            fi
+          done

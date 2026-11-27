@@ -36,7 +36,12 @@ const failed = '문제가 생겨 가입하지 못했어요. 잠시 후 다시 �
 const open = (path: string) => openApp(path, addScreens([{ path: '/secret', element: <main>{secret}</main> }]))
 type User = Awaited<ReturnType<typeof open>>['user']
 
-const signupHeading = () => screen.findByRole('heading', { level: 1, name: '가입' })
+/** 가입 화면. 화면 코드를 받는 동안의 틀에도 같은 제목이 있으므로 칸이 나오기를 기다린다(#251). */
+async function signupHeading() {
+  const heading = await screen.findByRole('heading', { level: 1, name: '가입' })
+  await screen.findByLabelText('표시 이름')
+  return heading
+}
 const loginHeading = () => screen.findByRole('heading', { level: 1, name: '로그인' })
 const welcome = () => screen.findByRole('heading', { level: 1, name: '기본 카테고리를 넣어 두었어요' })
 const email = () => screen.getByLabelText<HTMLInputElement>('이메일')
@@ -213,6 +218,7 @@ describe('로그인 화면과 이메일을 주고받기', () => {
 
   it('가입에서 쓴 이메일이 로그인에 채워지고 비밀번호에 초점이 간다. 다른 값은 넘기지 않는다', async () => {
     const { router, user } = await open('/signup')
+    await signupHeading()
     await user.type(email(), 'name@example.com')
     await user.type(password(), 'pass1234')
     await user.type(screen.getByLabelText('표시 이름'), '이서연')

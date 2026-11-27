@@ -44,11 +44,11 @@ interface SkeletonBarProps {
   /** 줄의 왼쪽 이름이나 오른쪽 금액 */
   kind: 'name' | 'amount'
   /** 그 자리에 올 글자 */
-  text: 'title' | 'body' | 'label'
+  text: 'hero' | 'title' | 'body' | 'label'
 }
 
 const kindClasses = { name: styles.name, amount: styles.amount }
-const textClasses = { title: styles.title, body: styles.body, label: styles.label }
+const textClasses = { hero: styles.hero, title: styles.title, body: styles.body, label: styles.label }
 
 /** 글자 한 줄 자리의 멈춘 막대. 이름과 금액을 나란히 놓는 줄(flex) 안에 둔다. */
 export function SkeletonBar({ kind, text }: SkeletonBarProps) {

@@ -1,7 +1,9 @@
 /*
  * 날짜는 시간대가 없는 `YYYY-MM-DD` 글자, 달은 `YYYY-MM` 글자다. 앞뒤는 글자 순서로 비교한다.
- * 계산할 때만 UTC 자정의 Date로 바꾼다. 기기의 시간대를 쓰는 곳은 오늘을 읽는 `today`뿐이다.
+ * 계산할 때만 UTC 자정의 Date로 바꾼다. 기기의 시간대를 쓰는 곳은 오늘을 읽는 `today`뿐이고, 지금과 시간대는 clock에서 읽는다.
  */
+
+import { wallTimeNow } from './clock'
 
 export interface DateRange {
   first: string
@@ -31,8 +33,7 @@ function weekdayOf(date: string): number {
 
 /** 기기의 오늘 */
 export function today(): string {
-  const now = new Date()
-  return dateOf(utc(now.getFullYear(), now.getMonth() + 1, now.getDate()))
+  return wallTimeNow().date
 }
 
 export function monthOf(date: string): string {

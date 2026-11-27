@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# 성공한 백업이 26시간 넘게 없으면 알린다. 백업 타이머가 죽은 경우도 잡으려고 백업과 별개의 타이머로 돈다.
+# 백업이 보내지 못하고 남긴 알림도 다시 보낸다.
+set -euo pipefail
+umask 077
+export LC_ALL=C.UTF-8 TZ=Asia/Seoul
+
+# shellcheck source=deploy/bin/backup-lib.sh
+. "$(dirname -- "${BASH_SOURCE[0]}")/backup-lib.sh"
+
+# 같은 문제를 다시 알리는 간격(초).
+REPEAT_SECONDS=$((6 * 3600))
+
+set_defaults
+load_config
+mkdir -p -- "$BACKUP_STATE_DIR"
+now=$(date +%s)
+rc=0
+
+unsent=$BACKUP_STATE_DIR/unsent-alerts
+if [[ -s $unsent ]]; then
+  mv -- "$unsent" "$unsent.$now"
+fi
+for file in "$unsent".*; do
+  [[ -e $file ]] || continue
+  if ! notify <"$file"; then
+    rc=1
+    break
+  fi
+  rm -- "$file"
+done
+
+last=$(state_get last-success epoch)
+if [[ -z $last ]]; then
+  problem='성공한 백업 기록이 없다.'
+elif is_stale "$now" "$last"; then
+  problem="성공한 백업이 $(((now - last) / 3600))시간째 없다. 마지막 성공: $(date -d "@$last" '+%F %T')"
+else
+  rm -f -- "$BACKUP_STATE_DIR/last-stale-alert"
+  exit "$rc"
+fi
+
+log "$problem"
+alerted=$(state_get last-stale-alert epoch)
+if [[ -z $alerted ]] || ((now - alerted >= REPEAT_SECONDS)); then
+  printf '[아낌표 백업] %s\n' "$problem" | notify
+  printf 'epoch=%s\n' "$now" | state_put last-stale-alert
+fi
+exit 1

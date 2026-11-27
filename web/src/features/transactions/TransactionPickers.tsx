@@ -1,15 +1,14 @@
 import type { UseQueryResult } from '@tanstack/react-query'
 import type { ReactNode, Ref } from 'react'
 import EmptyState from '../../components/EmptyState'
-import LoadFailure from '../../components/LoadFailure'
 import OptionList, { type PickerSection } from '../../components/OptionList'
 import PickerField from '../../components/PickerField'
 import { useLoadingMessage } from '../../components/useLoadingMessage'
 import { accountTypes, type Account } from '../accounts/accounts'
 import { accountTypeNames } from '../accounts/accountTypeNames'
-import { useAccounts } from '../accounts/useAccounts'
 import type { Category, CategoryKind } from '../categories/categories'
-import { useCategories } from '../categories/useCategories'
+import LoadFailureHere from '../connection/LoadFailureHere'
+import { useEntryAccounts, useEntryCategories } from './entryLists'
 import styles from './TransactionNew.module.css'
 
 /** 카테고리 칸이 비었을 때 보이는 이름(D-04 (5)). 미분류로 저장한다. */
@@ -25,7 +24,7 @@ interface PickerProps {
 
 /** 카테고리(D-04 (5)). 그 유형의 구분만 나오고 상위와 하위 모두 고를 수 있다. 미분류는 맨 아래이고 빈 값이다. */
 export function CategoryField({ kind, value, onChange, ...field }: PickerProps & { kind: CategoryKind }) {
-  const categories = useCategories()
+  const categories = useEntryCategories()
   const valueText = value === '' ? UNCATEGORIZED : (categoryName(categories.data ?? [], value) ?? '')
   return (
     <PickerField label="카테고리" optional valueText={valueText} {...field}>
@@ -58,7 +57,7 @@ interface AccountFieldProps extends PickerProps {
 
 /** 계좌(D-04 (6), (17), (18)). 은행, 카드, 현금 묶음이고 줄에는 이름만 있다. 1A에는 숨긴 계좌가 없다. */
 export function AccountField({ label, value, onChange, ...field }: AccountFieldProps) {
-  const accounts = useAccounts()
+  const accounts = useEntryAccounts()
   const valueText = accounts.data?.find((account) => account.id === value)?.name ?? ''
   return (
     <PickerField label={label} valueText={valueText} {...field}>
@@ -94,7 +93,8 @@ export function AccountField({ label, value, onChange, ...field }: AccountFieldP
 function PickerState<T>({ query, children }: { query: UseQueryResult<T>; children: (data: T) => ReactNode }) {
   if (query.data !== undefined) return children(query.data)
   if (query.errorUpdateCount > 0) {
-    return <LoadFailure headingLevel={2} onRetry={() => void query.refetch()} busy={query.isFetching} />
+    // 연결이 없으면 버튼 없이 기다리고 돌아오면 다시 받는다(F-908). 판 안이라 띠가 가려져도 문구가 까닭을 알린다
+    return <LoadFailureHere headingLevel={2} onRetry={() => void query.refetch()} busy={query.isFetching} />
   }
   return <PickerLoading />
 }

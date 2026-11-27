@@ -1,0 +1,50 @@
+/*
+ * 연결 없음 띠(00-common 6.1 (6) [판단 56]). 흐름 안에 두어 내용을 덮지 않고 아래로 민다. 휴대폰 배치는 스크롤해도 상단 바 바로
+ * 아래에 붙는다(층은 상단 바와 같다, 2.6). 움직임 없이 바로 나타난다. 연결이 있을 때는 알림 영역만 남고 높이가 없다.
+ */
+.connectionBand {
+  position: sticky;
+  top: calc(var(--size-topbar) + env(safe-area-inset-top));
+  z-index: 1;
+  flex: none;
+}
+
+/* 높이 40px 이상(글이 길면 두 줄), 화면 전체 폭, 모서리 0, 누를 수 없다 */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: var(--space-40);
+  margin: 0;
+  padding-block: var(--space-8);
+  padding-inline: max(var(--space-16), env(safe-area-inset-left)) max(var(--space-16), env(safe-area-inset-right));
+  background-color: var(--color-border);
+  color: var(--color-text);
+  font: var(--text-secondary);
+}
+
+.bar > svg {
+  flex: none;
+}
+
+/* 화면 읽기 프로그램만 읽는다("다시 연결됐어요"). 눈에 보이는 토스트는 없다 */
+.spoken {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 넓은 화면은 상단 바가 없고 내용 영역 맨 위다. 하위 화면의 화면 이름 줄보다 위에 둔다 */
+@media (width >= 1024px) {
+  .connectionBand {
+    top: 0;
+    order: -1;
+  }
+
+  .bar {
+    padding-inline: var(--space-24);
+  }
+}

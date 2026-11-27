@@ -21,6 +21,13 @@
   display: none;
 }
 
+/* 수정의 유형(D-04 (2)): 상자 없이 값 글자만, 높이는 글자 높이다 */
+.typeValue {
+  margin: 0;
+  color: var(--color-text);
+  font: var(--text-body);
+}
+
 /* 고르기 판 안의 불러오는 중과 계좌 없음 */
 .pickerMessage {
   margin: 0;

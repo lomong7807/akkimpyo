@@ -20,7 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @SpringBootTest
-@Import({PostgresContainerConfig.class, TestPasswordHasherConfig.class, Fixtures.class})
+@Import({PostgresContainerConfig.class, TestPasswordHasherConfig.class, TestAccessTokens.KeyConfig.class,
+        Fixtures.class})
 @Transactional
 public @interface IntegrationTest {
 }

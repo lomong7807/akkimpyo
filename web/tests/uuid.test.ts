@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createUuidV7, isUuid, uuidV7 } from '../src/lib/uuid'
+import { setDeviceClock } from './support/clock'
 
 const FORMAT = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
@@ -25,6 +26,14 @@ describe('형식(RFC 9562)', () => {
     const id = generatorAt({ now })()
     expect(timeOf(id)).toBe(now)
     expect(id.slice(0, 13)).toBe(`${now.toString(16).padStart(12, '0').replace(/^(.{8})/, '$1-')}`)
+  })
+
+  // 앞서 만든 id보다 작아지지 않으므로 새로 연 탭(새로 읽은 모듈)에서 본다
+  it('탭에서 쓰는 거래 id의 시각은 기기의 시계(src/lib/clock)의 지금이다', async () => {
+    setDeviceClock('2026-11-26T12:15:00.123+09:00')
+    vi.resetModules()
+    const { uuidV7: newTab } = await import('../src/lib/uuid')
+    expect(timeOf(newTab())).toBe(Date.parse('2026-11-26T03:15:00.123Z'))
   })
 
   it('무작위 값은 crypto.getRandomValues에서 받는다', () => {

@@ -4,9 +4,11 @@ import caretLeft from '../assets/icons/phosphor/caret-left.svg?raw'
 import caretRight from '../assets/icons/phosphor/caret-right.svg?raw'
 import caretUp from '../assets/icons/phosphor/caret-up.svg?raw'
 import check from '../assets/icons/phosphor/check.svg?raw'
+import cloudArrowUp from '../assets/icons/phosphor/cloud-arrow-up.svg?raw'
 import dotsThree from '../assets/icons/phosphor/dots-three.svg?raw'
 import eyeSlash from '../assets/icons/phosphor/eye-slash.svg?raw'
 import eye from '../assets/icons/phosphor/eye.svg?raw'
+import house from '../assets/icons/phosphor/house.svg?raw'
 import info from '../assets/icons/phosphor/info.svg?raw'
 import listBullets from '../assets/icons/phosphor/list-bullets.svg?raw'
 import magnifyingGlass from '../assets/icons/phosphor/magnifying-glass.svg?raw'
@@ -15,6 +17,7 @@ import signOut from '../assets/icons/phosphor/sign-out.svg?raw'
 import tag from '../assets/icons/phosphor/tag.svg?raw'
 import wallet from '../assets/icons/phosphor/wallet.svg?raw'
 import warningCircle from '../assets/icons/phosphor/warning-circle.svg?raw'
+import wifiSlash from '../assets/icons/phosphor/wifi-slash.svg?raw'
 import x from '../assets/icons/phosphor/x.svg?raw'
 import styles from './Icon.module.css'
 
@@ -26,9 +29,11 @@ const svgs = {
   CaretRight: caretRight,
   CaretUp: caretUp,
   Check: check,
+  CloudArrowUp: cloudArrowUp,
   DotsThree: dotsThree,
   Eye: eye,
   EyeSlash: eyeSlash,
+  House: house,
   Info: info,
   ListBullets: listBullets,
   MagnifyingGlass: magnifyingGlass,
@@ -37,6 +42,7 @@ const svgs = {
   Tag: tag,
   Wallet: wallet,
   WarningCircle: warningCircle,
+  WifiSlash: wifiSlash,
   X: x,
 }
 
