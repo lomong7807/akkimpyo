@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@SpringBootTest
+@SpringBootTest(properties = "WEB_ORIGIN=" + HttpServerTest.ORIGIN)
 @Import({PostgresContainerConfig.class, TestPasswordHasherConfig.class, TestAccessTokens.KeyConfig.class,
         Fixtures.class})
 @Transactional

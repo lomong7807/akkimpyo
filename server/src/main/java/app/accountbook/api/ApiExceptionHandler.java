@@ -1,6 +1,7 @@
 package app.accountbook.api;
 
 import app.accountbook.api.Problem.InvalidField;
+import app.accountbook.auth.InvalidCredentialsException;
 import app.accountbook.common.DuplicateAccountNameException;
 import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.DuplicateEmailException;
@@ -112,10 +113,13 @@ class ApiExceptionHandler {
     }
 
     @ExceptionHandler
+    ResponseEntity<Problem> invalidCredentials(InvalidCredentialsException e, HttpServletRequest request) {
+        return respond(ErrorCode.INVALID_CREDENTIALS, HttpHeaders.WWW_AUTHENTICATE, SecurityConfig.CHALLENGE, e, request);
+    }
+
+    @ExceptionHandler
     ResponseEntity<Problem> hashBusy(PasswordHashBusyException e, HttpServletRequest request) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set(HttpHeaders.RETRY_AFTER, HASH_RETRY_AFTER);
-        return respond(ErrorCode.TOO_MANY_REQUESTS, headers, List.of(), e, request);
+        return respond(ErrorCode.TOO_MANY_REQUESTS, HttpHeaders.RETRY_AFTER, HASH_RETRY_AFTER, e, request);
     }
 
     /** 위에 없는 모든 것. 프레임워크가 요청의 잘못이라고 한 것 말고는 500이다. */
@@ -148,6 +152,13 @@ class ApiExceptionHandler {
 
     private static ResponseEntity<Problem> respond(ErrorCode code, Exception e, HttpServletRequest request) {
         return respond(code, HttpHeaders.EMPTY, List.of(), e, request);
+    }
+
+    private static ResponseEntity<Problem> respond(ErrorCode code, String header, String value, Exception e,
+                                                   HttpServletRequest request) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(header, value);
+        return respond(code, headers, List.of(), e, request);
     }
 
     private static ResponseEntity<Problem> respond(ErrorCode code, HttpHeaders headers, List<InvalidField> fields,
