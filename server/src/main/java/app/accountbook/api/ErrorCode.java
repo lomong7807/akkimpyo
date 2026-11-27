@@ -15,6 +15,8 @@ enum ErrorCode {
     ORIGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "다른 출처에서 왔거나 전용 헤더가 없는 요청이다"),
     NOT_FOUND(HttpStatus.NOT_FOUND, "대상을 찾을 수 없다"),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "이 경로에서 받지 않는 메서드다"),
+    /** 낡은 version으로 고치려 했다. {@code current}가 있다. */
+    STALE_VERSION(HttpStatus.CONFLICT, "요청의 version이 저장된 version과 다르다"),
     /** 그 id로 만들 수 없다. 이유를 구분할 수 없게 문구가 고정이다(ADR 006 결정 3). */
     ID_CONFLICT(HttpStatus.CONFLICT, "그 id로는 만들 수 없다"),
     /** 입력란과 무관한 상태 오류("이미 삭제된 거래" 등). */

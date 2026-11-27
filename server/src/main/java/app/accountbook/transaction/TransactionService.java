@@ -153,21 +153,30 @@ public class TransactionService {
                 || ID_LEDGER_CONSTRAINT.equals(violation.getConstraintName()));
     }
 
-    /** 내용과 라인을 통째로 바꾼다. 거래 종류는 바꿀 수 없다. paidBy가 null이면 기존 값을 유지한다. */
+    /**
+     * 내용과 라인을 통째로 바꾼다. 거래 종류는 바꿀 수 없다. paidBy가 null이면 기존 값을 유지한다.
+     *
+     * <p>검사 순서(#36): 구성원 → 형식(기기 값, 입력란, 종류) → version → 상태(휴지통) → 참조 → 저장. 만들기와 같은 형식
+     * 검증이다. 값 맞추기를 거친 내용이 저장된 것과 같으면 바꾸지 않고(version 그대로, 이력 없음) 지금 거래를 돌려준다.
+     * 비교는 재전송 판정과 같다(ADR 006 결정 3).
+     */
     @Transactional
     public TransactionView update(UUID actorId, UUID txId, long expectedVersion, TransactionCommand cmd,
                                   String deviceId) {
         Transaction tx = loadAccessible(actorId, txId);
         DeviceIds.requireValidFormat(deviceId);
-        requireVersion(tx, expectedVersion);
-        requireNotDeleted(tx, "삭제된 거래는 수정할 수 없습니다.");
         Content content = normalize(tx.getLedgerId(), cmd, tx.getPaidBy());
-        requireReferences(tx.getLedgerId(), cmd);
         if (!tx.getId().equals(content.id())) {
             throw new InvalidRequestException("id", FieldErrorCode.NOT_ALLOWED, "요청의 거래 id가 수정 대상과 다릅니다.");
         }
         if (content.type() != tx.getType()) {
             throw new InvalidRequestException("type", FieldErrorCode.NOT_ALLOWED, "거래 종류는 바꿀 수 없습니다.");
+        }
+        requireVersion(tx, expectedVersion);
+        requireNotDeleted(tx, "삭제된 거래는 수정할 수 없습니다.");
+        requireReferences(tx.getLedgerId(), cmd);
+        if (Content.of(tx).sameAs(content)) {
+            return view(tx);
         }
         return write(tx, expectedVersion, ChangeAction.UPDATE, actorId, deviceId, now -> {
             tx.changeDetails(content.occurredOn(), content.occurredTime(), content.payee(), content.memo(),

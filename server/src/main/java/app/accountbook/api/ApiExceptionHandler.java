@@ -115,10 +115,13 @@ class ApiExceptionHandler {
     /** 같은 장부에서 내가 만든 거래와 내용이 다를 때만 {@code current}가 있다. 그 밖은 모두 같은 응답이다. */
     @ExceptionHandler
     ResponseEntity<Problem> idConflict(TransactionIdConflict e, HttpServletRequest request) {
-        log.debug("{} {}", ErrorCode.ID_CONFLICT, e.getClass().getSimpleName());
-        return ResponseEntity.status(ErrorCode.ID_CONFLICT.status())
-                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-                .body(Problem.of(ErrorCode.ID_CONFLICT, RequestId.of(request), List.of(), e.current()));
+        return conflict(ErrorCode.ID_CONFLICT, e.current(), e, request);
+    }
+
+    /** {@code current}가 늘 있다. 구성원 확인과 입력 검증을 지난 요청에만 나간다(ADR 002 5절). */
+    @ExceptionHandler
+    ResponseEntity<Problem> staleVersion(TransactionStaleVersion e, HttpServletRequest request) {
+        return conflict(ErrorCode.STALE_VERSION, e.current(), e, request);
     }
 
     @ExceptionHandler({DuplicateAccountNameException.class, DuplicateCategoryNameException.class})
@@ -164,6 +167,15 @@ class ApiExceptionHandler {
         }
         log.error("처리하지 못한 예외", e);
         return body(ErrorCode.INTERNAL_ERROR, HttpHeaders.EMPTY, List.of(), request);
+    }
+
+    /** @param current 서버의 지금 자원. {@code null}이면 본문에 없다 */
+    private static ResponseEntity<Problem> conflict(ErrorCode code, Object current, Exception e,
+                                                    HttpServletRequest request) {
+        log.debug("{} {}", code, e.getClass().getSimpleName());
+        return ResponseEntity.status(code.status())
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(Problem.of(code, RequestId.of(request), List.of(), current));
     }
 
     private static ResponseEntity<Problem> invalid(String field, FieldErrorCode code, Exception e,

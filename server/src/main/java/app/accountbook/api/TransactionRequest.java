@@ -41,12 +41,23 @@ record TransactionRequest(JsonNode id, JsonNode type, JsonNode occurredOn, JsonN
     /** 빠지거나 읽을 수 없는 칸이 하나라도 있으면 그것들을 모두 담아 거부한다. */
     TransactionCommand command() {
         List<InvalidRequestException> errors = new ArrayList<>();
-        UUID txId = uuid("id", id, true, errors);
+        TransactionCommand command = command(uuid("id", id, true, errors), errors);
+        if (!errors.isEmpty()) {
+            throw InvalidRequestException.ofAll(errors);
+        }
+        return command;
+    }
+
+    /**
+     * {@code id} 밖의 칸을 읽어 그 id의 명령을 만든다. 틀린 칸은 errors에 더하고, 그때의 명령은 쓰지 않는다.
+     * 고치기 요청({@link TransactionUpdateRequest})이 경로의 id로 부른다.
+     */
+    TransactionCommand command(UUID txId, List<InvalidRequestException> errors) {
         TransactionType txType = type(errors);
         LocalDate date = date(errors);
         LocalTime time = time(errors);
         Long amountValue = amount(errors);
-        TransactionCommand command = switch (txType) {
+        return switch (txType) {
             case EXPENSE, INCOME -> new Entry(txId, txType, date, time, uuid("accountId", accountId, true, errors),
                     uuid("categoryId", categoryId, false, errors), orZero(amountValue), false,
                     text("payee", payee, errors), text("memo", memo, errors), null);
@@ -54,10 +65,6 @@ record TransactionRequest(JsonNode id, JsonNode type, JsonNode occurredOn, JsonN
                     uuid("toAccountId", toAccountId, true, errors), orZero(amountValue), text("memo", memo, errors));
             case null -> null;
         };
-        if (!errors.isEmpty()) {
-            throw InvalidRequestException.ofAll(errors);
-        }
-        return command;
     }
 
     private TransactionType type(List<InvalidRequestException> errors) {

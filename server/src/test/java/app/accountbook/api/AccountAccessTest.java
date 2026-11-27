@@ -29,7 +29,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #34, #14). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
+ * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #34, #14, #36). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
  * 없는 id와 같은 404이고, 응답에 B의 값이 없으며, DB가 그대로다. 대조로 B 자신은 같은 요청이 열린다(틀린 본문이면 400).
  * 틀린 본문과 B가 이미 쓰는 이름도 404라, 장부가 있는지와 그 안의 이름을 알 수 없다. B의 거래 id로 만들어도 409가 아니라 404다.
  */
@@ -118,7 +118,21 @@ class AccountAccessTest {
                         client.postJson(transactions(ledger), "{\"amount\":\"x\"}"), 400),
                 new Case("거래 만들기(공백뿐인 본문)", (client, ledger) -> client.postJson(transactions(ledger), " "), 400),
                 new Case("거래 만들기(틀린 기기 값)", (client, ledger) -> client.send("POST", transactions(ledger),
-                        expense(UUID.randomUUID()), "Content-Type", "application/json", "X-Akkimpyo-Device", "a b"), 400));
+                        expense(UUID.randomUUID()), "Content-Type", "application/json", "X-Akkimpyo-Device", "a b"), 400),
+                // B의 거래를 바꾸지 않는 요청만 쓴다. 대조가 B의 거래를 바꾸면 뒤의 줄의 version이 어긋난다.
+                new Case("거래 고치기(같은 내용)", (client, ledger) -> put(client, ledger, bExpenseAsIs("1")), 200),
+                new Case("거래 고치기(낡은 version)", (client, ledger) -> put(client, ledger, bExpenseAsIs("2")), 409),
+                new Case("거래 고치기(틀린 본문)", (client, ledger) -> put(client, ledger, "{\"amount\":\"x\"}"), 400));
+    }
+
+    private Reply put(ServerClient client, UUID ledger, String json) throws Exception {
+        return client.send("PUT", transactions(ledger) + "/" + bExpense, json, "Content-Type", "application/json");
+    }
+
+    /** B의 지출과 같은 내용. */
+    private String bExpenseAsIs(String version) {
+        return "{\"type\":\"EXPENSE\",\"occurredOn\":\"2026-11-18\",\"accountId\":\"" + bBank + "\",\"categoryId\":\""
+                + bFood + "\",\"amount\":73100,\"version\":" + version + "}";
     }
 
     /** B의 계좌와 카테고리를 쓴 지출. B의 거래와 금액이 달라 같은 id면 내용이 다르다. */
