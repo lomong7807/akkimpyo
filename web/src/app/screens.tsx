@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import FullScreenFormShell from '../components/FullScreenFormShell'
 import { MainScreen, SubScreen } from '../components/Screen'
+import AccountFieldsSkeleton from '../features/accounts/AccountFieldsSkeleton'
 import AccountsSkeleton from '../features/accounts/AccountsSkeleton'
 import AddAccountLink from '../features/accounts/AddAccountLink'
 import { CategoriesScreenSkeleton } from '../features/categories/CategoriesSkeleton'
@@ -83,6 +84,14 @@ export const accountsScreen = lazyScreen(() => import('../features/accounts/Acco
 export const accountAddScreen = lazyScreen(() => import('../features/accounts/AccountAddPage'), {
   Frame: fullScreenForm('계좌 추가', '/accounts'),
   Placeholder: Loading,
+  headingLevel: 2,
+})
+
+/** G-02 수정 모드(#243). 1B 동안 닫거나 저장하면 계좌 목록으로 간다(1C에는 계좌 상세) */
+export const accountEditScreen = lazyScreen(() => import('../features/accounts/AccountEditPage'), {
+  Frame: fullScreenForm('계좌 수정', '/accounts'),
+  // 칸은 계좌를 받는 동안의 뼈대와 같다
+  Placeholder: AccountFieldsSkeleton,
   headingLevel: 2,
 })
 
