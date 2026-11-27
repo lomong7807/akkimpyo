@@ -1,5 +1,6 @@
 package app.accountbook.api;
 
+import app.accountbook.account.AccountRepository;
 import app.accountbook.account.AccountService;
 import app.accountbook.stats.BalanceQuery;
 import app.accountbook.support.Fixtures;
@@ -20,7 +21,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @HttpServerTest
-@MockitoSpyBean(types = {UserService.class, AccountService.class, BalanceQuery.class})
+@MockitoSpyBean(types = {UserService.class, AccountService.class, AccountRepository.class, BalanceQuery.class})
 @Import({Fixtures.class, StoppedClockConfig.class, LedgerProbeController.class})
 @interface LedgerApiTest {
 }

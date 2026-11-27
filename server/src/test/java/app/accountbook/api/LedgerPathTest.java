@@ -109,7 +109,8 @@ class LedgerPathTest {
     void 장부_경로의_모든_컨트롤러는_구성원이_아니면_잘못된_본문에도_404다() throws Exception {
         List<Route> routes = ledgerRoutes();
         assertThat(routes).extracting(Route::toString)
-                .contains("GET /api/v1/ledgers/{ledgerId}/accounts", "POST " + LedgerProbeController.PATH);
+                .contains("GET /api/v1/ledgers/{ledgerId}/accounts", "POST /api/v1/ledgers/{ledgerId}/accounts",
+                        "POST " + LedgerProbeController.PATH);
 
         for (Route route : routes) {
             String path = route.pattern().replaceFirst(VARIABLE, ledgerId.toString())
