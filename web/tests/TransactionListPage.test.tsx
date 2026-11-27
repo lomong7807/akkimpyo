@@ -891,7 +891,8 @@ describe('거래가 없는 달(4.2)', () => {
     }
     await openList()
     expect(screen.getByText('11월에 입력한 거래가 없어요')).toBeTruthy()
-    expect(within(main()).queryByRole('link')).toBeNull()
+    // 월 이동 오른쪽의 "달력"(D-01 (2))은 보기 전용에게도 있다
+    expect(within(main()).queryByRole('link', { name: '거래 입력' })).toBeNull()
   })
 })
 

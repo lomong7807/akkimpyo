@@ -31,7 +31,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #34, #14, #36, #38). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
+ * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #34, #14, #36, #38). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
  * 없는 id와 같은 404이고, 응답에 B의 값이 없으며, DB가 그대로다. 대조로 B 자신은 같은 요청이 열린다(틀린 본문이면 400).
  * 틀린 본문과 B가 이미 쓰는 이름도 404라, 장부가 있는지와 그 안의 이름을 알 수 없다. B의 거래 id로 만들어도 409가 아니라 404다.
  */
@@ -105,13 +105,23 @@ class AccountAccessTest {
     private List<Case> cases() {
         String created = "{\"name\":\"새 계좌\",\"type\":\"CASH\",\"openingBalance\":0,\"openingDate\":\"2026-11-18\"}";
         String sameName = created.replace("새 계좌", "B월급통장");
+        String bBankAsIs = "{\"name\":\"B월급통장\",\"type\":\"BANK\",\"openingBalance\":5432100,"
+                + "\"openingDate\":\"2026-11-18\"}";
         return List.of(
                 new Case("계좌 목록", (client, ledger) -> client.get(accounts(ledger)), 200),
                 new Case("계좌 추가", (client, ledger) -> client.postJson(accounts(ledger), created), 201),
                 new Case("계좌 추가(틀린 본문)", (client, ledger) -> client.postJson(accounts(ledger), "{\"name\":1}"), 400),
                 new Case("계좌 추가(B가 쓰는 이름)", (client, ledger) -> client.postJson(accounts(ledger), sameName), 400),
                 new Case("계좌 추가(JSON이 아님)", (client, ledger) -> client.postJson(accounts(ledger), "{"), 400),
+                // B의 계좌와 같은 내용이라 대조가 B의 계좌를 바꾸지 않는다.
+                new Case("계좌 고치기(같은 내용)", (client, ledger) -> putAccount(client, ledger, bBankAsIs), 200),
+                new Case("계좌 고치기(틀린 본문)", (client, ledger) -> putAccount(client, ledger, "{\"name\":1}"), 400),
                 new Case("카테고리 목록", (client, ledger) -> client.get(categories(ledger)), 200),
+                new Case("카테고리 제안", (client, ledger) -> client.get(suggestions(ledger) + "?payee=B"), 200),
+                new Case("카테고리 제안(101자 가맹점)", (client, ledger) ->
+                        client.get(suggestions(ledger) + "?payee=" + "x".repeat(101)), 400),
+                new Case("월별 통계", (client, ledger) ->
+                        client.get("/api/v1/ledgers/" + ledger + "/stats/monthly?month=2026-11"), 200),
                 new Case("거래 만들기", (client, ledger) ->
                         client.postJson(transactions(ledger), expense(UUID.randomUUID())), 201),
                 new Case("거래 만들기(B의 거래 id에 다른 내용)", (client, ledger) ->
@@ -133,6 +143,10 @@ class AccountAccessTest {
                         client.postJson(transactions(ledger) + "/" + bExpense + "/restore", "{\"version\":1}"), 409),
                 new Case("거래 되살리기(틀린 본문)", (client, ledger) ->
                         client.postJson(transactions(ledger) + "/" + bExpense + "/restore", "{}"), 400));
+    }
+
+    private Reply putAccount(ServerClient client, UUID ledger, String json) throws Exception {
+        return client.send("PUT", accounts(ledger) + "/" + bBank, json, "Content-Type", "application/json");
     }
 
     private Reply put(ServerClient client, UUID ledger, String json) throws Exception {
@@ -194,6 +208,10 @@ class AccountAccessTest {
 
     private static String categories(UUID ledger) {
         return "/api/v1/ledgers/" + ledger + "/categories";
+    }
+
+    private static String suggestions(UUID ledger) {
+        return "/api/v1/ledgers/" + ledger + "/category-suggestions";
     }
 
     private static String transactions(UUID ledger) {

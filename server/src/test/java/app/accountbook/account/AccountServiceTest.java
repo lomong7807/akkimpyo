@@ -158,7 +158,7 @@ class AccountServiceTest {
         accountService.create(owner.getId(), ledgerId, command("생활비", 0));
         Account savings = accountService.create(owner.getId(), ledgerId, command("비상금", 0));
 
-        assertThatThrownBy(() -> accountService.update(owner.getId(), savings.getId(), command(" 생활비 ", 0)))
+        assertThatThrownBy(() -> accountService.update(owner.getId(), ledgerId, savings.getId(), command(" 생활비 ", 0)))
                 .isInstanceOf(DuplicateAccountNameException.class)
                 .hasMessage("같은 이름의 계좌가 있습니다.");
         assertThat(accountRepository.findById(savings.getId()).orElseThrow().getName()).isEqualTo("비상금");
@@ -169,7 +169,7 @@ class AccountServiceTest {
         // 자기 자신과는 겹치지 않는 것으로 본다.
         Account account = accountService.create(owner.getId(), ledgerId, command("생활비", 0));
 
-        accountService.update(owner.getId(), account.getId(), command("생활비", 50_000));
+        accountService.update(owner.getId(), ledgerId, account.getId(), command("생활비", 50_000));
 
         Account stored = accountRepository.findById(account.getId()).orElseThrow();
         assertThat(stored.getName()).isEqualTo("생활비");
@@ -207,10 +207,10 @@ class AccountServiceTest {
     void update_storesOpeningBalanceAtRangeEdges() {
         Account account = accountService.create(owner.getId(), ledgerId, command("생활비", 0));
 
-        accountService.update(owner.getId(), account.getId(), command("생활비", 9_999_999_999L));
+        accountService.update(owner.getId(), ledgerId, account.getId(), command("생활비", 9_999_999_999L));
         assertThat(storedOpeningBalance(account)).isEqualTo(9_999_999_999L);
 
-        accountService.update(owner.getId(), account.getId(), command("생활비", -9_999_999_999L));
+        accountService.update(owner.getId(), ledgerId, account.getId(), command("생활비", -9_999_999_999L));
         assertThat(storedOpeningBalance(account)).isEqualTo(-9_999_999_999L);
     }
 
@@ -219,7 +219,7 @@ class AccountServiceTest {
     void update_rejectsOpeningBalanceOutsideRange(long openingBalance) {
         Account account = accountService.create(owner.getId(), ledgerId, command("생활비", 1_000));
 
-        assertThatThrownBy(() -> accountService.update(owner.getId(), account.getId(),
+        assertThatThrownBy(() -> accountService.update(owner.getId(), ledgerId, account.getId(),
                 command("생활비", openingBalance)))
                 .isInstanceOf(InvalidRequestException.class);
         assertThat(storedOpeningBalance(account)).isEqualTo(1_000);

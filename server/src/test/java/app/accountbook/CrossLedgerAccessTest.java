@@ -27,6 +27,7 @@ import app.accountbook.stats.MonthlyStatsQuery;
 import app.accountbook.stats.MonthlySummary;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
+import app.accountbook.transaction.CategorySuggestionQuery;
 import app.accountbook.transaction.IdConflictException;
 import app.accountbook.transaction.StaleVersionException;
 import app.accountbook.transaction.TransactionCommand;
@@ -98,6 +99,7 @@ class CrossLedgerAccessTest {
     @Autowired CategoryService categoryService;
     @Autowired TransactionService transactionService;
     @Autowired TransactionListQuery transactionListQuery;
+    @Autowired CategorySuggestionQuery categorySuggestionQuery;
     @Autowired BalanceQuery balanceQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
     @Autowired LedgerAccess ledgerAccess;
@@ -181,6 +183,7 @@ class CrossLedgerAccessTest {
         categoryService = recorded(categoryService);
         transactionService = recorded(transactionService);
         transactionListQuery = recorded(transactionListQuery);
+        categorySuggestionQuery = recorded(categorySuggestionQuery);
         balanceQuery = recorded(balanceQuery);
         monthlyStatsQuery = recorded(monthlyStatsQuery);
         ledgerAccess = recorded(ledgerAccess);
@@ -311,6 +314,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Day(DAY), null, 50)),
                 denied("조회: 거래 목록(장부 전체)", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new WholeLedger(), null, 50)),
+                denied("조회: 가맹점의 최근 카테고리 제안", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> categorySuggestionQuery.suggest(actor, ledger, "B단골식당")),
                 denied("조회: 날짜별 합계(달력)", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, NOVEMBER)),
                 denied("조회: 계좌 잔액", NotLedgerMemberException.class, bBank,
@@ -397,7 +402,9 @@ class CrossLedgerAccessTest {
     Stream<Row> changeRows() {
         return Stream.of(
                 denied("수정: B의 계좌", NotLedgerMemberException.class, bBank,
-                        (actor, account) -> accountService.update(actor, account, accountCommand("바꾼이름"))),
+                        (actor, account) -> accountService.update(actor, ledgerB, account, accountCommand("바꾼이름"))),
+                foreign("수정: A의 장부로 B의 계좌", NotLedgerMemberException.class, bBank, aCash,
+                        (actor, account) -> accountService.update(actor, ledgerA, account, accountCommand("바꾼이름"))),
                 denied("수정: B의 카테고리 이름", NotLedgerMemberException.class, bFood,
                         (actor, category) -> categoryService.rename(actor, category, "바꾼이름")),
                 denied("수정: B의 지출", NotFoundException.class, bExpense.id(),
@@ -452,7 +459,7 @@ class CrossLedgerAccessTest {
                 denied("순서: B의 미분류 삭제", notMember, bUncategorized, invalid,
                         (actor, category) -> categoryService.delete(actor, category)),
                 denied("순서: B의 계좌를 빈 요청으로 수정", notMember, bBank, invalid,
-                        (actor, account) -> accountService.update(actor, account, null)),
+                        (actor, account) -> accountService.update(actor, ledgerB, account, null)),
                 denied("순서: B의 카테고리를 빈 이름으로", notMember, bFood, invalid,
                         (actor, category) -> categoryService.rename(actor, category, " ")),
                 denied("순서: B의 장부에 빈 계좌 요청", notMember, ledgerB, invalid,
@@ -463,8 +470,12 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionService.create(actor, ledger, null, DEVICE)),
                 denied("순서: B의 장부 월 통계를 달 없이", notMember, ledgerB, invalid,
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, null)),
+                denied("순서: B의 장부 월 통계를 범위 밖 달로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, YearMonth.of(1999, 12))),
                 denied("순서: B의 장부 거래 목록을 범위 밖 limit으로", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 0)),
+                denied("순서: B의 장부에 101자 가맹점으로 카테고리 제안", notMember, ledgerB, invalid,
+                        (actor, ledger) -> categorySuggestionQuery.suggest(actor, ledger, "가".repeat(101))),
                 denied("순서: B의 장부 날짜별 합계를 범위 밖 달로", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, YearMonth.of(1999, 12))),
                 denied("순서: B의 지출을 낡은 version으로 취소", notFound, bExpense.id(), StaleVersionException.class,

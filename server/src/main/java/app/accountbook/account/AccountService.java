@@ -62,10 +62,18 @@ public class AccountService {
         return saveUnlessDuplicate(account);
     }
 
+    /**
+     * 이름, 종류, 시작 잔액, 기준일을 바꾼다(F-503). 검증은 만들기와 같고, 이름은 자기 자신과는 겹치지 않는 것으로 본다.
+     * version은 없고 나중 저장이 덮어쓴다(P-217). 그 장부의 계좌가 아니면(내가 구성원인 다른 장부의 계좌, 없는 계좌)
+     * 구성원이 아닌 것과 같은 예외이고, 검증보다 먼저다. 계좌의 장부는 바뀌지 않는다({@code ledger_id}는 고칠 수 없다).
+     */
     @Transactional
-    public Account update(UUID actorId, UUID accountId, AccountCommand cmd) {
-        Account account = loadForMember(actorId, accountId);
-        String name = validateAndNormalizeName(account.getLedgerId(), cmd);
+    public Account update(UUID actorId, UUID ledgerId, UUID accountId, AccountCommand cmd) {
+        ledgerAccess.requireMember(actorId, ledgerId);
+        Account account = accountRepository.findById(accountId)
+                .filter(found -> found.getLedgerId().equals(ledgerId))
+                .orElseThrow(NotLedgerMemberException::new);
+        String name = validateAndNormalizeName(ledgerId, cmd);
         requireUniqueName(account, name);
         account.update(name, cmd.type(), cmd.openingBalance(), cmd.openingDate());
         return saveUnlessDuplicate(account);

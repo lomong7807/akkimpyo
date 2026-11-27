@@ -225,7 +225,19 @@ export async function fetchTransactionPage(
   const query = new URLSearchParams({ month, limit: String(PAGE_SIZE) })
   if (cursor !== null) query.set('cursor', cursor)
   const body = await request<unknown>(`${ledgerPath(ledgerId, 'transactions')}?${query}`)
-  if (!isTransactionPage(body, month, cursor === null)) throw ApiError.unreadable()
+  if (!isTransactionPage(body, { month }, cursor === null)) throw ApiError.unreadable()
+  return body
+}
+
+/**
+ * 장부의 하루 거래를 한 쪽 받는다(#15의 하루 모드 `date=YYYY-MM-DD`, 달력 D-02의 고른 날). 순서와 cursor는 달 목록과 같고,
+ * 첫 쪽의 합계(totals)는 그날 합계다. 달을 함께 보내지 않는다(서버가 400으로 거부한다). 나머지는 fetchTransactionPage와 같다.
+ */
+export async function fetchDayPage(ledgerId: string, date: string, cursor: string | null): Promise<TransactionPage> {
+  const query = new URLSearchParams({ date, limit: String(PAGE_SIZE) })
+  if (cursor !== null) query.set('cursor', cursor)
+  const body = await request<unknown>(`${ledgerPath(ledgerId, 'transactions')}?${query}`)
+  if (!isTransactionPage(body, { date }, cursor === null)) throw ApiError.unreadable()
   return body
 }
 
@@ -236,7 +248,7 @@ export async function fetchTransactionPage(
 export async function fetchMonthTotals(ledgerId: string, month: string, sender?: SenderCheck): Promise<IncomeAndExpense> {
   const query = new URLSearchParams({ month, limit: '1' })
   const body = await request<unknown>(`${ledgerPath(ledgerId, 'transactions')}?${query}`, {}, sender)
-  if (!isTransactionPage(body, month, true)) throw ApiError.unreadable()
+  if (!isTransactionPage(body, { month }, true)) throw ApiError.unreadable()
   // 첫 쪽에는 합계가 늘 있다(isTransactionPage)
   return body.totals!
 }
@@ -279,16 +291,23 @@ export async function fetchLedgerPage(ledgerId: string, cursor: string | null, s
   return { items: body.items, nextCursor: body.nextCursor, days: body.days }
 }
 
-/** 한 쪽의 모양이 약속(#15)과 같은지. `month`가 null이면 장부 전체의 쪽이라 합계가 없고 달을 보지 않는다. */
-function isTransactionPage(value: unknown, month: string | null, first: boolean): value is TransactionPage {
+/** 목록의 범위(#15): 한 달, 하루, 없으면(null) 장부 전체 */
+type PageScope = { month: string } | { date: string } | null
+
+/**
+ * 한 쪽의 모양이 약속(#15)과 같은지. 거래와 그날 합계의 날짜가 모두 범위 안이어야 한다. 장부 전체(null)의 쪽은 합계가 없고
+ * 날짜를 보지 않는다. 달과 하루의 첫 쪽에는 범위의 합계가 있다.
+ */
+function isTransactionPage(value: unknown, scope: PageScope, first: boolean): value is TransactionPage {
   if (typeof value !== 'object' || value === null) return false
   const { items, nextCursor, totals, days } = value as Partial<Record<keyof TransactionPage, unknown>>
   if (!Array.isArray(items) || !Array.isArray(days)) return false
-  const inMonth = (date: string) => month === null || monthOf(date) === month
-  if (!items.every((item) => isListedTransaction(item) && inMonth(item.occurredOn))) return false
-  if (!days.every((day) => isDayTotal(day) && inMonth(day.date))) return false
+  const inScope = (date: string) =>
+    scope === null || ('month' in scope ? monthOf(date) === scope.month : date === scope.date)
+  if (!items.every((item) => isListedTransaction(item) && inScope(item.occurredOn))) return false
+  if (!days.every((day) => isDayTotal(day) && inScope(day.date))) return false
   const dates = new Set(days.map(({ date }) => date))
-  const totalsKept = month === null ? totals === null : isIncomeAndExpense(totals) || (!first && totals === null)
+  const totalsKept = scope === null ? totals === null : isIncomeAndExpense(totals) || (!first && totals === null)
   return (
     items.every(({ occurredOn }) => dates.has(occurredOn)) &&
     (nextCursor === null || (typeof nextCursor === 'string' && nextCursor !== '')) &&

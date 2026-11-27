@@ -16,6 +16,7 @@ import {
   pendingFixScreen,
   pendingScreen,
   signupScreen,
+  transactionCalendarScreen,
   transactionDetailScreen,
   transactionEditScreen,
   transactionListScreen,
@@ -90,6 +91,12 @@ export const routes: RouteObject[] = [
                     handle: { navigationItem: transactionsItem },
                   },
                   { path: '/transactions/new', element: <transactionNewScreen.Screen />, handle: { fullScreen: true } },
+                  // 거래 상세(/transactions/:id)보다 앞에 둔다(정적 경로가 이기지만 순서로도 분명히 한다, architect #300 C)
+                  {
+                    path: '/transactions/calendar',
+                    element: <transactionCalendarScreen.Screen />,
+                    handle: { navigationItem: transactionsItem },
+                  },
                   {
                     path: '/transactions/:id',
                     element: <transactionDetailScreen.Screen />,

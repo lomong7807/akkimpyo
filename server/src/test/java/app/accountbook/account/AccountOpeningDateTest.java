@@ -122,7 +122,7 @@ class AccountOpeningDateTest {
     void update_storesDatesUpToBothEdges(String date) {
         Account account = create(ledgerId, "2026-11-01");
 
-        update(account.getId(), date);
+        update(account, date);
 
         assertThat(storedDate(account.getId())).isEqualTo(date);
     }
@@ -133,7 +133,7 @@ class AccountOpeningDateTest {
         Account account = create(ledgerId, "2026-11-01");
         Map<String, Object> before = storedRow(account.getId());
 
-        assertRejected(() -> accountService.update(owner.getId(), account.getId(),
+        assertRejected(() -> accountService.update(owner.getId(), ledgerId, account.getId(),
                 new AccountCommand("다른 이름", AccountType.CASH, 5_000, LocalDate.parse(date))));
 
         assertThat(storedRow(account.getId())).isEqualTo(before);
@@ -168,9 +168,9 @@ class AccountOpeningDateTest {
         Account account = create(zonedLedgerId, last.toString());
         assertThat(storedDate(account.getId())).isEqualTo(last.toString());
 
-        assertRejected(() -> update(account.getId(), dayAfter));
-        update(account.getId(), FIRST_DAY);
-        update(account.getId(), last.toString());
+        assertRejected(() -> update(account, dayAfter));
+        update(account, FIRST_DAY);
+        update(account, last.toString());
         assertThat(storedDate(account.getId())).isEqualTo(last.toString());
     }
 
@@ -183,9 +183,9 @@ class AccountOpeningDateTest {
 
         assertThatThrownBy(() -> accountService.create(outsider.getId(), ledgerId, outOfRange))
                 .isInstanceOf(NotLedgerMemberException.class);
-        assertThatThrownBy(() -> accountService.update(outsider.getId(), account.getId(), outOfRange))
+        assertThatThrownBy(() -> accountService.update(outsider.getId(), ledgerId, account.getId(), outOfRange))
                 .isInstanceOf(NotLedgerMemberException.class);
-        assertThatThrownBy(() -> accountService.update(owner.getId(), UUID.randomUUID(), outOfRange))
+        assertThatThrownBy(() -> accountService.update(owner.getId(), ledgerId, UUID.randomUUID(), outOfRange))
                 .isInstanceOf(NotLedgerMemberException.class);
     }
 
@@ -233,11 +233,11 @@ class AccountOpeningDateTest {
         UUID accountId = insertAccount("2028-11-26", 1_000);
         Map<String, Object> before = storedRow(accountId);
 
-        assertRejected(() -> accountService.update(owner.getId(), accountId,
+        assertRejected(() -> accountService.update(owner.getId(), ledgerId, accountId,
                 new AccountCommand("새 이름", AccountType.BANK, 1_000, LocalDate.parse("2028-11-26"))));
         assertThat(storedRow(accountId)).isEqualTo(before);
 
-        accountService.update(owner.getId(), accountId,
+        accountService.update(owner.getId(), ledgerId, accountId,
                 new AccountCommand("새 이름", AccountType.BANK, 1_000, LocalDate.parse(LAST_DAY)));
         assertThat(storedDate(accountId)).isEqualTo(LAST_DAY);
     }
@@ -252,8 +252,8 @@ class AccountOpeningDateTest {
         return accountService.create(owner.getId(), targetLedgerId, command("생활비", date));
     }
 
-    private void update(UUID accountId, String date) {
-        accountService.update(owner.getId(), accountId, command("생활비", date));
+    private void update(Account account, String date) {
+        accountService.update(owner.getId(), account.getLedgerId(), account.getId(), command("생활비", date));
     }
 
     private static AccountCommand command(String name, String date) {

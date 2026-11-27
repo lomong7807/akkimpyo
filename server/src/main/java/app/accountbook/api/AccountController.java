@@ -13,12 +13,13 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 장부의 계좌(F-501, F-502). 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가 한 번 더 한다. */
+/** 장부의 계좌(F-501, F-502, F-503). 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가 한 번 더 한다. */
 @RestController
 @RequestMapping(path = "/api/v1/ledgers/{ledgerId}/accounts", produces = MediaType.APPLICATION_JSON_VALUE)
 class AccountController {
@@ -58,5 +59,23 @@ class AccountController {
         } catch (InvalidRequestException e) {
             throw read.explain(e);
         }
+    }
+
+    /**
+     * 200이고 본문은 목록의 항목과 같다(#33). 잔액은 바꾼 시작 잔액과 기준일로 다시 구한 값이다(P-206). version은 없고 나중
+     * 저장이 덮어쓴다(P-217). 이 장부의 계좌가 아니면(내가 구성원인 다른 장부의 계좌, 없는 계좌) 본문이 틀려도 404다.
+     * 검증은 만들기와 같다. 잔액은 저장한 뒤 따로 구한다(ADR 004 결정 6).
+     */
+    @PutMapping(path = "/{accountId}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    AccountResponse update(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                           @PathVariable UUID accountId, @RequestBody AccountRequest request) {
+        AccountRequest.Read read = request.read();
+        Account account;
+        try {
+            account = accountService.update(actorId, ledgerId, accountId, read.command());
+        } catch (InvalidRequestException e) {
+            throw read.explain(e);
+        }
+        return AccountResponse.of(account, balanceQuery.balance(actorId, account.getId()));
     }
 }

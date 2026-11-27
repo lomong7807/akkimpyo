@@ -4,6 +4,7 @@ import { MainScreen, SubScreen } from '../components/Screen'
 import AccountsSkeleton from '../features/accounts/AccountsSkeleton'
 import AddAccountLink from '../features/accounts/AddAccountLink'
 import { CategoriesScreenSkeleton } from '../features/categories/CategoriesSkeleton'
+import CalendarSkeleton from '../features/transactions/CalendarSkeleton'
 import { DetailSkeleton } from '../features/transactions/TransactionDetailSkeleton'
 import TransactionFieldsSkeleton from '../features/transactions/TransactionFieldsSkeleton'
 import { HistorySkeleton } from '../features/transactions/TransactionListSkeleton'
@@ -20,10 +21,10 @@ import { SignupFrame, TransactionEditFrame } from './screenFrames'
 
 type Frame = ScreenShell['Frame']
 
-function subScreen(title: string, parent: string, action?: ReactNode): Frame {
+function subScreen(title: string, parent: string, action?: ReactNode, fullWidth = false): Frame {
   return function SubScreenFrame({ children }) {
     return (
-      <SubScreen title={title} parent={parent} action={action}>
+      <SubScreen title={title} parent={parent} action={action} fullWidth={fullWidth}>
         {children}
       </SubScreen>
     )
@@ -43,6 +44,13 @@ function fullScreenForm(title: string, parent: string): Frame {
 export const transactionListScreen = lazyScreen(() => import('../features/transactions/TransactionListPage'), {
   Frame: MainScreen,
   Placeholder: HistorySkeleton,
+})
+
+/** D-02. 넓은 화면은 두 칸이라 내용 영역 전체 폭이다. 화면은 앞 화면이 없을 때 "뒤로"가 그 달의 내역으로 간다 */
+export const transactionCalendarScreen = lazyScreen(() => import('../features/transactions/CalendarPage'), {
+  Frame: subScreen('달력', '/transactions', undefined, true),
+  Placeholder: CalendarSkeleton,
+  headingLevel: 2,
 })
 
 export const transactionNewScreen = lazyScreen(() => import('../features/transactions/TransactionNewPage'), {
