@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         - 조각은 마일스톤으로도 건다.
-        - `ready` 라벨은 owner만 붙인다.
+        - `ready` 라벨은 planner가 붙인다.
   - type: dropdown
     id: slice
     attributes:
