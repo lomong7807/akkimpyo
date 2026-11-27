@@ -4,6 +4,7 @@ import app.accountbook.category.CategoryService;
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
+import app.accountbook.common.NotFoundException;
 import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
@@ -103,6 +104,14 @@ public class UserService {
     /** 이 id의 사용자가 있는가. 토큰의 사용자가 탈퇴로 지워졌는지 요청마다 본다(ADR 001 결정 1). 사용자의 값은 내주지 않는다. */
     public boolean exists(UUID userId) {
         return userRepository.existsById(userId);
+    }
+
+    /**
+     * 호출자 자신의 이메일과 표시 이름(#30, F-014). 다른 사용자의 값을 고를 인자는 없다.
+     * 토큰을 확인한 뒤 그 사이에 사용자가 지워졌으면 {@link NotFoundException}이다.
+     */
+    public UserProfile profile(UUID actorId) {
+        return userRepository.findById(actorId).map(UserProfile::of).orElseThrow(NotFoundException::new);
     }
 
     /** 형식이 틀린 이메일로 가입한 사람은 없다. */
