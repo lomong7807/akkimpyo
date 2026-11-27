@@ -1,0 +1,780 @@
+#!/usr/bin/env bash
+# main의 deploy/production.env를 보고 운영 이미지를 바꾼다. 설치와 운영 방법은 deploy/deploy.md다.
+#   deploy                 한 번 돈다. systemd 타이머(akkimpyo-deploy.timer)가 인자 없이 부른다
+#   deploy --check 파일    배포 파일의 형식만 본다. CI의 Deploy PR 검사가 쓴다
+# 레포에서 받는 것은 배포 파일의 내용뿐이다. compose와 허용 목록은 서버에 설치된 사본만 쓴다.
+# 출력은 모두 표준 오류로 나간다. env 파일의 값은 출력하지 않는다.
+set +x
+set -euo pipefail
+umask 077
+export LC_ALL=C.UTF-8 TZ=Asia/Seoul
+
+BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+DEPLOY_FILE_PATH=deploy/production.env
+MIGRATION_DIR=server/src/main/resources/db/migration
+# 같은 알림(형식 오류 등)을 다시 보내는 간격(초).
+REPEAT_SECONDS=$((6 * 3600))
+# 교체 뒤 env 파일에 꼭 있어야 하는 이름(범위 보강 6, 13, 15, 17).
+REQUIRED_ENV=(DB_URL DB_USERNAME DB_PASSWORD ACCESS_TOKEN_SIGNING_KEY WEB_ORIGIN)
+LIMIT_NOTE='이전 이미지로 돌아가도 이미 적용된 마이그레이션은 그대로다(스키마는 되돌리지 않는다). 이전 이미지가 새 스키마에서 뜨지 않으면 백업 복구가 필요하고, 자동으로 복구하지 않는다.'
+
+log() {
+  printf '%s\n' "$*" >&2
+}
+
+die() {
+  log "오류: $*"
+  exit 1
+}
+
+# --- 설정 ---
+
+set_defaults() {
+  COMPOSE_PROJECT=akkimpyo
+  COMPOSE_FILE_PATH=/opt/akkimpyo/deploy/compose.yaml
+  ENV_ALLOWLIST_FILE=/opt/akkimpyo/deploy/env.allowlist
+  KNOWN_HOSTS_FILE=/opt/akkimpyo/deploy/github-known-hosts
+  APP_ENV_FILE=/etc/akkimpyo/app.env
+  DEPLOY_KEY_FILE=/etc/akkimpyo/deploy-key
+  TELEGRAM_ENV_FILE=/etc/akkimpyo/telegram.env
+  REPO_URL=git@github.com:lomong7807/akkimpyo.git
+  REPO_BRANCH=main
+  SERVER_REPOSITORY=ghcr.io/lomong7807/akkimpyo-server
+  WEB_REPOSITORY=ghcr.io/lomong7807/akkimpyo-web
+  DEPLOY_STATE_DIR=/var/lib/akkimpyo-deploy
+  BACKUP_BIN=/opt/akkimpyo/bin/backup
+  WAIT_SECONDS=600
+  HEALTH_URL=http://127.0.0.1:8080/actuator/health
+  HEALTH_TRIES=36
+  HEALTH_INTERVAL_SECONDS=5
+  PROXY_WAIT_SECONDS=60
+  FETCH_ALERT_AFTER_SECONDS=1800
+}
+
+# 설정 파일은 없어도 된다(기본값이 운영 값이다). 셸로 실행하지 않고 "이름=값" 줄만 읽는다. 모르는 이름이 있으면 멈춘다.
+load_config() {
+  local file=${DEPLOY_ENV_FILE:-/etc/akkimpyo/deploy.env} line key
+  [[ -e $file ]] || return 0
+  [[ -r $file ]] || die "설정 파일을 읽을 수 없다: $file"
+  while IFS= read -r line || [[ -n $line ]]; do
+    [[ $line =~ ^[[:space:]]*(#|$) ]] && continue
+    [[ $line =~ ^([A-Z_]+)=(.*)$ ]] || die "$file: '이름=값' 형식이 아닌 줄이 있다"
+    key=${BASH_REMATCH[1]}
+    case $key in
+      COMPOSE_PROJECT | COMPOSE_FILE_PATH | ENV_ALLOWLIST_FILE | KNOWN_HOSTS_FILE | APP_ENV_FILE | \
+        DEPLOY_KEY_FILE | TELEGRAM_ENV_FILE | REPO_URL | REPO_BRANCH | SERVER_REPOSITORY | WEB_REPOSITORY | \
+        DEPLOY_STATE_DIR | BACKUP_BIN | HEALTH_URL)
+        printf -v "$key" '%s' "${BASH_REMATCH[2]}"
+        ;;
+      WAIT_SECONDS | HEALTH_TRIES | HEALTH_INTERVAL_SECONDS | PROXY_WAIT_SECONDS | FETCH_ALERT_AFTER_SECONDS)
+        [[ ${BASH_REMATCH[2]} =~ ^[0-9]+$ ]] || die "$file: $key 는 0 이상의 정수다"
+        printf -v "$key" '%s' "${BASH_REMATCH[2]}"
+        ;;
+      *) die "$file: 모르는 변수 $key" ;;
+    esac
+  done <"$file"
+  ((HEALTH_TRIES > 0)) || die "$file: HEALTH_TRIES는 1 이상이다"
+}
+
+# root_file 파일 권한: root 소유이고 권한이 정확히 그 값이다.
+root_file() {
+  [[ -f $1 && $(stat -c '%u %a' -- "$1") == "0 $2" ]]
+}
+
+# --- 상태 파일 ---
+
+state_get() {
+  if [[ -r $DEPLOY_STATE_DIR/$1 ]]; then
+    sed -n "s/^$2=//p" "$DEPLOY_STATE_DIR/$1"
+  fi
+}
+
+# 표준 입력으로 상태 파일을 바꾼다. 쓰다가 끊겨도 이전 내용이 남는다.
+state_put() {
+  cat >"$DEPLOY_STATE_DIR/$1.partial"
+  mv -- "$DEPLOY_STATE_DIR/$1.partial" "$DEPLOY_STATE_DIR/$1"
+}
+
+# 상태 파일의 앞 네 줄(배포 파일 내용)이 지금 받은 배포 파일과 같다.
+state_matches() {
+  [[ -r $DEPLOY_STATE_DIR/$1 && $(head -n 4 -- "$DEPLOY_STATE_DIR/$1") == "$(desired_text)" ]]
+}
+
+# 배포 이력 한 줄: 시각, 결과, 이미지, SW_DISABLE, 커밋, 걸린 시간, 단계.
+history() {
+  printf '%s\t%s\tserver=%s\tweb=%s\tsw=%s\tcommit=%s\tseconds=%s\tstep=%s\n' \
+    "$(date +%Y-%m-%dT%H:%M:%S%:z)" "$1" "${D_SERVER#*@}" "${D_WEB#*@}" "$D_SW" "$file_commit" \
+    "$(($(date +%s) - started))" "${2:--}" >>"$DEPLOY_STATE_DIR/history"
+}
+
+# --- 알림 ---
+
+notify() {
+  TELEGRAM_ENV_FILE=$TELEGRAM_ENV_FILE "$BIN_DIR/notify-telegram"
+}
+
+# 한 건 보낸다. 못 보내면 남겨 두고 다음 실행이 다시 보낸다.
+alert() {
+  log "알림: $1"
+  printf '[아낌표 배포] %s\n' "$1" | notify && return 0
+  log '알림을 보내지 못했다. 다음 실행이 다시 보낸다'
+  printf '[아낌표 배포] (늦게 보낸 알림) %s\n' "$1" >"$(mktemp "$DEPLOY_STATE_DIR/unsent.$(date +%s).XXXXXX")"
+}
+
+resend_unsent() {
+  local file
+  for file in "$DEPLOY_STATE_DIR"/unsent.*; do
+    [[ -e $file ]] || continue
+    if ! notify <"$file"; then
+      log '남은 알림을 아직 보내지 못한다'
+      return 0
+    fi
+    rm -- "$file"
+  done
+}
+
+# alert_once 이름 글: 같은 글은 REPEAT_SECONDS 안에 다시 보내지 않는다. 못 보내면 다음 실행이 다시 보낸다.
+alert_once() {
+  local file=$DEPLOY_STATE_DIR/alerted.$1 sum now last_sum='' last_at=0
+  sum=$(printf '%s' "$2" | sha256sum | cut -c 1-64)
+  now=$(date +%s)
+  if [[ -r $file ]]; then
+    read -r last_sum last_at <"$file" || true
+  fi
+  if [[ $last_sum == "$sum" ]] && ((now - last_at < REPEAT_SECONDS)); then
+    log "$2"
+    log '(같은 알림을 이미 보냈다)'
+    return 0
+  fi
+  log "알림: $2"
+  if printf '[아낌표 배포] %s\n' "$2" | notify; then
+    printf '%s %s\n' "$sum" "$now" | state_put "alerted.$1"
+  else
+    log '알림을 보내지 못했다. 다음 실행이 다시 보낸다'
+  fi
+}
+
+clear_alert() {
+  rm -f -- "$DEPLOY_STATE_DIR/alerted.$1"
+}
+
+# --- 배포 파일 ---
+
+# expect_image 줄번호 이름 저장소 줄 변수
+expect_image() {
+  local prefix="$2=$3@sha256:"
+  if [[ $4 != "$prefix"* ]] || ! [[ ${4#"$prefix"} =~ ^[0-9a-f]{64}$ ]]; then
+    refusal="$1번째 줄은 $2=$3@sha256:<소문자 16진수 64자>여야 한다"
+    return 1
+  fi
+  printf -v "$5" '%s' "${4#"$2="}"
+}
+
+# expect_choice 줄번호 이름 줄 변수
+expect_choice() {
+  if ! [[ $3 =~ ^$2=(yes|no)$ ]]; then
+    refusal="$1번째 줄은 $2=yes 또는 $2=no여야 한다"
+    return 1
+  fi
+  printf -v "$4" '%s' "${BASH_REMATCH[1]}"
+}
+
+# parse_deploy_file 파일: 정해진 네 줄만 받는다. 맞으면 D_SERVER, D_WEB, D_ROLLBACK, D_SW를 채운다.
+# 틀리면 refusal에 이유를 넣고 1을 낸다.
+parse_deploy_file() {
+  local -a lines=()
+  refusal=''
+  if [[ ! -f $1 ]]; then
+    refusal='파일이 없다'
+    return 1
+  fi
+  if (($(wc -c <"$1") > 1024)); then
+    refusal='1024바이트보다 크다'
+    return 1
+  fi
+  # CR, 탭, NUL, ASCII 밖 글자를 모두 막는다.
+  if LC_ALL=C grep -qa '[^ -~]' "$1"; then
+    refusal='ASCII 인쇄 가능 문자가 아닌 것(CR, 탭, 한글 등)이 있다'
+    return 1
+  fi
+  mapfile -t lines <"$1"
+  if ((${#lines[@]} != 4)); then
+    refusal="줄이 ${#lines[@]}개다. SERVER_IMAGE, WEB_IMAGE, ROLLBACK_SAFE, SW_DISABLE 네 줄만 이 순서로 둔다"
+    return 1
+  fi
+  expect_image 1 SERVER_IMAGE "$SERVER_REPOSITORY" "${lines[0]}" D_SERVER &&
+    expect_image 2 WEB_IMAGE "$WEB_REPOSITORY" "${lines[1]}" D_WEB &&
+    expect_choice 3 ROLLBACK_SAFE "${lines[2]}" D_ROLLBACK &&
+    expect_choice 4 SW_DISABLE "${lines[3]}" D_SW
+}
+
+desired_text() {
+  printf 'SERVER_IMAGE=%s\nWEB_IMAGE=%s\nROLLBACK_SAFE=%s\nSW_DISABLE=%s' "$D_SERVER" "$D_WEB" "$D_ROLLBACK" "$D_SW"
+}
+
+# --- 레포 읽기(읽기 전용 배포 키) ---
+
+git_repo() {
+  local ssh_command
+  printf -v ssh_command 'ssh -F /dev/null -i %q -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=%q -o ConnectTimeout=20' \
+    "$DEPLOY_KEY_FILE" "$KNOWN_HOSTS_FILE"
+  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND=$ssh_command \
+    timeout 300 git -C "$DEPLOY_STATE_DIR/repo.git" "$@"
+}
+
+fetch_main() {
+  root_file "$DEPLOY_KEY_FILE" 600 || { log "$DEPLOY_KEY_FILE 이 root 소유, 권한 600인 파일이 아니다"; return 1; }
+  [[ -r $KNOWN_HOSTS_FILE ]] || { log "GitHub 호스트 키 파일이 없다: $KNOWN_HOSTS_FILE"; return 1; }
+  if [[ ! -d $DEPLOY_STATE_DIR/repo.git ]]; then
+    git -c init.defaultBranch=main init --quiet --bare "$DEPLOY_STATE_DIR/repo.git"
+  fi
+  git_repo config remote.origin.url "$REPO_URL"
+  # 작업 트리가 없는 bare 저장소다. 파일을 꺼내 실행하지 않고 배포 파일의 내용만 읽는다.
+  git_repo fetch --quiet --no-tags --force origin "+refs/heads/$REPO_BRANCH:refs/heads/$REPO_BRANCH"
+}
+
+# 가져오기가 FETCH_ALERT_AFTER_SECONDS 넘게 계속 실패하면 알린다. 잠깐의 GitHub 장애는 알리지 않는다.
+fetch_failed() {
+  local now first
+  now=$(date +%s)
+  first=$(state_get fetch-failing since)
+  if [[ -z $first ]]; then
+    first=$now
+    printf 'since=%s\n' "$now" | state_put fetch-failing
+  fi
+  if ((now - first >= FETCH_ALERT_AFTER_SECONDS)); then
+    alert_once fetch "$((( now - first) / 60))분째 $REPO_BRANCH의 $DEPLOY_FILE_PATH 를 받아 오지 못한다. 배포 키($DEPLOY_KEY_FILE)와 GitHub 호스트 키, 네트워크를 본다. 그동안 배포는 일어나지 않는다."
+  fi
+  exit 1
+}
+
+# known_commit 커밋: 가져온 브랜치에 있는 커밋이다.
+known_commit() {
+  [[ $1 =~ ^[0-9a-f]{40}$ ]] && git_repo merge-base --is-ancestor "$1" "refs/heads/$REPO_BRANCH" 2>/dev/null
+}
+
+# --- 지금 돌고 있는 것 ---
+
+# one_container 서비스: 이 compose 프로젝트의 그 서비스 컨테이너 id. 없으면 빈 값, 둘 이상이면 멈춘다.
+one_container() {
+  local ids
+  ids=$(docker ps --all --quiet --no-trunc \
+    --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" \
+    --filter "label=com.docker.compose.service=$1" \
+    --filter label=com.docker.compose.oneoff=False)
+  [[ $ids != *$'\n'* ]] || die "$COMPOSE_PROJECT/$1 컨테이너가 둘 이상이다"
+  printf '%s' "$ids"
+}
+
+# C_SERVER, C_WEB, C_SW와 컨테이너 id를 채운다. compose가 만든 컨테이너의 이미지 이름은 compose에 넘긴 digest 이름 그대로다.
+read_current() {
+  C_SERVER='' C_WEB='' C_SW=''
+  C_SERVER_ID=$(one_container server)
+  C_PROXY_ID=$(one_container proxy)
+  C_DB_ID=$(one_container db)
+  if [[ -n $C_SERVER_ID ]]; then
+    C_SERVER=$(docker inspect --format '{{.Config.Image}}' "$C_SERVER_ID")
+  fi
+  if [[ -n $C_PROXY_ID ]]; then
+    C_WEB=$(docker inspect --format '{{.Config.Image}}' "$C_PROXY_ID")
+    C_SW=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$C_PROXY_ID" | sed -n 's/^SW_DISABLE=//p')
+  fi
+}
+
+is_current() {
+  [[ $C_SERVER == "$D_SERVER" && $C_WEB == "$D_WEB" && $C_SW == "$D_SW" ]]
+}
+
+# --- env 파일 검사(범위 보강 13) ---
+
+# 따옴표를 벗기고, 따옴표가 없으면 " #" 뒤의 주석과 앞뒤 공백을 지운다. compose의 env 파일 읽기와 같은 쪽으로 본다.
+unquote() {
+  local v=$1
+  v=${v#"${v%%[![:space:]]*}"}
+  if [[ $v =~ ^\"(.*)\"[[:space:]]*$ || $v =~ ^\'(.*)\'[[:space:]]*$ ]]; then
+    v=${BASH_REMATCH[1]}
+  else
+    v=${v%%[[:space:]]#*}
+    v=${v%"${v##*[![:space:]]}"}
+  fi
+  printf '%s' "$v"
+}
+
+# 문제를 env_problems에 모은다. 이름과 줄 번호만 적고 값은 적지 않는다.
+check_app_env() {
+  local line name n=0 profile
+  local -A allowed=() seen=() values=()
+  local -a unknown=() duplicate=() empty=()
+  env_problems=()
+  if ! root_file "$APP_ENV_FILE" 600; then
+    env_problems+=("$APP_ENV_FILE 이 root 소유, 권한 600인 파일이 아니다")
+    return 1
+  fi
+  if ! root_file "$ENV_ALLOWLIST_FILE" 644; then
+    env_problems+=("허용 목록 $ENV_ALLOWLIST_FILE 이 root 소유, 권한 644인 파일이 아니다")
+    return 1
+  fi
+  while IFS= read -r line || [[ -n $line ]]; do
+    n=$((n + 1))
+    [[ $line =~ ^[[:space:]]*(#|$) ]] && continue
+    if [[ $line =~ ^[A-Z][A-Z0-9_]*$ ]]; then
+      allowed[$line]=1
+    else
+      env_problems+=("허용 목록 ${n}번째 줄이 변수 이름이 아니다")
+    fi
+  done <"$ENV_ALLOWLIST_FILE"
+  for name in "${REQUIRED_ENV[@]}"; do
+    [[ -n ${allowed[$name]:-} ]] || env_problems+=("허용 목록에 $name 이 없다")
+  done
+  n=0
+  while IFS= read -r line || [[ -n $line ]]; do
+    n=$((n + 1))
+    [[ $line =~ ^[[:space:]]*(#|$) ]] && continue
+    if ! [[ $line =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      env_problems+=("env 파일 ${n}번째 줄이 '이름=값' 형식이 아니다")
+      continue
+    fi
+    name=${BASH_REMATCH[1]}
+    [[ -n ${allowed[$name]:-} ]] || unknown+=("$name")
+    [[ -z ${seen[$name]:-} ]] || duplicate+=("$name")
+    seen[$name]=1
+    values[$name]=$(unquote "${BASH_REMATCH[2]}")
+  done <"$APP_ENV_FILE"
+  ((${#unknown[@]} == 0)) || env_problems+=("허용 목록에 없는 이름: ${unknown[*]}")
+  ((${#duplicate[@]} == 0)) || env_problems+=("두 번 이상 나온 이름: ${duplicate[*]}")
+  for name in "${REQUIRED_ENV[@]}"; do
+    [[ -n ${values[$name]:-} ]] || empty+=("$name")
+  done
+  ((${#empty[@]} == 0)) || env_problems+=("없거나 빈 값: ${empty[*]}")
+  if [[ -n ${values[WEB_ORIGIN]:-} && ${values[WEB_ORIGIN]} != https://* ]]; then
+    env_problems+=('WEB_ORIGIN이 https://로 시작하지 않는다')
+  fi
+  if [[ ${values[DB_URL]:-} == *[Ll][Oo][Gg][Ss][Ee][Rr][Vv][Ee][Rr][Ee][Rr][Rr][Oo][Rr][Dd][Ee][Tt][Aa][Ii][Ll]* ]]; then
+    env_problems+=('DB_URL에 logServerErrorDetail이 있다')
+  fi
+  profile=${values[SPRING_PROFILES_ACTIVE]:-}
+  profile=${profile//[[:space:]]/}
+  if [[ ,$profile, == *,local,* ]]; then
+    env_problems+=('SPRING_PROFILES_ACTIVE에 local이 있다')
+  fi
+  ((${#env_problems[@]} == 0))
+}
+
+# --- 이미지 ---
+
+pull() {
+  docker image inspect "$1" >/dev/null 2>&1 || docker pull --quiet "$1" >&2
+}
+
+revision_of() {
+  local rev
+  rev=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$1" 2>/dev/null) || true
+  [[ $rev =~ ^[0-9a-f]{40}$ ]] && printf '%s' "$rev"
+}
+
+# migration_summary 지금 서버 이미지 새 서버 이미지: 두 이미지의 커밋 사이에 바뀐 마이그레이션 파일.
+migration_summary() {
+  local old_rev='' new_rev changes added others
+  if [[ $1 == "$2" ]]; then
+    printf '없음(서버 이미지가 그대로다)'
+    return
+  fi
+  new_rev=$(revision_of "$2") || true
+  if ! known_commit "$new_rev"; then
+    printf '알 수 없음(새 서버 이미지의 커밋을 %s에서 찾지 못했다)' "$REPO_BRANCH"
+    return
+  fi
+  if [[ -z $1 ]]; then
+    printf '첫 배포라 모두 적용된다: %s' \
+      "$(git_repo ls-tree --name-only "$new_rev" -- "$MIGRATION_DIR/" | sed 's|.*/||' | sort -V | paste -sd ' ')"
+    return
+  fi
+  old_rev=$(revision_of "$1") || true
+  if ! known_commit "$old_rev"; then
+    printf '알 수 없음(지금 서버 이미지의 커밋을 %s에서 찾지 못했다)' "$REPO_BRANCH"
+    return
+  fi
+  changes=$(git_repo diff --no-renames --name-status "$old_rev" "$new_rev" -- "$MIGRATION_DIR")
+  if [[ -z $changes ]]; then
+    printf '없음'
+    return
+  fi
+  added=$(awk '$1 == "A" { n = split($2, p, "/"); print p[n] }' <<<"$changes" | sort -V | paste -sd ' ')
+  others=$(awk '$1 != "A" { n = split($2, p, "/"); print (($1 == "D") ? "지워짐 " : "바뀜 ") p[n] }' <<<"$changes" | paste -sd ',')
+  printf '있음'
+  [[ -z $added ]] || printf ' — 새로 적용: %s' "$added"
+  [[ -z $others ]] || printf ' — 주의(이미 있던 파일이 바뀌거나 지워진다. 지워진 것은 DB에 남는다): %s' "$others"
+}
+
+# 이미지의 커밋이 가져온 브랜치에 없으면 경고 한 줄을 낸다.
+revision_warning() {
+  local rev
+  [[ -n $2 ]] || return 0
+  rev=$(revision_of "$2") || true
+  known_commit "$rev" || printf '\n주의: %s 이미지의 커밋이 %s에 없다' "$1" "$REPO_BRANCH"
+}
+
+# 아낌표 이미지만, 남길 것을 뺀 나머지를 지운다. 전체 정리(prune)는 쓰지 않는다.
+# cleanup_images 저장소 남길이미지...
+cleanup_images() {
+  local repo=$1 ref keep
+  shift
+  while IFS= read -r ref; do
+    [[ $ref == "$repo@sha256:"* ]] || continue
+    for keep in "$@"; do
+      [[ $ref == "$keep" ]] && continue 2
+    done
+    if docker image rm "$ref" >/dev/null 2>&1; then
+      log "옛 이미지를 지웠다: $ref"
+    else
+      log "옛 이미지를 지우지 못했다(쓰는 컨테이너가 있을 수 있다): $ref"
+    fi
+  done < <(docker image ls --all --digests --format '{{.Repository}}@{{.Digest}}' "$repo")
+}
+
+# --- 교체 ---
+
+# compose_up 서버이미지 웹이미지 SW_DISABLE 서비스...: 서버에 설치된 compose 사본으로 올린다.
+# 이미지와 SW_DISABLE은 검사한 값만 환경 변수로 넘기고, 나머지 값은 서버의 env 파일에서만 온다.
+compose_up() {
+  local server=$1 web=$2 sw=$3
+  shift 3
+  SERVER_IMAGE=$server WEB_IMAGE=$web SW_DISABLE=$sw docker compose --progress plain \
+    --project-name "$COMPOSE_PROJECT" --file "$COMPOSE_FILE_PATH" --env-file "$APP_ENV_FILE" \
+    up --detach --no-build --pull never "$@"
+}
+
+# 최상위 객체의 status가 UP이다. 안쪽 객체(구성 요소)의 status는 보지 않는다.
+health_is_up() {
+  local s=$1
+  [[ $s =~ ^[[:space:]]*\{(.*)\}[[:space:]]*$ ]] || return 1
+  s=${BASH_REMATCH[1]}
+  while [[ $s =~ \{[^{}]*\} ]]; do
+    s=${s//"${BASH_REMATCH[0]}"/}
+  done
+  [[ $s =~ (^|,)[[:space:]]*\"status\"[[:space:]]*:[[:space:]]*\"UP\"[[:space:]]*(,|$) ]]
+}
+
+# 서버 컨테이너 안에서 GET /actuator/health. 호스트 포트를 쓰지 않는다. HTTP 상태 코드와 최상위 status만 본다.
+server_healthy() {
+  local id out
+  id=$(one_container server)
+  [[ -n $id ]] || return 1
+  out=$(docker exec "$id" curl --silent --max-time 5 --output - --write-out '\n%{http_code}' "$HEALTH_URL" 2>/dev/null) || return 1
+  [[ ${out##*$'\n'} == 200 ]] && health_is_up "${out%$'\n'*}"
+}
+
+wait_healthy() {
+  local i
+  for ((i = 1; i <= HEALTH_TRIES; i++)); do
+    if server_healthy; then
+      log "상태 확인 통과(${i}번째)"
+      return 0
+    fi
+    ((i == HEALTH_TRIES)) || sleep "$HEALTH_INTERVAL_SECONDS"
+  done
+  log "상태 확인 실패(${HEALTH_INTERVAL_SECONDS}초 간격으로 ${HEALTH_TRIES}번)"
+  return 1
+}
+
+# 프록시가 돌고 있고(상태 확인이 있으면 healthy) 3초 뒤에도 다시 시작하지 않았다.
+wait_proxy() {
+  local deadline id status health started
+  deadline=$(($(date +%s) + PROXY_WAIT_SECONDS))
+  while (($(date +%s) < deadline)); do
+    id=$(one_container proxy)
+    if [[ -n $id ]]; then
+      read -r status health started < <(docker inspect \
+        --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}} {{.State.StartedAt}}' "$id")
+      if [[ $status == running && ($health == - || $health == healthy) ]]; then
+        sleep 3
+        if [[ $(docker inspect --format '{{.State.Status}} {{.State.StartedAt}}' "$id") == "running $started" ]]; then
+          log '프록시가 돈다'
+          return 0
+        fi
+      fi
+    fi
+    sleep 1
+  done
+  log "프록시가 ${PROXY_WAIT_SECONDS}초 안에 안정되지 않았다"
+  return 1
+}
+
+# copy_assets 웹컨테이너 웹이미지: 지금 웹의 /srv/assets를 assets-prev 볼륨으로 옮긴다(범위 보강 21). 볼륨은 한 판만 갖는다.
+# 복사는 그 웹 이미지(busybox sh, tar)로 네트워크 없이, 권한 없이 한다.
+copy_assets() {
+  local volume
+  volume=$(docker volume ls --quiet \
+    --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" \
+    --filter label=com.docker.compose.volume=assets-prev)
+  [[ -n $volume && $volume != *$'\n'* ]] || { log "$COMPOSE_PROJECT 의 assets-prev 볼륨이 하나가 아니다"; return 1; }
+  docker cp "$1:/srv/assets/." - |
+    docker run --rm -i --network none --user 0:0 --cap-drop ALL --security-opt no-new-privileges \
+      --read-only --memory 128m --mount "type=volume,src=$volume,dst=/dst" --entrypoint /bin/sh "$2" \
+      -c 'find /dst -mindepth 1 -delete && tar -x -o -f - -C /dst'
+  log "지금 웹의 /srv/assets를 $volume 에 남겼다"
+}
+
+# 이전 판으로 되돌린다. 웹이 바뀌어 있으면 되돌리기 전에 지금 웹의 assets를 남긴다(범위 보강 21과 같은 규칙).
+rollback() {
+  read_current
+  if [[ -n $C_PROXY_ID && $C_WEB != "$P_WEB" ]]; then
+    copy_assets "$C_PROXY_ID" "$C_WEB" || log 'assets를 남기지 못했다. 되돌리기는 계속한다'
+  fi
+  compose_up "$P_SERVER" "$P_WEB" "$P_SW" server proxy && wait_healthy && wait_proxy
+}
+
+# --- 결과 ---
+
+describe() {
+  printf '커밋: %s %s\nPR: %s\n서버: %s → %s\n웹: %s → %s\nSW_DISABLE: %s → %s' \
+    "${file_commit:0:12}" "$file_subject" "${pr:+#$pr}${pr:-없음(커밋 제목에 (#번호)가 없다)}" \
+    "$(digest_of "$P_SERVER")" "$(digest_of "$D_SERVER")" "$(digest_of "$P_WEB")" "$(digest_of "$D_WEB")" \
+    "${P_SW:-없음}" "$D_SW"
+}
+
+digest_of() {
+  if [[ -n $1 ]]; then printf '%s' "${1#*@}"; else printf '없음(첫 배포)'; fi
+}
+
+# finish_failed 결과 단계 글: 실패를 남기고 끝낸다. 같은 배포 파일로는 다시 하지 않는다.
+finish_failed() {
+  phase=done
+  { desired_text; printf '\nstep=%s\nat=%s\n' "$2" "$(date +%s)"; } | state_put failed
+  rm -f -- "$DEPLOY_STATE_DIR/pending"
+  history "$1" "$2"
+  alert "$3
+$(describe)
+직전 백업: $backup_object
+걸린 시간: $(($(date +%s) - started))초
+같은 배포 파일로 다시 하려면 서버에서 $DEPLOY_STATE_DIR/failed 를 지운다(다시 알리고 ${WAIT_SECONDS}초 기다린 뒤 교체한다). 다른 값이면 새 배포 PR을 머지한다."
+  exit 1
+}
+
+# 교체를 시작한 뒤의 실패. ROLLBACK_SAFE=yes이고 이전 판이 있으면 되돌린다. 아니면 멈춘다.
+failed_after_swap() {
+  step=$1
+  log "실패: $step"
+  if [[ $D_ROLLBACK == yes && -n $P_SERVER && -n $P_WEB ]]; then
+    log "이전 판으로 되돌린다. $LIMIT_NOTE"
+    if rollback; then
+      finish_failed 되돌림 "$step" "배포가 실패해 이전 이미지로 되돌렸다. 실패 단계: $step. 되돌린 뒤 상태 확인은 통과했다. $LIMIT_NOTE"
+    fi
+    finish_failed '되돌림 실패' "$step" "배포가 실패해 이전 이미지로 되돌렸지만 되돌린 판도 상태 확인을 통과하지 못했다. 실패 단계: $step. 앱이 내려가 있을 수 있다. $LIMIT_NOTE 서버 로그(docker logs)를 본다."
+  fi
+  if [[ $D_ROLLBACK == yes ]]; then
+    finish_failed 멈춤 "$step" "배포가 실패했고 되돌아갈 이전 판이 없어 멈췄다. 실패 단계: $step. 앱이 내려가 있을 수 있다."
+  fi
+  finish_failed 멈춤 "$step" "배포가 실패했다. ROLLBACK_SAFE=no라 되돌리지 않고 멈췄다. 실패 단계: $step. 앱이 내려가 있을 수 있다. 배포 PR 본문의 되돌리는 방법을 따른다."
+}
+
+# 예상하지 못한 오류나 신호로 교체 중에 끝나면 실패로 남기고 알린다. 같은 배포 파일로 다시 하지 않는다.
+on_exit() {
+  local rc=$?
+  trap - EXIT
+  set +e
+  if ((rc != 0)) && [[ $phase == deploy ]]; then
+    phase=done
+    { desired_text; printf '\nstep=%s\nat=%s\n' "$step" "$(date +%s)"; } | state_put failed
+    rm -f -- "$DEPLOY_STATE_DIR/pending"
+    history 중단 "$step"
+    alert "배포 스크립트가 교체 중에 예상하지 못하게 끝났다(종료 코드 $rc). 단계: $step. 지금 도는 컨테이너를 확인한다.
+$(describe)"
+  fi
+  exit "$rc"
+}
+
+# --- 한 번 돌기 ---
+
+# 변경을 처음 봤을 때: 교체할 수 있는지 먼저 보고, 시작 알림을 보낸 뒤에만 기다리기 시작한다.
+notice() {
+  local again=$1 problems=() text migration
+  step='알림 전 확인'
+  check_app_env || problems+=("${env_problems[@]}")
+  for ref in "$D_SERVER" "$D_WEB"; do
+    pull "$ref" || problems+=("이미지를 받지 못했다: ${ref#*@}")
+  done
+  if ((${#problems[@]} > 0)); then
+    rm -f -- "$DEPLOY_STATE_DIR/pending"
+    alert_once precheck "배포 파일이 바뀌었지만 교체하지 않는다. 고치면 다음 확인 때 다시 본다.
+$(printf -- '- %s\n' "${problems[@]}")커밋: ${file_commit:0:12} ${pr:+(#$pr)}"
+    exit 1
+  fi
+  clear_alert precheck
+  migration=$(migration_summary "$P_SERVER" "$D_SERVER")
+  text="${again}배포 파일이 바뀌었다. $((WAIT_SECONDS / 60))분 뒤($(date -d "@$((now + WAIT_SECONDS))" +%H:%M) 이후 첫 확인 때) 교체한다.
+$(describe)
+마이그레이션: $migration
+ROLLBACK_SAFE=$D_ROLLBACK: $(if [[ $D_ROLLBACK == yes ]]; then printf '상태 확인이 실패하면 이전 이미지로 되돌린다'; else printf '상태 확인이 실패해도 되돌리지 않고 멈춘다'; fi)$(revision_warning 서버 "$D_SERVER")$(revision_warning 웹 "$D_WEB")
+내가 머지한 배포가 아니면 그 안에 $REPO_BRANCH의 $DEPLOY_FILE_PATH 를 되돌리거나 서버에서 systemctl stop akkimpyo-deploy.timer 한다."
+  log "알림: $text"
+  if ! printf '[아낌표 배포] %s\n' "$text" | notify; then
+    rm -f -- "$DEPLOY_STATE_DIR/pending"
+    log '시작 알림을 보내지 못해 교체하지 않는다. 다음 확인 때 다시 보낸다'
+    exit 1
+  fi
+  { desired_text; printf '\nnoticed_at=%s\ncommit=%s\n' "$now" "$file_commit"; } | state_put pending
+}
+
+deploy_now() {
+  phase=deploy
+  started=$(date +%s)
+  log "교체를 시작한다. $(describe | paste -sd ' ')"
+
+  step='env 파일 검사'
+  check_app_env || finish_failed 중단 "$step" "교체하지 않았다: env 파일 검사.
+$(printf -- '- %s\n' "${env_problems[@]}")"
+
+  step='이미지 받기'
+  pull "$D_SERVER" && pull "$D_WEB" || finish_failed 중단 "$step" '교체하지 않았다: 이미지를 받지 못했다.'
+
+  step='직전 백업'
+  if [[ -n $C_DB_ID ]]; then
+    backup_object=$("$BACKUP_BIN" </dev/null | tail -n 1) ||
+      finish_failed 중단 "$step" '교체하지 않았다: 직전 백업이 실패했다.'
+  else
+    backup_object='없음(DB 컨테이너가 없다. 첫 배포)'
+    log '첫 배포라 백업할 DB가 없다'
+  fi
+
+  step='웹 assets 남기기'
+  if [[ -n $C_PROXY_ID && $C_WEB != "$D_WEB" ]]; then
+    copy_assets "$C_PROXY_ID" "$C_WEB" || finish_failed 중단 "$step" '교체하지 않았다: 지금 웹의 assets를 남기지 못했다.'
+  fi
+
+  # 서버를 먼저 바꾸고 상태 확인이 통과한 뒤에 웹을 바꾼다. 서버가 실패하면 새 웹(service worker)이 나가지 않는다.
+  # 마이그레이션은 새 서버가 뜰 때 Flyway가 적용한다. 실패하면 서버가 뜨지 않아 상태 확인이 실패한다.
+  step='서버 교체'
+  compose_up "$D_SERVER" "${P_WEB:-$D_WEB}" "${P_SW:-$D_SW}" server || failed_after_swap "$step"
+  step='서버 상태 확인'
+  wait_healthy || failed_after_swap "$step"
+  step='프록시 교체'
+  compose_up "$D_SERVER" "$D_WEB" "$D_SW" proxy || failed_after_swap "$step"
+  step='프록시 확인'
+  wait_proxy || failed_after_swap "$step"
+  step='교체 뒤 확인'
+  read_current
+  is_current || failed_after_swap "$step(도는 이미지나 SW_DISABLE이 배포 파일과 다르다)"
+
+  phase=done
+  rm -f -- "$DEPLOY_STATE_DIR/pending" "$DEPLOY_STATE_DIR/failed"
+  history 성공
+  cleanup_images "$SERVER_REPOSITORY" "$D_SERVER" "$P_SERVER"
+  cleanup_images "$WEB_REPOSITORY" "$D_WEB" "$P_WEB"
+  alert "배포가 끝났다.
+$(describe)
+직전 백업: $backup_object
+걸린 시간: $(($(date +%s) - started))초"
+}
+
+main() {
+  local tool pending_at
+  step='설정'
+  load_config
+  for tool in docker git ssh flock timeout sha256sum; do
+    command -v -- "$tool" >/dev/null || die "명령이 없다: $tool"
+  done
+  [[ $(date +%z) == +0900 ]] || die '시간대 자료(tzdata)가 없다'
+  mkdir -p -- "$DEPLOY_STATE_DIR"
+  [[ $(stat -c '%u %a' "$DEPLOY_STATE_DIR") == '0 700' ]] || die "$DEPLOY_STATE_DIR 이 root 소유, 권한 700이 아니다"
+  root_file "$COMPOSE_FILE_PATH" 644 || die "$COMPOSE_FILE_PATH 이 root 소유, 권한 644인 파일이 아니다"
+
+  step='잠금'
+  exec 8>"$DEPLOY_STATE_DIR/lock"
+  if ! flock --nonblock 8; then
+    log '다른 배포가 돌고 있다. 끊지 않고 이번에는 아무것도 하지 않는다'
+    exit 0
+  fi
+  resend_unsent
+
+  step='배포 파일 가져오기'
+  fetch_main || fetch_failed
+  rm -f -- "$DEPLOY_STATE_DIR/fetch-failing"
+  clear_alert fetch
+  file_commit=$(git_repo log -1 --format=%H "refs/heads/$REPO_BRANCH" -- "$DEPLOY_FILE_PATH")
+  if [[ -z $file_commit ]]; then
+    log "$REPO_BRANCH에 $DEPLOY_FILE_PATH 가 없다. 할 일이 없다"
+    exit 0
+  fi
+  file_subject=$(git_repo log -1 --format=%s "$file_commit")
+  pr=''
+  if [[ $file_subject =~ \(#([0-9]+)\)$ ]]; then
+    pr=${BASH_REMATCH[1]}
+  fi
+  work=$(mktemp -d)
+  if git_repo cat-file -e "refs/heads/$REPO_BRANCH:$DEPLOY_FILE_PATH" 2>/dev/null; then
+    git_repo show "refs/heads/$REPO_BRANCH:$DEPLOY_FILE_PATH" >"$work/production.env"
+  fi
+
+  step='배포 파일 검사'
+  if ! parse_deploy_file "$work/production.env"; then
+    local cancelled=''
+    if [[ -e $DEPLOY_STATE_DIR/pending ]]; then
+      rm -f -- "$DEPLOY_STATE_DIR/pending"
+      cancelled=' 대기 중이던 배포도 취소했다.'
+    fi
+    alert_once refused "$REPO_BRANCH의 $DEPLOY_FILE_PATH 를 받지 않는다(배포하지 않는다): $refusal.$cancelled
+커밋: ${file_commit:0:12} $file_subject"
+    exit 1
+  fi
+  clear_alert refused
+
+  step='지금 상태'
+  now=$(date +%s)
+  started=$now
+  backup_object='-'
+  read_current
+  P_SERVER=$C_SERVER P_WEB=$C_WEB P_SW=$C_SW
+  if is_current; then
+    if [[ -e $DEPLOY_STATE_DIR/pending ]]; then
+      rm -f -- "$DEPLOY_STATE_DIR/pending"
+      history 취소
+      alert "대기 중이던 배포를 취소했다. 배포 파일이 지금 돌고 있는 값으로 돌아갔다.
+커밋: ${file_commit:0:12} $file_subject"
+    fi
+    rm -f -- "$DEPLOY_STATE_DIR/failed"
+    clear_alert precheck
+    log '배포 파일과 지금 돌고 있는 것이 같다. 할 일이 없다'
+    exit 0
+  fi
+  if state_matches failed; then
+    log "이 배포 파일은 실패한 적이 있어 다시 하지 않는다($DEPLOY_STATE_DIR/failed)"
+    exit 0
+  fi
+  if state_matches pending; then
+    pending_at=$(state_get pending noticed_at)
+    if ((now - pending_at >= WAIT_SECONDS)); then
+      deploy_now
+    else
+      log "알림을 보낸 뒤 기다리는 중이다. 남은 시간 $((WAIT_SECONDS - (now - pending_at)))초"
+    fi
+    exit 0
+  fi
+  if [[ -e $DEPLOY_STATE_DIR/pending ]]; then
+    notice '기다리는 동안 배포 파일이 다시 바뀌었다. 앞의 값은 교체하지 않고 새 값으로 다시 기다린다.
+'
+  else
+    notice ''
+  fi
+}
+
+if [[ ${1:-} == --check ]]; then
+  (($# == 2)) || die '쓰는 법: deploy --check 파일'
+  set_defaults
+  parse_deploy_file "$2" || die "$2: $refusal"
+  log "$2: 형식이 맞다"
+  exit 0
+fi
+(($# == 0)) || die '인자를 받지 않는다(형식 검사는 --check 파일)'
+
+set_defaults
+phase=prepare
+step='시작'
+work=''
+file_commit='' file_subject='' pr='' started=0 backup_object='-'
+D_SERVER='' D_WEB='' D_ROLLBACK='' D_SW='' P_SERVER='' P_WEB='' P_SW=''
+trap on_exit EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+main
