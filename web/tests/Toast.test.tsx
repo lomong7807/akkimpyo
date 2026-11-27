@@ -812,3 +812,66 @@ it('공급자 밖에서는 쓸 수 없다', () => {
   vi.spyOn(console, 'error').mockImplementation(() => {})
   expect(() => render(<Caller />)).toThrow()
 })
+
+describe('되돌리기 토스트 뒤에 보이는 알림(자동 보내기의 200 알림, designer #235 Q1)', () => {
+  const UNDO_DURATION = 8000
+
+  function Callers() {
+    const showToast = useToast()
+    return (
+      <>
+        <button type="button" onClick={() => showToast('휴지통으로 옮겼어요', { label: '되돌리기', onAction: () => {} })}>
+          삭제하기
+        </button>
+        <button type="button" onClick={() => showToast('보낸 입력 1건은 이미 저장된 거래라 저장된 내용으로 두었어요', undefined, { behindAction: true })}>
+          보내기 끝
+        </button>
+      </>
+    )
+  }
+
+  function renderCallers() {
+    return renderScreen(
+      <ToastProvider>
+        <Caller />
+        <Callers />
+      </ToastProvider>,
+    )
+  }
+
+  it('되돌리기 토스트가 떠 있으면 걷지 않고, 끝난 뒤에 보인다', async () => {
+    renderCallers()
+    press('삭제하기')
+    press('보내기 끝')
+    expect(message()).toContain('휴지통으로 옮겼어요')
+    await pass(UNDO_DURATION)
+    expect(message()).toBe('보낸 입력 1건은 이미 저장된 거래라 저장된 내용으로 두었어요')
+    await pass(DURATION)
+    expect(message()).toBe('')
+  })
+
+  it('되돌리기를 누르면 바로 그 뒤의 알림을 보인다', async () => {
+    renderCallers()
+    press('삭제하기')
+    press('보내기 끝')
+    fireEvent.click(within(region()).getByRole('button', { name: '되돌리기' }))
+    expect(message()).toBe('보낸 입력 1건은 이미 저장된 거래라 저장된 내용으로 두었어요')
+  })
+
+  it('되돌리기가 없는 토스트가 떠 있으면 바로 바꾼다', () => {
+    renderCallers()
+    press('알리기')
+    press('보내기 끝')
+    expect(message()).toBe('보낸 입력 1건은 이미 저장된 거래라 저장된 내용으로 두었어요')
+  })
+
+  it('기다리는 사이 다른 토스트가 와서 되돌리기 토스트를 바꾸면 기다리던 알림은 그 뒤에 이어 보인다', async () => {
+    renderCallers()
+    press('삭제하기')
+    press('보내기 끝')
+    press('알리기')
+    expect(message()).toBe("'신한카드' 계좌를 추가했어요")
+    await pass(DURATION)
+    expect(message()).toBe('보낸 입력 1건은 이미 저장된 거래라 저장된 내용으로 두었어요')
+  })
+})

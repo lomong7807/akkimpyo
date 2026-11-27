@@ -12,6 +12,7 @@ import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/useTrans
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { holdClock, passTime, releaseClock } from './support/testClock'
 import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
@@ -35,7 +36,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  vi.useRealTimers()
   cleanup()
   resetViewport()
   vi.unstubAllGlobals()
@@ -322,7 +322,7 @@ describe('계좌가 없으면', () => {
 })
 
 describe('불러오는 중', () => {
-  const pass = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+  const pass = passTime
 
   /** 다른 화면에서 시계를 멈추고 계좌 목록으로 간다. 계좌 요청은 답을 기다린다. */
   async function openLoading() {
@@ -330,7 +330,7 @@ describe('불러오는 중', () => {
     accounts.response = answer.respond
     const { router } = await openApp('/other', addScreens([{ path: '/other', element: <main>다른 화면</main> }]))
     await screen.findByText('다른 화면')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
     await act(() => router.navigate('/accounts'))
     return answer
   }
@@ -376,7 +376,7 @@ describe('불러오는 중', () => {
     const fonts = [total, head, row].map(fontsOf)
 
     answer.answer(accountsBody(...everyType))
-    vi.useRealTimers()
+    releaseClock()
     await screen.findByText('자산 합계')
     const realRows = [totalRow(), headOf('은행'), within(group('은행')).getAllByRole('listitem')[0]]
     const realParts = [totalRow().parentElement!, realRows[0], headOf('은행').parentElement!, realRows[1], realRows[2]]
@@ -390,7 +390,7 @@ describe('불러오는 중', () => {
     const answer = await openLoading()
     await pass(300)
     answer.answer(accountsBody(...everyType))
-    vi.useRealTimers()
+    releaseClock()
     await screen.findByText('자산 합계')
     expect(content().queryByRole('status')).toBeNull()
     expect(main().querySelector('[aria-hidden="true"]')).toBeNull()
@@ -400,7 +400,7 @@ describe('불러오는 중', () => {
     const answer = await openLoading()
     const dom = recordDom()
     answer.answer(accountsBody(...everyType))
-    vi.useRealTimers()
+    releaseClock()
     await screen.findByText('자산 합계')
     expect(dom.sawText(loading)).toBe(false)
     expect(dom.sawElement('[aria-hidden="true"]')).toBe(false)
@@ -413,7 +413,6 @@ describe('불러오지 못하면', () => {
 
   it.each([
     ['서버 오류', () => problem(500, 'INTERNAL_ERROR')],
-    ['연결 오류', () => HttpResponse.error()],
     ['없는 장부', () => problem(404, 'NOT_FOUND')],
     ['모르는 종류가 섞인 응답', () => accountsBody(salary, accountOf('대출', 'LOAN', -1))],
     ['정수가 아닌 잔액', () => accountsBody(salary, accountOf('지갑', 'CASH', 0.1))],
@@ -428,6 +427,15 @@ describe('불러오지 못하면', () => {
     expect(texts(screen.getAllByRole('heading', { level: 1 }))).toEqual(['계좌'])
     expect(dom.sawText('급여통장')).toBe(false)
     expect(consoleError).not.toHaveBeenCalled()
+  })
+
+  it('연결 오류이고 기기에 남긴 계좌 목록이 없으면 버튼 없이 "연결되면 자동으로 불러올게요."다(F-908, #238)', async () => {
+    accounts.response = () => HttpResponse.error()
+    await openApp('/accounts')
+    await failure()
+    expect(main().textContent).toBe(`${failed}연결되면 자동으로 불러올게요.`)
+    expect(content().queryByRole('button')).toBeNull()
+    expect(texts(screen.getAllByRole('heading', { level: 1 }))).toEqual(['계좌'])
   })
 
   it('"다시 시도"를 누르면 화면은 그대로 두고 그 버튼만 처리 중이며, 받으면 목록을 보인다', async () => {
@@ -485,15 +493,8 @@ describe('불러오지 못하면', () => {
 describe('이미 불러온 뒤', () => {
   /** 탭으로 돌아온 것을 알린다. 받은 지 30초가 지났으면 쓰던 값을 다시 받는다. */
   const refocus = () => act(() => window.dispatchEvent(new Event('visibilitychange')))
-  /**
-   * 받은 목록을 새것으로 보는 30초(perf 권고 #90)가 지난 것으로 한다. 라이브러리가 재는 시계(Date)만 앞으로 보낸다.
-   * 진짜 시계로는 afterEach가 돌아간다.
-   */
-  function passStaleTime() {
-    const later = Date.now() + TRANSACTION_LIST_STALE_MS + 1
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(later)
-  }
+  /** 받은 목록을 새것으로 보는 30초(perf 권고 #90)가 지난 것으로 한다. 라이브러리가 재는 시계(Date)도 공용 시계다. */
+  const passStaleTime = () => passTime(TRANSACTION_LIST_STALE_MS + 1)
 
   it('30초 안에는 탭에 돌아오거나 다른 화면에 다녀와도 다시 받지 않는다', async () => {
     accounts.items = everyType
@@ -513,33 +514,36 @@ describe('이미 불러온 뒤', () => {
   it('30초가 지나 다시 불러오기가 실패하면 있던 내용을 그대로 보인다', async () => {
     await open()
     accounts.response = () => problem(500, 'INTERNAL_ERROR')
-    passStaleTime()
+    await passStaleTime()
     await refocus()
     await waitFor(() => expect(accounts.requests).toHaveLength(2))
     await settle()
     expect(rowsOf('은행')).toEqual(['급여통장3,210,000원', '비상금1,000,000원'])
     expect(screen.queryByText(failed)).toBeNull()
     expect(content().queryByRole('button')).toBeNull()
+    expect(totalRow().previousElementSibling!.textContent).toBe('12:00 기준')
   })
 
   it('30초가 지나 다시 불러온 것이 약속과 달라도 있던 내용을 그대로 보인다', async () => {
     await open()
     accounts.response = () => accountsBody(accountOf('대출', 'LOAN', -1))
-    passStaleTime()
+    await passStaleTime()
     await refocus()
     await waitFor(() => expect(accounts.requests).toHaveLength(2))
     await settle()
+    // 새로 불러오지 못했으므로 그 값을 받은 시각을 붙인다(N-03 (5), #238)
     expect(totalRow().textContent).toBe('자산 합계3,682,600원')
+    expect(totalRow().previousElementSibling!.textContent).toBe('12:00 기준')
   })
 
   it('30초가 지나 다시 불러오는 동안 뼈대로 바꾸지 않고, 받으면 합계를 다시 계산한다', async () => {
     await open()
     const answer = delayed()
     accounts.response = answer.respond
-    passStaleTime()
+    await passStaleTime()
     await refocus()
     await answer.arrived
-    await act(() => new Promise((resolve) => setTimeout(resolve, 350)))
+    await passTime(350)
     expect(totalRow().textContent).toBe('자산 합계3,682,600원')
     expect(content().queryByRole('status')).toBeNull()
     answer.answer(accountsBody(wallet))
@@ -555,7 +559,7 @@ describe('이미 불러온 뒤', () => {
     )
     await screen.findByText('자산 합계')
     await act(() => router.navigate('/other'))
-    passStaleTime()
+    await passStaleTime()
     const answer = delayed()
     accounts.response = answer.respond
     await act(() => router.navigate('/accounts'))

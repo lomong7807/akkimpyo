@@ -1,3 +1,4 @@
+import { announce } from './changes'
 import { isInstantMs, isUserId, otherUsersRanges, resultOf, transact, userRange } from './deviceDb'
 
 /*
@@ -6,10 +7,16 @@ import { isInstantMs, isUserId, otherUsersRanges, resultOf, transact, userRange 
  *
  * 사용자마다 메타 줄 하나에 마지막으로 확인한 로그인 시각(confirmedAt)을 둔다. 갱신이 401이면 로그인 기록은 지워져도 사본은
  * 남으므로, 사본을 지우는 "로그인이 풀린 채 30일"(confirmedAt부터)을 이 줄로 센다.
+ * 이 저장소에는 사본이 아닌 줄(meta, gone, 보낸 시각 sent #235)도 있다. 사본을 여럿 읽는 곳은 copiesOf만 쓴다(architect #235 F).
  */
 
-/** 사본의 종류. 내 정보(me)는 사용자 단위라 장부 자리가 빈 글자다. */
-export type CopyKind = 'me' | 'accounts' | 'categories'
+/**
+ * 사본의 종류. 내 정보(me)는 사용자 단위라 장부 자리가 빈 글자다. transactions는 장부의 최근 한 달 내역(P-902, #238)이다.
+ * 종류가 늘어도 지우는 길(로그아웃, 다른 사용자의 로그인, 30일, 장부를 볼 수 없게 됨)은 키 범위로 지우므로 그대로 닿는다.
+ */
+export type CopyKind = 'me' | 'accounts' | 'categories' | 'transactions'
+
+const COPY_KINDS: readonly CopyKind[] = ['me', 'accounts', 'categories', 'transactions']
 
 /** 사용자 단위 사본의 장부 자리 */
 export const USER_SCOPE = ''
@@ -50,6 +57,13 @@ export interface Copy {
   receivedAt: number
 }
 
+/** 사본 하나와 그 자리 */
+export interface ScopedCopy extends Copy {
+  /** 장부 id. 사용자 단위 사본(내 정보)은 빈 글자다 */
+  scope: string
+  kind: CopyKind
+}
+
 /**
  * 받은 사본으로 통째로 바꾼다. 장부 사본은 그 응답을 받은 요청을 보낸 때(`startedAt`)를 반드시 넘긴다. 그 장부를 지운 때와
  * 같거나 그보다 앞에 보낸 요청의 것이면 남기지 않는다(GoneRow). 넘기지 않는 호출이 생겨 경쟁이 조용히 되살아나지 않게
@@ -73,14 +87,33 @@ export function saveCopy(
   startedAt?: number,
 ): Promise<void> {
   const row: CopyRow = { userId, scope, kind, receivedAt, data }
-  return transact(['copies'], 'readwrite', async (transaction) => {
+  const saved = transact(['copies'], 'readwrite', async (transaction) => {
     const store = transaction.objectStore('copies')
     if (scope !== USER_SCOPE) {
       const gone = goneAtOf(await resultOf(store.get([userId, scope, 'gone'])))
       // 보낸 때를 모르면 막는 쪽이다
-      if (gone !== undefined && (startedAt === undefined || startedAt <= gone)) return
+      if (gone !== undefined && (startedAt === undefined || startedAt <= gone)) return false
     }
     store.put(row)
+    return true
+  })
+  // 사본을 새로 받은 때는 마지막으로 맞춘 시각이다(B-04 (2-3), #235)
+  return saved.then((stored) => {
+    if (stored) announce('synced')
+  })
+}
+
+/** 그 사용자의 사본 전부(내 정보, 장부마다 계좌·카테고리·최근 한 달 내역). 사본이 아닌 줄과 모양이 틀린 줄은 뺀다. */
+export async function copiesOf(userId: string): Promise<ScopedCopy[]> {
+  const rows: unknown[] = await transact(['copies'], 'readonly', (transaction) =>
+    resultOf(transaction.objectStore('copies').getAll(userRange(userId))),
+  )
+  return rows.flatMap((row) => {
+    if (typeof row !== 'object' || row === null) return []
+    const { userId: owner, scope, kind, receivedAt, data } = row as Partial<CopyRow>
+    const copyKind = COPY_KINDS.find((each) => each === kind)
+    if (owner !== userId || typeof scope !== 'string' || !copyKind || !isInstantMs(receivedAt)) return []
+    return [{ scope, kind: copyKind, receivedAt, data }]
   })
 }
 

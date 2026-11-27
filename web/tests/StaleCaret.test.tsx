@@ -4,7 +4,6 @@ import { RouterProvider } from 'react-router/dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ClearStaleCaret from '../src/app/ClearStaleCaret'
 import { setDeviceClock } from './support/clock'
-import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { amount, closeButton, openApp, path, resetGlobals, startServer, type Opened } from './support/transactionScreen'
 import { resetViewport } from './support/viewport'
@@ -23,7 +22,6 @@ const caret = () => document.getSelection()!
 
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
   caretsAtRestore = []
   vi.stubGlobal(
     'scrollTo',

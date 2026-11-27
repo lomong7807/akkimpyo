@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import { ApiError } from '../../api/apiError'
 import { sessionUserId } from '../../api/session'
 import { pendingOf, queueTransaction, type PendingTransaction } from '../../device/pendingQueue'
 import { isDate, monthOf } from '../../lib/calendarDate'
@@ -24,9 +23,7 @@ export const QUEUED_TOAST = '기기에 저장했어요. 연결되면 보낼게�
 export const QUEUE_FAILED = '연결이 없어 저장하지 못했어요. 이 브라우저에는 저장해 둘 수 없어요.'
 
 /** 요청이 응답 없이 실패했다(요청 중 연결이 끊김). 이 새 거래는 같은 id로 쌓는다(P-904). 서버 오류와 지연은 아니다 */
-export function isConnectionLoss(error: unknown): boolean {
-  return error instanceof ApiError && error.kind === 'connection'
-}
+export { isConnectionLost as isConnectionLoss } from '../connection/offlineAction'
 
 interface Owner {
   /** 입력의 주인(sessionUserId). 확인하지 못한 로그인이면 기록의 사용자다 */
@@ -49,20 +46,33 @@ export async function queueNewTransaction({ userId, ledgerId }: Owner, transacti
  * 쌓은 거래의 "보내지 않음" 줄(C-01 (9)(10), D-01 (4)(8)(11)). 서버 거래와 같은 순서 규칙으로 섞는다. 내역 합계와 날짜 묶음
  * 머리의 그날 합계에는 더하고(planner Q5), 홈의 이번 달 합계와 계좌 잔액에는 더하지 않는다(작성자 판단 43). 홈 합계 아래에는
  * 합계에 없는 건수를 알린다(designer #234 B).
- * 대기(waiting)만 보인다. 보낼 수 없음의 줄과 칩은 #235가 더한다.
+ * 서버가 거부한 줄(보낼 수 없음)도 섞어 보이고 오류 칩을 붙인다. 내역 합계와 그날 합계에는 더하고, 홈 합계 아래의 건수에는
+ * 세지 않는다(planner #102, designer #235 Q2).
  */
 
-/** 목록에 보이는 거래. 기기에 쌓여 아직 서버에 없는 줄은 pending이다(눌리지 않는다, 1B 임시 #236) */
-export type ShownTransaction = ListedTransaction & { pending?: true }
+/**
+ * 목록에 보이는 거래. 기기에 쌓여 아직 서버에 없는 줄은 pending이고(누르면 보내지 않은 입력 목록 B-05, 0.4, #236), 그 가운데
+ * 서버가 거부한 줄은 rejected다(칩 "보낼 수 없음", D-01 (11), #235).
+ */
+export type ShownTransaction = ListedTransaction & { pending?: true; rejected?: true }
 
 /** 대기열 조회의 캐시 키. 대기열이 바뀌면(이 탭, 다른 탭) 로그인 영역(SignedInArea)이 이것을 무효로 만든다. */
 export function pendingKey(userId: string | undefined) {
   return deviceKey(userId, 'pending')
 }
 
-/** 이 탭의 기기 데이터 주인이 이 장부에 쌓은 대기 항목 */
-export function usePendingTransactions(): PendingTransaction[] {
-  const ledger = useCurrentLedger()
+const NONE: PendingTransaction[] = []
+
+/** 이 탭의 기기 데이터 주인이 이 기기에 쌓은 모든 장부의 항목(대기와 보낼 수 없음). 동기화 상태 표시(B-04)가 센다 */
+export function useAllPending(): PendingTransaction[] {
+  return usePendingRead() ?? NONE
+}
+
+/**
+ * useAllPending과 같은 항목. 읽기 전이면 없다(보내지 않은 입력 목록 B-05가 읽기 전에 '데이터 없음'을 그리지 않게). 기기 저장소를
+ * 읽지 못했으면 쌓을 수도 없었으므로 빈 목록이다.
+ */
+export function usePendingRead(): PendingTransaction[] | undefined {
   const user = sessionUserId()
   const query = useQuery({
     queryKey: pendingKey(user),
@@ -70,14 +80,18 @@ export function usePendingTransactions(): PendingTransaction[] {
     enabled: user !== undefined,
     staleTime: Infinity,
   })
-  return useMemo(
-    () => (query.data ?? []).filter(({ ledgerId, state }) => ledgerId === ledger.id && state.kind === 'waiting'),
-    [query.data, ledger.id],
-  )
+  return query.isError ? NONE : query.data
+}
+
+/** 이 장부에 쌓은 항목(대기와 보낼 수 없음, #235) */
+export function usePendingTransactions(): PendingTransaction[] {
+  const ledger = useCurrentLedger()
+  const all = useAllPending()
+  return useMemo(() => all.filter(({ ledgerId }) => ledgerId === ledger.id), [all, ledger.id])
 }
 
 /** 대기 항목을 목록의 줄로 바꾼다. 비운 카테고리는 그 장부의 미분류다. 본문이 약속과 다르면 없다. */
-export function pendingRow({ body }: PendingTransaction, categories: Category[]): ShownTransaction | undefined {
+export function pendingRow({ body, state }: PendingTransaction, categories: Category[]): ShownTransaction | undefined {
   const { id, type, occurredOn, occurredTime, amount } = body
   const timeOk = occurredTime === null || (typeof occurredTime === 'string' && isValidTime(occurredTime))
   if (typeof occurredOn !== 'string' || !isDate(occurredOn) || !timeOk || !Number.isSafeInteger(amount)) return undefined
@@ -91,6 +105,7 @@ export function pendingRow({ body }: PendingTransaction, categories: Category[])
     occurredTime: occurredTime as string | null,
     amount: amount as number,
     pending: true as const,
+    ...(state.kind === 'rejected' && { rejected: true as const }),
   }
   if (type === 'TRANSFER') {
     const { fromAccountId, toAccountId } = body
@@ -164,10 +179,12 @@ function insertInOrder(items: ShownTransaction[], rows: ShownTransaction[]): Sho
 
 /**
  * 그 달의 보내지 않은 수입·지출 건수. 홈의 이번 달 합계 아래에 "합계에 아직 없는" 건수로 알린다(designer #234 B). 이체는
- * 합계에 들지 않으므로 세지 않는다(P-205). 목록에 보이지 않을 본문(약속과 다름)은 세지 않는다.
+ * 합계에 들지 않으므로 세지 않는다(P-205). 목록에 보이지 않을 본문(약속과 다름)은 세지 않는다. 보낼 수 없음은 곧 합계에 들어갈
+ * 것이 아니므로 세지 않는다(planner #102, #235).
  */
 export function pendingCountInMonth(pending: PendingTransaction[], month: string): number {
   return pending
+    .filter(({ state }) => state.kind === 'waiting')
     .flatMap((item) => pendingRow(item, []) ?? [])
     .filter(({ type, occurredOn }) => type !== 'TRANSFER' && monthOf(occurredOn) === month).length
 }

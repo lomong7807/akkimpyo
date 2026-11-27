@@ -1,4 +1,5 @@
 import { isUuid } from '../lib/uuid'
+import { announce, onDeviceChange } from './changes'
 import { isInstantMs, isUserId, resultOf, transact } from './deviceDb'
 
 /*
@@ -81,22 +82,68 @@ export async function countPending(userId: string): Promise<{ waiting: number; r
   return { waiting: rows.length - rejected, rejected }
 }
 
-/** 보낼 수 없음으로 바꾸고 까닭을 남긴다(#235). 없는 항목이면 아무것도 하지 않는다. */
-export async function markRejected(userId: string, id: string, rejection: Rejection): Promise<void> {
-  await transact(
+/** 그 사용자의 그 항목. 보내기 직전에 다시 읽는다(그사이 버렸거나 다른 탭이 바꿨을 수 있다). 없거나 모양이 틀리면 없다. */
+export async function readPending(userId: string, id: string): Promise<PendingTransaction | undefined> {
+  const row: unknown = await transact(['queue'], 'readonly', (transaction) =>
+    resultOf(transaction.objectStore('queue').get([userId, id])),
+  )
+  const pending = pendingOfRow(row)
+  return pending?.userId === userId ? pending : undefined
+}
+
+/** 보낸 결과. sent는 서버가 받았다(201, 200), rejected는 서버가 이유를 붙여 거부했다 */
+export type Outcome = { kind: 'sent' } | ({ kind: 'rejected' } & Rejection)
+
+/**
+ * 보낸 결과로 그 항목을 지우거나(sent) 보낼 수 없음으로 바꾼다(rejected)(#235). 한 트랜잭션에서 다시 읽어, 보내기 직전에 본
+ * 줄(`seen`)과 모든 칸이 같을 때만 바꾼다. 그사이 다른 탭이 고쳐 쌓았거나, 보낼 수 없음으로 바꿨거나, 버렸으면 그대로 두고
+ * false다(#234 B 검토, architect #235 C).
+ */
+export async function settlePending(seen: PendingTransaction, outcome: Outcome): Promise<boolean> {
+  const settled = await transact(
     ['queue'],
     'readwrite',
     async (transaction) => {
       const store = transaction.objectStore('queue')
-      const row = pendingOfRow(await resultOf(store.get([userId, id])))
-      if (row) store.put({ ...row, state: { kind: 'rejected', ...rejection } })
+      const row = pendingOfRow(await resultOf(store.get([seen.userId, seen.id])))
+      if (!row || !isSameRow(row, seen)) return false
+      if (outcome.kind === 'sent') store.delete([seen.userId, seen.id])
+      else store.put({ ...row, state: outcome })
+      return true
     },
     { durability: 'strict' },
   )
-  changed()
+  if (settled) changed()
+  return settled
 }
 
-/** 그 항목을 지운다(보내기 성공 #235, 버리기 #236). */
+/**
+ * 고쳐서 보내기(F-108, #237): 보낼 수 없음인 줄을 고친 본문의 대기로 바꾼다. 한 트랜잭션에서 다시 읽어, 고치는 화면을 연 때 본
+ * 줄(`seen`)과 모든 칸이 같을 때만 바꾼다. 그사이 버려졌거나 다른 탭이 먼저 고쳐 보냈으면 그대로 두고 false다.
+ * 쌓은 시각은 그대로 둬 원래 순서 자리에서 보낸다. 거래 id가 바뀌면(current 없는 409, ADR 006 결정 3) 옛 줄을 지우고 새 id의 줄을
+ * 같은 트랜잭션에서 넣는다(둘 다 있거나 둘 다 없는 때가 없게, architect #237). 탭 사이 잠금은 잡지 않는다. 보낼 수 없음 줄은
+ * 어느 탭의 보내기도 건드리지 않고, 버리기·다른 탭의 고치기와 겹치는 것은 위 비교가 막는다(architect #237).
+ */
+export async function refilePending(seen: PendingTransaction, body: PendingBody): Promise<boolean> {
+  const refiled = await transact(
+    ['queue'],
+    'readwrite',
+    async (transaction) => {
+      const store = transaction.objectStore('queue')
+      const row = pendingOfRow(await resultOf(store.get([seen.userId, seen.id])))
+      if (!row || !isSameRow(row, seen)) return false
+      if (body.id !== seen.id) store.delete([seen.userId, seen.id])
+      const next: PendingTransaction = { ...row, id: body.id, state: { kind: 'waiting' }, body }
+      store.put(next)
+      return true
+    },
+    { durability: 'strict' },
+  )
+  if (refiled) changed()
+  return refiled
+}
+
+/** 그 항목을 지운다(버리기 #236). 보내기 결과로 지울 때는 settlePending을 쓴다. */
 export async function removePending(userId: string, id: string): Promise<void> {
   await transact(['queue'], 'readwrite', (transaction) => void transaction.objectStore('queue').delete([userId, id]), {
     durability: 'strict',
@@ -104,37 +151,19 @@ export async function removePending(userId: string, id: string): Promise<void> {
   changed()
 }
 
-/*
- * 바뀜 알림. 같은 탭과 다른 탭에 대기열이 바뀌었다는 것만 알리고 내용은 싣지 않는다. 받는 쪽은 저장소를 다시 읽는다
- * (security 2026-11-26). BroadcastChannel이 없는 브라우저에서는 같은 탭에만 알린다.
- */
-
-const CHANNEL = 'akkimpyo-device'
-const listeners = new Set<() => void>()
-let channel: BroadcastChannel | undefined
-
-/** 대기열이 바뀔 때마다 부른다(이 탭과 다른 탭). 돌려받은 함수로 끊는다. */
+/** 대기열이 바뀔 때마다 부른다(이 탭과 다른 탭, device/changes). 돌려받은 함수로 끊는다. */
 export function onPendingChanged(listener: () => void): () => void {
-  listeners.add(listener)
-  openChannel()
-  return () => {
-    listeners.delete(listener)
-  }
+  return onDeviceChange('queue', listener)
 }
 
-/** 이 탭에서 대기열을 바꿨다. 이 탭에 알리고 다른 탭에 보낸다. */
-export function changed(): void {
-  listeners.forEach((notify) => notify())
-  openChannel()?.postMessage({ changed: 'queue' })
+/** 이 탭에서 대기열을 바꿨다. 이 탭에 알리고 다른 탭에 보낸다. 내용은 싣지 않는다. */
+function changed(): void {
+  announce('queue')
 }
 
-function openChannel(): BroadcastChannel | undefined {
-  if (channel || typeof BroadcastChannel === 'undefined') return channel
-  channel = new BroadcastChannel(CHANNEL)
-  channel.onmessage = ({ data }: MessageEvent<unknown>) => {
-    if ((data as { changed?: unknown } | null)?.changed === 'queue') listeners.forEach((notify) => notify())
-  }
-  return channel
+/** 읽은 두 줄이 같은지. 둘 다 pendingOfRow로 읽어 칸의 순서가 같다. 줄은 JSON으로 만든 값만 담는다 */
+function isSameRow(a: PendingTransaction, b: PendingTransaction): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
 }
 
 function pendingOfRow(value: unknown): PendingTransaction | undefined {

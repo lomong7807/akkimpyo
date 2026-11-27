@@ -20,12 +20,12 @@ export function withAccount(values: TransactionValues, defaultAccountId: string)
 /**
  * 거래의 칸. 처음 값은 새 입력의 기본값이다(D-04 칸별 기본값). 수정은 고칠 거래를 받은 뒤 `reset`으로 그 값을 채운다.
  * 새 입력의 계좌 기본값은 계좌 목록을 받은 뒤에야 정해지므로 처음 값에 넣지 않고 `defaultAccountId`로 받는다.
- * 그래서 기본 계좌가 채워져도 바꾼 값이 아니다.
+ * 그래서 기본 계좌가 채워져도 바꾼 값이 아니다. 값을 채워 여는 새 입력(고쳐서 보내기 #237)은 처음 값을 `initialValues`로 준다.
  */
-export function useTransactionForm(defaultAccountId: string) {
+export function useTransactionForm(defaultAccountId: string, initialValues: () => TransactionValues = newTransactionValues) {
   const form = useFormFields({
     fields: transactionFields,
-    initialValues: newTransactionValues(),
+    initialValues: initialValues(),
     validate: (values: TransactionValues) => validateTransaction(withAccount(values, defaultAccountId)),
   })
   return { ...form, effective: withAccount(form.values, defaultAccountId) }

@@ -38,7 +38,7 @@ describe('입력칸의 타입', () => {
     ['비밀번호 칸의 글자 수', '<PasswordField label="비밀번호" count={{ current: 8, max: 72 }} />', 'count'],
     ['비밀번호 칸의 모양 덮어쓰기', '<PasswordField label="비밀번호" className="a" />', 'className'],
     ['이름 없는 날짜 칸', '<DateField value="" onChange={() => {}} />', 'label'],
-    ['Date를 값으로 받는 날짜 칸', '<DateField label="기준일" value={new Date()} onChange={() => {}} />', 'string'],
+    ['Date를 값으로 받는 날짜 칸', '<DateField label="기준일" value={new Date(0)} onChange={() => {}} />', 'string'],
     ['날짜 칸의 모양 덮어쓰기', '<DateField label="기준일" value="" onChange={() => {}} className="a" />', 'className'],
     ['모양이 정해지지 않은 날짜 칸의 비활성', '<DateField label="기준일" value="" onChange={() => {}} disabled />', 'disabled'],
     ['이름 없는 금액 칸', '<AmountField value={0} onChange={() => {}} />', 'label'],

@@ -1,12 +1,12 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react'
-import { HttpResponse } from 'msw'
+import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountOf, startAccounts } from './support/accounts'
 import { startBackend, type Backend } from './support/backend'
 import { copyKeys, queueOf, seedLedgerCopy, seedPending } from './support/device'
 import { untilOpened, untilUnshielded } from './support/dialog'
-import { startGuardClock, stopGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
+import { problem } from './support/problem'
 import { openApp } from './support/openApp'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 
@@ -25,11 +25,12 @@ const NOW = Date.parse('2026-11-26T12:00:00+09:00')
 
 beforeEach(() => {
   vi.stubGlobal('scrollTo', vi.fn())
-  startGuardClock()
   backend = startBackend(server)
   const accounts = startAccounts(server, backend)
   accounts.items = [accountOf('통장', 'BANK', 0)]
   backend.cookieUser = 'user-1'
+  // 이 파일은 로그아웃 확인 창의 건수를 본다. 저절로 보내기(#235)가 대기열을 비우지 않게 서버가 받지 않는다
+  server.use(http.post('/api/v1/ledgers/:ledgerId/transactions', () => problem(503, 'INTERNAL_ERROR')))
   localStorage.clear()
   sessionStorage.clear()
 })
@@ -38,7 +39,6 @@ afterEach(async () => {
   cleanup()
   await untilUnshielded()
   resetViewport()
-  stopGuardClock()
   vi.unstubAllGlobals()
 })
 
@@ -108,8 +108,9 @@ describe('보내지 않은 입력이 있으면', () => {
     const second = pending()
     await seedPending(second)
     vi.resetModules()
-    const { markRejected } = await import('../src/device/pendingQueue')
-    await markRejected('user-1', second.body.id, { status: 400, code: 'VALIDATION_FAILED', fieldErrors: [], at: NOW })
+    const { pendingOf, settlePending } = await import('../src/device/pendingQueue')
+    const seen = (await pendingOf('user-1')).find(({ id }) => id === second.body.id)!
+    await settlePending(seen, { kind: 'rejected', status: 400, code: 'VALIDATION_FAILED', fieldErrors: [], at: NOW })
     const { user } = await open('/more')
     await pressLogout(user)
     await untilOpened()

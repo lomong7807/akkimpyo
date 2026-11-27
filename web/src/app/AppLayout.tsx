@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react'
 import { Outlet } from 'react-router'
 import { LedgerNameContext } from '../components/LedgerNameContext'
+import { ShellContext, type ShellParts } from '../components/ShellContext'
 import { QUICK_ENTRY, type MainNavigationItem, type Navigation } from './navigation'
 import Sidebar from './Sidebar'
 import TabBar from './TabBar'
@@ -13,13 +15,19 @@ interface AppLayoutProps {
   /** 거래를 쓸 수 있다(편집 이상). 아니면 하단 탭의 거래 입력 칸과 사이드바의 "거래 입력"을 두지 않는다(B-03). */
   canWrite?: boolean
   onLogout: () => void
+  /**
+   * 화면의 상단 바·머리에 넣는 것(연결 없음 띠, 동기화 상태 표시)과 사이드바 맨 아래 묶음(#235). 공통 틀을 쓰는 곳(LedgerLayout)이
+   * 그려서 넘긴다.
+   */
+  shell?: ShellParts & { sidebarBottom?: ReactNode }
 }
 
 /**
  * 공통 틀. 하단 탭(휴대폰 배치)과 사이드바(넓은 화면)를 그린다.
  * 상단 바의 형태는 안쪽 화면이 MainScreen이나 SubScreen으로 고른다.
  */
-export default function AppLayout({ navigation, ledgerName, canWrite = false, onLogout }: AppLayoutProps) {
+export default function AppLayout({ navigation, ledgerName, canWrite = false, onLogout, shell = {} }: AppLayoutProps) {
+  const { band, syncStatus, sidebarBottom } = shell
   const { navigationItem: screenItem, fullScreen } = useScreenHandle()
   const screenTabs = navigation.tabs.filter((tab): tab is MainNavigationItem => tab !== QUICK_ENTRY)
   const currentTab = useCurrentTab({ tabs: screenTabs, fallbackTab: navigation.fallbackTab }, screenItem)
@@ -32,10 +40,13 @@ export default function AppLayout({ navigation, ledgerName, canWrite = false, on
         ledgerName={ledgerName}
         quickEntry={quickEntry}
         onLogout={onLogout}
+        bottom={sidebarBottom}
       />
       <div className={styles.screen}>
         <LedgerNameContext value={ledgerName}>
-          <Outlet />
+          <ShellContext value={{ band, syncStatus }}>
+            <Outlet />
+          </ShellContext>
         </LedgerNameContext>
       </div>
       {!fullScreen && <TabBar tabs={navigation.tabs} current={currentTab} quickEntry={quickEntry} />}

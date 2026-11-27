@@ -2,9 +2,11 @@ spring:
   application:
     name: account-book
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5433/accountbook}
-    username: ${DB_USERNAME:accountbook}
-    password: ${DB_PASSWORD:accountbook}
+    # 기본값을 두지 않는다. 셋 중 하나라도 없으면 기동하지 않는다(RequiredDbSettings).
+    # 로컬 개발용 기본값은 application-local.yml(local 프로파일)에 있다.
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     hikari:
       data-source-properties:
         # 제약 위반의 상세에는 그 행의 값(이메일, 비밀번호 해시, 이름, 메모 등)이 들어 있다. 예외와 로그에 싣지 않는다(#20).

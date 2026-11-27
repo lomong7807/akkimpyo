@@ -107,6 +107,5 @@ SELECT g.id
  GROUP BY g.id
 HAVING count(m.id) <> 1;
 
--- [점검 13] 소문자·공백 정리가 안 된 이메일, 대소문자만 다른 중복
-SELECT id FROM users WHERE email <> lower(btrim(email));
-SELECT lower(email), count(*) FROM users GROUP BY lower(email) HAVING count(*) > 1;
+-- [점검 13] 정규화가 안 된 이메일(P-101)
+SELECT id FROM users WHERE (email COLLATE "C") !~ '^[\x21-\x40\x5B-\x7E]+$' OR char_length(email) > 254;

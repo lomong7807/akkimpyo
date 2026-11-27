@@ -3,6 +3,7 @@ import { HttpResponse } from 'msw'
 import type { RouteObject } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, ledgerIdOf, ledgerNameOf, meOf, startBackend, type Backend } from './support/backend'
+import { goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -98,7 +99,6 @@ describe('내 정보', () => {
 describe('내 정보를 받지 못하면', () => {
   it.each([
     ['서버 오류', () => problem(500, 'INTERNAL_ERROR')],
-    ['연결 오류', () => HttpResponse.error()],
     ['장부가 하나도 없음', () => HttpResponse.json({ ...meOf('user-1'), ledgers: [] })],
     ['장부 목록이 깨짐', () => HttpResponse.json({ ...meOf('user-1'), ledgers: { items: [] } })],
     ['갱신한 뒤에도 401', () => problem(401, 'UNAUTHENTICATED')],
@@ -112,6 +112,19 @@ describe('내 정보를 받지 못하면', () => {
     expect(router.state.location.pathname).toBe('/me-screen')
     expect(dom.sawElement('nav, header')).toBe(false)
     expect(consoleError).not.toHaveBeenCalled()
+  })
+
+  it('연결 오류면 버튼 없이 "연결되면 자동으로 불러올게요."를 보이고, 연결이 돌아오면 저절로 받아 들어간다(F-908, 1B)', async () => {
+    backend.meResponse = () => HttpResponse.error()
+    const dom = recordDom()
+    await open()
+    await screen.findByRole('heading', { level: 1, name: failed })
+    expect(screen.getByRole('main').textContent).toBe(`${failed}연결되면 자동으로 불러올게요.`)
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(dom.sawElement('nav, header')).toBe(false)
+    backend.meResponse = undefined
+    act(() => goOnline())
+    expect(await content()).toBeTruthy()
   })
 
   it('"다시 시도"를 누르면 화면은 그대로 두고 그 버튼만 처리 중이며, 받으면 들어간다', async () => {

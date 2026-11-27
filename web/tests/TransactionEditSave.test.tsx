@@ -3,9 +3,11 @@ import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, type Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
+import { goOffline, goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { holdClock, passTime } from './support/testClock'
 import { trashed, type TransactionDetailServer } from './support/transactionDetail'
 import {
   deviceNow,
@@ -49,6 +51,8 @@ import { resetViewport } from './support/viewport'
 /* D-04 거래 수정의 저장(F-208, P-213, P-217). 수정 API(#36)는 가짜 서버가 계약대로 답한다. */
 
 const failed = '문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
+const lost = '연결이 끊겨 저장하지 못했어요. 연결되면 다시 시도해 주세요.'
+const offlineReason = '연결되면 저장할 수 있어요'
 const conflict = '다른 기기에서 먼저 고쳤어요'
 /** planner 확정(#89, 2026-11-26) */
 const deletedMeanwhile = '그사이 삭제된 거래라 저장하지 못했어요'
@@ -325,11 +329,54 @@ describe('검증은 새 입력과 같다', () => {
   })
 })
 
+describe('연결이 없을 때(00-common 4.3, 02의 0.10, #238)', () => {
+  it('화면은 열리고 값을 쓸 수 있지만 저장은 비활성이고 바로 위에 "연결되면 저장할 수 있어요"를 보인다. 돌아오면 지운다', async () => {
+    const item = lunch()
+    put(item)
+    const { user } = await openFromDetail(item)
+    act(() => goOffline())
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true')
+    expect(saveButton().previousElementSibling!.textContent).toBe(offlineReason)
+    await changeAndSave(user)
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    expect(amount().value).toBe('30,000')
+    expect(detail.requests.update).toEqual([])
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(saveButton().getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('앞선 실패 문구가 있으면 연결이 끊길 때 안내 줄이 그것을 대신하고, 다시 연결돼도 되살리지 않는다(designer #238)', async () => {
+    await failToSave(() => problem(500, 'INTERNAL_ERROR'))
+    act(() => goOffline())
+    expect(screen.queryByText(failed)).toBeNull()
+    expect(saveButton().previousElementSibling!.textContent).toBe(offlineReason)
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(screen.queryByText(failed)).toBeNull()
+  })
+
+  it('요청 중에 끊기면 그 줄 대신 "연결이 끊겨 저장하지 못했어요."와 "다시 시도"(연결이 없는 동안 비활성)이고, 돌아와도 저절로 다시 보내지 않는다', async () => {
+    const { user } = await failToSave(() => HttpResponse.error())
+    expect(screen.getByRole('alert').textContent).toBe(lost)
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true')
+    expect(amount().value).toBe('30,000')
+    detail.updateResponse = undefined
+    act(() => goOnline())
+    await settle(100)
+    expect(detail.requests.update).toHaveLength(1)
+    expect(retryButton().getAttribute('aria-disabled')).toBeNull()
+    await user.click(retryButton())
+    await waitFor(() => expect(detail.requests.update).toHaveLength(2))
+  })
+})
+
 describe('저장하지 못함', () => {
   it.each([
     ['500', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['429', () => problem(429, 'TOO_MANY_REQUESTS')],
     ['유형이 다르다는 400', refuse(['type', 'NOT_ALLOWED'])],
     ['version 형식 400', refuse(['version', 'INVALID_FORMAT'])],
@@ -353,11 +400,11 @@ describe('저장하지 못함', () => {
     detail.updateResponse = delayed().respond
     const { user } = await openFromDetail(item)
     await changeAmount(user)
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
     fireEvent.click(saveButton())
-    await act(() => vi.advanceTimersByTimeAsync(14_900))
+    await passTime(14_900)
     expect(screen.queryByRole('alert')).toBeNull()
-    await act(() => vi.advanceTimersByTimeAsync(200))
+    await passTime(200)
     expect(screen.getByRole('alert').textContent).toBe(failed)
   })
 
@@ -378,7 +425,7 @@ describe('저장하지 못함', () => {
     const { user } = await failToSave(() => problem(500, 'INTERNAL_ERROR'))
     await settle(100)
     expect(detail.requests.update).toHaveLength(1)
-    detail.updateResponse = () => HttpResponse.error()
+    detail.updateResponse = () => problem(503, 'INTERNAL_ERROR')
     await user.click(retryButton())
     await waitFor(() => expect(detail.requests.update).toHaveLength(2))
     expect(sentBodies()[1]).toEqual(sentBodies()[0])
@@ -434,27 +481,25 @@ describe('저장하지 못함', () => {
   })
 })
 
-describe('다른 기기가 먼저 고침(409 STALE_VERSION, 1A 임시)', () => {
+/*
+ * 최신 거래(current)가 온 충돌은 수정 충돌 안내(N-04) 판이다(EditConflict.test.tsx). 최신 거래가 오지 않았으면 판을 그릴 수 없어
+ * 1A처럼 저장 위에 안내와 "최신 내용 보기"만 보인다(planner #239 P3).
+ */
+describe('다른 기기가 먼저 고침(409 STALE_VERSION), 최신 거래 없음', () => {
   /** 다른 기기가 금액을 40,000원으로 고쳐 서버의 version이 2가 된 거래 */
   function changedElsewhere(item: Item) {
     Object.assign(item, { amount: 40000, version: 2 })
   }
 
-  async function conflictOnSave() {
+  it('저장 바로 위에 "다른 기기에서 먼저 고쳤어요"와 "최신 내용 보기" 하나만 보이고 초점을 옮기지 않는다', async () => {
     const item = lunch()
     put(item)
+    detail.updateResponse = () => problem(409, 'STALE_VERSION')
     const opened = await openFromDetail(item)
-    changedElsewhere(item)
     await changeAmount(opened.user)
-    // 저장을 눌러도 초점은 쓰던 칸에 남는다(FullScreenForm)
     const focused = document.activeElement
     await opened.user.click(saveButton())
     await waitFor(() => expect(screen.queryByText(conflict)).toBeTruthy())
-    return { ...opened, item, focused }
-  }
-
-  it('저장 바로 위에 "다른 기기에서 먼저 고쳤어요"와 "최신 내용 보기" 하나만 보이고 초점을 옮기지 않는다', async () => {
-    const { focused } = await conflictOnSave()
     await settle()
     const alert = screen.getByRole('alert')
     expect(alert.textContent).toBe(conflict)
@@ -464,29 +509,6 @@ describe('다른 기기가 먼저 고침(409 STALE_VERSION, 1A 임시)', () => {
     expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull()
     expect(document.activeElement).toBe(focused)
     expect(amount().value).toBe('30,000')
-  })
-
-  it('"최신 내용 보기"는 묻지 않고 입력을 버려 최신 내용의 상세로 간다. 수정 화면은 방문 기록에 남지 않는다', async () => {
-    const opened = await conflictOnSave()
-    detail.getResponse = delayed().respond
-    await opened.user.click(latestLink()!)
-    await untilDetail()
-    expect(discardQuestion()).toBeNull()
-    expect(pathOf(opened)).toBe(detailPath(opened.item))
-    expect(within(screen.getByRole('main')).getByText('40,000원')).toBeTruthy()
-    expect(detail.requests.update).toHaveLength(1)
-    detail.getResponse = undefined
-    await opened.user.click(backButton())
-    await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
-  })
-
-  it('다시 저장해도 연 때의 version으로 보내 덮어쓰지 않고 같은 안내를 보인다', async () => {
-    const opened = await conflictOnSave()
-    await opened.user.click(saveButton())
-    await waitFor(() => expect(detail.requests.update).toHaveLength(2))
-    expect(sentBodies().map((body) => (body as { version: number }).version)).toEqual([1, 1])
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(conflict))
-    expect(opened.item.amount).toBe(40000)
   })
 
   it('최신 거래(current)가 오지 않아도 같은 안내이고, 상세는 최신을 다시 받는다', async () => {
@@ -503,10 +525,12 @@ describe('다른 기기가 먼저 고침(409 STALE_VERSION, 1A 임시)', () => {
   })
 })
 
+/*
+ * 다른 기기가 휴지통으로 옮겨 최신 거래가 휴지통에 있는 충돌(STALE_VERSION의 current)은 N-04 판이다(EditConflict.test.tsx).
+ * version은 맞는데 휴지통인 거부(INVALID_STATE, current 없음)는 1A 그대로다(planner #239 P3).
+ */
 describe('그사이 휴지통으로 간 거래(planner·designer #102)', () => {
-  /** 다른 기기가 휴지통으로 옮기는 두 길 */
   const trashedElsewhere: [string, (item: Item) => void][] = [
-    ['STALE_VERSION의 current가 휴지통', (item) => Object.assign(item, { version: 2, ...trashed('2026-11-26T03:15:00.123Z') })],
     ['version은 맞는데 휴지통(INVALID_STATE)', (item) => Object.assign(item, trashed('2026-11-26T03:15:00.123Z'))],
   ]
 

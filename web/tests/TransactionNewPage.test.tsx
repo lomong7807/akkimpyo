@@ -1,10 +1,11 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
+import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Accounts } from './support/accounts'
 import { ledgerIdOf, type Backend } from './support/backend'
 import { untilOpened, untilUnshielded } from './support/dialog'
 import { setDeviceClock } from './support/clock'
-import { startGuardClock } from './support/guardClock'
+import { goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import {
@@ -45,7 +46,6 @@ let transactions: Transactions
 
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts, transactions } = startServer(server))
   localStorage.clear()
@@ -512,6 +512,21 @@ describe('계좌', () => {
       expect(screen.getByText('불러오지 못했어요.')).toBeTruthy()
       accounts.response = undefined
       await opened.user.click(screen.getByRole('button', { name: '다시 시도' }))
+      expect(await screen.findByRole('option', { name: '지갑' })).toBeTruthy()
+    })
+
+    it('연결 오류이고 기기 사본도 없으면 판에 버튼 없이 "연결되면 자동으로 불러올게요."이고, 연결이 돌아오면 저절로 받는다(#238)', async () => {
+      accounts.response = () => HttpResponse.error()
+      const opened = await openApp('/transactions/new')
+      await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+      await waitFor(() => expect(accounts.requests.length).toBeGreaterThan(0))
+      await settle()
+      await opened.user.click(accountField())
+      await untilOpened()
+      expect(screen.getByText('연결되면 자동으로 불러올게요.')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull()
+      accounts.response = undefined
+      act(() => goOnline())
       expect(await screen.findByRole('option', { name: '지갑' })).toBeTruthy()
     })
   })

@@ -1,6 +1,7 @@
 /* 시각 칸의 글자(화면설계서 00-common 5.8). 24시간제 `HH:mm`이고 1분 단위다. 시간대는 없다. */
 
-import { wallTimeNow } from './clock'
+import { formatDate } from './calendarDate'
+import { wallTimeNow, wallTimeOf } from './clock'
 
 function digitsOf(text: string): string {
   return text.replace(/[^0-9]/g, '')
@@ -42,4 +43,19 @@ export function isValidTime(text: string): boolean {
 /** 기기의 지금 시각(분 단위) */
 export function currentTime(): string {
   return wallTimeNow().time
+}
+
+/**
+ * 기기에 적은 시각(밀리초)을 화면의 글자로(00-common 3.2). 기기의 시간대로 본 오늘이면 시각만("10:42"), 아니면 날짜와 시각
+ * ("11월 19일 (목) 22:10")이다. 마지막으로 맞춘 시각과 "{시각} 기준"(F-908)이 쓴다.
+ */
+export function momentText(at: number): string {
+  const { date, time } = wallTimeOf(at)
+  const today = wallTimeNow().date
+  return date === today ? time : `${formatDate(date, today)} ${time}`
+}
+
+/** 연결이 없을 때 잔액과 합계 옆에 붙이는 기준 시각("10:42 기준", 00-common 3.2, F-908) */
+export function basisText(at: number): string {
+  return `${momentText(at)} 기준`
 }

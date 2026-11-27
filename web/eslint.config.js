@@ -8,9 +8,11 @@ import tseslint from 'typescript-eslint'
 // lib는 화면과 무관한 계산이다. React와 앱의 다른 폴더를 모른다.
 // device는 기기 저장소(IndexedDB, #234)다. lib만 부르고 app, features, api가 device를 부른다. IndexedDB를 직접 다루는
 // deviceDb는 device 안에서만 부른다(architect 결정, #102).
+// sw는 service worker(#234 C)다. 앱과 따로 묶이므로 sw 밖을 부르지 않는다.
 const direction = '의존 방향은 app → features → components, api다.'
 const libDirection = 'lib는 화면과 무관한 계산이라 앱의 다른 폴더를 모른다.'
 const deviceDirection = 'device는 기기 저장소라 lib만 부른다.'
+const swDirection = 'service worker는 따로 묶이는 classic script라 sw 밖을 부르지 않는다.'
 
 function importsFrom(folder, rule = direction) {
   return {
@@ -37,8 +39,9 @@ const apiInternals = {
 // 화면은 연결 상태를 읽기만 한다. 상태는 api 안의 요청 결과(http)와 앱 시작(app)이 바꾼다(4.3, architect #234 B).
 const connectionWrites = {
   regex: '^\\.\\.?/(.*/)?api/connection(\\.ts)?$',
-  allowImportNames: ['connection', 'onConnectionChange', 'Connection'],
-  message: '화면은 api의 connection에서 connection, onConnectionChange, Connection만 쓴다. 연결 상태는 api가 바꾼다.',
+  allowImportNames: ['connection', 'onConnectionChange', 'offlineCause', 'Connection', 'OfflineCause'],
+  message:
+    '화면은 api의 connection에서 connection, onConnectionChange, offlineCause와 그 타입만 쓴다. 연결 상태는 api가 바꾼다.',
 }
 
 const deviceInternals = {
@@ -49,6 +52,11 @@ const deviceInternals = {
 const devicePackages = {
   regex: '^((react|react-dom|react-router)(/|$)|@tanstack/)',
   message: 'device는 React와 무관하다. 화면과 잇는 훅은 features에 둔다.',
+}
+
+const anyPackage = {
+  regex: '^[^./]',
+  message: `${swDirection} 패키지도 부르지 않는다.`,
 }
 
 const mswPackage = {
@@ -104,6 +112,11 @@ export default tseslint.config(
       devicePackages,
     ],
   ),
+  restrictedImports(
+    ['src/sw/**/*.{ts,tsx}'],
+    ['app', 'features', 'components', 'api', 'device', 'lib'].map((folder) => importsFrom(folder, swDirection)).concat(anyPackage),
+  ),
+  { files: ['src/sw/**/*.{ts,tsx}'], languageOptions: { globals: globals.serviceworker } },
   restrictedImports(
     ['src/lib/**/*.{ts,tsx}'],
     [

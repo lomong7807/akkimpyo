@@ -16,6 +16,7 @@ import layout from './layout.module.css'
 import { isModalOpen } from './openModal'
 import { usePressShield } from './pressGuard'
 import { shellRiseElapsed, ShellShownContext } from './shellShown'
+import { ShellContext } from './ShellContext'
 import type { LeaveGuard } from './useLeaveGuard'
 import styles from './FullScreenForm.module.css'
 
@@ -26,6 +27,10 @@ interface FullScreenFormProps {
   onSubmit: () => void
   /** 맨 아래에 고정하는 저장 버튼과 그 위의 문구. 없으면 저장 자리를 숨긴다(수정할 거래를 받는 동안, D-04 상태). */
   bottom?: ReactNode
+  /** 화면 이름 아래의 안내 한 줄(D-04 상태의 "열린 경로별 안내", 보조 글자색). 칸 맨 위에 둔다 */
+  notice?: string
+  /** 안내를 위험색 글자로 보인다(D-04 (33) "보내지 못한 이유", designer #237 D9). 자리와 글자는 같다 */
+  noticeDanger?: boolean
   /** Ctrl+엔터(Mac은 Cmd+엔터)를 어느 칸에서나 저장으로 받는다(D-04 (16)). 한글을 조합하는 중과 판이 열린 동안은 받지 않는다. */
   submitShortcut?: boolean
   children: ReactNode
@@ -40,11 +45,15 @@ export default function FullScreenForm({
   guard,
   onSubmit,
   bottom,
+  notice,
+  noticeDanger = false,
   submitShortcut = false,
   children,
 }: FullScreenFormProps) {
   const screen = useRef<HTMLDivElement>(null)
   const bottomArea = useRef<HTMLDivElement>(null)
+  // 연결 없음 띠는 머리 바로 아래(00-common 6.1). 동기화 상태 표시(B-04)는 전체 화면 입력에 없다
+  const { band } = use(ShellContext)
   useVisibleArea(screen, bottomArea)
   useRiseAfterShell(screen)
   useEscape(guard.close)
@@ -76,9 +85,18 @@ export default function FullScreenForm({
         </div>
         <h1 className={styles.title}>{title}</h1>
       </header>
+      {band}
       <main className={styles.main}>
         <form className={styles.form} noValidate onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
-          <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>{children}</div>
+          <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>
+            {/* 초점은 옮기지 않는다. 비어 있을 때 자리를 차지하지 않게 있을 때만 그린다 */}
+            {notice && (
+              <p role="status" className={noticeDanger ? `${styles.notice} ${styles.noticeDanger}` : styles.notice}>
+                {notice}
+              </p>
+            )}
+            {children}
+          </div>
           {/* 숨겨도 남겨 둔다. 저장 자리의 높이를 재는 곳이 이 요소를 지켜본다 */}
           <div
             ref={bottomArea}

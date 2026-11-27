@@ -84,7 +84,7 @@
 
 ### 같은 클러스터에 복원할 때
 
-먼저 서버 디스크의 여유가 DB 크기(`SELECT pg_size_pretty(pg_database_size('<DB이름>'))`)보다 큰지 본다. DB가 두 벌이 된다.
+먼저 서버 디스크의 여유가 DB 크기(`SELECT pg_size_pretty(pg_database_size('<DB이름>'))`)보다 큰지 본다. DB가 두 벌이 된다. 7번에서 `transaction` 테이블과 그 인덱스가 한 벌 더 들어갈 공간(`pg_total_relation_size('transaction')`)이 여기에 더 필요하다. 새 클러스터도 같다. 7번을 돌릴 때 WAL이 잠깐 더 쓰인다(30만 건에서 265MB). `transaction`과 인덱스 크기의 세 배를 더 본다. WAL은 체크포인트 뒤에 다시 쓰이지만 바로 줄지는 않는다.
 
 1. 새 이름의 DB를 원래 DB와 같은 소유자로 만든다. `postgres` DB에 붙어서 한다. 원래 DB의 소유자는 `psql`의 `\l`로 본다.
 
@@ -102,12 +102,14 @@
    psql -U <관리 역할> -d <DB이름>_restore -c ANALYZE
    ```
 4. 6번 점검을 한다.
-5. 점검을 통과한 뒤 이름을 바꾼다. `postgres` DB에 붙어서 한다. `<날짜>`는 `20261125`처럼 적는다.
+5. 점검을 통과한 뒤 7번을 `<DB이름>_restore`에 돌린다.
+6. 이름을 바꾼다. `postgres` DB에 붙어서 한다. `<날짜>`는 `20261125`처럼 적는다.
 
    ```sql
    ALTER DATABASE <DB이름> RENAME TO <DB이름>_broken_<날짜>;
    ALTER DATABASE <DB이름>_restore RENAME TO <DB이름>;
    ```
+7. 이름을 바꾼 뒤에 8번부터 한다.
 
 - 이름 바꾸기는 그 DB에 붙은 연결이 없어야 된다. 앱이 붙어 있으면 `is being accessed by other users`로, 바꿀 DB에 붙어서 하면 `current database cannot be renamed`로 실패한다(확인).
 - `OWNER`를 빼면 DB의 소유자가 관리 역할이 된다. PostgreSQL 15부터 `public` 스키마의 소유자가 `pg_database_owner`라, 원래 소유자 역할로 도는 마이그레이션이 `public`에 테이블을 만들지 못할 수 있다.
@@ -132,7 +134,7 @@
    ```
    psql -U <새 관리 역할> -d <DB이름> -c ANALYZE
    ```
-5. 6번 점검을 한다. 이름을 바꿀 것은 없다.
+5. 6번 점검을 한 뒤 7번을 `<DB이름>`에 돌린다. 이름을 바꿀 것은 없다.
 6. 10번의 첫 백업 전에 compose의 `POSTGRES_DB`와 `POSTGRES_USER`를 되돌려 컨테이너를 다시 만들거나, `backup.env`에 `BACKUP_DB_NAME`과 `BACKUP_DB_USER`를 적는다. 안 하면 백업이 빈 `postgres` DB를 덤프한다. 확인: 되돌리지 않은 값으로 `pg_dump`하면 성공하고 덤프 확인도 통과하지만 테이블이 0개다. 명세표 쿼리는 실패한다.
 
 - `globals.sql`에는 백업한 클러스터의 관리 역할이 들어 있다. 같은 이름의 관리 역할로 initdb하면 `role "..." already exists`로 멈춘다(확인, `psql` 종료 코드 3).
@@ -159,14 +161,29 @@
 
 확인: 복원한 DB(같은 클러스터, 새 클러스터)에서 명세표가 같고 점검 13개가 모두 0건이었다. 일부러 이체 라인 하나의 금액을 바꾼 DB에서는 명세표가 다르고 점검 1이 1건이었다.
 
-## 7. refresh token 행을 모두 지운다
+## 7. refresh token 행을 모두 지우고 모든 거래의 `version`을 올린다
 
-- 앱을 붙이기 전에 SQL 한 문장으로 한다(ADR 008 결정 10).
-- 테이블은 #26에서 만들어진다. 이름은 그때 적는다(미확인).
-- 그 테이블이 없던 때의 백업이면 건너뛴다.
+6번을 통과한 DB에 앱을 붙이기 전에 [restore-step7.sql](restore-step7.sql)을 한 번 돌린다(ADR 008 결정 10). 실제 복원과 훈련이 같은 파일을 쓴다.
+
+- 운영 데이터를 바꾸는 단계다. 실행은 owner 승인으로 한다.
+- 같은 클러스터면 이름을 바꾸기 전에 `<DB이름>_restore`에 돌린다. 그래서 원래 DB에 잘못 돌릴 일이 없다. 새 클러스터면 `<DB이름>`에 돌린다.
+- `transaction` 테이블의 소유자나 슈퍼유저로, 표준 입력으로 흘려 넣는다. 새 클러스터면 `-d`에 `<DB이름>`을 준다.
+
+  ```
+  psql -X -U <역할> -d <DB이름>_restore < restore-step7.sql
+  ```
+- 모든 거래(휴지통 포함)의 `version`에 돌리는 시각의 epoch 초를 더한다. `updated_at`과 이력은 바꾸지 않는다. 바뀐 행 수와 더한 값을 보여 준다.
+- 같은 DB에 다른 클라이언트 연결이 있으면 멈추고 아무것도 바꾸지 않는다(확인: 앱, 같은 역할, 다른 역할의 연결과 유휴 트랜잭션).
+- 이미 돌린 DB에 또 돌려도 `version`이 더 커질 뿐이다(확인).
+- refresh token 테이블은 #26에서 만들어진다. 지금은 파일에 자리만 있다(미확인). 그 테이블이 없던 때의 백업이면 지울 것이 없다.
+
+확인: `version` 말고는 모든 테이블의 내용 해시가 전후 같았고, 명세표(`last_transaction_update` 포함)가 같고 점검 13개가 0건이었다. DB 소유자 역할로도 돌아가고, 돌린 DB에 서버가 붙어 기동했다. 거래 30만 건에서 4.3초가 걸렸고 `transaction`과 인덱스는 87MB에서 174MB가 됐으며 WAL은 265MB가 쓰였다(로컬 Docker Desktop).
+
+받아들인 위험: 백업 뒤에 만들어져 복원으로 사라진 거래는 `version`을 올릴 행이 없다. 재전송으로 같은 id가 다시 만들어져 다시 고쳐지면, 사라지기 전 내용을 든 다른 기기와 `version`이 겹칠 수 있다(추정, 드물다, ADR 008).
 
 ## 8. (2단계부터) 백업 시점 뒤의 정리 작업과 탈퇴 신청, 탈퇴 취소를 다시 적용한다
 
+- 같은 클러스터면 5번의 이름을 바꾼 뒤에 한다.
 - SQL로 하지 않고 서버의 관리 명령으로 한다(ADR 008 결정 8).
 - 1단계에는 삭제 기록이 없다. owner가 서비스를 연 뒤 앱에서 다시 지운다.
 - 관리 명령이 서버를 쓰므로 10번의 마이그레이션이 먼저일 수 있다. 순서는 #140에서 정한다.
@@ -177,11 +194,13 @@
 
 ## 10. 서비스를 연다
 
+같은 클러스터면 5번의 이름을 바꾼 뒤에 한다.
+
 1. 앱을 붙인다. 서버가 뜰 때 Flyway가 백업 뒤의 마이그레이션을 적용하고 `ddl-auto=validate`를 한다(확인: V5까지 적용된 백업에 V6이 든 앱). 마이그레이션이 배포의 별도 단계가 된 뒤에는 앱을 붙이기 전에 그 단계를 먼저 돌린다(ADR 005 결정 4).
 2. 로그에서 Flyway validate와 적용된 마이그레이션을 확인한다. `Successfully validated ... migrations`, `Migrating schema "public" to version ...`, `Successfully applied ... migration` 줄이다(확인).
 3. 바로 백업을 한 번 돌려 성공을 확인한다. 돌리기 전에 다음을 한다.
    - 서버에 설치된 `integrity-checks.sql`을 연 앱 버전의 파일과 맞춘다. 다르면 명세표가 실패할 수 있다.
-   - 새 클러스터면 5번의 6항(`POSTGRES_DB`, `POSTGRES_USER`)을 끝낸다.
+   - 새 클러스터면 5번 "새 클러스터에 복원할 때"의 6항(`POSTGRES_DB`, `POSTGRES_USER`)을 끝낸다.
 4. 첫 백업이 성공한 뒤 백업 타이머를 다시 켠다.
 5. 배포 타이머를 마지막에 켠다. 켜기 전에 main의 `deploy/production.env`가 연 앱 버전을 가리키는지 본다. 배포는 이 파일을 돌고 있는 digest와 비교하므로(#52), 다르면 파일의 버전이 다시 배포된다.
 
@@ -215,8 +234,7 @@ owner에게 보고하고 다음을 남긴다.
 
 ## 남은 것
 
-- refresh token 테이블 이름(#26)
+- refresh token 테이블 이름(#26). 정해지면 [restore-step7.sql](restore-step7.sql)의 자리를 채운다
 - 서버 명령(#54). 3번의 덤프를 받는 명령도 여기에 든다
 - 삭제 기록과 다시 적용 명령(#140, 2단계 전, ADR 008 결정 8)
 - 시점 복구(#141, 2단계 전, ADR 008 결정 9)
-- 전체 복원 뒤 거래의 `version`이 과거로 돌아가, 복원 전 내용을 든 기기의 수정이 나중에 같은 `version`과 맞으면 충돌 없이 덮을 수 있다(추정). 막는 방법은 dba와 architect가 정한다

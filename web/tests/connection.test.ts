@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { goOffline, goOnline, startOffline } from './support/connection'
-import { startMockServer } from './support/mockServer'
+import { NOT_OUR_SERVER, startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 
 /*
@@ -17,6 +17,9 @@ const withRequestId = (response: Response) => {
   return response
 }
 
+/** 우리 서버를 거치지 않은 응답(포털 페이지 등). 가짜 서버가 X-Request-Id를 붙이지 않게 한다(support/mockServer) */
+const notOurServer = (body: string) => new HttpResponse(body, { status: 200, headers: { [NOT_OUR_SERVER]: '1' } })
+
 let probes = 0
 let probeResponse: () => Response = () => withRequestId(problem(404, 'NOT_FOUND'))
 
@@ -30,7 +33,7 @@ beforeEach(() => {
     }),
     http.get('/api/v1/ok', () => withRequestId(HttpResponse.json({}))),
     http.get('/api/v1/broken', () => withRequestId(problem(500, 'INTERNAL_ERROR'))),
-    http.get('/api/v1/portal', () => new HttpResponse('<html>로그인하세요</html>', { status: 200 })),
+    http.get('/api/v1/portal', () => notOurServer('<html>로그인하세요</html>')),
     http.get('/api/v1/unreachable', () => HttpResponse.error()),
     http.get('/api/v1/slow', () => new Promise(() => {})),
   )
@@ -138,7 +141,7 @@ describe('연결이 돌아왔는지 확인하는 요청', () => {
   beforeEach(stopClock)
 
   it('신호는 켜져 있는데 요청이 실패해 없음이 되면 5, 10, 20초 간격 뒤 30초마다 HEAD /api/v1/을 보낸다', async () => {
-    probeResponse = () => new HttpResponse('포털', { status: 200 })
+    probeResponse = () => notOurServer('포털')
     const { call } = await load()
     await call('/unreachable')
     let count = 0
@@ -218,5 +221,42 @@ describe('연결이 돌아왔는지 확인하는 요청', () => {
     stopWatching = undefined
     await pass(120_000)
     expect(probes).toBe(0)
+  })
+})
+
+describe('없음이 된 까닭(연결 없음 띠, 00-common 6.1 (6), #235)', () => {
+  it('연결이 있으면 까닭이 없다', async () => {
+    const { offlineCause } = await load()
+    expect(offlineCause()).toBeUndefined()
+  })
+
+  it('처음부터 연결이 없거나 브라우저 신호로 없음이 되면 signal이다(띠는 2초 뒤)', async () => {
+    startOffline()
+    const first = await load()
+    expect(first.offlineCause()).toBe('signal')
+    goOnline()
+    goOffline()
+    expect(first.offlineCause()).toBe('signal')
+  })
+
+  it('요청이 응답 없이 실패해 없음이 되면 request다(띠는 바로)', async () => {
+    const { offlineCause, call } = await load()
+    await call('/unreachable')
+    expect(offlineCause()).toBe('request')
+  })
+
+  it('신호로 없음인 동안 요청이 실패하면 request로 바뀌고 알린다', async () => {
+    const { offlineCause, call, changes } = await load()
+    goOffline()
+    await call('/unreachable')
+    expect(offlineCause()).toBe('request')
+    expect(changes).toEqual(['offline', 'offline'])
+  })
+
+  it('연결이 돌아오면 까닭을 지운다', async () => {
+    const { offlineCause, call } = await load()
+    await call('/unreachable')
+    await call('/ok')
+    expect(offlineCause()).toBeUndefined()
   })
 })

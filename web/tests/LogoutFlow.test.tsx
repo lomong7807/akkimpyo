@@ -1,12 +1,14 @@
 import { act, cleanup, screen, waitFor } from '@testing-library/react'
-import { HttpResponse } from 'msw'
+import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { startAccounts } from './support/accounts'
 import { delayed, ledgerNameOf, startBackend, type Backend } from './support/backend'
 import { itemOf, listOf, listScreen, startList, type List } from './support/listScreen'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { passTime } from './support/testClock'
 import { createFakeLocks, createStuckLocks, installLocks, removeLocks, SESSION_LOCK } from './support/webLocks'
 
 vi.stubGlobal('scrollTo', vi.fn())
@@ -64,6 +66,16 @@ async function openAsFirstUser(path?: string) {
   const opened = await open(path)
   await screen.findByText(itemOf('user-1'))
   return opened
+}
+
+/**
+ * 다시 보낸 로그아웃이 연결 문제로 실패한 뒤 연결이 돌아온다. 브라우저의 online 신호 없이 앱의 연결 확인 요청(5초 뒤)이 답을
+ * 받아 돌아온다. 연결이 없는 동안 로그인 버튼은 비활성이다(1B, #238). 다시 보내는 로그아웃은 online 신호에만 나간다.
+ */
+async function reconnectByProbe() {
+  server.use(http.head('/api/v1/', () => new HttpResponse(null, { status: 404, headers: { 'X-Request-Id': 'probe' } })))
+  await passTime(5_000)
+  await waitFor(() => expect(screen.getByRole('button', { name: '로그인' }).getAttribute('aria-disabled')).toBeNull())
 }
 
 async function logIn(user: Opened['user'], as: string) {
@@ -314,6 +326,7 @@ describe('로그아웃이 서버에 닿지 않은 채 앱을 열면', () => {
     await loginHeading()
     await settleResent()
     backend.logoutResponse = undefined
+    await reconnectByProbe()
     await logIn(user, 'user-2')
     await screen.findByText(itemOf('user-2'))
     act(() => void window.dispatchEvent(new Event('online')))
@@ -333,6 +346,7 @@ describe('로그아웃이 서버에 닿지 않은 채 앱을 열면', () => {
     await loginHeading()
     await settleResent()
     backend.logoutResponse = undefined
+    await reconnectByProbe()
     await logIn(user, 'user-2')
     await login.arrived
     act(() => void window.dispatchEvent(new Event('online')))
@@ -369,6 +383,8 @@ describe('로그인하는 동안 다른 탭에서 로그아웃하면', () => {
 
 describe('가입하는 동안 다른 탭에서 로그아웃하면', () => {
   it('들어가지 않고 다시 시도할 수 있다', async () => {
+    // 막 가입한 사람의 장부에는 계좌가 없다. 다시 시도해 들어가면 첫 실행 안내에 머문다
+    startAccounts(server, backend)
     const signup = delayed()
     backend.signupResponse = signup.respond
     const opened = await open('/signup')

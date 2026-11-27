@@ -6,10 +6,10 @@ import { delayed, meOf, type Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
 import { readCssRule } from './support/cssRule'
 import { untilOpened } from './support/dialog'
-import { startGuardClock } from './support/guardClock'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
+import { passTime } from './support/testClock'
 import { startTransactionDetail, type TransactionDetailServer } from './support/transactionDetail'
 import { expenseOf, incomeOf, pageOf, startTransactionList, transferOf, type TransactionList } from './support/transactionList'
 import {
@@ -24,6 +24,7 @@ import {
   type Opened,
 } from './support/transactionScreen'
 import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/useTransactionList'
+import { monthOf, today } from '../src/lib/calendarDate'
 import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
@@ -43,10 +44,8 @@ let detail: TransactionDetailServer
 const NOW = '2026-11-26T12:30:00+09:00'
 
 beforeEach(() => {
-  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)는 진짜 시계다
+  // 기기의 지금(서울). 받아 둔 목록이 오래됐는지 세는 라이브러리의 시계(Date)와 누름을 막는 300ms는 공용 시계(testClock)다
   setDeviceClock(NOW)
-  // 확인 창을 여닫을 때 누름을 막는 300ms는 실제로 기다리지 않는 시계로 앞당긴다(Date는 바꾸지 않는다)
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts } = startServer(server))
   list = startTransactionList(server, backend)
@@ -165,8 +164,10 @@ function asViewer() {
   backend.meResponse = () => HttpResponse.json({ ...me, ledgers: [{ ...me.ledgers[0], role: 'VIEWER' }] })
 }
 
-const totalsRequests = () => list.requests.filter(({ month }) => month !== null)
-const recentRequests = () => list.requests.filter(({ month }) => month === null)
+/** 홈의 이번 달 합계 요청. 기기에 남기는 최근 한 달(#238)의 다른 달 합계는 뺀다(이번 달은 같은 캐시라 한 번이다) */
+const totalsRequests = () => list.requests.filter(({ month }) => month !== null && month === monthOf(today()))
+/** 홈의 최근 10건 요청. 기기에 남기는 최근 한 달(50건씩)은 뺀다 */
+const recentRequests = () => list.requests.filter(({ month, limit }) => month === null && limit === '10')
 
 describe('주소와 공통 틀', () => {
   it('/home은 공통 틀 안의 주 화면이다. 상단 바에 장부 이름만 있고 "뒤로"가 없으며 화면 이름은 "홈"(h1)이다', async () => {
@@ -515,9 +516,8 @@ describe('계좌 잔액(F-112, P-220)', () => {
   it('30초가 지나면 홈에 다시 들어올 때 계좌 목록을 다시 받는다', async () => {
     const opened = await openHome()
     await act(() => opened.router.navigate('/more'))
-    // 라이브러리가 받은 때와 지금을 재는 시계(Date.now)만 30초 뒤로 보낸다
-    const later = Date.now() + TRANSACTION_LIST_STALE_MS + 1
-    vi.spyOn(Date, 'now').mockReturnValue(later)
+    // 라이브러리가 받은 때와 지금을 재는 시계(Date.now)도 공용 시계라 함께 간다
+    await passTime(TRANSACTION_LIST_STALE_MS + 1)
     await act(() => opened.router.navigate('/home'))
     await screen.findByRole('heading', { level: 1, name: '홈' })
     await waitFor(() => expect(accounts.requests).toHaveLength(2))
@@ -837,17 +837,20 @@ describe('구역 하나가 실패해도 다른 구역은 보인다', () => {
     expect(within(accountsRegion()).getByRole('link')).toBeTruthy()
     expect(recentRows()).toHaveLength(10)
     list.response = undefined
+    // 기기에 남기는 최근 한 달(#238)도 이번 달 합계를 같은 캐시로 받으므로 실패한 뒤 한 번 더 받았을 수 있다
+    const before = totalsRequests().length
     await opened.user.click(within(totalsRegion()).getByRole('button', { name: '다시 시도' }))
     await waitFor(() => expect(within(totalsRegion()).queryByText(failed)).toBeNull())
     expect(totals()[0][0]).toBe('지출')
-    expect(totalsRequests()).toHaveLength(2)
+    expect(totalsRequests()).toHaveLength(before + 1)
   })
 
   it('최근 거래를 받지 못하면 그 구역에만 실패가 보인다', async () => {
     putTransactions()
     list.response = (sent) => (sent.month === null ? problem(500, 'INTERNAL_ERROR') : undefined)
     const opened = await openHome()
-    expect(within(recentRegion()).getByText(failed)).toBeTruthy()
+    // 기기의 최근 한 달(#238)을 읽은 뒤에 실패가 된다
+    expect(await within(recentRegion()).findByText(failed)).toBeTruthy()
     expect(within(recentRegion()).getByRole('link', { name: '모두 보기' })).toBeTruthy()
     expect(totals()[0][0]).toBe('지출')
     expect(within(accountsRegion()).getByRole('link')).toBeTruthy()
@@ -860,7 +863,7 @@ describe('구역 하나가 실패해도 다른 구역은 보인다', () => {
     putTransactions()
     const categories = startCategoriesFailing()
     const opened = await openHome()
-    expect(within(recentRegion()).getByText(failed)).toBeTruthy()
+    expect(await within(recentRegion()).findByText(failed)).toBeTruthy()
     expect(within(accountsRegion()).getByRole('link')).toBeTruthy()
     categories.fail = false
     const before = recentRequests().length

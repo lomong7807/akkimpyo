@@ -26,7 +26,6 @@ class ModuleBoundaryTest {
 
     /**
      * ADR 004 결정 3: 모듈마다 참조해도 되는 다른 모듈. 방향을 더하거나 모듈을 추가할 때는 ADR을 먼저 고친다.
-     * api, auth는 아직 없는 패키지다. 생기는 순간부터 이 목록으로 검사된다.
      */
     static final Map<String, Set<String>> ALLOWED = Map.of(
             "common", Set.of(),

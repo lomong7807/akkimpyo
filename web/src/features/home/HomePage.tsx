@@ -10,14 +10,21 @@ import { LoadingStatus, SkeletonBar, SkeletonSpace } from '../../components/Skel
 import { useLoadingMessage } from '../../components/useLoadingMessage'
 import { formatAmount } from '../../lib/amountText'
 import { formatMonth, monthOf, today } from '../../lib/calendarDate'
-import { accountTypes, type Account } from '../accounts/accounts'
+import { basisText } from '../../lib/timeText'
+import { accountTypes, parseAccounts, type Account } from '../accounts/accounts'
 import { accountTypeNames } from '../accounts/accountTypeNames'
-import { useAccounts } from '../accounts/useAccounts'
-import { useCategories } from '../categories/useCategories'
+import { accountsKey, useAccounts } from '../accounts/useAccounts'
+import { parseCategories, type Category } from '../categories/categories'
+import { categoriesKey, useCategories } from '../categories/useCategories'
+import BasisTime from '../connection/BasisTime'
+import { useShown, type Shown } from '../connection/deviceFirst'
+import { useConnection } from '../connection/useConnection'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
+import { useKeptCopy, type Kept } from '../me/ledgerCopy'
 import { canEdit } from '../me/me'
 import { DayGroup } from '../transactions/DayGroup'
 import { groupByDate } from '../transactions/groupByDate'
+import { useKeptLastMonth, type LastMonth } from '../transactions/lastMonth'
 import { nameBookOf, type NameBook } from '../transactions/listedText'
 import {
   mergeRecent,
@@ -28,51 +35,85 @@ import {
 } from '../transactions/pendingTransactions'
 import { DayHeadSkeleton, RowsSkeleton } from '../transactions/TransactionListSkeleton'
 import { RECENT_COUNT, type IncomeAndExpense, type RecentTransactions } from '../transactions/transactions'
-import { useMonthTotals, useRecentTransactions } from '../transactions/useTransactionList'
+import {
+  monthTotalsKey,
+  recentTransactionsKey,
+  useMonthTotals,
+  useRecentTransactions,
+} from '../transactions/useTransactionList'
 import styles from './Home.module.css'
 
-/** 구역 하나가 기다리는 조회 */
+/** 구역이 기다리는 서버 조회. 불러오지 못했을 때 받지 못한 것만 다시 받는다 */
 interface SectionQuery {
   data: unknown
-  isFetchedAfterMount: boolean
   isFetching: boolean
   refetch: () => Promise<unknown>
 }
 
 /** 구역의 상태. 구역마다 따로 정하므로 한 구역이 실패해도 다른 구역은 그대로다. */
-type SectionState = 'ready' | 'failed' | 'loading'
+type SectionState = Shown<unknown>['state']
 
-function stateOf(queries: SectionQuery[]): SectionState {
-  if (queries.every((query) => query.data !== undefined)) return 'ready'
-  // 다시 받는 동안에는 isError가 풀리므로 이 화면에서 받아 본 적이 있는지로 본다
-  return queries.some((query) => query.data === undefined && query.isFetchedAfterMount) ? 'failed' : 'loading'
+/** 여러 값을 함께 기다리는 구역(최근 거래는 계좌와 카테고리 이름이 있어야 줄을 그린다) */
+function stateOf(shown: Shown<unknown>[]): SectionState {
+  if (shown.every(({ state }) => state === 'ready')) return 'ready'
+  return shown.some(({ state }) => state === 'failed') ? 'failed' : 'loading'
+}
+
+/** 보이는 값의 기준 시각(없으면 없다) */
+function basisOf<T>(shown: Shown<T>): number | undefined {
+  return shown.state === 'ready' ? shown.basis : undefined
 }
 
 /**
- * C-01 홈(1A 최소판). 이번 달 합계, 계좌 잔액, 최근 거래를 구역마다 따로 받아 보인다.
- * 1A 임시: 이번 달 합계는 눌리지 않고 머리 줄에 화살표가 없다(월별 통계 E-01은 1B). 한 줄 입력, 숨긴 계좌, 연결이 없을 때의
- * "기준" 표시가 없다. 예산·진행 중 이벤트·확인할 거래는 2·3단계다.
+ * 기기의 최근 한 달에서 그 값만 고른다. 최근 한 달을 읽는 중이면 없고(undefined), 없거나 고를 값이 없으면 null이다.
+ * 받은 시각은 최근 한 달의 것이다.
+ */
+function keptFrom<T>(kept: Kept<LastMonth> | null | undefined, pick: (value: LastMonth) => T | undefined): Kept<T> | null | undefined {
+  if (!kept) return kept
+  const value = pick(kept.value)
+  return value === undefined ? null : { value, receivedAt: kept.receivedAt }
+}
+
+/**
+ * C-01 홈. 이번 달 합계, 계좌 잔액, 최근 거래를 구역마다 따로 받아 보인다.
+ * 기기에 남긴 값(최근 한 달, 계좌, 카테고리)이 있으면 받는 동안 뼈대 대신 먼저 보이고(00-common 4.5), 연결이 없거나 새로 받지
+ * 못하면 그 값을 기준 시각과 함께 보인다(F-908, P-902). 합계와 잔액은 마지막으로 서버와 맞춘 값이라 보내지 않은 입력을 넣지 않는다.
+ * 홈을 열면 최근 한 달을 받아 기기에 남긴다(#238).
+ * 1A 임시: 이번 달 합계는 눌리지 않고 머리 줄에 화살표가 없다(월별 통계 E-01은 1B). 한 줄 입력과 숨긴 계좌가 없다.
+ * 예산·진행 중 이벤트·확인할 거래는 2·3단계다.
  * 넓은 화면은 두 칸이다: 왼쪽에 합계와 계좌 잔액, 오른쪽에 최근 거래.
  */
 export default function HomePage() {
   // 화면을 연 날의 오늘. 이번 달(기기의 오늘이 속한 달, planner 결정 2026-11-25)과 날짜 이름(올해인지)을 정한다
   const [openedOn] = useState(today)
   const month = monthOf(openedOn)
+  const ledger = useCurrentLedger()
   const totals = useMonthTotals(month)
   const accounts = useAccounts()
   const categories = useCategories()
   const recent = useRecentTransactions()
+  const lastMonth = useKeptLastMonth()
   const message = useLoadingMessage()
 
-  // 최근 거래의 줄은 계좌와 카테고리 이름이 있어야 그린다(내역과 같다)
-  const recentQueries = [recent, accounts, categories]
+  const keptTotals = useMemo(
+    () => keptFrom(lastMonth, (kept) => kept.months.find((each) => each.month === month)?.totals),
+    [lastMonth, month],
+  )
+  const keptRecent = useMemo(() => keptFrom(lastMonth, ({ items, days }) => ({ items, days })), [lastMonth])
+  const shown = {
+    totals: useShown(totals, monthTotalsKey(ledger.id, month), keptTotals),
+    accounts: useShown(accounts, accountsKey(ledger.id), useKeptCopy(ledger.id, 'accounts', parseAccounts)),
+    categories: useShown(categories, categoriesKey(ledger.id), useKeptCopy(ledger.id, 'categories', parseCategories)),
+    recent: useShown(recent, recentTransactionsKey(ledger.id), keptRecent),
+  }
   const states = {
-    totals: stateOf([totals]),
-    accounts: stateOf([accounts]),
-    recent: stateOf(recentQueries),
+    totals: shown.totals.state,
+    accounts: shown.accounts.state,
+    recent: stateOf([shown.recent, shown.accounts, shown.categories]),
   }
   const loading = Object.values(states).includes('loading')
   const skeletonShown = message !== undefined
+  const dataOf = <T,>(each: Shown<T>) => (each.state === 'ready' ? each.data : undefined)
 
   return (
     <MainScreen fullWidth>
@@ -84,13 +125,15 @@ export default function HomePage() {
           <MonthTotals
             month={month}
             label={`${formatMonth(month, openedOn)} 합계`}
-            totals={totals.data}
+            totals={dataOf(shown.totals)}
+            basis={basisOf(shown.totals)}
             state={states.totals}
             queries={[totals]}
             skeletonShown={skeletonShown}
           />
           <AccountBalances
-            accounts={accounts.data}
+            accounts={dataOf(shown.accounts)}
+            basis={basisOf(shown.accounts)}
             state={states.accounts}
             queries={[accounts]}
             skeletonShown={skeletonShown}
@@ -99,11 +142,11 @@ export default function HomePage() {
         <div className={styles.column}>
           <RecentSection
             today={openedOn}
-            recent={recent.data}
-            accounts={accounts.data}
-            categories={categories.data}
+            recent={dataOf(shown.recent)}
+            accounts={dataOf(shown.accounts)}
+            categories={dataOf(shown.categories)}
             state={states.recent}
-            queries={recentQueries}
+            queries={[recent, accounts, categories]}
             skeletonShown={skeletonShown}
           />
         </div>
@@ -119,13 +162,22 @@ interface SectionProps {
   skeletonShown: boolean
 }
 
-/** 구역의 머리 줄: 제목(h2)과 오른쪽 끝의 동작 */
-function SectionHead({ id, children, action }: { id: string; children: string; action?: ReactNode }) {
+interface SectionHeadProps {
+  id: string
+  children: string
+  /** 머리 줄 오른쪽의 기준 시각(N-03 (5)) */
+  basis?: number
+  action?: ReactNode
+}
+
+/** 구역의 머리 줄: 제목(h2)과 오른쪽 끝의 기준 시각이나 동작 */
+function SectionHead({ id, children, basis, action }: SectionHeadProps) {
   return (
     <div className={`${styles.head} ${styles.inset}`}>
       <h2 id={id} className={styles.heading}>
         {children}
       </h2>
+      {basis !== undefined && <BasisTime at={basis} className={styles.basis} />}
       {action}
     </div>
   )
@@ -137,22 +189,26 @@ function SectionBody({ children }: { children: ReactNode }) {
 }
 
 /**
- * 구역을 불러오지 못했다. 00-common 4.3의 읽기 화면 문구와 "다시 시도"를 구역 안에 왼쪽 정렬로 작게 둔다(머리 줄은 남는다).
- * "다시 시도"는 이 구역이 기다리는 것 가운데 받지 못한 것만 다시 받는다.
+ * 구역을 불러오지 못했고 기기에 남은 값도 없다. 00-common 4.3의 읽기 화면 문구와 "다시 시도"를 구역 안에 왼쪽 정렬로 작게 둔다
+ * (머리 줄은 남는다). "다시 시도"는 이 구역이 기다리는 것 가운데 받지 못한 것만 다시 받는다. 연결이 없으면 버튼 없이
+ * "연결되면 자동으로 불러올게요."이고, 연결이 돌아오면 저절로 다시 받는다(F-908).
  */
 function SectionFailure({ queries }: { queries: SectionQuery[] }) {
+  const offline = useConnection() === 'offline'
   function retry() {
     queries.filter((query) => query.data === undefined).forEach((query) => void query.refetch())
   }
   return (
     <div className={styles.failure}>
       <p className={styles.failureTitle}>불러오지 못했어요.</p>
-      <p className={styles.failureDescription}>잠시 후 다시 시도해 주세요.</p>
-      <div className={styles.retry}>
-        <Button kind="text" busy={queries.some((query) => query.isFetching)} onClick={retry}>
-          다시 시도
-        </Button>
-      </div>
+      <p className={styles.failureDescription}>{offline ? '연결되면 자동으로 불러올게요.' : '잠시 후 다시 시도해 주세요.'}</p>
+      {!offline && (
+        <div className={styles.retry}>
+          <Button kind="text" busy={queries.some((query) => query.isFetching)} onClick={retry}>
+            다시 시도
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
@@ -163,6 +219,7 @@ interface MonthTotalsProps extends SectionProps {
   /** 머리 줄 "{달}월 합계" */
   label: string
   totals: IncomeAndExpense | undefined
+  basis: number | undefined
 }
 
 /**
@@ -170,13 +227,15 @@ interface MonthTotalsProps extends SectionProps {
  * 보내지 않은 입력은 합계에 더하지 않으므로(작성자 판단 43), 이번 달에 1건 이상이면 차액 아래에 그 건수를 알린다. 같은
  * 화면의 그날 합계(보이는 보내지 않음 줄을 더함)와 다른 까닭을 그 자리에서 알린다(designer #234 B). 누를 곳은 없다(#236).
  */
-function MonthTotals({ month, label, totals, state, queries, skeletonShown }: MonthTotalsProps) {
+function MonthTotals({ month, label, totals, basis, state, queries, skeletonShown }: MonthTotalsProps) {
   const headingId = useId()
   const pending = usePendingTransactions()
   const pendingCount = useMemo(() => pendingCountInMonth(pending, month), [pending, month])
   return (
     <section aria-labelledby={headingId} className={styles.section}>
-      <SectionHead id={headingId}>{label}</SectionHead>
+      <SectionHead id={headingId} basis={basis}>
+        {label}
+      </SectionHead>
       <SectionBody>
         {state === 'ready' && (
           <>
@@ -256,23 +315,27 @@ function FiguresSkeleton() {
 
 interface AccountBalancesProps extends SectionProps {
   accounts: Account[] | undefined
+  basis: number | undefined
 }
 
 /**
  * (5) 계좌 잔액 요약(F-112, P-220). 종류별 합계(계좌가 없는 종류는 숨김)와 선 아래 자산 합계.
  * 구역 전체가 계좌 목록(G-01)으로 가는 링크 하나다. 계좌 목록 화면과 같은 캐시를 쓴다.
  */
-function AccountBalances({ accounts, state, queries, skeletonShown }: AccountBalancesProps) {
+function AccountBalances({ accounts, basis, state, queries, skeletonShown }: AccountBalancesProps) {
   const headingId = useId()
   if (state === 'ready' && accounts!.length > 0) {
     const total = sumOf(accounts!)
+    // 링크의 이름이 안의 글을 대신하므로 기준 시각도 이름에 넣는다
+    const name = `계좌 잔액, 자산 합계 ${wonOf(total)}${basis === undefined ? '' : `, ${basisText(basis)}`}`
     return (
       <section aria-labelledby={headingId} className={`${styles.section} ${styles.linkSection}`}>
-        <Link to="/accounts" className={styles.sectionLink} aria-label={`계좌 잔액, 자산 합계 ${wonOf(total)}`}>
+        <Link to="/accounts" className={styles.sectionLink} aria-label={name}>
           <div className={styles.head}>
             <h2 id={headingId} className={styles.heading}>
               계좌 잔액
             </h2>
+            {basis !== undefined && <BasisTime at={basis} className={styles.basis} />}
             <span className={styles.caret}>
               <Icon name="CaretRight" size={20} />
             </span>
@@ -284,7 +347,9 @@ function AccountBalances({ accounts, state, queries, skeletonShown }: AccountBal
   }
   return (
     <section aria-labelledby={headingId} className={styles.section}>
-      <SectionHead id={headingId}>계좌 잔액</SectionHead>
+      <SectionHead id={headingId} basis={basis}>
+        계좌 잔액
+      </SectionHead>
       <SectionBody>
         {state === 'ready' && <p className={styles.none}>계좌가 없어요</p>}
         {state === 'failed' && <SectionFailure queries={queries} />}
@@ -353,7 +418,7 @@ interface RecentSectionProps extends SectionProps {
   today: string
   recent: RecentTransactions | undefined
   accounts: Account[] | undefined
-  categories: Parameters<typeof nameBookOf>[1] | undefined
+  categories: Category[] | undefined
 }
 
 /**
@@ -405,7 +470,7 @@ interface RecentListProps {
   today: string
   recent: RecentTransactions
   names: NameBook
-  categories: Parameters<typeof nameBookOf>[1]
+  categories: Category[]
 }
 
 /**

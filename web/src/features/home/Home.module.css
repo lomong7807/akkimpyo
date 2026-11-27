@@ -114,6 +114,13 @@
   color: var(--color-text-secondary);
 }
 
+/* 연결이 없거나 새로 불러오지 못했을 때 머리 줄 오른쪽의 "10:42 기준"(N-03 (5), 보조 글자 13px) */
+.basis {
+  flex: none;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}
+
 /*
  * "모두 보기": 글자 버튼의 안쪽 여백만큼 당겨 화살표를 내용의 오른쪽 선에 맞춘다(상단 바의 화면별 버튼과 같다).
  * 누름 영역 44px이 머리 줄(24px)을 늘리지 않도록 위아래로 넘치게 둔다. 그래야 두 칸의 첫 머리 줄이 같은 높이에 선다.

@@ -1,9 +1,12 @@
 // jsdom에는 IndexedDB가 없다. 규격대로 도는 가짜를 전역에 둔다(devDependency, #234)
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
-import { afterAll, beforeEach, vi } from 'vitest'
+import { afterAll, beforeEach, expect, vi } from 'vitest'
+import { connection } from '../../src/api/connection'
 import { DEFAULT_NOW, setDeviceClock } from './clock'
-import { installDialog, untilUnshielded } from './dialog'
+import { reconnectStaticApp } from './staticConnection'
+import { installDialog } from './dialogElement'
+import { failOnLeftShields, watchShields } from './shieldCheck'
 
 // 테스트마다 기기 저장소를 비운다. 한 테스트 안에서 여는 탭들은 같은 저장소를 함께 쓴다
 beforeEach(() => {
@@ -16,6 +19,18 @@ vi.mock(import('../../src/lib/clock'), (importOriginal) => importOriginal())
 
 // 테스트마다 기기의 지금과 시간대를 정해 둔다. 테스트를 돌리는 기기의 시계와 시간대(TZ)를 보지 않는다(#225)
 beforeEach(() => setDeviceClock(DEFAULT_NOW))
+
+// 앱 모듈을 정적으로 불러온 파일은 연결 판단(api/connection) 하나를 테스트끼리 나눠 쓴다. 테스트가 연결을 끊었으면 그 테스트가
+// 되돌린다(goOnline 등). 남아 있으면 다음 테스트를 '연결 없음'으로 시작하게 하고, 화면이 판단을 잘못 남기는 버그도 가리므로
+// 테스트 이름과 함께 실패한다. 다음 테스트를 위해 되돌린 뒤에 실패한다. 앞 정리가 실패해도 돌도록 onTestFinished로 건다(qa #289, #274).
+// 앱을 새로 여는 테스트(vi.resetModules)는 새 모듈을 받으므로 이것과 상관없다
+beforeEach(({ onTestFinished }) =>
+  onTestFinished(() => {
+    if (typeof window === 'undefined' || connection() === 'online') return
+    reconnectStaticApp()
+    throw new Error(`연결 판단이 '없음'으로 남았다: ${expect.getState().currentTestName}. 연결을 끊은 테스트는 끝에서 되돌린다`)
+  }),
+)
 
 // jsdom에는 없다. 배치를 계산하지 않고 움직임이 없으므로 아무것도 하지 않는다
 if (typeof Element !== 'undefined') {
@@ -36,8 +51,10 @@ if (typeof Element !== 'undefined') {
   }
 
   // 화면에서 빠진 뒤에도 덮개(pressGuard)는 시간이 다 될 때까지 남는다. 파일이 끝난 뒤 jsdom을 정리하고 나서 그 시계가
-  // 돌면 없어진 cancelAnimationFrame을 부르다 오류가 난다(PR #210 CI). 파일을 끝내기 전에 걷힐 때까지 기다린다.
-  afterAll(untilUnshielded)
+  // 돌면 없어진 cancelAnimationFrame을 부르다 오류가 난다(PR #210 CI). 파일을 끝내기 전에 남은 덮개를 확인한다.
+  // 기다리지 않는다. 가짜 시계면 보내 걷고, 그래도 남으면 남긴 테스트의 이름을 담아 바로 실패한다(8절 4)
+  watchShields()
+  afterAll(failOnLeftShields)
 }
 
 /**

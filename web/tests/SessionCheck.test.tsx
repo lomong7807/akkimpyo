@@ -6,6 +6,7 @@ import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { holdClock, passTime } from './support/testClock'
 import { createStuckLocks, createFakeLocks, installLocks, removeLocks, SESSION_LOCK } from './support/webLocks'
 
 vi.stubGlobal('scrollTo', vi.fn())
@@ -19,7 +20,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  vi.useRealTimers()
   cleanup()
   removeLocks()
 })
@@ -45,8 +45,8 @@ const unauthenticated = () => problem(401, 'UNAUTHENTICATED')
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
 /** 시계를 멈춘다. 요청은 흐른다. */
-const stopClock = () => void vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-const pass = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+const stopClock = holdClock
+const pass = passTime
 
 /** 시계를 멈춘 채로 `check`가 될 때까지 기다린다. 시계는 한 번에 1ms씩만 흐른다. */
 async function until(check: () => unknown) {
@@ -418,17 +418,18 @@ describe('확인이 진행 중인 채로 로그인 화면에 오면', () => {
     expect(backend.requests.me).toEqual(['user-2'])
   })
 
-  it.each([
-    ['로그인이 필요하다고 오면(401)', unauthenticated],
-    ['또 실패하면', serverError],
-    ['연결이 끊기면', () => HttpResponse.error()],
-  ])('%s 로그인 화면에 그대로 두고 알리지 않는다', async (_, response) => {
+  it.each<[string, () => Response, string | null]>([
+    ['로그인이 필요하다고 오면(401)', unauthenticated, null],
+    ['또 실패하면', serverError, null],
+    // 연결이 없으면 로그인 버튼 바로 위에 누를 수 없는 까닭만 보인다(00-common 4.3, #238)
+    ['연결이 끊기면', () => HttpResponse.error(), '연결되면 로그인할 수 있어요'],
+  ])('%s 로그인 화면에 그대로 두고 알리지 않는다', async (_, response, reason) => {
     const { opened, answer } = await goToLoginWhileChecking()
     answer(response())
     await settle()
     expect(addressOf(opened)).toBe('/login')
     expect(loginButton()).toBeTruthy()
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.queryByRole('status')?.textContent ?? null).toBe(reason)
     expect(screen.queryByRole('alert')).toBeNull()
     expect(sessionStorage.getItem(RETURN_ADDRESS)).toBe('/secret?month=2026-11')
   })

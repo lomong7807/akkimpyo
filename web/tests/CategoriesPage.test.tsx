@@ -3,10 +3,12 @@ import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
+import { goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
+import { holdClock, passTime, releaseClock } from './support/testClock'
 import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
@@ -67,7 +69,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  vi.useRealTimers()
   cleanup()
   resetViewport()
   vi.unstubAllGlobals()
@@ -390,7 +391,7 @@ describe('지출과 수입', () => {
 })
 
 describe('불러오는 중', () => {
-  const pass = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+  const pass = passTime
   const skeleton = () => screen.getByRole('main').querySelector('[aria-hidden="true"]')
 
   /** 다른 화면에서 시계를 멈추고 카테고리로 간다. 요청은 답을 기다린다. */
@@ -400,7 +401,7 @@ describe('불러오는 중', () => {
     installMatchMedia(390)
     const { router } = await openApp('/other', addScreens([{ path: '/other', element: <main>다른 화면</main> }]))
     await screen.findByText('다른 화면')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
     await act(() => router.navigate('/categories'))
     return answer
   }
@@ -446,7 +447,7 @@ describe('불러오는 중', () => {
     await pass(300)
     const classes = [...skeleton()!.children].map((row) => row.className)
     answer.answer(HttpResponse.json({ items }))
-    vi.useRealTimers()
+    releaseClock()
     await list()
     expect(new Set(classes)).toEqual(new Set([rowOf('식비').className]))
   })
@@ -455,7 +456,7 @@ describe('불러오는 중', () => {
     const answer = await openLoading()
     await pass(300)
     answer.answer(HttpResponse.json({ items }))
-    vi.useRealTimers()
+    releaseClock()
     await list()
     expect(content().queryByRole('status')).toBeNull()
     expect(skeleton()).toBeNull()
@@ -465,7 +466,7 @@ describe('불러오는 중', () => {
     const answer = await openLoading()
     const dom = recordDom()
     answer.answer(HttpResponse.json({ items }))
-    vi.useRealTimers()
+    releaseClock()
     await list()
     expect(dom.sawText(loading)).toBe(false)
     expect(dom.sawElement('main [aria-hidden="true"]')).toBe(false)
@@ -476,7 +477,6 @@ describe('오류', () => {
   it.each([
     ['서버 오류', () => problem(500, 'INTERNAL_ERROR')],
     ['거부', () => problem(404, 'NOT_FOUND')],
-    ['연결 실패', () => HttpResponse.error()],
     ['약속과 다른 응답', () => HttpResponse.json({ items: [{ ...items[0], kind: 'TRANSFER' }] })],
   ])('%s: 고르기 아래에 안내와 "다시 시도"를 보이고, 누르면 다시 받는다', async (_, response) => {
     api.response = response
@@ -490,6 +490,17 @@ describe('오류', () => {
     await user.click(retry())
     expect((await tree())[0]).toEqual(['식비', ['외식', '장보기']])
     expect(screen.queryByText(failed)).toBeNull()
+  })
+
+  it('연결 실패이고 기기에 남긴 카테고리가 없으면 버튼 없이 기다리고, 연결이 돌아오면 저절로 다시 받는다(F-908, #238)', async () => {
+    api.response = () => HttpResponse.error()
+    await open()
+    await failure()
+    expect(content().getByText('연결되면 자동으로 불러올게요.')).toBeTruthy()
+    expect(content().queryByRole('button', { name: '다시 시도' })).toBeNull()
+    respondWith(items)
+    act(() => goOnline())
+    expect((await tree())[0]).toEqual(['식비', ['외식', '장보기']])
   })
 
   it('저절로 다시 받지 않는다', async () => {

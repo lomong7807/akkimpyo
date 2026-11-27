@@ -6,17 +6,21 @@ import {
   login,
   onSessionConfirmed,
   onSessionEnded,
+  onSessionEnding,
   openUnconfirmed,
   resendLogout,
   restoreSession,
   signup,
 } from '../api/session'
 import { sweepExpiredCopies } from '../device/copies'
+import { sweepExpiredDrafts } from '../device/drafts'
 import { askToKeepStorage } from '../device/persistence'
 import type { SignIn } from '../features/auth/useLogin'
 import type { SignUp } from '../features/auth/useSignup'
+import { keepOpenDrafts } from '../features/drafts/keepDraft'
 import { readMeCopy } from '../features/me/meCopy'
 import { now } from '../lib/clock'
+import { refetchOnReconnect } from './queryClient'
 import { initialSession, nextSession, type SessionEvent } from './sessionState'
 import { SessionContext } from './SessionContext'
 import { uncoverPage, watchSession } from './sessionWatch'
@@ -29,23 +33,39 @@ export default function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const check = () => void checkSession().then(dispatch)
+    // 로그인이 풀리기 직전에 열린 입력 화면의 쓰던 값을 남기기 시작하고, 남긴 뒤에 로그인 화면으로 보낸다(#234 C2)
+    let keeping: Promise<boolean> | undefined
+    const stopEnding = onSessionEnding((userId) => {
+      keeping = keepOpenDrafts(userId, now())
+      if (keeping) dispatch('ending')
+    })
     const stopListening = onSessionEnded((end) => {
+      const kept = end === 'ended' ? keeping : undefined
+      keeping = undefined
+      if (kept) {
+        void kept.then((draftKept) => dispatch({ type: 'ended', draftKept }))
+        return
+      }
       dispatch(end)
       if (end === 'replaced' || end === 'replaced-after-logout') check()
     })
     const stopConfirmed = onSessionConfirmed(() => dispatch('confirmed'))
     const stopWatching = watchSession(() => dispatch('resumed'))
     const stopConnection = watchConnection()
-    // 마지막으로 확인한 로그인부터 30일이 지난 사본은 앱을 열 때 지운다(security #72 권고)
+    const stopRefetching = refetchOnReconnect()
+    // 마지막으로 확인한 로그인부터 30일이 지난 사본과, 남긴 때부터 30일이 지난 쓰던 값은 앱을 열 때 지운다(security 권고)
     void sweepExpiredCopies(now()).catch(() => {})
+    void sweepExpiredDrafts(now()).catch(() => {})
     // 서버에 닿지 못한 로그아웃은 앱을 열 때와 다시 연결될 때만 또 보낸다
     resendLogout()
     check()
     return () => {
+      stopEnding()
       stopListening()
       stopConfirmed()
       stopWatching()
       stopConnection()
+      stopRefetching()
     }
   }, [])
 
@@ -54,6 +74,16 @@ export default function SessionProvider({ children }: { children: ReactNode }) {
     if (status !== 'unconfirmed') return
     return onConnectionChange((next) => {
       if (next === 'online') void confirmSession().catch(() => {})
+    })
+  }, [status])
+
+  // 로그인 여부를 확인하지 못했는데 연결이 돌아오면 저절로 다시 확인한다. 연결이 없는 동안 그 화면에는 버튼이 없다(00-common 4.1, #238)
+  useEffect(() => {
+    if (status !== 'unknown') return
+    return onConnectionChange((next) => {
+      if (next !== 'online') return
+      dispatch('retried')
+      void checkSession().then(dispatch)
     })
   }, [status])
 

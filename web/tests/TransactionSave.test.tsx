@@ -5,7 +5,6 @@ import type { Accounts } from './support/accounts'
 import { delayed, type Backend } from './support/backend'
 import { untilOpened } from './support/dialog'
 import { setDeviceClock } from './support/clock'
-import { startGuardClock } from './support/guardClock'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
@@ -36,6 +35,7 @@ import {
   type Opened,
   type User,
 } from './support/transactionScreen'
+import { holdClock, passTime } from './support/testClock'
 import { startTransactionDetail } from './support/transactionDetail'
 import { savedOf, type Transactions } from './support/transactions'
 import { resetViewport } from './support/viewport'
@@ -44,7 +44,8 @@ const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const failed = '문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
 const savedDifferently = '앞서 저장한 거래와 내용이 달라 저장하지 못했어요. 내역에서 확인해 주세요.'
 const idUnusable = '문제가 생겨 저장하지 못했어요. 새 거래로 저장해 주세요.'
-const resendNotice = '이미 저장된 거래가 있어요. 내역에서 확인해 주세요.'
+/** designer #239: 1A 문구를 바꾼다 */
+const resendNotice = '이미 저장된 거래라 저장된 내용으로 두었어요'
 
 const server = startMockServer()
 let backend: Backend
@@ -53,7 +54,6 @@ let transactions: Transactions
 
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, accounts, transactions } = startServer(server))
   localStorage.clear()
@@ -226,7 +226,7 @@ describe('같은 id를 다시 보냄(200)', () => {
     ['휴지통의 거래', { deletedAt: '2026-11-26T04:00:00.000Z' }],
     ['취소된 거래', { status: 'CANCELED' }],
     ['결제한 사람이 탈퇴한 거래', { paidBy: null }],
-  ])('%s이면 "이미 저장된 거래가 있어요."를 알리고 이전 화면으로 간다', async (_, changes) => {
+  ])('%s이면 "이미 저장된 거래라 저장된 내용으로 두었어요"를 알리고 이전 화면으로 간다', async (_, changes) => {
     transactions.response = ({ body, user }) => HttpResponse.json(savedOf(body, user, changes), { status: 200 })
     const opened = await openFromMore()
     await saveAmount(opened.user)
@@ -276,11 +276,11 @@ describe('서버 오류와 지연', () => {
     transactions.response = delayed().respond
     const { user } = await openForm()
     await user.keyboard('12000')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    holdClock()
     fireEvent.click(saveButton())
-    await act(() => vi.advanceTimersByTimeAsync(14_900))
+    await passTime(14_900)
     expect(screen.queryByRole('alert')).toBeNull()
-    await act(() => vi.advanceTimersByTimeAsync(200))
+    await passTime(200)
     expect(screen.getByRole('alert').textContent).toBe(failed)
   })
 
@@ -432,10 +432,14 @@ describe('서버가 칸을 거부함(400)', () => {
   })
 })
 
+/*
+ * current가 보낸 거래의 것으로 온 409는 선택 판이다(IdConflictChoice.test.tsx). 아래 current는 보낸 거래와 id가 달라 약속과 다른
+ * 응답이다. 선택 판을 그릴 수 없어 1A처럼 그 거래를 보러 가게만 한다.
+ */
 describe('같은 id로 만들 수 없음(409 ID_CONFLICT)', () => {
   const savedId = '019a5f2e-8a7d-7b60-9c11-0b9f6c1e3d52'
 
-  it('앞서 저장한 내 거래가 있으면(current) 문구와 "저장된 거래 보기" 하나를 보이고 초점을 옮기지 않는다', async () => {
+  it('current가 보낸 거래의 것이 아니면 문구와 "저장된 거래 보기" 하나를 보이고 초점을 옮기지 않는다', async () => {
     transactions.response = ({ body }) => problem(409, 'ID_CONFLICT', { current: savedOf({ ...body, id: savedId }) })
     const { user } = await openForm()
     await user.keyboard('12000')

@@ -8,7 +8,7 @@ import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { setDeviceClock } from './support/clock'
-import { startGuardClock } from './support/guardClock'
+import { goOffline, goOnline } from './support/connection'
 import { startTransactionDetail, trashed, type TransactionDetailServer } from './support/transactionDetail'
 import { expenseOf, incomeOf, startTransactionList, transferOf, type TransactionList } from './support/transactionList'
 import type { Categories } from './support/categories'
@@ -29,6 +29,8 @@ import { readWebFile } from './support/webFile'
 
 const CSS = 'src/features/transactions/TransactionDetail.module.css'
 const failedToDelete = '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.'
+const lostToDelete = '연결이 끊겨 삭제하지 못했어요. 연결되면 다시 시도해 주세요.'
+const offlineDelete = '연결되면 삭제할 수 있어요'
 const conflict = '다른 기기에서 먼저 고쳤어요'
 
 const server = startMockServer()
@@ -38,10 +40,9 @@ let list: TransactionList
 let detail: TransactionDetailServer
 
 // 기기의 지금은 서울의 2026-11-26 12:30이다(안내 띠의 밀리초 경계는 purgeNotice.test.ts). 확인 창을 여닫을 때 누름을
-// 막는 300ms는 실제로 기다리지 않는 시계(guardClock)로 앞당긴다.
+// 막는 300ms는 공용 시계(testClock)가 앞당긴다.
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
-  startGuardClock()
   vi.stubGlobal('scrollTo', vi.fn())
   ;({ backend, categories } = startServer(server))
   list = startTransactionList(server, backend)
@@ -521,7 +522,6 @@ describe('삭제(F-227)', () => {
 
   it.each([
     ['서버 오류', () => problem(500, 'INTERNAL_ERROR')],
-    ['연결 실패', () => HttpResponse.error()],
     ['약속과 다른 응답', () => HttpResponse.json({ id: 'x' })],
   ])('%s면 창이 남고 버튼 위에 문구, 실행 버튼은 "다시 시도"이고 초점이 그리로 간다', async (_, respond) => {
     const answers = [respond]
@@ -538,6 +538,60 @@ describe('삭제(F-227)', () => {
     await opened.user.click(inDialog('다시 시도'))
     await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
     expect(detail.requests.delete.map(({ query }) => query)).toEqual(['version=1', 'version=1'])
+  })
+
+  it('요청 중에 연결이 끊기면 창의 버튼 위에 "연결이 끊겨 삭제하지 못했어요."이고 "다시 시도"는 연결이 없는 동안 누를 수 없다(#238)', async () => {
+    const answers = [() => HttpResponse.error()]
+    detail.deleteResponse = () => answers.shift()?.()
+    const item = lunch()
+    put(item)
+    const opened = await openDetail(item)
+    await askToDelete(opened)
+    await opened.user.click(inDialog('삭제'))
+    const alert = await within(dialog()!).findByRole('alert')
+    expect(alert.textContent).toBe(lostToDelete)
+    expect(within(dialog()!).queryByText(offlineDelete)).toBeNull()
+    expect(document.activeElement).toBe(inDialog('다시 시도'))
+    expect(inDialog('다시 시도').getAttribute('aria-disabled')).toBe('true')
+    act(() => goOnline())
+    expect(inDialog('다시 시도').getAttribute('aria-disabled')).toBeNull()
+    await opened.user.click(inDialog('다시 시도'))
+    await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
+    expect(detail.requests.delete.map(({ query }) => query)).toEqual(['version=1', 'version=1'])
+  })
+
+  it('창의 앞선 실패 문구는 연결이 끊길 때 안내 줄이 대신하고 실행 버튼은 "삭제"(비활성)로 돌아오며, 다시 연결돼도 되살리지 않는다(designer #238)', async () => {
+    detail.deleteResponse = () => problem(500, 'INTERNAL_ERROR')
+    const item = lunch()
+    put(item)
+    const opened = await openDetail(item)
+    await askToDelete(opened)
+    await opened.user.click(inDialog('삭제'))
+    expect((await within(dialog()!).findByRole('alert')).textContent).toBe(failedToDelete)
+    act(() => goOffline())
+    expect(within(dialog()!).queryByText(failedToDelete)).toBeNull()
+    expect(within(dialog()!).getByText(offlineDelete)).toBeTruthy()
+    expect(inDialog('삭제').getAttribute('aria-disabled')).toBe('true')
+    act(() => goOnline())
+    expect(within(dialog()!).queryByText(offlineDelete)).toBeNull()
+    expect(within(dialog()!).queryByRole('alert')).toBeNull()
+  })
+
+  it('창이 열린 채 연결이 끊기면 "삭제"가 비활성이고 바로 위에 "연결되면 삭제할 수 있어요"를 보이며, 돌아오면 지운다(00-common 5.6, #238)', async () => {
+    const item = lunch()
+    put(item)
+    const opened = await openDetail(item)
+    await askToDelete(opened)
+    act(() => goOffline())
+    expect(inDialog('삭제').getAttribute('aria-disabled')).toBe('true')
+    const actions = inDialog('삭제').closest('div')!.parentElement!
+    expect(actions.previousElementSibling!.textContent).toBe(offlineDelete)
+    await opened.user.click(inDialog('삭제'))
+    expect(detail.requests.delete).toEqual([])
+    expect(inDialog('닫기').getAttribute('aria-disabled')).toBeNull()
+    act(() => goOnline())
+    expect(within(dialog()!).queryByText(offlineDelete)).toBeNull()
+    expect(inDialog('삭제').getAttribute('aria-disabled')).toBeNull()
   })
 
   it('다시 시도하는 동안 문구를 두고 "다시 시도"에 도는 표시를 둔다', async () => {
@@ -590,47 +644,19 @@ describe('삭제(F-227)', () => {
   })
 })
 
-describe('충돌(1A 임시)', () => {
-  it('다른 기기가 먼저 고쳤으면 창 안에 "다른 기기에서 먼저 고쳤어요", 실행 버튼 "다시 하기", 초점은 "닫기"이고 화면을 최신 내용으로 그린다', async () => {
+/* 최신 거래(current)가 온 충돌은 N-04의 다른 동작 판이다(#239, DeleteConflict.test.tsx) */
+describe('충돌', () => {
+  it('최신 거래가 오지 않았으면 판을 그릴 수 없어 창 안에 "다른 기기에서 먼저 고쳤어요"와 "다시 하기", 초점은 "닫기"다(1A와 같다)', async () => {
     const item = lunch()
     put(item)
+    detail.deleteResponse = () => problem(409, 'STALE_VERSION')
     const opened = await openDetail(item)
-    Object.assign(item, { version: 2, amount: 30000, payee: '고기국수집' })
     await askToDelete(opened)
     await opened.user.click(inDialog('삭제'))
     const alert = await within(dialog()!).findByRole('alert')
     expect(alert.textContent).toBe(conflict)
     expect(inDialog('다시 하기')).toBeTruthy()
     expect(document.activeElement).toBe(inDialog('닫기'))
-    expect(within(main()).getByText('30,000원')).toBeTruthy()
-    expect(within(main()).getByText('고기국수집')).toBeTruthy()
-  })
-
-  it('"다시 하기"는 최신 version으로 삭제한다', async () => {
-    const item = lunch()
-    put(item)
-    const opened = await openDetail(item)
-    Object.assign(item, { version: 2 })
-    await askToDelete(opened)
-    await opened.user.click(inDialog('삭제'))
-    await within(dialog()!).findByRole('alert')
-    await opened.user.click(inDialog('다시 하기'))
-    await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
-    expect(detail.requests.delete.map(({ query }) => query)).toEqual(['version=1', 'version=2'])
-    await waitFor(() => expect(toastRegion().textContent).toBe('휴지통으로 옮겼어요되돌리기'))
-  })
-
-  it('"닫기"를 누르면 창을 닫고 최신 내용을 둔다', async () => {
-    const item = lunch()
-    put(item)
-    const opened = await openDetail(item)
-    Object.assign(item, { version: 2, amount: 30000 })
-    await askToDelete(opened)
-    await opened.user.click(inDialog('삭제'))
-    await within(dialog()!).findByRole('alert')
-    await opened.user.click(inDialog('닫기'))
-    await waitFor(() => expect(dialog()).toBeNull())
-    expect(within(main()).getByText('30,000원')).toBeTruthy()
   })
 
   it('다른 기기가 이미 지웠으면 창을 닫고 삭제한 거래 화면으로 그린다', async () => {

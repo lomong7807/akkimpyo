@@ -52,7 +52,12 @@ function formatIn(timeZone: string | undefined): Intl.DateTimeFormat {
 
 /** 지금을 기기의 시간대로 본 날짜와 시각 */
 export function wallTimeNow(): WallTime {
-  const parts = new Map(formatIn(clock.timeZone).formatToParts(clock.now()).map(({ type, value }) => [type, value]))
+  return wallTimeOf(clock.now())
+}
+
+/** 시각(밀리초)을 기기의 시간대로 본 날짜와 시각. 서버가 기록한 시각(UTC)을 화면에 보일 때 쓴다(ADR 002 2절). */
+export function wallTimeOf(instant: number): WallTime {
+  const parts = new Map(formatIn(clock.timeZone).formatToParts(instant).map(({ type, value }) => [type, value]))
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.get(type) ?? ''
   return {
     date: `${part('year').padStart(4, '0')}-${part('month')}-${part('day')}`,

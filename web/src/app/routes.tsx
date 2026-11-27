@@ -13,6 +13,8 @@ import {
   categoriesScreen,
   moreScreen,
   notFoundScreen,
+  pendingFixScreen,
+  pendingScreen,
   signupScreen,
   transactionDetailScreen,
   transactionEditScreen,
@@ -78,6 +80,10 @@ export const routes: RouteObject[] = [
                     handle: { navigationItem: accountsItem, fullScreen: true },
                   },
                   { path: '/categories', element: <categoriesScreen.Screen />, handle: { navigationItem: categoriesItem } },
+                  // 사이드바 항목이 없다. 주소로 열면 하단 탭은 더보기를 강조한다(00-common 6.2)
+                  { path: '/pending', element: <pendingScreen.Screen /> },
+                  // 고쳐서 보내기(planner #237 P1). 1B 임시: 넓은 화면에서도 B-05 오른쪽 칸이 아닌 한 칸이다(#244)
+                  { path: '/pending/:id/edit', element: <pendingFixScreen.Screen />, handle: { fullScreen: true } },
                   {
                     path: '/transactions',
                     element: <transactionListScreen.Screen />,

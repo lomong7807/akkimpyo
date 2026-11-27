@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../src/api/apiError'
 import { send, sendForResponse } from '../src/api/http'
 import { startMockServer } from './support/mockServer'
+import { reconnectStaticApp } from './support/staticConnection'
 import { problem } from './support/problem'
 import { watchAppTimers } from './support/timers'
 
@@ -271,6 +272,9 @@ describe('오류 응답', () => {
 })
 
 describe('다른 주소로 보내는 응답', () => {
+  // 연결 오류를 일부러 내므로 끝에서 연결 판단을 되돌린다(tests/support/setup)
+  afterEach(reconnectStaticApp)
+
   it.each([301, 302, 307, 308])('%d을 따라가지 않아 본문과 토큰이 다른 곳으로 가지 않는다', async (status) => {
     const followed = vi.fn(() => HttpResponse.json({}))
     server.use(
@@ -284,6 +288,9 @@ describe('다른 주소로 보내는 응답', () => {
 })
 
 describe('응답을 받지 못함', () => {
+  // 연결 오류를 일부러 내므로 끝에서 연결 판단을 되돌린다(tests/support/setup)
+  afterEach(reconnectStaticApp)
+
   it('서버에 닿지 못하면 연결 오류다', async () => {
     respondWith(() => HttpResponse.error())
     const error = await errorOf(send('/ledgers'))

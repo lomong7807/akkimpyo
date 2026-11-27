@@ -93,11 +93,11 @@ export function useFormFields<Values extends object>({ fields, initialValues, va
 
   /**
    * 처음 값을 새로 정하고 칸을 그 값으로 채운다. 보이던 오류 문구는 지운다. 화면을 연 뒤에 받아 온 값(고칠 거래)으로 채울 때 쓴다.
-   * 이 값과 같으면 바꾸지 않은 것이다.
+   * 이 값과 같으면 바꾸지 않은 것이다. 칸에 다른 값을 채우려면 `filled`로 준다(수정 충돌에서 최신 내용 위에 내 입력을 얹을 때).
    */
-  function reset(next: Values) {
+  function reset(next: Values, filled: Values = next) {
     setInitial(next)
-    setValues(next)
+    setValues(filled)
     setShown(new Set())
     setRejected({})
   }

@@ -1,5 +1,5 @@
 import { ApiError } from '../../api/apiError'
-import { request, requestForResponse } from '../../api/request'
+import { request, requestForResponse, type SenderCheck } from '../../api/request'
 import { isDate, monthOf } from '../../lib/calendarDate'
 import { deviceValueOf } from '../../lib/deviceValue'
 import { isValidTime } from '../../lib/timeText'
@@ -127,12 +127,18 @@ export function needsResendNotice({ created, transaction }: CreateResult): boole
 /**
  * 그 id로 만들 수 없다는 거부(409 ID_CONFLICT). 아니면 없다.
  * 앞서 같은 id로 저장한 내 거래가 있으면(current) 그 id를 준다. 주소에 넣으므로 UUID 모양일 때만 준다.
+ * current가 약속대로의 거래이고 보낸 거래 id(`id`)의 것이면 그 거래도 준다. 선택 판(ADR 006 결정 3)이 쓴다.
  */
-export function idConflictOf(error: unknown): { savedId?: string } | undefined {
+export function idConflictOf(
+  error: unknown,
+  id?: string,
+): { savedId?: string; current?: TransactionDetail } | undefined {
   if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'ID_CONFLICT') return undefined
   const current: unknown = error.current
   const savedId = typeof current === 'object' && current !== null && 'id' in current ? current.id : undefined
-  return isUuid(savedId) ? { savedId: savedId.toLowerCase() } : {}
+  if (!isUuid(savedId)) return {}
+  const conflict = { savedId: savedId.toLowerCase() }
+  return id !== undefined && isTransactionDetail(current) && isSameId(current.id, id) ? { ...conflict, current } : conflict
 }
 
 function isSavedTransaction(value: unknown): value is SavedTransaction {
@@ -225,11 +231,11 @@ export async function fetchTransactionPage(
 
 /**
  * 장부의 한 달 합계(P-205). 그 달의 첫 쪽을 한 건만 받아 합계(totals)만 쓴다(홈의 이번 달 합계, F-111).
- * 실패하면 ApiError를 던진다.
+ * `sender`는 request와 같다(여러 요청을 한 사용자의 토큰으로만 보낼 때). 실패하면 ApiError를 던진다.
  */
-export async function fetchMonthTotals(ledgerId: string, month: string): Promise<IncomeAndExpense> {
+export async function fetchMonthTotals(ledgerId: string, month: string, sender?: SenderCheck): Promise<IncomeAndExpense> {
   const query = new URLSearchParams({ month, limit: '1' })
-  const body = await request<unknown>(`${ledgerPath(ledgerId, 'transactions')}?${query}`)
+  const body = await request<unknown>(`${ledgerPath(ledgerId, 'transactions')}?${query}`, {}, sender)
   if (!isTransactionPage(body, month, true)) throw ApiError.unreadable()
   // 첫 쪽에는 합계가 늘 있다(isTransactionPage)
   return body.totals!
@@ -257,6 +263,22 @@ export async function fetchRecentTransactions(ledgerId: string): Promise<RecentT
   return { items: body.items, days: body.days }
 }
 
+/** 장부 전체의 한 쪽. 합계(totals)가 없다. */
+export type LedgerPage = Omit<TransactionPage, 'totals'>
+
+/**
+ * 장부 전체의 거래를 서버의 순서(목록과 같다)로 한 쪽(50건) 받는다. `cursor`가 null이면 첫 쪽이다. 달을 보내지 않으므로
+ * cursor도 장부 전체 기준이다(달 기준 cursor와 섞지 않는다). 장부 시간대의 오늘까지의 거래만 온다(서버가 거른다).
+ * `sender`는 request와 같다. 기기에 남기는 최근 한 달(P-902)을 받는 데 쓴다. 실패하면 ApiError를 던진다.
+ */
+export async function fetchLedgerPage(ledgerId: string, cursor: string | null, sender?: SenderCheck): Promise<LedgerPage> {
+  const query = new URLSearchParams({ limit: String(PAGE_SIZE) })
+  if (cursor !== null) query.set('cursor', cursor)
+  const body = await request<unknown>(`${ledgerPath(ledgerId, 'transactions')}?${query}`, {}, sender)
+  if (!isTransactionPage(body, null, cursor === null)) throw ApiError.unreadable()
+  return { items: body.items, nextCursor: body.nextCursor, days: body.days }
+}
+
 /** 한 쪽의 모양이 약속(#15)과 같은지. `month`가 null이면 장부 전체의 쪽이라 합계가 없고 달을 보지 않는다. */
 function isTransactionPage(value: unknown, month: string | null, first: boolean): value is TransactionPage {
   if (typeof value !== 'object' || value === null) return false
@@ -274,7 +296,8 @@ function isTransactionPage(value: unknown, month: string | null, first: boolean)
   )
 }
 
-function isListedTransaction(value: unknown): value is ListedTransaction {
+/** 목록의 거래 하나가 약속(#15)대로인지. 기기에 남긴 사본도 이것으로 다시 본다(값은 믿지 않는다). */
+export function isListedTransaction(value: unknown): value is ListedTransaction {
   if (!isSavedTransaction(value)) return false
   const body = value as Partial<Record<keyof ListedIncomeOrExpense | keyof ListedTransfer, unknown>>
   const shared =
@@ -293,13 +316,13 @@ function isListedTransaction(value: unknown): value is ListedTransaction {
   )
 }
 
-function isIncomeAndExpense(value: unknown): value is IncomeAndExpense {
+export function isIncomeAndExpense(value: unknown): value is IncomeAndExpense {
   if (typeof value !== 'object' || value === null) return false
   const { income, expense } = value as Partial<Record<keyof IncomeAndExpense, unknown>>
   return [income, expense].every((amount) => Number.isSafeInteger(amount) && (amount as number) >= 0)
 }
 
-function isDayTotal(value: unknown): value is DayTotal {
+export function isDayTotal(value: unknown): value is DayTotal {
   if (!isIncomeAndExpense(value)) return false
   const { date } = value as Partial<Record<keyof DayTotal, unknown>>
   return typeof date === 'string' && isDate(date)
@@ -312,6 +335,8 @@ export type TransactionDetail = ListedTransaction & {
   createdBy: Person | null
   /** 휴지통에서 영구 삭제될 시각(ISO 8601 UTC). 휴지통에 없으면 null이다. 화면은 날 수를 따로 세지 않고 이것을 쓴다. */
   purgeAt: string | null
+  /** 마지막으로 고친 시각(ISO 8601 UTC, ADR 002 2절). 수정 충돌 안내(N-04)가 보인다. */
+  updatedAt: string
 }
 
 /** 장부의 거래 하나. 휴지통에 있으면 deletedAt이 차서 온다. 없거나 다른 장부의 것이면 404 거부다. 실패하면 ApiError를 던진다. */
@@ -408,12 +433,14 @@ function isInstant(value: unknown): value is string {
   return Number.isFinite(time) && new Date(time).toISOString() === value
 }
 
-function isTransactionDetail(value: unknown): value is TransactionDetail {
+/** 상세의 모양(#15)인지. 목록의 거래도 상세의 값을 모두 싣고 오면 상세로 그릴 수 있다(기기의 최근 한 달, #238). */
+export function isTransactionDetail(value: unknown): value is TransactionDetail {
   if (!isListedTransaction(value)) return false
   const body = value as Partial<Record<keyof TransactionDetail, unknown>>
   return (
     (body.memo === null || typeof body.memo === 'string') &&
     (body.createdBy === null || isPerson(body.createdBy)) &&
+    isInstant(body.updatedAt) &&
     // 휴지통에 있을 때만 영구 삭제 예정 시각이 있다
     (body.deletedAt === null ? body.purgeAt === null : isInstant(body.purgeAt))
   )
