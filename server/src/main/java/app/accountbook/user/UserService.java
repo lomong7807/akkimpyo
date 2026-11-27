@@ -2,6 +2,7 @@ package app.accountbook.user;
 
 import app.accountbook.category.CategoryService;
 import app.accountbook.common.DuplicateEmailException;
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.Names;
 import app.accountbook.common.NotFoundException;
@@ -10,8 +11,11 @@ import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRepository;
 import app.accountbook.ledger.LedgerRole;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,18 +40,20 @@ public class UserService {
     private final CategoryService categoryService;
     private final PasswordHasher passwordHasher;
     private final TransactionTemplate transactionTemplate;
+    private final SignupAllowlist allowlist;
     /** 비교할 저장값이 없을 때 대신 비교하는 값. 저장하는 값과 같은 방식으로 만들고, 맞다고 나와도 쓰지 않는다. */
     private final String decoyHash;
 
     UserService(UserRepository userRepository, LedgerRepository ledgerRepository,
                 LedgerMemberRepository memberRepository, CategoryService categoryService,
-                PasswordHasher passwordHasher, TransactionTemplate transactionTemplate) {
+                PasswordHasher passwordHasher, TransactionTemplate transactionTemplate, SignupAllowlist allowlist) {
         this.userRepository = userRepository;
         this.ledgerRepository = ledgerRepository;
         this.memberRepository = memberRepository;
         this.categoryService = categoryService;
         this.passwordHasher = passwordHasher;
         this.transactionTemplate = transactionTemplate;
+        this.allowlist = allowlist;
         this.decoyHash = passwordHasher.hash("decoy1" + UUID.randomUUID());
     }
 
@@ -59,20 +65,31 @@ public class UserService {
      * 같은 이메일로 동시에 가입하면 한 건만 성공하고 나머지는 {@link DuplicateEmailException}이다.
      * 표시 이름은 P-214의 글자 규칙({@link Names})으로 맞춘 1~{@value User#DISPLAY_NAME_MAX_LENGTH}자다(P-101).
      * 비밀번호는 NFKC로 맞춘 값으로 규칙({@link PasswordPolicy})을 보고 Argon2id 해시로만 저장한다.
+     * 형식 오류는 모두 모아 알리고(#29), 형식이 모두 맞을 때만 허용 목록({@link SignupAllowlist}, P-102)과 중복을 차례로 본다.
      * 해시는 비싸므로 입력 검사와 중복 확인이 끝난 뒤에 한다(ADR 001 결정 7).
      * 해시와 그 자리를 기다리는 동안 DB 연결을 잡지 않도록 저장만 트랜잭션으로 한다. 이 메서드를 트랜잭션 안에서 부르지 않는다.
      */
     public User createUser(String rawEmail, String rawPassword, String rawDisplayName) {
-        String email = EmailNormalizer.normalize(rawEmail);
-        String displayName = Names.normalize(rawDisplayName, User.DISPLAY_NAME_MAX_LENGTH, "displayName");
+        List<InvalidRequestException> errors = new ArrayList<>();
+        String email = checked(errors, () -> EmailNormalizer.normalize(rawEmail));
         // 해시할 때도 같은 규칙을 본다. 여기서는 DB 조회와 해시보다 먼저 떨어뜨리려고 부른다.
-        PasswordPolicy.normalizeAndValidate(rawPassword);
+        checked(errors, () -> PasswordPolicy.normalizeAndValidate(rawPassword));
+        String displayName = checked(errors,
+                () -> Names.normalize(rawDisplayName, User.DISPLAY_NAME_MAX_LENGTH, "displayName"));
+        if (!errors.isEmpty()) {
+            throw InvalidRequestException.ofAll(errors);
+        }
+        if (!allowlist.allows(email)) {
+            throw new InvalidRequestException("email", FieldErrorCode.NOT_ALLOWED, "가입이 허용된 이메일이 아닙니다.");
+        }
         if (userRepository.existsByEmail(email)) {
             throw new DuplicateEmailException();
         }
         String passwordHash = passwordHasher.hash(rawPassword);
-        return transactionTemplate.execute(status ->
+        User user = transactionTemplate.execute(status ->
                 saveWithPersonalLedger(User.of(email, passwordHash, displayName)));
+        log.info("가입: 사용자 {}", user.getId());
+        return user;
     }
 
     /**
@@ -112,6 +129,16 @@ public class UserService {
      */
     public UserProfile profile(UUID actorId) {
         return userRepository.findById(actorId).map(UserProfile::of).orElseThrow(NotFoundException::new);
+    }
+
+    /** 규칙에 맞으면 맞춘 값, 아니면 오류를 모으고 null. */
+    private static String checked(List<InvalidRequestException> errors, Supplier<String> rule) {
+        try {
+            return rule.get();
+        } catch (InvalidRequestException e) {
+            errors.add(e);
+            return null;
+        }
     }
 
     /** 형식이 틀린 이메일로 가입한 사람은 없다. */

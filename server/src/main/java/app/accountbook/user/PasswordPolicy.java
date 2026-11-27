@@ -1,5 +1,6 @@
 package app.accountbook.user;
 
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 
 /**
@@ -11,15 +12,32 @@ final class PasswordPolicy {
     static final int MIN_LENGTH = 8;
     static final int MAX_LENGTH = 72;
 
+    private static final String FIELD = "password";
+
     private PasswordPolicy() {
     }
 
-    /** 정규화한({@link PasswordNormalizer}) 비밀번호를 돌려준다. 규칙에 맞지 않으면 {@link InvalidRequestException}. */
+    /**
+     * 정규화한({@link PasswordNormalizer}) 비밀번호. 규칙에 맞지 않으면 입력란 {@code password}의 {@link InvalidRequestException}:
+     * 없거나 빈 글자는 REQUIRED, 정규화 전 512자나 정규화 뒤 72자를 넘으면 TOO_LONG, 나머지 규칙 오류는 INVALID_FORMAT.
+     */
     static String normalizeAndValidate(String raw) {
-        return PasswordNormalizer.normalize(raw)
-                .filter(PasswordPolicy::isAllowed)
-                .orElseThrow(() -> new InvalidRequestException(
-                        "비밀번호는 " + MIN_LENGTH + "~" + MAX_LENGTH + "자이고 영문과 숫자를 모두 포함해야 합니다."));
+        if (raw == null || raw.isEmpty()) {
+            throw invalid(FieldErrorCode.REQUIRED);
+        }
+        // 정규화보다 먼저 본다. 정규화하지 못하는 나머지는 짝 없는 서로게이트다.
+        if (raw.length() > PasswordNormalizer.MAX_RAW_LENGTH) {
+            throw invalid(FieldErrorCode.TOO_LONG);
+        }
+        String password = PasswordNormalizer.normalize(raw).orElseThrow(() -> invalid(FieldErrorCode.INVALID_FORMAT));
+        if (length(password) > MAX_LENGTH) {
+            throw invalid(FieldErrorCode.TOO_LONG);
+        }
+        if (length(password) < MIN_LENGTH || password.chars().noneMatch(PasswordPolicy::isAsciiLetter)
+                || password.chars().noneMatch(PasswordPolicy::isAsciiDigit)) {
+            throw invalid(FieldErrorCode.INVALID_FORMAT);
+        }
+        return password;
     }
 
     /**
@@ -32,15 +50,10 @@ final class PasswordPolicy {
                 .isPresent();
     }
 
-    private static boolean isAllowed(String password) {
-        return hasValidLength(password)
-                && password.chars().anyMatch(PasswordPolicy::isAsciiLetter)
-                && password.chars().anyMatch(PasswordPolicy::isAsciiDigit);
-    }
-
-    private static boolean hasValidLength(String password) {
-        int length = length(password);
-        return length >= MIN_LENGTH && length <= MAX_LENGTH;
+    /** 문구는 하나다. 입력값을 넣지 않는다. */
+    private static InvalidRequestException invalid(FieldErrorCode code) {
+        return new InvalidRequestException(FIELD, code,
+                "비밀번호는 " + MIN_LENGTH + "~" + MAX_LENGTH + "자이고 영문과 숫자를 모두 포함해야 합니다.");
     }
 
     private static int length(String password) {

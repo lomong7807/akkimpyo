@@ -294,7 +294,7 @@ class LoginTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"/api/v1/auth", "/api/v1/auth/", LOGIN + "/", LOGIN + ".json", LOGIN + "/x", "/api/v1/auth/Login",
-            "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/signup", "/api/v1/login", "/auth/login"})
+            "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/login", "/auth/login"})
     void 비슷한_주소는_열리지_않는다(String path) throws Exception {
         anyone.send("POST", path, body(EMAIL, PASSWORD), "Content-Type", "application/json", "X-Akkimpyo-Client", "web")
                 .assertProblem(401, "Unauthorized", "UNAUTHENTICATED");
