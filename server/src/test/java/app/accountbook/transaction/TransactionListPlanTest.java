@@ -188,7 +188,8 @@ class TransactionListPlanTest {
                 if (sql != null) {
                     break;
                 }
-                sql = message.contains("fetch first") ? message : null;
+                // 구성원 확인(exists)도 fetch first를 쓴다. 쪽 질의는 라인을 함께 읽는 문장이다.
+                sql = message.contains("left join transaction_line") && message.contains("fetch first") ? message : null;
             } else if (sql != null && bind.matches()) {
                 assertThat(Integer.parseInt(bind.group(1))).isEqualTo(values.size() + 1);
                 values.add(bind.group(2));
