@@ -11,6 +11,10 @@ import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionType;
 import app.accountbook.user.User;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -21,10 +25,12 @@ import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * {@code GET /api/v1/ledgers/{ledgerId}/transactions}(#15 응답 계약)의 HTTP 쪽: 응답 모양, cursor, 쿼리 값의 오류.
@@ -35,6 +41,7 @@ class TransactionListTest {
 
     private static final Instant NOW = Instant.parse("2026-11-27T03:00:00Z");
     private static final LocalDate DAY = LocalDate.of(2026, 11, 18);
+    private static final JsonMapper JSON = new JsonMapper();
 
     @LocalServerPort int port;
     @Autowired StoppedClock clock;
@@ -80,14 +87,44 @@ class TransactionListTest {
         assertThat(month.status()).as(month.body()).isEqualTo(200);
         assertThat(month.header("Content-Type")).isEqualTo("application/json");
         JsonNode page = month.json();
-        assertThat(page.propertyNames()).containsExactlyInAnyOrder("items", "nextCursor");
+        assertThat(page.propertyNames()).containsExactlyInAnyOrder("items", "nextCursor", "totals", "days");
         assertThat(page.get("nextCursor").isNull()).isTrue();
         assertThat(ids(page)).containsExactly(future, income, timed, transfer);
         for (JsonNode item : page.get("items")) {
             assertThat(item).isEqualTo(client.get(path() + "/" + item.get("id").asString()).json());
         }
-        assertThat(ids(list("").json())).as("장부 전체는 오늘까지").containsExactly(income, timed, transfer);
-        assertThat(ids(list("date=2026-11-18").json())).containsExactly(timed, transfer);
+        assertThat(page.get("totals")).isEqualTo(json("{\"income\":3000000,\"expense\":2000}"));
+        assertThat(page.get("days")).isEqualTo(json("[{\"date\":\"2026-11-28\",\"income\":0,\"expense\":1000},"
+                + "{\"date\":\"2026-11-19\",\"income\":3000000,\"expense\":0},"
+                + "{\"date\":\"2026-11-18\",\"income\":0,\"expense\":1000}]"));
+        JsonNode whole = list("").json();
+        assertThat(ids(whole)).as("장부 전체는 오늘까지").containsExactly(income, timed, transfer);
+        assertThat(whole.get("totals").isNull()).isTrue();
+        JsonNode day = list("date=2026-11-18").json();
+        assertThat(ids(day)).containsExactly(timed, transfer);
+        assertThat(day.get("totals")).isEqualTo(json("{\"income\":0,\"expense\":1000}"));
+    }
+
+    /** 이름과 고친 사람을 쪽마다 한 번에 읽는다(docs/perf/README.md 점검표 1번). 거래·날짜·고친 사람이 늘어도 같다. */
+    @Test
+    void 호출당_SQL_수는_쪽의_거래_수와_무관하다() throws Exception {
+        expense(DAY, null);
+        int one = sqlCount("month=2026-11");
+        User member = user();
+        fixtures.addMember(ledgerId, member, LedgerRole.MEMBER);
+        for (int i = 0; i < 30; i++) {
+            UUID id = expense(DAY.minusDays(i % 10), i % 2 == 0 ? null : "12:00");
+            if (i % 3 == 0) {
+                fixtures.cancel(member, transactionService.get(owner.getId(), id));
+            }
+        }
+
+        int many = sqlCount("month=2026-11");
+
+        assertThat(many).as("거래 1건일 때 %d", one).isEqualTo(one);
+        assertThat(sqlCount("month=2026-11&limit=5&cursor="
+                + list("month=2026-11&limit=5").json().get("nextCursor").asString()))
+                .as("다음 쪽은 범위 합계를 읽지 않는다").isEqualTo(one - 1);
     }
 
     @Test
@@ -185,6 +222,28 @@ class TransactionListTest {
 
     private Reply list(String query) throws Exception {
         return client.get(path() + "?" + query);
+    }
+
+    /** 요청 하나에 Hibernate가 보낸 문장 수(인증 필터와 구성원 확인 포함). 요청은 서버 스레드에서 돈다. */
+    private int sqlCount(String query) throws Exception {
+        Logger sqlLog = (Logger) LoggerFactory.getLogger("org.hibernate.SQL");
+        Level level = sqlLog.getLevel();
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        sqlLog.addAppender(appender);
+        sqlLog.setLevel(Level.DEBUG);
+        try {
+            assertThat(list(query).status()).isEqualTo(200);
+        } finally {
+            sqlLog.setLevel(level);
+            sqlLog.detachAppender(appender);
+        }
+        appender.list.forEach(event -> System.out.println("[plan] " + query + ": " + event.getFormattedMessage()));
+        return appender.list.size();
+    }
+
+    private static JsonNode json(String text) {
+        return JSON.readTree(text);
     }
 
     private User user() {

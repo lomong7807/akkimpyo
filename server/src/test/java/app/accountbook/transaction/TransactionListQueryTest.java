@@ -9,11 +9,15 @@ import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.ledger.LedgerDates;
 import app.accountbook.ledger.LedgerRole;
+import app.accountbook.stats.MonthlyStatsQuery;
+import app.accountbook.stats.MonthlySummary;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.support.StoppedClockConfig;
 import app.accountbook.support.StoppedClockConfig.StoppedClock;
 import app.accountbook.transaction.TransactionCommand.Entry;
+import app.accountbook.transaction.TransactionPage.DayTotals;
+import app.accountbook.transaction.TransactionPage.Totals;
 import app.accountbook.transaction.TransactionScope.Day;
 import app.accountbook.transaction.TransactionScope.Month;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
@@ -33,6 +37,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * 거래 목록의 순서, 다음 쪽, 범위(#15 응답 계약). 시계는 UTC 2026-11-27 03:00(서울 11-27 12:00)에 멈춰 있고,
@@ -56,6 +61,8 @@ class TransactionListQueryTest {
     @Autowired StoppedClock clock;
     @Autowired Fixtures fixtures;
     @Autowired EntityManager entityManager;
+    @Autowired MonthlyStatsQuery monthlyStatsQuery;
+    @Autowired JdbcTemplate jdbc;
 
     private User owner;
     private UUID ledgerId;
@@ -212,6 +219,60 @@ class TransactionListQueryTest {
                 null, 1));
         assertThatNoException().isThrownBy(() -> page(new Day(LocalDate.of(2027, 11, 27)), null, 1));
         assertThatNoException().isThrownBy(() -> page(new Day(LedgerDates.MIN_DATE), null, 1));
+    }
+
+    /** P-205: 이체·취소·휴지통을 빼고 승인 대기를 넣으며 환불은 지출을 줄인다. 월 통계와 같은 값이다(F-111, F-301). */
+    @Test
+    void 달의_합계는_첫_쪽에만_있고_P_205로_세며_월_통계와_같다() {
+        UUID bank = fixtures.account(owner, ledgerId, "은행", AccountType.BANK, 0, LocalDate.of(2024, 1, 1)).getId();
+        LocalDate day = LocalDate.of(2026, 11, 18);
+        fixtures.expense(owner, ledgerId, cash, null, day, 12_000);
+        fixtures.refund(owner, ledgerId, cash, null, day, 2_000);
+        fixtures.income(owner, ledgerId, bank, null, day, 3_000_000);
+        fixtures.transfer(owner, ledgerId, bank, cash, day, 50_000);
+        fixtures.cancel(owner, fixtures.expense(owner, ledgerId, cash, null, day, 7_000));
+        fixtures.delete(owner, fixtures.expense(owner, ledgerId, cash, null, day, 8_000));
+        UUID pending = fixtures.expense(owner, ledgerId, cash, null, day, 900).id();
+        fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2026, 12, 1), 100_000);
+        entityManager.flush();
+        jdbc.update("update transaction set status = 'PENDING' where id = ?", pending);
+
+        TransactionPage first = page(NOVEMBER, null, 2);
+        TransactionPage second = page(NOVEMBER, first.next(), 2);
+
+        assertThat(first.totals()).isEqualTo(new Totals(3_000_000, 10_900));
+        assertThat(second.totals()).as("다음 쪽").isNull();
+        MonthlySummary stats = monthlyStatsQuery.monthly(owner.getId(), ledgerId, NOVEMBER.month());
+        assertThat(first.totals()).isEqualTo(new Totals(stats.income(), stats.expense()));
+        assertThat(page(new WholeLedger(), null, 50).totals()).as("장부 전체").isNull();
+        assertThat(page(month(2026, 10), null, 50)).isEqualTo(new TransactionPage(List.of(), null, new Totals(0, 0),
+                List.of()));
+    }
+
+    /** 한 날이 두 쪽에 걸쳐도 그날 전체의 합계가 두 쪽에 같이 온다. 합계에 들지 않는 거래만 있는 날은 0이다. */
+    @Test
+    void 날마다의_합계는_그_쪽에_나온_날의_그날_전체_합계다() {
+        UUID bank = fixtures.account(owner, ledgerId, "은행", AccountType.BANK, 0, LocalDate.of(2024, 1, 1)).getId();
+        LocalDate busy = LocalDate.of(2026, 11, 20);
+        expense(busy, "10:00");
+        expense(busy, "09:00");
+        fixtures.cancel(owner, view(expense(busy, "08:00")));
+        fixtures.refund(owner, ledgerId, cash, null, busy, 500);
+        fixtures.transfer(owner, ledgerId, bank, cash, busy.minusDays(1), 50_000);
+        fixtures.income(owner, ledgerId, bank, null, busy.minusDays(2), 30_000);
+        DayTotals busyDay = new DayTotals(busy, 0, 1_500);
+
+        TransactionPage first = page(NOVEMBER, null, 3);
+        TransactionPage second = page(NOVEMBER, first.next(), 3);
+
+        assertThat(first.days()).containsExactly(busyDay);
+        assertThat(second.days()).containsExactly(busyDay, new DayTotals(busy.minusDays(1), 0, 0),
+                new DayTotals(busy.minusDays(2), 30_000, 0));
+        assertThat(page(new WholeLedger(), null, 1).days()).containsExactly(busyDay);
+        TransactionPage oneDay = page(new Day(busy), null, 50);
+        assertThat(oneDay.totals()).isEqualTo(new Totals(0, 1_500));
+        assertThat(oneDay.days()).containsExactly(busyDay);
+        assertThat(page(new Day(busy.plusDays(1)), null, 50).totals()).isEqualTo(new Totals(0, 0));
     }
 
     @Test

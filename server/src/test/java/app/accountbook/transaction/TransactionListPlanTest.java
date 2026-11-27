@@ -42,7 +42,7 @@ class TransactionListPlanTest {
     private static final int LEDGERS = 1_000;
     /** 큰 장부(1번)의 거래 수. 2026-11-27부터 3,650일 앞까지 고르게, 넷에 하나는 시각 없음. */
     private static final int BIG = 20_000;
-    /** 나머지 장부마다의 거래 수. 2026년 11월에 있다. */
+    /** 나머지 장부마다의 거래 수. 큰 장부와 같은 10년에 흩어 둔다. 한 달에 몰면 날짜 통계가 운영과 달라진다. */
     private static final int SMALL = 10;
 
     private static final int USER = 1;
@@ -88,7 +88,7 @@ class TransactionListPlanTest {
         insertTransactions("1", "generate_series(1, %d) t".formatted(BIG), "t",
                 "date '2026-11-27' - mod(t, 3650)");
         insertTransactions("l", "generate_series(2, %d) l, generate_series(1, %d) t".formatted(LEDGERS, SMALL),
-                "%d + (l - 2) * %d + t".formatted(BIG, SMALL), "date '2026-11-01' + mod(t, 27)");
+                "%d + (l - 2) * %d + t".formatted(BIG, SMALL), "date '2026-11-27' - mod(l * 37 + t * 365, 3650)");
         jdbc.execute("analyze users, ledger, ledger_member, account, category, transaction, transaction_line");
     }
 
@@ -109,31 +109,38 @@ class TransactionListPlanTest {
                 idSql(CATEGORY, ledger), rows));
     }
 
-    /** 홈의 최근 거래와 오프라인 사본(#238)이 쓰는 장부 전체 모드: 첫 쪽과, 시각 있는 키 뒤의 쪽. */
+    /** 홈의 최근 거래와 오프라인 사본(#238)이 쓰는 장부 전체 모드: 첫 쪽과, 시각 있는 키 뒤의 쪽, 그 쪽의 날마다 합계. */
     @Test
     void 장부_전체_모드는_큰_장부에서도_인덱스를_거꾸로_읽다가_쪽이_차면_멈춘다() {
-        Statement first = pageStatement(new WholeLedger(), null);
-        Statement after = pageStatement(new WholeLedger(),
+        List<Statement> first = statements(new WholeLedger(), null);
+        List<Statement> after = statements(new WholeLedger(),
                 new TransactionKey(LocalDate.of(2026, 6, 1), LocalTime.of(12, 0), UUID.randomUUID()));
 
-        for (Statement statement : List.of(first, after)) {
-            String custom = explain(statement, "force_custom_plan");
+        for (Statement page : List.of(pick(first, Kind.PAGE), pick(after, Kind.PAGE))) {
+            String custom = explain(page, "force_custom_plan");
             // 비트맵 훑기는 장부의 거래를 모두 모은 뒤 정렬한다. 바깥 질의도 쪽의 id로만 찾아야 한다.
             assertThat(custom).contains(INDEX_BACKWARD).doesNotContain("Seq Scan", "Bitmap Heap Scan");
             assertThat(rowsReadFromIndex(custom)).as("큰 장부 %d건 가운데 읽은 거래", BIG).isLessThan(500);
-            assertThat(explain(statement, "force_generic_plan")).doesNotContain("Seq Scan");
+            assertThat(explain(page, "force_generic_plan")).doesNotContain("Seq Scan");
         }
+        assertThat(first.stream().map(Statement::kind)).as("장부 전체 모드에는 범위 합계가 없다").doesNotContain(Kind.TOTALS);
+        Statement days = pick(first, Kind.DAYS);
+        assertThat(explain(days, "force_custom_plan")).contains("ix_transaction_ledger_occurred_on")
+                .doesNotContain("Seq Scan");
+        assertThat(explain(days, "force_generic_plan")).doesNotContain("Seq Scan");
     }
 
-    /** 달 모드는 그 달만 읽는다. 큰 장부의 한 달은 약 165건이다. */
+    /** 달 모드는 쪽도, 그 달의 합계도, 날마다 합계도 그 달만 읽는다. 큰 장부의 한 달은 약 165건이다. */
     @Test
     void 달_모드는_큰_장부에서_그_달의_거래만_읽는다() {
-        Statement month = pageStatement(new Month(YearMonth.of(2026, 11)), null);
+        List<Statement> month = statements(new Month(YearMonth.of(2026, 11)), null);
 
-        String custom = explain(month, "force_custom_plan");
-
-        assertThat(custom).contains("ix_transaction_ledger_occurred_on").doesNotContain("Seq Scan");
-        assertThat(explain(month, "force_generic_plan")).doesNotContain("Seq Scan");
+        for (Kind kind : List.of(Kind.PAGE, Kind.TOTALS, Kind.DAYS)) {
+            Statement statement = pick(month, kind);
+            assertThat(explain(statement, "force_custom_plan")).contains("ix_transaction_ledger_occurred_on")
+                    .doesNotContain("Seq Scan");
+            assertThat(explain(statement, "force_generic_plan")).doesNotContain("Seq Scan");
+        }
     }
 
     /** 앱의 문장을 그대로 PREPARE하고 받은 값으로 실행한 계획. 비교용으로 인덱스를 끈 계획의 비용도 남긴다. */
@@ -144,12 +151,13 @@ class TransactionListPlanTest {
                 .map(value -> "'" + value.replace("'", "''") + "'")
                 .collect(joining(", ", "(", ")"));
         jdbc.execute("set local plan_cache_mode = " + planCacheMode);
-        String plan = plan(statement.label() + ": " + planCacheMode, "explain (analyze, buffers) " + execute);
+        String title = statement.label() + " " + statement.kind();
+        String plan = plan(title + ": " + planCacheMode, "explain (analyze, buffers) " + execute);
         jdbc.execute("set local plan_cache_mode = force_custom_plan");
         if (planCacheMode.equals("force_custom_plan")) {
             jdbc.execute("set local enable_indexscan = off");
             jdbc.execute("set local enable_bitmapscan = off");
-            plan(statement.label() + ": 비교용, 인덱스를 끈 계획", "explain " + execute);
+            plan(title + ": 비교용, 인덱스를 끈 계획", "explain " + execute);
             jdbc.execute("set local enable_indexscan = on");
             jdbc.execute("set local enable_bitmapscan = on");
         }
@@ -157,8 +165,14 @@ class TransactionListPlanTest {
         return plan;
     }
 
-    /** 큰 장부의 한 쪽을 실제로 읽고, 그때 Hibernate가 보낸 쪽 질의와 그 값. */
-    private Statement pageStatement(TransactionScope scope, TransactionKey after) {
+    private static Statement pick(List<Statement> statements, Kind kind) {
+        List<Statement> found = statements.stream().filter(statement -> statement.kind() == kind).toList();
+        assertThat(found).as(kind.name()).hasSize(1);
+        return found.getFirst();
+    }
+
+    /** 큰 장부의 한 쪽을 실제로 읽고, 그때 Hibernate가 보낸 문장과 그 값을 순서대로. */
+    private List<Statement> statements(TransactionScope scope, TransactionKey after) {
         Logger sqlLog = (Logger) LoggerFactory.getLogger("org.hibernate.SQL");
         Logger bindLog = (Logger) LoggerFactory.getLogger("org.hibernate.orm.jdbc.bind");
         Level sqlLevel = sqlLog.getLevel();
@@ -179,26 +193,23 @@ class TransactionListPlanTest {
             bindLog.detachAppender(appender);
         }
         assertThat(page.items()).hasSize(TransactionListQuery.MAX_LIMIT);
-        String sql = null;
-        List<String> values = new ArrayList<>();
+        String label = scope + (after == null ? " 첫 쪽" : " 다음 쪽");
+        List<Statement> statements = new ArrayList<>();
         for (ILoggingEvent event : appender.list) {
             String message = event.getFormattedMessage().strip();
             Matcher bind = BIND.matcher(message);
             if (event.getLoggerName().equals("org.hibernate.SQL")) {
-                if (sql != null) {
-                    break;
-                }
-                // 구성원 확인(exists)도 fetch first를 쓴다. 쪽 질의는 라인을 함께 읽는 문장이다.
-                sql = message.contains("left join transaction_line") && message.contains("fetch first") ? message : null;
-            } else if (sql != null && bind.matches()) {
+                statements.add(new Statement(label, message, new ArrayList<>()));
+            } else if (bind.matches()) {
+                List<String> values = statements.getLast().values();
                 assertThat(Integer.parseInt(bind.group(1))).isEqualTo(values.size() + 1);
                 values.add(bind.group(2));
             }
         }
-        assertThat(sql).as("쪽 질의").isNotNull();
-        assertThat(sql.chars().filter(c -> c == '?').count()).as(sql).isEqualTo(values.size());
-        print(scope + " 쪽 질의", List.of(sql));
-        return new Statement(scope + (after == null ? " 첫 쪽" : " 다음 쪽"), sql, values);
+        statements.forEach(statement -> assertThat(statement.sql().chars().filter(c -> c == '?').count())
+                .as(statement.sql()).isEqualTo(statement.values().size()));
+        print(label + "의 문장", statements.stream().map(Statement::sql).toList());
+        return statements;
     }
 
     /** 인덱스 훑기 노드가 실제로 내놓은 행 수. */
@@ -240,5 +251,24 @@ class TransactionListPlanTest {
     }
 
     private record Statement(String label, String sql, List<String> values) {
+
+        /** 목록이 보내는 문장의 종류. 구성원 확인 등 그 밖의 문장은 null이다. 구성원 확인(exists)도 fetch first를 쓴다. */
+        Kind kind() {
+            if (sql.contains("left join transaction_line") && sql.contains("fetch first")) {
+                return Kind.PAGE;
+            }
+            if (sql.contains("sum(") && sql.contains("occurred_on>=")) {
+                return Kind.TOTALS;
+            }
+            if (sql.contains("sum(") && sql.contains("occurred_on in (")) {
+                return Kind.DAYS;
+            }
+            return null;
+        }
+    }
+
+    /** 쪽(거래와 라인), 범위 합계, 날마다 합계. */
+    private enum Kind {
+        PAGE, TOTALS, DAYS
     }
 }

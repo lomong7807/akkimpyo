@@ -7,12 +7,15 @@ import app.accountbook.ledger.Ledger;
 import app.accountbook.ledger.LedgerAccess;
 import app.accountbook.ledger.LedgerDates;
 import app.accountbook.ledger.LedgerRepository;
+import app.accountbook.transaction.TransactionPage.DayTotals;
+import app.accountbook.transaction.TransactionPage.Totals;
 import app.accountbook.transaction.TransactionScope.Day;
 import app.accountbook.transaction.TransactionScope.Month;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Tuple;
 import jakarta.persistence.TypedQuery;
+import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -35,6 +38,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>거래와 라인은 한 문장으로 읽는다. 쪽은 하위 질의가 DB에서 자르고, 바깥 질의가 그 거래들과 라인을 함께 읽는다.
  * 라인을 함께 읽는 질의를 메모리에서 자르지 않고(docs/perf/risks.md 2.2), 거래와 라인이 서로 다른 시점의 값이 되지 않는다(#202).
  * 장부 조건은 거래에 건다. 라인은 거래 id로 찾으므로 장부 조건을 더해도 읽는 양이 줄지 않는다({@code findWithLinesById}와 같다).
+ *
+ * <p>합계({@link TransactionPage#totals()}, {@link TransactionPage#days()})는 P-205이고 DB가 계산한다. 쪽과는 다른
+ * 문장이라, 그사이 다른 요청이 고친 거래는 쪽과 합계에 다르게 보일 수 있다.
  */
 @Component
 @Transactional(readOnly = true)
@@ -102,7 +108,81 @@ public class TransactionListQuery {
                         .map(Edit::actorId)
                         .orElse(null)))
                 .toList();
-        return new TransactionPage(items, found.size() > limit ? TransactionKey.of(items.getLast()) : null);
+        Totals totals = after != null || scope instanceof WholeLedger ? null : totals(ledgerId, range);
+        return new TransactionPage(items, found.size() > limit ? TransactionKey.of(items.getLast()) : null, totals,
+                days(ledgerId, items));
+    }
+
+    /** 범위 전체의 P-205 합계. */
+    private Totals totals(UUID ledgerId, DateRange range) {
+        Map<TransactionType, Long> sums = sums(entityManager.createQuery("""
+                        select t.type, cast(sum(l.amount) as BigInteger)
+                          from TransactionLine l
+                          join l.transaction t
+                         where l.ledgerId = :ledgerId
+                           and t.ledgerId = :ledgerId
+                           and t.occurredOn >= :from and t.occurredOn < :until
+                           and t.type <> :transfer
+                           and t.deletedAt is null
+                           and t.status <> :canceled
+                         group by t.type
+                        """, Tuple.class)
+                .setParameter("from", range.from())
+                .setParameter("until", range.until()), ledgerId).stream()
+                .collect(Collectors.toMap(row -> row.get(0, TransactionType.class), TransactionListQuery::sum));
+        return new Totals(sums.getOrDefault(TransactionType.INCOME, 0L),
+                expense(sums.getOrDefault(TransactionType.EXPENSE, 0L)));
+    }
+
+    /** 이 쪽에 나온 날마다 그날 전체의 P-205 합계. 한 날이 두 쪽에 걸쳐도 같은 값이다. 쪽마다 한 문장이다. */
+    private List<DayTotals> days(UUID ledgerId, List<TransactionView> items) {
+        List<LocalDate> dates = items.stream().map(TransactionView::occurredOn).distinct().toList();
+        if (dates.isEmpty()) {
+            return List.of();
+        }
+        Map<LocalDate, Map<TransactionType, Long>> sums = sums(entityManager.createQuery("""
+                        select t.type, cast(sum(l.amount) as BigInteger), t.occurredOn
+                          from TransactionLine l
+                          join l.transaction t
+                         where l.ledgerId = :ledgerId
+                           and t.ledgerId = :ledgerId
+                           and t.occurredOn in :dates
+                           and t.type <> :transfer
+                           and t.deletedAt is null
+                           and t.status <> :canceled
+                         group by t.occurredOn, t.type
+                        """, Tuple.class)
+                .setParameter("dates", dates), ledgerId).stream()
+                .collect(Collectors.groupingBy(row -> row.get(2, LocalDate.class),
+                        Collectors.toMap(row -> row.get(0, TransactionType.class), TransactionListQuery::sum)));
+        return dates.stream()
+                .map(date -> {
+                    Map<TransactionType, Long> day = sums.getOrDefault(date, Map.of());
+                    return new DayTotals(date, day.getOrDefault(TransactionType.INCOME, 0L),
+                            expense(day.getOrDefault(TransactionType.EXPENSE, 0L)));
+                })
+                .toList();
+    }
+
+    /**
+     * 합계 질의의 공통 조건 값. 라인과 거래에 장부 조건을 각각 건다(docs/db/schema-standards.md 4절). 수입·지출 구분은
+     * 카테고리가 아니라 거래 종류로 한다. 서비스가 카테고리의 구분을 종류와 맞추므로 월 통계(MonthlyStatsQuery)와 같은 값이다.
+     */
+    private static List<Tuple> sums(TypedQuery<Tuple> query, UUID ledgerId) {
+        return query.setParameter("ledgerId", ledgerId)
+                .setParameter("transfer", TransactionType.TRANSFER)
+                .setParameter("canceled", TransactionStatus.CANCELED)
+                .getResultList();
+    }
+
+    /** DB의 합은 numeric이라 넘치지 않는다. long을 넘으면 틀린 값 대신 ArithmeticException이 난다(BalanceQuery와 같다). */
+    private static long sum(Tuple row) {
+        return row.get(1, BigInteger.class).longValueExact();
+    }
+
+    /** 지출 라인은 음수이고 환불 라인은 양수라, 합의 부호를 뒤집으면 환불을 뺀 지출이다. */
+    private static long expense(long lineSum) {
+        return Math.negateExact(lineSum);
     }
 
     /** 범위의 날짜 구간. 끝은 들지 않는다. */
