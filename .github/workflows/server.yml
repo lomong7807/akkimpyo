@@ -1,0 +1,52 @@
+name: server
+
+# server/나 이 파일이 바뀔 때만 돈다. web만 바꾼 PR에서는 돌지 않는다.
+# paths와 paths-ignore는 한 이벤트에 같이 쓸 수 없어 문서 제외는 '!' 패턴으로 적는다.
+# docs/와 claudedocs/는 위 경로 밖이라 따로 뺄 필요가 없다.
+on:
+  pull_request:
+    paths:
+      - 'server/**'
+      - '.github/workflows/server.yml'
+      - '!**/*.md'
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/server.yml'
+      - '!**/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  server:
+    name: server (Gradle build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Gradle wrapper jar 체크섬 검증(validate-wrappers, 기본 true)은 이 액션의 기본 동작을 쓴다.
+      # 캐시는 기본값(enhanced, private 레포는 무료 미리보기)에 기대지 않고 오픈소스(MIT) basic을 쓴다.
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
+
+      # 테스트는 Testcontainers로 PostgreSQL을 띄우므로 러너의 Docker를 그대로 쓴다.
+      - name: Build and test
+        run: ./gradlew build
