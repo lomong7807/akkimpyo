@@ -123,6 +123,10 @@ class AccountAccessTest {
                 // B의 카테고리와 같은 이름이라 대조가 B의 카테고리를 바꾸지 않는다.
                 new Case("카테고리 이름 바꾸기(같은 이름)", (client, ledger) -> putCategory(client, ledger, "{\"name\":\"B식비\"}"), 200),
                 new Case("카테고리 이름 바꾸기(틀린 본문)", (client, ledger) -> putCategory(client, ledger, "{\"name\":1}"), 400),
+                new Case("중복 경고", (client, ledger) -> client.get(transactions(ledger)
+                        + "/duplicates?occurredOn=2026-11-18&amount=1000&payee=B"), 200),
+                new Case("중복 경고(금액 없음)", (client, ledger) ->
+                        client.get(transactions(ledger) + "/duplicates?occurredOn=2026-11-18"), 400),
                 new Case("카테고리 제안", (client, ledger) -> client.get(suggestions(ledger) + "?payee=B"), 200),
                 new Case("카테고리 제안(101자 가맹점)", (client, ledger) ->
                         client.get(suggestions(ledger) + "?payee=" + "x".repeat(101)), 400),
