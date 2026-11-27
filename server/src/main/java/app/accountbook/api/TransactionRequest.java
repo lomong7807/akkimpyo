@@ -31,10 +31,10 @@ record TransactionRequest(JsonNode id, JsonNode type, JsonNode occurredOn, JsonN
                           JsonNode fromAccountId, JsonNode toAccountId) {
 
     /** 36자 표준 표기만 받고 대소문자는 가리지 않는다. 응답은 소문자다(architect 결정 2026-11-26, #102). */
-    private static final Pattern UUID_TEXT = Pattern.compile(
+    static final Pattern UUID_TEXT = Pattern.compile(
             "\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}");
     /** 숫자는 ASCII만이다. {@link LocalDate#parse}는 부호 붙은 다섯 자리 연도도 받는다. */
-    private static final Pattern DATE = Pattern.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}");
+    static final Pattern DATE = Pattern.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}");
     /** 사용자가 고른 시각은 {@code HH:mm}만이다. 초와 배열은 받지 않는다(ADR 002 2절). */
     private static final Pattern TIME = Pattern.compile("[0-9]{2}:[0-9]{2}");
 
