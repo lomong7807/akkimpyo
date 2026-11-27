@@ -40,7 +40,6 @@
 - 포트는 설정이 없어 Spring 기본값 **8080**이다. 확인 당시 8080을 다른 프로세스가 쓰고 있어
   `SERVER_PORT=18080 ./gradlew bootRun`으로 확인했다. 기본 포트 8080으로 뜨는 것은 직접 확인하지 못했다.
 - DB 접속 정보는 환경변수 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`로 바꿀 수 있다(기본값은 compose DB).
-- 데모 계정(`demo@example.com` / `demo1234pw`, 로컬 전용)과 예시 데이터: `./gradlew demoSeed`로 넣고 `./gradlew demoSeedRemove`로 지운다(`docs/dev/demo-seed.md`, #349).
 
 ### web/ (npm)
 
