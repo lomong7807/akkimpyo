@@ -161,7 +161,10 @@ class TransactionListPlanTest {
         assertThat(explain(sums, "force_generic_plan")).doesNotContain("Seq Scan");
     }
 
-    /** 월별 통계(#16)도 그 달만 읽는다. 달의 구간 조건이 날짜별 합계와 같고, 라인·거래·카테고리에 장부 조건이 있다. */
+    /**
+     * 월별 통계(#16)도 그 달만 읽는다. 달의 구간 조건이 날짜별 합계와 같다. 카테고리에 장부 조건을 걸면 카테고리부터 읽어
+     * 그 카테고리의 라인 2만 건을 모두 읽었다. 그 계획을 여기서 막는다.
+     */
     @Test
     void 월별_통계는_큰_장부에서_그_달의_거래만_읽는다() {
         List<Statement> monthly = statements("월별 통계 2026-11", () -> assertThat(
