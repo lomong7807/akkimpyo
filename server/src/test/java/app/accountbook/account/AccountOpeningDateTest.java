@@ -122,7 +122,7 @@ class AccountOpeningDateTest {
     void update_storesDatesUpToBothEdges(String date) {
         Account account = create(ledgerId, "2026-11-01");
 
-        update(account.getId(), date);
+        update(account, date);
 
         assertThat(storedDate(account.getId())).isEqualTo(date);
     }
@@ -168,9 +168,9 @@ class AccountOpeningDateTest {
         Account account = create(zonedLedgerId, last.toString());
         assertThat(storedDate(account.getId())).isEqualTo(last.toString());
 
-        assertRejected(() -> update(account.getId(), dayAfter));
-        update(account.getId(), FIRST_DAY);
-        update(account.getId(), last.toString());
+        assertRejected(() -> update(account, dayAfter));
+        update(account, FIRST_DAY);
+        update(account, last.toString());
         assertThat(storedDate(account.getId())).isEqualTo(last.toString());
     }
 
@@ -252,8 +252,8 @@ class AccountOpeningDateTest {
         return accountService.create(owner.getId(), targetLedgerId, command("생활비", date));
     }
 
-    private void update(UUID accountId, String date) {
-        accountService.update(owner.getId(), ledgerId, accountId, command("생활비", date));
+    private void update(Account account, String date) {
+        accountService.update(owner.getId(), account.getLedgerId(), account.getId(), command("생활비", date));
     }
 
     private static AccountCommand command(String name, String date) {
