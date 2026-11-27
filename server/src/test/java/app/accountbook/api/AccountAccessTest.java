@@ -31,7 +31,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #34, #14, #36, #38). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
+ * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #34, #44, #14, #36, #38). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
  * 없는 id와 같은 404이고, 응답에 B의 값이 없으며, DB가 그대로다. 대조로 B 자신은 같은 요청이 열린다(틀린 본문이면 400).
  * 틀린 본문과 B가 이미 쓰는 이름도 404라, 장부가 있는지와 그 안의 이름을 알 수 없다. B의 거래 id로 만들어도 409가 아니라 404다.
  */
@@ -117,6 +117,12 @@ class AccountAccessTest {
                 new Case("계좌 고치기(같은 내용)", (client, ledger) -> putAccount(client, ledger, bBankAsIs), 200),
                 new Case("계좌 고치기(틀린 본문)", (client, ledger) -> putAccount(client, ledger, "{\"name\":1}"), 400),
                 new Case("카테고리 목록", (client, ledger) -> client.get(categories(ledger)), 200),
+                new Case("카테고리 추가", (client, ledger) ->
+                        client.postJson(categories(ledger), "{\"kind\":\"EXPENSE\",\"name\":\"새 분류\"}"), 201),
+                new Case("카테고리 추가(틀린 본문)", (client, ledger) -> client.postJson(categories(ledger), "{\"kind\":1}"), 400),
+                // B의 카테고리와 같은 이름이라 대조가 B의 카테고리를 바꾸지 않는다.
+                new Case("카테고리 이름 바꾸기(같은 이름)", (client, ledger) -> putCategory(client, ledger, "{\"name\":\"B식비\"}"), 200),
+                new Case("카테고리 이름 바꾸기(틀린 본문)", (client, ledger) -> putCategory(client, ledger, "{\"name\":1}"), 400),
                 new Case("중복 경고", (client, ledger) -> client.get(transactions(ledger)
                         + "/duplicates?occurredOn=2026-11-18&amount=1000&payee=B"), 200),
                 new Case("중복 경고(금액 없음)", (client, ledger) ->
@@ -151,6 +157,10 @@ class AccountAccessTest {
 
     private Reply putAccount(ServerClient client, UUID ledger, String json) throws Exception {
         return client.send("PUT", accounts(ledger) + "/" + bBank, json, "Content-Type", "application/json");
+    }
+
+    private Reply putCategory(ServerClient client, UUID ledger, String json) throws Exception {
+        return client.send("PUT", categories(ledger) + "/" + bFood, json, "Content-Type", "application/json");
     }
 
     private Reply put(ServerClient client, UUID ledger, String json) throws Exception {
