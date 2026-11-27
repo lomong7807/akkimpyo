@@ -267,7 +267,7 @@ class LoginTest {
     @Test
     void 해시_자리가_없으면_429이고_1초_뒤에_다시_보내라고_알린다() throws Exception {
         doThrow(BeanUtils.instantiateClass(PasswordHashBusyException.class))
-                .when(userService).authenticate(any(), any());
+                .when(userService).checkPassword(any(), any());
 
         Reply reply = login(EMAIL, PASSWORD).assertProblem(429, "Too Many Requests", "TOO_MANY_REQUESTS");
 
@@ -398,7 +398,7 @@ class LoginTest {
     }
 
     private void assertNotAuthenticated() {
-        verify(userService, never()).authenticate(any(), any());
+        verify(userService, never()).checkPassword(any(), any());
     }
 
     private static Map<String, Object> withoutRequestId(Reply reply) {

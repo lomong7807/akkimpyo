@@ -1,5 +1,6 @@
 package app.accountbook.auth;
 
+import app.accountbook.user.PasswordCheck;
 import app.accountbook.user.User;
 import app.accountbook.user.UserService;
 import java.util.UUID;
@@ -33,20 +34,27 @@ public class LoginService {
 
     /**
      * 이메일과 비밀번호가 맞으면 그 사용자의 토큰. 아니면 {@link InvalidCredentialsException}이고 이유를 나누지 않으며
-     * 아무것도 폐기하지 않는다(P-105). 실패는 사용자를 아는 user가 로그로 남긴다.
+     * 아무것도 폐기하지 않는다(P-105). 계열은 사용자 행을 잠그고 확인한 저장값이 그대로일 때만 만든다. 확인한 뒤 비밀번호가
+     * 바뀌었으면 옛 비밀번호로 새 계열이 생기지 않게 실패한다(ADR 001 결정 7). 실패는 사용자를 아는 user가 로그로 남긴다.
      *
      * @param refreshCookie 요청의 refresh 쿠키 값. 없으면 null
      */
     public LoginTokens login(String email, String password, String refreshCookie) {
-        UUID userId = userService.authenticate(email, password).orElseThrow(InvalidCredentialsException::new);
-        IssuedRefreshToken refreshToken = transactionTemplate.execute(status -> newFamily(userId, refreshCookie));
-        log.info("로그인 성공: 사용자 {}", userId);
+        PasswordCheck check = userService.checkPassword(email, password).orElseThrow(InvalidCredentialsException::new);
+        IssuedRefreshToken refreshToken = transactionTemplate.execute(status -> {
+            if (!userService.lockUnchanged(check)) {
+                throw new InvalidCredentialsException();
+            }
+            return newFamily(check.userId(), refreshCookie);
+        });
+        log.info("로그인 성공: 사용자 {}", check.userId());
         return tokens(refreshToken);
     }
 
     /**
      * 가입(F-002, F-003)하고 그 사용자의 토큰을 준다. 가입과 그 규칙(입력, 허용 목록, 중복)은 user가 한다. 가입과 계열은
-     * 한 트랜잭션이 아니다. 계열 쪽이 실패해도 가입은 남고 사용자는 로그인하면 된다(ADR 004, dba).
+     * 한 트랜잭션이 아니다. 계열 쪽이 실패해도 가입은 남고 사용자는 로그인하면 된다(ADR 004). 응답 전에는 이 사용자의
+     * 토큰이 밖에 없어 비밀번호 바꾸기와 겹치지 않으므로 사용자 행을 잠그지 않는다(dba).
      */
     public LoginTokens signup(String email, String password, String displayName, String refreshCookie) {
         User user = userService.createUser(email, password, displayName);

@@ -43,6 +43,10 @@ class ServiceMethodInventoryTest {
      * {@code Map.of}가 10쌍까지라 둘로 나눠 합친다.
      */
     static final Map<String, String> NO_ACTOR_ALLOWED = Stream.of(Map.of(
+            "UserService.checkPassword",
+            "authenticate와 같은 로그인의 확인이고, 확인할 때 본 저장값을 user 밖에서 꺼낼 수 없는 채로 함께 준다(ADR 001 결정 7)",
+            "UserService.lockUnchanged",
+            "로그인이 계열을 만드는 트랜잭션에서 checkPassword가 준 결과를 돌려주는 것뿐이다. 사용자 행을 잠그고 참거짓만 답한다",
             "LoginService.refresh",
             "갱신. 아직 호출자가 없다. 사용자 id를 받지 않고, refresh 쿠키가 쓸 수 있는 값일 때만 그 계열의 사용자 토큰을 준다"),
             Map.of(
