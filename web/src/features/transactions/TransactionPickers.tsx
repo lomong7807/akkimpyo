@@ -1,13 +1,13 @@
 import type { UseQueryResult } from '@tanstack/react-query'
 import type { ReactNode, Ref } from 'react'
 import EmptyState from '../../components/EmptyState'
-import LoadFailure from '../../components/LoadFailure'
 import OptionList, { type PickerSection } from '../../components/OptionList'
 import PickerField from '../../components/PickerField'
 import { useLoadingMessage } from '../../components/useLoadingMessage'
 import { accountTypes, type Account } from '../accounts/accounts'
 import { accountTypeNames } from '../accounts/accountTypeNames'
 import type { Category, CategoryKind } from '../categories/categories'
+import LoadFailureHere from '../connection/LoadFailureHere'
 import { useEntryAccounts, useEntryCategories } from './entryLists'
 import styles from './TransactionNew.module.css'
 
@@ -93,7 +93,8 @@ export function AccountField({ label, value, onChange, ...field }: AccountFieldP
 function PickerState<T>({ query, children }: { query: UseQueryResult<T>; children: (data: T) => ReactNode }) {
   if (query.data !== undefined) return children(query.data)
   if (query.errorUpdateCount > 0) {
-    return <LoadFailure headingLevel={2} onRetry={() => void query.refetch()} busy={query.isFetching} />
+    // 연결이 없으면 버튼 없이 기다리고 돌아오면 다시 받는다(F-908). 판 안이라 띠가 가려져도 문구가 까닭을 알린다
+    return <LoadFailureHere headingLevel={2} onRetry={() => void query.refetch()} busy={query.isFetching} />
   }
   return <PickerLoading />
 }

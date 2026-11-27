@@ -8,6 +8,7 @@ import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { setDeviceClock } from './support/clock'
+import { goOffline, goOnline } from './support/connection'
 import { startTransactionDetail, trashed, type TransactionDetailServer } from './support/transactionDetail'
 import { expenseOf, incomeOf, startTransactionList, transferOf, type TransactionList } from './support/transactionList'
 import type { Categories } from './support/categories'
@@ -28,6 +29,8 @@ import { readWebFile } from './support/webFile'
 
 const CSS = 'src/features/transactions/TransactionDetail.module.css'
 const failedToDelete = '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.'
+const lostToDelete = '연결이 끊겨 삭제하지 못했어요. 연결되면 다시 시도해 주세요.'
+const offlineDelete = '연결되면 삭제할 수 있어요'
 const conflict = '다른 기기에서 먼저 고쳤어요'
 
 const server = startMockServer()
@@ -519,7 +522,6 @@ describe('삭제(F-227)', () => {
 
   it.each([
     ['서버 오류', () => problem(500, 'INTERNAL_ERROR')],
-    ['연결 실패', () => HttpResponse.error()],
     ['약속과 다른 응답', () => HttpResponse.json({ id: 'x' })],
   ])('%s면 창이 남고 버튼 위에 문구, 실행 버튼은 "다시 시도"이고 초점이 그리로 간다', async (_, respond) => {
     const answers = [respond]
@@ -536,6 +538,60 @@ describe('삭제(F-227)', () => {
     await opened.user.click(inDialog('다시 시도'))
     await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
     expect(detail.requests.delete.map(({ query }) => query)).toEqual(['version=1', 'version=1'])
+  })
+
+  it('요청 중에 연결이 끊기면 창의 버튼 위에 "연결이 끊겨 삭제하지 못했어요."이고 "다시 시도"는 연결이 없는 동안 누를 수 없다(#238)', async () => {
+    const answers = [() => HttpResponse.error()]
+    detail.deleteResponse = () => answers.shift()?.()
+    const item = lunch()
+    put(item)
+    const opened = await openDetail(item)
+    await askToDelete(opened)
+    await opened.user.click(inDialog('삭제'))
+    const alert = await within(dialog()!).findByRole('alert')
+    expect(alert.textContent).toBe(lostToDelete)
+    expect(within(dialog()!).queryByText(offlineDelete)).toBeNull()
+    expect(document.activeElement).toBe(inDialog('다시 시도'))
+    expect(inDialog('다시 시도').getAttribute('aria-disabled')).toBe('true')
+    act(() => goOnline())
+    expect(inDialog('다시 시도').getAttribute('aria-disabled')).toBeNull()
+    await opened.user.click(inDialog('다시 시도'))
+    await waitFor(() => expect(pathOf(opened)).toBe('/transactions'))
+    expect(detail.requests.delete.map(({ query }) => query)).toEqual(['version=1', 'version=1'])
+  })
+
+  it('창의 앞선 실패 문구는 연결이 끊길 때 안내 줄이 대신하고 실행 버튼은 "삭제"(비활성)로 돌아오며, 다시 연결돼도 되살리지 않는다(designer #238)', async () => {
+    detail.deleteResponse = () => problem(500, 'INTERNAL_ERROR')
+    const item = lunch()
+    put(item)
+    const opened = await openDetail(item)
+    await askToDelete(opened)
+    await opened.user.click(inDialog('삭제'))
+    expect((await within(dialog()!).findByRole('alert')).textContent).toBe(failedToDelete)
+    act(() => goOffline())
+    expect(within(dialog()!).queryByText(failedToDelete)).toBeNull()
+    expect(within(dialog()!).getByText(offlineDelete)).toBeTruthy()
+    expect(inDialog('삭제').getAttribute('aria-disabled')).toBe('true')
+    act(() => goOnline())
+    expect(within(dialog()!).queryByText(offlineDelete)).toBeNull()
+    expect(within(dialog()!).queryByRole('alert')).toBeNull()
+  })
+
+  it('창이 열린 채 연결이 끊기면 "삭제"가 비활성이고 바로 위에 "연결되면 삭제할 수 있어요"를 보이며, 돌아오면 지운다(00-common 5.6, #238)', async () => {
+    const item = lunch()
+    put(item)
+    const opened = await openDetail(item)
+    await askToDelete(opened)
+    act(() => goOffline())
+    expect(inDialog('삭제').getAttribute('aria-disabled')).toBe('true')
+    const actions = inDialog('삭제').closest('div')!.parentElement!
+    expect(actions.previousElementSibling!.textContent).toBe(offlineDelete)
+    await opened.user.click(inDialog('삭제'))
+    expect(detail.requests.delete).toEqual([])
+    expect(inDialog('닫기').getAttribute('aria-disabled')).toBeNull()
+    act(() => goOnline())
+    expect(within(dialog()!).queryByText(offlineDelete)).toBeNull()
+    expect(inDialog('삭제').getAttribute('aria-disabled')).toBeNull()
   })
 
   it('다시 시도하는 동안 문구를 두고 "다시 시도"에 도는 표시를 둔다', async () => {

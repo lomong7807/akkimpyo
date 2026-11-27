@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import { ApiError } from '../../api/apiError'
 import { sessionUserId } from '../../api/session'
 import { pendingOf, queueTransaction, type PendingTransaction } from '../../device/pendingQueue'
 import { isDate, monthOf } from '../../lib/calendarDate'
@@ -24,9 +23,7 @@ export const QUEUED_TOAST = '기기에 저장했어요. 연결되면 보낼게�
 export const QUEUE_FAILED = '연결이 없어 저장하지 못했어요. 이 브라우저에는 저장해 둘 수 없어요.'
 
 /** 요청이 응답 없이 실패했다(요청 중 연결이 끊김). 이 새 거래는 같은 id로 쌓는다(P-904). 서버 오류와 지연은 아니다 */
-export function isConnectionLoss(error: unknown): boolean {
-  return error instanceof ApiError && error.kind === 'connection'
-}
+export { isConnectionLost as isConnectionLoss } from '../connection/offlineAction'
 
 interface Owner {
   /** 입력의 주인(sessionUserId). 확인하지 못한 로그인이면 기록의 사용자다 */

@@ -5,6 +5,7 @@ import { accountOf, accountsBody, startAccounts, type Accounts } from './support
 import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { untilOpened, untilUnshielded } from './support/dialog'
 import { setDeviceClock } from './support/clock'
+import { goOffline, goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -24,6 +25,8 @@ const dateRequired = '기준일을 골라 주세요'
 const dateOutOfRange = '2000년 1월 1일부터 2027년 11월 26일까지 고를 수 있어요'
 const typeNotice = '종류를 바꾸면 금액의 뜻이 바뀌어요. 금액을 다시 확인해 주세요.'
 const failed = '문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
+const lost = '연결이 끊겨 저장하지 못했어요. 연결되면 다시 시도해 주세요.'
+const offlineReason = '연결되면 저장할 수 있어요'
 const question = '쓰던 내용을 버릴까요?'
 
 const server = startMockServer()
@@ -668,9 +671,45 @@ describe('서버가 거부함', () => {
     const { user } = await open()
     await fillAndSave(user)
     await screen.findByRole('alert')
+    // 연결이 돌아와야 "다시 시도"를 누를 수 있다(#238)
+    act(() => goOnline())
     await user.click(retryButton())
     await waitFor(() => expect(errorOf(name())).toBe(nameDuplicate))
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('연결이 없을 때(00-common 4.3, R1, #238)', () => {
+  it('화면은 열리고 값을 쓸 수 있지만 저장은 비활성이고 바로 위에 "연결되면 저장할 수 있어요"를 보인다. 돌아오면 지운다', async () => {
+    const opened = await open()
+    act(() => goOffline())
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true')
+    const reason = saveButton().previousElementSibling as HTMLElement
+    expect(reason.textContent).toBe(offlineReason)
+    await fill(opened.user)
+    await opened.user.click(saveButton())
+    await opened.user.keyboard('{Enter}')
+    expect(accounts.added).toEqual([])
+    expect(path(opened)).toBe('/accounts/new')
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(saveButton().getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('요청 중에 끊기면 그 줄 대신 "연결이 끊겨 저장하지 못했어요."와 "다시 시도"(연결이 없는 동안 비활성)이고 값이 남는다', async () => {
+    accounts.addResponse = () => HttpResponse.error()
+    const opened = await open()
+    await fillAndSave(opened.user)
+    expect((await screen.findByRole('alert')).textContent).toBe(lost)
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true')
+    expect([name().value, balance().value]).toEqual(['급여통장', '350,000'])
+    accounts.addResponse = undefined
+    act(() => goOnline())
+    expect(retryButton().getAttribute('aria-disabled')).toBeNull()
+    await opened.user.click(retryButton())
+    expect(await screen.findByText('급여통장')).toBeTruthy()
   })
 })
 
@@ -678,7 +717,6 @@ describe('서버 오류와 지연', () => {
   it.each([
     ['500', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['429', () => problem(429, 'TOO_MANY_REQUESTS')],
     ['404', () => problem(404, 'NOT_FOUND')],
     ['413', () => problem(413, 'PAYLOAD_TOO_LARGE')],

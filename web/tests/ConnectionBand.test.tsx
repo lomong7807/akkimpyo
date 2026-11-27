@@ -7,6 +7,8 @@ import { goOffline, goOnline } from './support/connection'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
 import { passTime } from './support/testClock'
+import type { Accounts } from './support/accounts'
+import type { Categories } from './support/categories'
 import { expenseOf, startTransactionList, type TransactionList } from './support/transactionList'
 import { id, openApp, resetGlobals, settle, startServer, untilDefaultAccount } from './support/transactionScreen'
 import { resetViewport, setViewportWidth } from './support/viewport'
@@ -22,6 +24,8 @@ import { readWebFile } from './support/webFile'
 const server = startMockServer()
 let backend: Backend
 let list: TransactionList
+let accounts: Accounts
+let categories: Categories
 
 const BAND = '연결이 없어요. 새 거래 입력만 돼요.'
 const CSS = 'src/features/connection/ConnectionBand.module.css'
@@ -29,7 +33,7 @@ const CSS = 'src/features/connection/ConnectionBand.module.css'
 beforeEach(() => {
   setDeviceClock('2026-11-26T12:30:00+09:00')
   vi.stubGlobal('scrollTo', vi.fn())
-  ;({ backend } = startServer(server))
+  ;({ backend, accounts, categories } = startServer(server))
   list = startTransactionList(server, backend)
   installIntersectionObserver()
   server.use(http.head('/api/v1/', () => new HttpResponse(null, { status: 404, headers: { 'X-Request-Id': 'req-probe' } })))
@@ -45,6 +49,19 @@ afterEach(() => {
 
 const band = () => screen.queryByText(BAND)
 const bandRegion = () => document.querySelector<HTMLElement>('[class*="_connectionBand_"]')!
+
+/** 내역 화면의 요청(목록, 계좌, 카테고리)이 모두 서버에 닿지 못한다. 하나라도 답이 오면 앱은 연결이 있다고 본다 */
+function cutScreenRequests() {
+  list.response = () => HttpResponse.error()
+  accounts.response = () => HttpResponse.error()
+  categories.response = () => HttpResponse.error()
+}
+
+function restoreScreenRequests() {
+  list.response = undefined
+  accounts.response = undefined
+  categories.response = undefined
+}
 
 async function openHome() {
   const opened = await openApp('/home')
@@ -73,7 +90,8 @@ describe('보이는 때', () => {
   })
 
   it('요청이 연결 문제로 실패하면 기다리지 않고 바로 띄운다', async () => {
-    list.response = () => HttpResponse.error()
+    // 브라우저 신호는 켜진 채 서버에 닿지 못한다. 그 화면의 요청이 모두 실패한다(응답이 오면 연결이 있다고 본다)
+    cutScreenRequests()
     await openApp('/transactions?month=2026-11')
     await screen.findByText('불러오지 못했어요.')
     expect(band()).not.toBeNull()
@@ -117,10 +135,10 @@ describe('연결이 돌아오면', () => {
 
   it('요청 실패로 없음이 된 뒤 확인 요청으로 돌아오면 지금 화면의 데이터를 다시 받는다', async () => {
     list.months.set('2026-11', [expenseOf({ occurredOn: '2026-11-26', accountId: id.salary, amount: 3000, payee: '돌아온 뒤' })])
-    list.response = () => HttpResponse.error()
+    cutScreenRequests()
     await openApp('/transactions?month=2026-11')
     await screen.findByText('불러오지 못했어요.')
-    list.response = undefined
+    restoreScreenRequests()
     // 확인 요청은 5초 뒤에 간다(api/connection)
     await passTime(5_000)
     expect(await screen.findByText('돌아온 뒤')).toBeTruthy()

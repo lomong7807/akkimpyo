@@ -3,6 +3,7 @@ import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delayed, type Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
+import { goOffline, goOnline } from './support/connection'
 import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
@@ -50,6 +51,8 @@ import { resetViewport } from './support/viewport'
 /* D-04 거래 수정의 저장(F-208, P-213, P-217). 수정 API(#36)는 가짜 서버가 계약대로 답한다. */
 
 const failed = '문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
+const lost = '연결이 끊겨 저장하지 못했어요. 연결되면 다시 시도해 주세요.'
+const offlineReason = '연결되면 저장할 수 있어요'
 const conflict = '다른 기기에서 먼저 고쳤어요'
 /** planner 확정(#89, 2026-11-26) */
 const deletedMeanwhile = '그사이 삭제된 거래라 저장하지 못했어요'
@@ -326,11 +329,54 @@ describe('검증은 새 입력과 같다', () => {
   })
 })
 
+describe('연결이 없을 때(00-common 4.3, 02의 0.10, #238)', () => {
+  it('화면은 열리고 값을 쓸 수 있지만 저장은 비활성이고 바로 위에 "연결되면 저장할 수 있어요"를 보인다. 돌아오면 지운다', async () => {
+    const item = lunch()
+    put(item)
+    const { user } = await openFromDetail(item)
+    act(() => goOffline())
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true')
+    expect(saveButton().previousElementSibling!.textContent).toBe(offlineReason)
+    await changeAndSave(user)
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    expect(amount().value).toBe('30,000')
+    expect(detail.requests.update).toEqual([])
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(saveButton().getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('앞선 실패 문구가 있으면 연결이 끊길 때 안내 줄이 그것을 대신하고, 다시 연결돼도 되살리지 않는다(designer #238)', async () => {
+    await failToSave(() => problem(500, 'INTERNAL_ERROR'))
+    act(() => goOffline())
+    expect(screen.queryByText(failed)).toBeNull()
+    expect(saveButton().previousElementSibling!.textContent).toBe(offlineReason)
+    act(() => goOnline())
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(screen.queryByText(failed)).toBeNull()
+  })
+
+  it('요청 중에 끊기면 그 줄 대신 "연결이 끊겨 저장하지 못했어요."와 "다시 시도"(연결이 없는 동안 비활성)이고, 돌아와도 저절로 다시 보내지 않는다', async () => {
+    const { user } = await failToSave(() => HttpResponse.error())
+    expect(screen.getByRole('alert').textContent).toBe(lost)
+    expect(screen.queryByText(offlineReason)).toBeNull()
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true')
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true')
+    expect(amount().value).toBe('30,000')
+    detail.updateResponse = undefined
+    act(() => goOnline())
+    await settle(100)
+    expect(detail.requests.update).toHaveLength(1)
+    expect(retryButton().getAttribute('aria-disabled')).toBeNull()
+    await user.click(retryButton())
+    await waitFor(() => expect(detail.requests.update).toHaveLength(2))
+  })
+})
+
 describe('저장하지 못함', () => {
   it.each([
     ['500', () => problem(500, 'INTERNAL_ERROR')],
     ['읽을 수 없는 502', () => new HttpResponse('<html>', { status: 502 })],
-    ['연결 오류', () => HttpResponse.error()],
     ['429', () => problem(429, 'TOO_MANY_REQUESTS')],
     ['유형이 다르다는 400', refuse(['type', 'NOT_ALLOWED'])],
     ['version 형식 400', refuse(['version', 'INVALID_FORMAT'])],
@@ -379,7 +425,7 @@ describe('저장하지 못함', () => {
     const { user } = await failToSave(() => problem(500, 'INTERNAL_ERROR'))
     await settle(100)
     expect(detail.requests.update).toHaveLength(1)
-    detail.updateResponse = () => HttpResponse.error()
+    detail.updateResponse = () => problem(503, 'INTERNAL_ERROR')
     await user.click(retryButton())
     await waitFor(() => expect(detail.requests.update).toHaveLength(2))
     expect(sentBodies()[1]).toEqual(sentBodies()[0])
