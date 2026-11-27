@@ -1,6 +1,7 @@
 package app.accountbook.api;
 
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.NotFoundException;
 import app.accountbook.transaction.CreateResult;
 import app.accountbook.transaction.IdConflictException;
 import app.accountbook.transaction.TransactionCommand;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,7 +21,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 장부의 거래(F-201~F-204, #14). 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가 한 번 더 한다. */
+/** 장부의 거래(F-201~F-204, #14)와 상세(F-224, #15). 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가 한 번 더 한다. */
 @RestController
 @RequestMapping(path = "/api/v1/ledgers/{ledgerId}/transactions", produces = MediaType.APPLICATION_JSON_VALUE)
 class TransactionController {
@@ -59,6 +61,20 @@ class TransactionController {
         }
         return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(response(actorId, ledgerId, result.transaction()));
+    }
+
+    /**
+     * 거래 하나(F-224, #15 상세 조회 계약). 휴지통의 거래도 200이고 {@code deletedAt}이 채워져 온다. 없는 거래, 다른 장부의
+     * 거래(내가 그 장부의 구성원이어도), 완전히 지운 거래는 구분하지 않고 404다.
+     */
+    @GetMapping("/{transactionId}")
+    TransactionResponse get(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                            @PathVariable UUID transactionId) {
+        TransactionView tx = transactionService.get(actorId, transactionId);
+        if (!tx.ledgerId().equals(ledgerId)) {
+            throw new NotFoundException();
+        }
+        return response(actorId, ledgerId, tx);
     }
 
     private TransactionResponse response(UUID actorId, UUID ledgerId, TransactionView tx) {
