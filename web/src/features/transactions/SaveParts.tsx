@@ -156,12 +156,18 @@ function ChoiceContent({ choice, mineType, busy, online, onKeep, onFix, onSaveAs
  * 중복 경고 판(F-209, D-04 (30)·(31), D-05 (10)). 휴대폰 배치는 바닥 시트, 넓은 화면은 가운데 창이다(DialogFrame). 처음 초점은
  * 판 제목이다: 저장을 누르자 뜻밖에 뜨는 판이라, 엔터 한 번으로 겹친 거래가 저장되지 않게 한다(5.6의 예외, designer #241 D3).
  * "닫기"(와 X, Esc, 판 바깥, 끌어내리기)는 판만 닫고 입력으로 돌아간다. "그래도 저장"은 판을 닫고 그대로 저장을 이어 가므로 판 안에
- * 처리 중 표시와 실패 문구가 없다(designer #241 D4).
+ * 처리 중 표시와 실패 문구가 없다(designer #241 D4). 그때는 움직임 없이 바로 닫는다(D-05가 그 처리 안에서 입력칸에 초점을 준다).
  */
 export function DuplicateWarningDialog({ save }: { save: NewTransactionSave }) {
-  const { warning, warningOpen, me } = save
+  const { warning, warningOpen, warningClosesNow, me } = save
   return (
-    <DialogFrame open={warningOpen} title={DUPLICATE_TITLE} titleFocusable onClose={save.closeWarning}>
+    <DialogFrame
+      open={warningOpen}
+      title={DUPLICATE_TITLE}
+      titleFocusable
+      instantClose={warningClosesNow}
+      onClose={save.closeWarning}
+    >
       {warning && (
         <ConflictPanel
           description={DUPLICATE_DESCRIPTION}

@@ -148,6 +148,9 @@ export function useNewTransactionSave({
   // 중복 경고 판. 닫히는 움직임 동안 내용이 남도록 열림을 따로 둔다
   const [warning, setWarning] = useState<DuplicateWarning>()
   const [warningOpen, setWarningOpen] = useState(false)
+  // "그래도 저장"으로 닫을 때는 움직임 없이 그 처리 안에서 뺀다. 모달이 남아 있으면 D-05가 그 처리 안에서 홈의 입력칸에 주는
+  // 초점을 받지 못한다(iPhone 키보드, Overlay의 instantClose)
+  const [warningClosesNow, setWarningClosesNow] = useState(false)
   // 묻는 동안 화면이 사라지면 답이 와도 보내지 않는다(떠난 화면의 입력이 저장되지 않게)
   const mounted = useRef(true)
   useEffect(() => {
@@ -222,12 +225,14 @@ export function useNewTransactionSave({
     }
     onFailed?.()
     setWarning((last) => ({ items: found, today: todayOfDevice(), openings: (last?.openings ?? 0) + 1 }))
+    setWarningClosesNow(false)
     setWarningOpen(true)
   }
 
   /** 중복 경고 판의 "그래도 저장": 판을 닫고 저장 버튼을 누른 것과 같이 이어 간다(묻지 않는다, designer #241 D4) */
   function saveAnyway() {
     if (busy) return
+    setWarningClosesNow(true)
     setWarningOpen(false)
     submit(id, 'save', true)
   }
@@ -386,6 +391,7 @@ export function useNewTransactionSave({
     /** 중복 경고 판(F-209). "닫기"는 판만 닫고 입력으로 돌아간다. 값은 그대로다 */
     warning,
     warningOpen,
+    warningClosesNow,
     closeWarning: () => setWarningOpen(false),
     saveAnyway,
     /** 판의 "입력한 사람: 나"를 가르는 사용자(입력의 주인) */
