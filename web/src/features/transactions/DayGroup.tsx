@@ -38,18 +38,20 @@ export function DayGroup({ date, today, total, items, names, highlighted, headin
         </Heading>
         {total && <DaySums total={total} />}
       </div>
-      {/* Safari는 점을 없앤 목록을 목록으로 알리지 않으므로 role을 적는다 */}
-      <ul role="list" aria-labelledby={headingId} className={styles.rows}>
-        {items.map((item) => (
-          <TransactionRow
-            key={item.id}
-            transaction={item}
-            names={names}
-            dateId={headingId}
-            highlighted={item.id === highlighted}
-          />
-        ))}
-      </ul>
+      {/* Safari는 점을 없앤 목록을 목록으로 알리지 않으므로 role을 적는다. 줄이 없으면(달력의 빈 날) 목록을 두지 않는다 */}
+      {items.length > 0 && (
+        <ul role="list" aria-labelledby={headingId} className={styles.rows}>
+          {items.map((item) => (
+            <TransactionRow
+              key={item.id}
+              transaction={item}
+              names={names}
+              dateId={headingId}
+              highlighted={item.id === highlighted}
+            />
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

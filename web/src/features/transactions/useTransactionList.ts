@@ -1,7 +1,7 @@
 import { queryOptions, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { ledgerKey, LEDGER_LIST } from '../me/ledgerKey'
-import { fetchMonthTotals, fetchRecentTransactions, fetchTransactionPage, RECENT_COUNT } from './transactions'
+import { fetchDayPage, fetchMonthTotals, fetchRecentTransactions, fetchTransactionPage, RECENT_COUNT } from './transactions'
 
 /**
  * 받은 목록을 새것으로 보는 시간. 이 안에 상세에 다녀오거나 창에 초점이 와도 다시 받지 않는다.
@@ -17,9 +17,14 @@ export const TRANSACTION_LIST_STALE_MS = 30_000
  * - 내역의 한 달: 달(`YYYY-MM`)
  * - 홈의 이번 달 합계: { month, limit: 1 }
  * - 홈의 최근 거래: { limit: 10 }
+ * - 달력의 고른 날: { date }
  */
 export function transactionListKey(ledgerId: string, month: string) {
   return [...ledgerKey(ledgerId, 'transactions'), month] as const
+}
+
+export function dayTransactionsKey(ledgerId: string, date: string) {
+  return [...ledgerKey(ledgerId, 'transactions'), { date }] as const
 }
 
 export function monthTotalsKey(ledgerId: string, month: string) {
@@ -39,6 +44,19 @@ export function useTransactionList(month: string) {
   return useInfiniteQuery({
     queryKey: transactionListKey(ledger.id, month),
     queryFn: ({ pageParam }) => fetchTransactionPage(ledger.id, month, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    staleTime: TRANSACTION_LIST_STALE_MS,
+    meta: LEDGER_LIST,
+  })
+}
+
+/** 현재 장부의 하루 거래를 50건씩 받는다(달력 D-02 (5), #15 하루 모드). 나머지는 useTransactionList와 같다. */
+export function useDayTransactions(date: string) {
+  const ledger = useCurrentLedger()
+  return useInfiniteQuery({
+    queryKey: dayTransactionsKey(ledger.id, date),
+    queryFn: ({ pageParam }) => fetchDayPage(ledger.id, date, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     staleTime: TRANSACTION_LIST_STALE_MS,
