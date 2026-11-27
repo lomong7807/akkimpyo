@@ -8,19 +8,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import app.accountbook.api.ServerClient.Reply;
-import app.accountbook.auth.LoginService;
 import app.accountbook.support.CapturedLogs;
 import app.accountbook.support.HttpServerTest;
 import app.accountbook.support.StoppedClockConfig.StoppedClock;
 import app.accountbook.user.PasswordHashBusyException;
 import app.accountbook.user.SignupRows;
-import app.accountbook.user.User;
 import app.accountbook.user.UserService;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import com.nimbusds.jwt.SignedJWT;
-import com.tngtech.archunit.core.importer.ClassFileImporter;
-import com.tngtech.archunit.core.importer.ImportOption;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -227,17 +223,6 @@ class SignupTest {
             SPRING_WEB.setLevel(null);
         }
         assertThat(new SignupRequest(EMAIL, PASSWORD, NAME)).hasToString("SignupRequest[]");
-    }
-
-    /** 비밀번호를 확인하지 않고 토큰을 주는 입구라, 가입 API 말고는 부르지 못하게 한다. */
-    @Test
-    void 가입_직후의_로그인은_가입_API만_부른다() throws Exception {
-        var loginNewUser = new ClassFileImporter().withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
-                .importPackages("app.accountbook").get(LoginService.class).getMethod("loginNewUser", User.class);
-
-        assertThat(loginNewUser.getCallsOfSelf())
-                .extracting(call -> call.getOriginOwner().getSimpleName() + "." + call.getOrigin().getName())
-                .containsExactly("AuthController.signup");
     }
 
     private Reply signup(String email, String password, String displayName, String... headers) throws Exception {

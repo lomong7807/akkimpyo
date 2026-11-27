@@ -7,7 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-/** 로그인(F-009). 확인은 user가 하고 여기서는 결과만 받아 토큰을 발급한다(ADR 004 결정 6). */
+/** 로그인(F-009)과 가입 직후의 로그인. 확인과 가입은 user가 하고 여기서는 결과만 받아 토큰을 발급한다(ADR 004 결정 6). */
 @Service
 public class LoginService {
 
@@ -33,11 +33,12 @@ public class LoginService {
     }
 
     /**
-     * 가입 직후의 로그인(F-002, ADR 001 결정 3). 비밀번호를 다시 확인하지 않으므로 api의 가입이
-     * {@link UserService#createUser}가 방금 돌려준 사용자로만 부른다(SignupTest가 부르는 곳을 막는다).
-     * 가입과 한 트랜잭션이 아니다. 발급이 실패해도 가입은 남고 사용자는 로그인하면 된다(ADR 004).
+     * 가입(F-002, F-003)하고 그 사용자의 access token을 준다. 가입과 그 규칙(입력, 허용 목록, 중복)은 user가 하고
+     * 여기서는 만들어진 사용자의 토큰만 발급한다(login과 같은 모양). 둘은 한 트랜잭션이 아니다. 발급이 실패해도 가입은 남고
+     * 사용자는 로그인하면 된다(ADR 004). 해시가 DB 연결을 잡지 않도록 트랜잭션 안에서 부르지 않는다.
      */
-    public String loginNewUser(User newUser) {
-        return issuer.issue(newUser.getId());
+    public String signup(String email, String password, String displayName) {
+        User user = userService.createUser(email, password, displayName);
+        return issuer.issue(user.getId());
     }
 }

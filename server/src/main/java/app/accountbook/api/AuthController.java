@@ -1,8 +1,6 @@
 package app.accountbook.api;
 
 import app.accountbook.auth.LoginService;
-import app.accountbook.user.User;
-import app.accountbook.user.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -18,11 +16,9 @@ import org.springframework.web.bind.annotation.RestController;
 class AuthController {
 
     private final LoginService loginService;
-    private final UserService userService;
 
-    AuthController(LoginService loginService, UserService userService) {
+    AuthController(LoginService loginService) {
         this.loginService = loginService;
-        this.userService = userService;
     }
 
     /** produces와 consumes를 적어 줄 수 없는 형식의 응답과 JSON이 아닌 본문을 비밀번호를 확인하기 전에 거절한다(ADR 002 5절). */
@@ -32,12 +28,11 @@ class AuthController {
         return new AccessTokenResponse(loginService.login(request.email(), request.password()));
     }
 
-    /** 가입(F-002)은 user, 이어서 로그인과 같은 토큰은 auth가 한다. 한 트랜잭션이 아니다(ADR 004). refresh 쿠키는 #26. */
+    /** 가입(F-002)하고 로그인과 같은 토큰을 준다. api는 auth만 부른다(ModuleBoundaryTest). refresh 쿠키는 #26. */
     @PostMapping(path = "/signup", consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     AccessTokenResponse signup(@RequestBody SignupRequest request) {
-        User user = userService.createUser(request.email(), request.password(), request.displayName());
-        return new AccessTokenResponse(loginService.loginNewUser(user));
+        return new AccessTokenResponse(loginService.signup(request.email(), request.password(), request.displayName()));
     }
 }
