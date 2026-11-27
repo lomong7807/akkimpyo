@@ -20,6 +20,7 @@ import { parseCategories } from '../categories/categories'
 import { categoriesKey, useCategories } from '../categories/useCategories'
 import { useShown } from '../connection/deviceFirst'
 import LoadFailureHere from '../connection/LoadFailureHere'
+import { DELETE, failureTextOf, isConnectionLost, offlineReasonOf } from '../connection/offlineAction'
 import { useConnection } from '../connection/useConnection'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { useKeptCopy } from '../me/ledgerCopy'
@@ -281,7 +282,6 @@ function ListedSkeleton({ listed, names, today }: { listed: ListedTransaction; n
   )
 }
 
-const failedToDelete = '문제가 생겨 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.'
 /** 최신 거래가 오지 않은 충돌(1A와 같다). 판(N-04)을 그릴 수 없어 확인 창의 오류 자리에 제목을 쓴다 */
 const conflict = '다른 기기에서 먼저 고쳤어요'
 
@@ -294,6 +294,8 @@ const againFailed = '문제가 생겨 다시 하지 못했어요. 잠시 후 다
 interface DeleteFailure {
   failure: ConfirmFailure
   actionLabel: string
+  /** 요청 중에 연결이 끊긴 실패다. 연결이 없어도 남는다 */
+  lost?: boolean
 }
 
 /** 다른 동작 판(N-04 (5)~(8))에 보이는 최신 거래와 그 판의 실패 */
@@ -335,6 +337,8 @@ function DeleteAction({ transaction, names }: DeleteActionProps) {
   // 상태가 바뀌어 그려지기 전에 또 눌러도 요청은 하나다
   const sending = useRef(false)
   const busy = deletion.isPending || deletion.isSuccess
+  // 연결이 끊기면 안내 줄이 앞선 실패 문구를 대신하고 다시 연결돼도 되살리지 않는다. 한 버튼 위에는 한 줄만(designer #238)
+  if (!online && failed && !failed.lost) setFailed(undefined)
 
   function ask() {
     deletion.reset()
@@ -384,7 +388,12 @@ function DeleteAction({ transaction, names }: DeleteActionProps) {
       setStale({ ...stale, failure: { message, count: (stale.failure?.count ?? 0) + 1 } })
       return
     }
-    setFailed({ failure: { message: failedToDelete, focus: 'action' }, actionLabel: '다시 시도' })
+    // 요청 중에 연결이 끊겼으면 "연결이 끊겨 삭제하지 못했어요."다. "다시 시도"는 연결이 없는 동안 누를 수 없다(00-common 4.3)
+    setFailed({
+      failure: { message: failureTextOf(error, DELETE), focus: 'action' },
+      actionLabel: '다시 시도',
+      lost: isConnectionLost(error),
+    })
   }
 
   // 판의 (7). 실패한 뒤에는 "다시 시도"이고 연결이 없는 동안은 누를 수 없다
@@ -428,6 +437,9 @@ function DeleteAction({ transaction, names }: DeleteActionProps) {
             actionLabel={failed?.actionLabel ?? '삭제'}
             busy={busy}
             failure={failed?.failure}
+            // 열린 채 연결이 끊기면 실행 버튼을 누를 수 없고 바로 위에 까닭을 보인다(창이 띠를 가린다, 00-common 5.6)
+            actionDisabled={!online}
+            reason={!online ? offlineReasonOf(DELETE) : undefined}
             onClose={() => setAsking(false)}
             onAction={() => send(transaction.version)}
           />

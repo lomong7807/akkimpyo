@@ -1,11 +1,11 @@
 import { useId, type ReactNode, type Ref } from 'react'
 import { Button } from '../../components/Button'
-import LoadFailure from '../../components/LoadFailure'
 import { LoadingStatus, SkeletonSpace } from '../../components/Skeleton'
 import StatusChip from '../../components/StatusChip'
 import { useLoadingMessage } from '../../components/useLoadingMessage'
 import type { Category, CategoryKind } from '../categories/categories'
 import { useCategories } from '../categories/useCategories'
+import LoadFailureHere from '../connection/LoadFailureHere'
 import WelcomeStep from './WelcomeStep'
 import styles from './Welcome.module.css'
 
@@ -47,7 +47,7 @@ function CategoryGroups() {
   const message = useLoadingMessage()
   // 다시 받는 동안에는 isError가 풀리므로 이 화면에서 받아 본 적이 있는지로 본다
   if (!data && isFetchedAfterMount) {
-    return <LoadFailure headingLevel={2} onRetry={() => void refetch()} busy={isFetching} />
+    return <LoadFailureHere headingLevel={2} onRetry={() => void refetch()} busy={isFetching} />
   }
   return (
     <>

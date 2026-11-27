@@ -246,8 +246,11 @@ describe('넓은 화면 사이드바 맨 아래 묶음', () => {
     const rejected = within(bottom).getByText('그중 보낼 수 없음 1건')
     expect(getComputedStyle(rejected).color).toBe('var(--color-danger)')
     expect(getComputedStyle(within(bottom).getByText('보내지 않은 입력 2건')).color).toBe('var(--color-text-secondary)')
-    const lines = [...bottom.querySelectorAll('a > span, p')].map((line) => line.textContent)
-    expect(lines).toEqual(['보내지 않은 입력 2건', '그중 보낼 수 없음 1건', expect.stringMatching(/에 맞춤$/)])
+    // 맞춘 시각은 홈이 사본을 처음 남긴 뒤에 "…에 맞춤"이 된다. 건수는 기기에서 바로 읽으므로 그보다 먼저 보일 수 있다
+    const lines = () => [...bottom.querySelectorAll('a > span, p')].map((line) => line.textContent)
+    await waitFor(() =>
+      expect(lines()).toEqual(['보내지 않은 입력 2건', '그중 보낼 수 없음 1건', expect.stringMatching(/에 맞춤$/)]),
+    )
     expect(within(bottom).queryByRole('button')).toBeNull()
   })
 
