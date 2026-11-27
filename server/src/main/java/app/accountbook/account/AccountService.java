@@ -120,7 +120,8 @@ public class AccountService {
     /** 요청을 검증하고 공백을 지운 이름을 돌려준다. 입력란마다 보고 틀린 것을 모두 모아 알린다. */
     private String validateAndNormalizeName(UUID ledgerId, AccountCommand cmd) {
         if (cmd == null) {
-            throw new InvalidRequestException("계좌 정보가 없습니다.");
+            throw new InvalidRequestException(InvalidRequestException.WHOLE_BODY, FieldErrorCode.REQUIRED,
+                    "계좌 정보가 없습니다.");
         }
         List<InvalidRequestException> errors = new ArrayList<>();
         String name = collect(errors, () -> Names.normalize(cmd.name()));

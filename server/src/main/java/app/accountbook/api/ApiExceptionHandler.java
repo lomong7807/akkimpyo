@@ -8,6 +8,7 @@ import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.user.PasswordHashBusyException;
@@ -103,6 +104,12 @@ class ApiExceptionHandler {
     ResponseEntity<Problem> invalidRequest(InvalidRequestException e, HttpServletRequest request) {
         return invalid(e.errors().stream().map(error -> InvalidField.of(error.field(), error.code())).distinct().toList(),
                 e, request);
+    }
+
+    /** 입력란이 없다. 상태 오류는 구성원 확인과 입력 검증을 지난 요청에만 나간다(ADR 002 5절). */
+    @ExceptionHandler
+    ResponseEntity<Problem> invalidState(InvalidStateException e, HttpServletRequest request) {
+        return respond(ErrorCode.INVALID_STATE, e, request);
     }
 
     /** 같은 장부에서 내가 만든 거래와 내용이 다를 때만 {@code current}가 있다. 그 밖은 모두 같은 응답이다. */

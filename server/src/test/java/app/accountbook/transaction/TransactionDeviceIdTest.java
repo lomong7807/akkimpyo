@@ -7,7 +7,6 @@ import static org.assertj.core.util.Throwables.getStackTrace;
 
 import app.accountbook.account.AccountType;
 import app.accountbook.common.InvalidRequestException;
-import app.accountbook.common.StaleVersionException;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.transaction.TransactionCommand.Entry;

@@ -15,10 +15,10 @@ import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.common.NotLedgerOwnerException;
-import app.accountbook.common.StaleVersionException;
 import app.accountbook.ledger.LedgerAccess;
 import app.accountbook.ledger.LedgerMembership;
 import app.accountbook.ledger.LedgerService;
@@ -28,6 +28,7 @@ import app.accountbook.stats.MonthlySummary;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.transaction.IdConflictException;
+import app.accountbook.transaction.StaleVersionException;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
@@ -422,6 +423,7 @@ class CrossLedgerAccessTest {
         Class<NotLedgerMemberException> notMember = NotLedgerMemberException.class;
         Class<NotFoundException> notFound = NotFoundException.class;
         Class<InvalidRequestException> invalid = InvalidRequestException.class;
+        Class<InvalidStateException> state = InvalidStateException.class;
         return Stream.of(
                 denied("순서: 거래가 있는 B의 계좌 삭제", notMember, bBank, InUseException.class,
                         (actor, account) -> accountService.delete(actor, account)),
@@ -447,14 +449,14 @@ class CrossLedgerAccessTest {
                         (actor, tx) -> transactionService.cancel(actor, tx, bExpense.version() + 1, DEVICE)),
                 denied("순서: B의 지출을 빈 요청으로 수정", notFound, bExpense.id(), invalid,
                         (actor, tx) -> transactionService.update(actor, tx, bExpense.version(), null, DEVICE)),
-                denied("순서: B의 취소한 거래를 다시 취소", notFound, bCanceled.id(), invalid,
+                denied("순서: B의 취소한 거래를 다시 취소", notFound, bCanceled.id(), state,
                         (actor, tx) -> transactionService.cancel(actor, tx, bCanceled.version(), DEVICE)),
-                denied("순서: B의 삭제한 거래를 수정", notFound, bDeleted.id(), invalid,
+                denied("순서: B의 삭제한 거래를 수정", notFound, bDeleted.id(), state,
                         (actor, tx) -> transactionService.update(actor, tx, bDeleted.version(),
                                 entry(tx, bBank, bFood, 1), DEVICE)),
-                denied("순서: B의 삭제한 거래를 다시 삭제", notFound, bDeleted.id(), invalid,
+                denied("순서: B의 삭제한 거래를 다시 삭제", notFound, bDeleted.id(), state,
                         (actor, tx) -> transactionService.delete(actor, tx, bDeleted.version(), DEVICE)),
-                denied("순서: B의 삭제하지 않은 거래를 복원", notFound, bExpense.id(), invalid,
+                denied("순서: B의 삭제하지 않은 거래를 복원", notFound, bExpense.id(), state,
                         (actor, tx) -> transactionService.restore(actor, tx, bExpense.version(), DEVICE)),
                 denied("순서: B의 장부에 형식이 틀린 기기 값으로 지출", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionService.create(actor, ledger,
