@@ -57,7 +57,7 @@ class TransactionCreateFieldErrorTest {
         cash = fixtures.account(owner, ledgerId, "현금", AccountType.CASH, 0, DAY).getId();
         bank = fixtures.account(owner, ledgerId, "은행", AccountType.BANK, 0, DAY).getId();
         removedAccount = fixtures.account(owner, ledgerId, "지운계좌", AccountType.CASH, 0, DAY).getId();
-        accountService.delete(owner.getId(), removedAccount);
+        accountService.delete(owner.getId(), ledgerId, removedAccount);
         food = category(owner, ledgerId, "식비", CategoryKind.EXPENSE);
         salary = category(owner, ledgerId, "급여", CategoryKind.INCOME);
         removedCategory = category(owner, ledgerId, "지운분류", CategoryKind.EXPENSE);
