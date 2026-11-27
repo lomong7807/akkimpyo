@@ -129,6 +129,11 @@ public class Transaction extends BaseEntity {
         this.status = TransactionStatus.CANCELED;
     }
 
+    /** 취소 직전 상태로 돌아간다. 승인 대기를 만드는 경로가 아직 없어 그 상태는 완료다({@link TransactionStatus#PENDING}). */
+    public void uncancel() {
+        this.status = TransactionStatus.POSTED;
+    }
+
     /** 소프트 삭제. 라인은 그대로 남는다. */
     public void markDeleted(Instant at) {
         this.deletedAt = at;
