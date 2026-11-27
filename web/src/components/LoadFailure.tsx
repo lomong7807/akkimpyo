@@ -15,14 +15,17 @@ interface LoadFailureProps {
   offline?: boolean
   /** "다시 시도" 아래에 놓는 다른 동작 */
   children?: ReactNode
+  /** 오류 문구 아래의 한 줄. 같은 오류가 되풀이될 때의 "마지막으로 맞춘 시각 {시각}"(00-common 4.3)이다. */
+  note?: string
 }
 
 /** 내용을 불러오지 못했다(F-907, F-908). */
-export default function LoadFailure({ onRetry, busy, headingLevel, offline = false, children }: LoadFailureProps) {
+export default function LoadFailure({ onRetry, busy, headingLevel, offline = false, children, note }: LoadFailureProps) {
   return (
     <ScreenMessage
       title="불러오지 못했어요."
       description={offline ? '연결되면 자동으로 불러올게요.' : '잠시 후 다시 시도해 주세요.'}
+      note={offline ? undefined : note}
       headingLevel={headingLevel}
     >
       {!offline && (

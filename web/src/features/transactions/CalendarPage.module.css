@@ -1,0 +1,171 @@
+/*
+ * 달력(D-02). 휴대폰 배치에서는 내용의 좌우 여백만큼 넓혀 달력 칸과 고른 날 목록이 화면 끝까지 닿게 한다(내역과 같다).
+ * 768px부터는 내용 폭이다. 넓은 화면(1024px 이상)은 가운데 칸(달 이동과 달력)과 오른쪽 칸(고른 날의 머리와 목록)으로 나눈다.
+ */
+.columns {
+  --bleed: var(--space-16);
+
+  margin-inline: calc(-1 * var(--bleed));
+}
+
+@media (width >= 768px) {
+  .columns {
+    --bleed: 0px;
+  }
+}
+
+/* 휴대폰 배치는 달력 아래에 1px 선을 긋고 그 아래가 고른 날이다 */
+.monthColumn {
+  padding-bottom: var(--space-8);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* 오른쪽 칸 폭과 가운데 칸의 최소 폭은 목록·상세 두 칸 배치(00-common 2.5)의 값이다. 두 칸은 함께 스크롤한다 */
+@media (width >= 1024px) {
+  .columns {
+    display: grid;
+    grid-template-columns: minmax(var(--width-list-min), 1fr) minmax(0, var(--width-side-panel));
+    column-gap: var(--space-24);
+    align-items: start;
+  }
+
+  .monthColumn {
+    border-bottom: 0;
+  }
+}
+
+/* 상단 바 아래 8px. 버튼 안쪽 여백만큼 바깥에 붙여 화살표를 글의 선 가까이 둔다(내역과 같다) */
+.monthNavigation {
+  margin: var(--space-8) var(--space-4) 0;
+}
+
+.grid {
+  width: 100%;
+  padding-inline: var(--space-4);
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.weekday {
+  padding: var(--space-4) 0;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}
+
+.blank {
+  padding: 0;
+}
+
+/* 날짜 칸 전체가 누름 영역이다(44px 이상). 위에 날짜 숫자, 아래에 금액 두 줄 자리 */
+.day {
+  height: var(--size-touch);
+  padding: var(--space-4) 0;
+  border-radius: var(--radius-10);
+  text-align: center;
+  vertical-align: top;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .day:hover:not([aria-selected='true'], [aria-disabled='true']) {
+    background-color: var(--color-press);
+  }
+}
+
+/* 고른 날은 면 색이다. 색이 강제되는 고대비 모드에서도 남긴다 */
+.day[aria-selected='true'] {
+  background-color: var(--color-surface);
+  forced-color-adjust: none;
+}
+
+/* 입력할 수 있는 날(P-202) 밖은 날짜 고르기(5.8)의 범위 밖 날짜와 같다(planner·designer #300 Q6) */
+.day[aria-disabled='true'] {
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+
+/* 초점은 칸 안쪽에 그린다(날짜 고르기와 같은 2.6의 예외). 칸이 화면 끝까지 닿아 바깥에 그리면 잘린다 */
+.day:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/*
+ * 날짜 숫자. 오늘 표시의 원은 글자 줄 높이에 4px을 더한 정원이라 글자를 키워도 두 자리 숫자를 감싼다. 칸보다 넓어지지 않는다
+ */
+.number {
+  display: inline-grid;
+  place-items: center;
+  inline-size: min(100%, calc(1lh + var(--space-4)));
+  aspect-ratio: 1;
+  font: var(--text-body);
+}
+
+.day[aria-current='date'] .number {
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-full);
+}
+
+/* 금액 두 줄 자리. 금액이 없거나 받는 중이어도 같은 높이라 내용으로 바뀔 때 밀리지 않는다 */
+.figures {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 2lh;
+  overflow: hidden;
+  font: var(--text-caption);
+}
+
+.figure {
+  white-space: nowrap;
+}
+
+.expense {
+  color: var(--color-text);
+}
+
+.income {
+  color: var(--color-accent);
+}
+
+/* 금액이 칸에 다 들어가지 않으면 금액은 자리만 남기고(다시 잴 수 있게) 점 하나를 보인다(F-903, designer #300 Q7) */
+.dotted > .figure {
+  visibility: hidden;
+}
+
+.dot {
+  position: absolute;
+  top: var(--space-4);
+  left: 50%;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-full);
+  background-color: var(--color-text-secondary);
+  translate: -50% 0;
+  forced-color-adjust: none;
+}
+
+/* 받는 동안의 금액 자리 막대 */
+.figureSkeleton {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+/* 불러오기 실패는 달력 아래 내용 자리의 가운데다. 화면 끝까지 넓힌 칸에서 글이 끝에 붙지 않게 한다 */
+.failure {
+  display: flex;
+  flex-direction: column;
+  padding-inline: var(--space-16);
+}
+
+/* 고른 날의 머리와 목록. 넓은 화면 오른쪽 칸에서 긴 글이 칸을 넓히지 않는다 */
+.dayColumn {
+  min-width: 0;
+}
