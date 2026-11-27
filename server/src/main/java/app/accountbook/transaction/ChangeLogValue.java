@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -55,6 +56,16 @@ record ChangeLogValue(
                 tx.getCreatedAt(),
                 tx.getUpdatedAt(),
                 tx.getLines().stream().map(Line::of).toList());
+    }
+
+    /** 카테고리 삭제로 옮긴 뒤의 값(#3): 그 카테고리들의 라인만 바꾸고 version을 1 올린다. DB에 쓰는 변경과 같다. */
+    ChangeLogValue withCategoryMoved(Set<UUID> categoryIds, UUID targetCategoryId, Instant movedAt) {
+        return new ChangeLogValue(id, ledgerId, type, occurredOn, occurredTime, payee, memo, status, createdBy, paidBy,
+                version + 1, deleted, createdAt, movedAt, lines.stream()
+                .map(line -> line.categoryId() != null && categoryIds.contains(line.categoryId())
+                        ? new Line(line.accountId(), targetCategoryId, line.amount())
+                        : line)
+                .toList());
     }
 
     JsonNode toJson() {
