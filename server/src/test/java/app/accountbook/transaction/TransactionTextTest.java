@@ -265,8 +265,9 @@ class TransactionTextTest {
     void resendOfTransactionStoredWithForbiddenCharacterIsRejectedAsFormatError() {
         UUID id = UUID.randomUUID();
         transactionService.create(owner.getId(), ledgerId, expense(id, "김밥천국", "점심"), DEVICE);
-        // U+200B(Cf)는 앱 검사만 막는다(DB CHECK에 걸지 않는 글자).
-        storeAsBeforeTheRule(id, "김밥\u200B천국", "점심");
+        // U+200B(Cf)는 앱 검사만 막는다. DB CHECK에 걸지 않는 글자라 지금도 DB에 바로 넣을 수 있다.
+        flushAndClear();
+        jdbc.update("update transaction set payee = ? where id = ?", "김밥\u200B천국", id);
         TransactionView stored = transactionService.get(owner.getId(), id);
 
         assertThat(rejection(() -> transactionService.createOrReplay(owner.getId(), ledgerId,
@@ -277,9 +278,19 @@ class TransactionTextTest {
 
     // ---------------------------------------------------------------- 도우미
 
-    /** 그 거래의 가맹점과 메모를 앱의 맞추기를 거치지 않은 이 규칙 전의 값으로 DB에서 바로 바꾼다. */
+    /**
+     * 그 거래의 가맹점과 메모를 앱의 맞추기를 거치지 않은 이 규칙 전의 값으로 DB에서 바로 바꾼다. 지금은 V18의 CHECK가
+     * 그런 값을 막으므로 이 테스트 트랜잭션 안에서만 CHECK를 내린다(테스트가 끝나면 함께 되돌아간다).
+     */
     private void storeAsBeforeTheRule(UUID id, String payee, String memo) {
         flushAndClear();
+        jdbc.execute("""
+                alter table transaction
+                    drop constraint ck_transaction_payee_nfc,
+                    drop constraint ck_transaction_payee_trimmed,
+                    drop constraint ck_transaction_memo_nfc,
+                    drop constraint ck_transaction_memo_no_control
+                """);
         jdbc.update("update transaction set payee = ?, memo = ? where id = ?", payee, memo, id);
     }
 
