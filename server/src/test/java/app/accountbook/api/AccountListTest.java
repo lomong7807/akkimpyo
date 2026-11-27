@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +51,13 @@ class AccountListTest {
         owner = fixtures.user(UUID.randomUUID().toString().substring(0, 18) + "@example.com");
         ledgerId = fixtures.personalLedgerId(owner);
         client = ServerClient.signedIn(port, owner.getId(), NOW);
+    }
+
+    /** HTTP 테스트는 롤백되지 않는다. 거래 수를 DB 전체로 세는 테스트(TransactionServiceTest 등)가 있어 만든 거래를 지운다. */
+    @AfterEach
+    void removeTransactions() {
+        jdbc.update("delete from change_log where ledger_id = ?", ledgerId);
+        jdbc.update("delete from transaction where ledger_id = ?", ledgerId);
     }
 
     @Test
