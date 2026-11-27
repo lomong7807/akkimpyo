@@ -15,7 +15,6 @@ import app.accountbook.auth.PasswordChangeService;
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
 import app.accountbook.common.AccountHasTransactionsException;
-import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotFoundException;
@@ -44,6 +43,7 @@ import app.accountbook.transaction.TransactionPage.DayTotals;
 import app.accountbook.transaction.TransactionScope.Day;
 import app.accountbook.transaction.TransactionScope.Month;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
+import app.accountbook.transaction.TransactionSearch;
 import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionTrashQuery;
 import app.accountbook.transaction.TransactionType;
@@ -127,6 +127,7 @@ class CrossLedgerAccessTest {
     UUID aBank;
     UUID aCash;
     UUID aFood;
+    UUID aUncategorized;
     TransactionView aExpense;
     TransactionView aTransfer;
     TransactionView aDeleted;
@@ -164,6 +165,7 @@ class CrossLedgerAccessTest {
         aBank = fixtures.account(userA, ledgerA, "A은행", AccountType.BANK, 100_000, OPENING).getId();
         aCash = fixtures.account(userA, ledgerA, "A현금", AccountType.CASH, 0, OPENING).getId();
         aFood = category(a, ledgerA, "A식비", CategoryKind.EXPENSE, null);
+        aUncategorized = categoryService.uncategorized(ledgerA, CategoryKind.EXPENSE).getId();
         aExpense = fixtures.expense(userA, ledgerA, aBank, aFood, DAY, 1_100);
         aTransfer = fixtures.transfer(userA, ledgerA, aBank, aCash, DAY, 2_200);
         aDeleted = fixtures.delete(userA, fixtures.expense(userA, ledgerA, aBank, aFood, DAY, 3_300));
@@ -365,6 +367,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
                                 new TransactionFilter(Set.of(bBank), Set.of(bFood), Set.of(TransactionType.EXPENSE),
                                         null), null, 50)),
+                denied("조회: 거래 검색", NotLedgerMemberException.class, ledgerB, (actor, ledger) -> transactionListQuery
+                        .search(actor, ledger, new TransactionSearch("B단골식당", DAY, DAY), TransactionFilter.NONE, null)),
                 denied("조회: 중복 경고", NotLedgerMemberException.class, ledgerB, (actor, ledger) ->
                         transactionListQuery.duplicates(actor, ledger, DAY, 73_100, "B단골식당", null)),
                 denied("조회: 가맹점의 최근 카테고리 제안", NotLedgerMemberException.class, ledgerB,
@@ -458,7 +462,10 @@ class CrossLedgerAccessTest {
                                 new TransactionFilter(Set.of(account), Set.of(), Set.of(), null), null, 50)),
                 foreign("조회: A의 거래 목록을 B의 카테고리(하위가 있는)로 거름", invalid, bFood, aFood,
                         (actor, category) -> transactionListQuery.page(actor, ledgerA, new Month(NOVEMBER),
-                                new TransactionFilter(Set.of(), Set.of(category), Set.of(), null), null, 50)));
+                                new TransactionFilter(Set.of(), Set.of(category), Set.of(), null), null, 50)),
+                foreign("조회: A의 거래 검색을 B의 계좌로 거름", invalid, bBank, aCash,
+                        (actor, account) -> transactionListQuery.search(actor, ledgerA, new TransactionSearch(null,
+                                null, null), new TransactionFilter(Set.of(account), Set.of(), Set.of(), null), null)));
     }
 
     /** 수정·취소. version은 지금 값이고 요청 내용은 B가 보내면 통과하는 것이다. */
@@ -502,7 +509,14 @@ class CrossLedgerAccessTest {
                         (actor, account) -> accountService.delete(actor, ledgerA, account), a, aBank,
                         AccountHasTransactionsException.class),
                 denied("삭제: B의 카테고리(거래 없음)", NotLedgerMemberException.class, bSpare,
-                        (actor, category) -> categoryService.delete(actor, category)),
+                        (actor, category) -> categoryService.delete(actor, ledgerB, category, null, DEVICE)),
+                foreign("삭제: A의 장부로 B의 카테고리", NotLedgerMemberException.class, bSpare, aFood,
+                        (actor, category) -> categoryService.delete(actor, ledgerA, category, null, DEVICE)),
+                // 옮길 곳만 B의 것이다. 대조는 A의 미분류로 옮기는 것이다.
+                foreign("삭제: A의 카테고리를 B의 카테고리로 옮기며", InvalidRequestException.class, bFood, aUncategorized,
+                        (actor, target) -> categoryService.delete(actor, ledgerA, aFood, target, DEVICE)),
+                denied("삭제 전 거래 수: B의 카테고리", NotLedgerMemberException.class, bFood,
+                        (actor, category) -> categoryService.countAffectedTransactions(actor, ledgerB, category)),
                 denied("삭제: B의 지출", NotFoundException.class, bExpense.id(),
                         (actor, tx) -> transactionService.delete(actor, tx, bExpense.version(), DEVICE)),
                 denied("삭제: B의 이체", NotFoundException.class, bTransfer.id(),
@@ -527,12 +541,12 @@ class CrossLedgerAccessTest {
                         (actor, account) -> accountService.delete(actor, ledgerB, account)),
                 denied("순서: B의 계좌를 값 없이 숨기기", notMember, bBank, invalid,
                         (actor, account) -> accountService.setHidden(actor, ledgerB, account, null)),
-                denied("순서: 하위 분류가 있는 B의 카테고리 삭제", notMember, bFood, InUseException.class,
-                        (actor, category) -> categoryService.delete(actor, category)),
+                denied("순서: B의 카테고리를 그 하위로 옮기며 삭제", notMember, bFood, invalid,
+                        (actor, category) -> categoryService.delete(actor, ledgerB, category, bLunch, DEVICE)),
                 denied("순서: B의 미분류 이름 바꾸기", notMember, bUncategorized, state,
                         (actor, category) -> categoryService.rename(actor, ledgerB, category, "바꾼이름")),
-                denied("순서: B의 미분류 삭제", notMember, bUncategorized, invalid,
-                        (actor, category) -> categoryService.delete(actor, category)),
+                denied("순서: B의 미분류 삭제", notMember, bUncategorized, state,
+                        (actor, category) -> categoryService.delete(actor, ledgerB, category, null, DEVICE)),
                 denied("순서: B의 계좌를 빈 요청으로 수정", notMember, bBank, invalid,
                         (actor, account) -> accountService.update(actor, ledgerB, account, null)),
                 denied("순서: B의 카테고리를 빈 이름으로", notMember, bFood, invalid,
@@ -557,6 +571,8 @@ class CrossLedgerAccessTest {
                 denied("순서: B의 장부 거래 목록을 없는 계좌로 거름", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
                                 new TransactionFilter(Set.of(missing), Set.of(), Set.of(), null), null, 50)),
+                denied("순서: B의 장부를 조건 없이 검색", notMember, ledgerB, invalid, (actor, ledger) -> transactionListQuery
+                        .search(actor, ledger, new TransactionSearch(null, null, null), TransactionFilter.NONE, null)),
                 denied("순서: B의 장부에 101자 가맹점으로 중복 경고", notMember, ledgerB, invalid, (actor, ledger) ->
                         transactionListQuery.duplicates(actor, ledger, DAY, 73_100, "가".repeat(101), null)),
                 denied("순서: B의 장부에 101자 가맹점으로 카테고리 제안", notMember, ledgerB, invalid,
