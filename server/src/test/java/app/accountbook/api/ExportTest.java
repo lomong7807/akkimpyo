@@ -9,11 +9,16 @@ import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.StoppedClockConfig.StoppedClock;
+import app.accountbook.support.TestAccessTokens;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
 import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionType;
 import app.accountbook.user.User;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -104,6 +109,31 @@ class ExportTest {
                 + ",6\r\n");
     }
 
+    /** 열과 행은 CSV와 같다. 가맹점·메모는 수식으로 시작해도 원래 글자의 글자 칸이다(칸 종류는 XlsxExportTest가 본다). */
+    @Test
+    void 엑셀은_xlsx_파일이고_CSV와_같은_행을_쓴다() throws Exception {
+        entry(TransactionType.EXPENSE, 1, null, cash, null, 16_500, false, "=1+1", "@SUM(A1)");
+        fixtures.expense(owner, ledgerId, cash, null, OCT_1.withDayOfMonth(31), 1_000);
+
+        HttpResponse<byte[]> response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create(
+                        "http://localhost:" + port + path() + "?format=xlsx&from=2026-10-01&to=2026-10-31"))
+                .header("Authorization", "Bearer " + TestAccessTokens.valid(owner.getId(), NOW)).build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.headers().firstValue("Content-Type"))
+                .contains("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+        assertThat(response.headers().firstValue("Content-Disposition")).hasValueSatisfying(value -> assertThat(value)
+                .startsWith("attachment; filename=\"_ ____20261001_20261031.xlsx\"; filename*=UTF-8''"));
+        Map<String, XlsxExportTest.Cell> cells = XlsxExportTest.cells(response.body());
+        assertThat(cells.get("J2").text()).isEqualTo("=1+1");
+        assertThat(cells.get("K2").text()).isEqualTo("@SUM(A1)");
+        assertThat(cells.get("D3").text()).isEqualTo("1000");
+        assertThat(cells.get("Q3").text()).isEqualTo("2");
+        assertThat(cells).doesNotContainKey("A4");
+    }
+
     @Test
     void 내보낼_거래가_없거나_휴지통_거래뿐이면_본문_없는_204다() throws Exception {
         assertNoContent(client.get(path() + OCTOBER));
@@ -113,13 +143,14 @@ class ExportTest {
         assertNoContent(client.get(path() + OCTOBER));
     }
 
-    /** 오류는 Accept와 무관하게 problem+json이다. 엑셀(xlsx)은 다음 PR에서 연다. */
+    /** 오류는 Accept와 무관하게 problem+json이다. */
     @Test
     void format_from_to가_없거나_형식이_틀리거나_종료일이_앞서면_그_입력란의_400이다() throws Exception {
         Map<String, String[]> rejected = Map.ofEntries(
                 Map.entry("", new String[] {"format:REQUIRED", "from:REQUIRED", "to:REQUIRED"}),
                 Map.entry("from=2026-10-01&to=2026-10-31", new String[] {"format:REQUIRED"}),
-                Map.entry("format=xlsx&from=2026-10-01&to=2026-10-31", new String[] {"format:INVALID_FORMAT"}),
+                Map.entry("format=pdf&from=2026-10-01&to=2026-10-31", new String[] {"format:INVALID_FORMAT"}),
+                Map.entry("format=XLSX&from=2026-10-01&to=2026-10-31", new String[] {"format:INVALID_FORMAT"}),
                 Map.entry("format=CSV&from=2026-10-01&to=2026-10-31", new String[] {"format:INVALID_FORMAT"}),
                 Map.entry("format=csv&to=2026-10-31", new String[] {"from:REQUIRED"}),
                 Map.entry("format=csv&from=2026-10-01", new String[] {"to:REQUIRED"}),
@@ -140,7 +171,7 @@ class ExportTest {
         String stranger = "/api/v1/ledgers/" + fixtures.personalLedgerId(user()) + "/exports";
 
         client.get(stranger + OCTOBER).assertProblem(404, "Not Found", "NOT_FOUND");
-        client.get(stranger + "?format=xlsx&from=bad").assertProblem(404, "Not Found", "NOT_FOUND");
+        client.get(stranger + "?format=pdf&from=bad").assertProblem(404, "Not Found", "NOT_FOUND");
         ServerClient.anonymous(port).get(path() + OCTOBER).assertProblem(401, "Unauthorized", "UNAUTHENTICATED");
     }
 

@@ -12,14 +12,12 @@ import app.accountbook.transaction.TransactionExportQuery;
 import app.accountbook.user.UserService;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,8 +33,6 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 class ExportController {
-
-    static final MediaType CSV = new MediaType("text", "csv", StandardCharsets.UTF_8);
 
     private final TransactionExportQuery exportQuery;
     private final LedgerService ledgerService;
@@ -75,11 +71,11 @@ class ExportController {
                 .map(LedgerMembership::name)
                 .findFirst().orElseThrow(NotLedgerMemberException::new);
         ByteArrayOutputStream file = new ByteArrayOutputStream();
-        CsvExport.write(ExportRow.of(found, names), file);
+        request.format().write(ExportRow.of(found, names), file);
         return ResponseEntity.ok()
-                .contentType(CSV)
+                .contentType(request.format().contentType)
                 .header(HttpHeaders.CONTENT_DISPOSITION, ExportFileName.attachment(
-                        ExportFileName.of(ledgerName, request.from(), request.to(), request.format())))
+                        ExportFileName.of(ledgerName, request.from(), request.to(), request.format().extension())))
                 .cacheControl(CacheControl.noStore())
                 .body(file.toByteArray());
     }
