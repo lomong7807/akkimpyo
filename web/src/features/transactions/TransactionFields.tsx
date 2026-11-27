@@ -8,6 +8,8 @@ import SegmentedChoice from '../../components/SegmentedChoice'
 import TextAreaField from '../../components/TextAreaField'
 import { TextField } from '../../components/TextField'
 import TimeField from '../../components/TimeField'
+import type { CategorySuggestion } from './categorySuggestion'
+import { enterToNext, keepComposingEnter } from './fieldKeys'
 import { categoryKindOf } from './formDefaults'
 import { useEntryCategories } from './entryLists'
 import { AccountField, CategoryField } from './TransactionPickers'
@@ -40,12 +42,8 @@ interface TransactionFieldsProps {
    * 열 때 금액에 초점을 두지 않는다(D-04 (3)). 나머지 칸과 검사는 새 입력과 같다.
    */
   editing?: boolean
-}
-
-/** 엔터를 그 칸의 동작으로 받는지. 한글을 조합하는 중과 Ctrl·Cmd를 함께 누른 저장은 빼고 본다. */
-function isPlainEnter(event: KeyboardEvent): boolean {
-  const composing = event.nativeEvent.isComposing || event.keyCode === 229
-  return event.key === 'Enter' && !composing && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+  /** 새 지출의 카테고리 제안(D-04 (4), P-219). 수정과 고쳐서 보내기에는 없다 */
+  suggestion?: Pick<CategorySuggestion, 'help' | 'suggest' | 'pick'>
 }
 
 /** D-04 새 입력과 수정의 칸(유형, 금액, 가맹점/내용, 카테고리, 계좌, 날짜, 더 보기 아래의 시각과 메모) */
@@ -55,6 +53,7 @@ export default function TransactionFields({
   moreOpen,
   onMoreOpenChange,
   editing = false,
+  suggestion,
 }: TransactionFieldsProps) {
   const { values, effective, change, control, check } = form
   const categories = useEntryCategories()
@@ -85,17 +84,7 @@ export default function TransactionFields({
 
   // 금액에서 엔터는 다음 칸(지출·수입은 가맹점/내용, 이체는 보내는 계좌)으로 간다(D-04 키보드 흐름)
   function handleAmountKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (!isPlainEnter(event)) return
-    event.preventDefault()
-    const form = event.currentTarget.form
-    const next = form?.querySelector<HTMLElement>(transfer ? '[data-field="accountId"]' : '[data-field="payee"]')
-    next?.focus()
-  }
-
-  // 가맹점/내용의 엔터는 양식을 보내 저장한다. 한글을 조합하는 중의 엔터는 글자를 끝낼 뿐이다
-  function handlePayeeKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    const composing = event.nativeEvent.isComposing || event.keyCode === 229
-    if (event.key === 'Enter' && composing) event.preventDefault()
+    enterToNext(event, transfer ? '[data-field="accountId"]' : '[data-field="payee"]')
   }
 
   const { error: accountError, ref: accountRef } = control('accountId')
@@ -143,16 +132,23 @@ export default function TransactionFields({
             readOnly={readOnly}
             count={{ current: payeeLength(values.payee), max: PAYEE_MAX }}
             onChange={(event) => change({ payee: event.target.value })}
-            onBlur={() => check('payee')}
-            onKeyDown={handlePayeeKeyDown}
+            onBlur={() => {
+              check('payee')
+              suggestion?.suggest(values.payee)
+            }}
+            onKeyDown={keepComposingEnter}
           />
           <CategoryField
             ref={categoryRef}
             kind={values.type === 'INCOME' ? 'INCOME' : 'EXPENSE'}
             value={values.categoryId}
             error={categoryError}
+            help={suggestion?.help}
             readOnly={readOnly}
-            onChange={(categoryId) => picked('categoryId', categoryId)}
+            onChange={(categoryId) => {
+              suggestion?.pick()
+              picked('categoryId', categoryId)
+            }}
           />
         </>
       )}

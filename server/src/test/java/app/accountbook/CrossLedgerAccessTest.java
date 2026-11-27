@@ -33,6 +33,7 @@ import app.accountbook.transaction.StaleVersionException;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
+import app.accountbook.transaction.TransactionExportQuery;
 import app.accountbook.transaction.TransactionListQuery;
 import app.accountbook.transaction.TransactionPage.DayTotals;
 import app.accountbook.transaction.TransactionScope.Day;
@@ -100,6 +101,7 @@ class CrossLedgerAccessTest {
     @Autowired TransactionService transactionService;
     @Autowired TransactionListQuery transactionListQuery;
     @Autowired CategorySuggestionQuery categorySuggestionQuery;
+    @Autowired TransactionExportQuery transactionExportQuery;
     @Autowired BalanceQuery balanceQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
     @Autowired LedgerAccess ledgerAccess;
@@ -184,6 +186,7 @@ class CrossLedgerAccessTest {
         transactionService = recorded(transactionService);
         transactionListQuery = recorded(transactionListQuery);
         categorySuggestionQuery = recorded(categorySuggestionQuery);
+        transactionExportQuery = recorded(transactionExportQuery);
         balanceQuery = recorded(balanceQuery);
         monthlyStatsQuery = recorded(monthlyStatsQuery);
         ledgerAccess = recorded(ledgerAccess);
@@ -320,6 +323,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> categorySuggestionQuery.suggest(actor, ledger, "B단골식당")),
                 denied("조회: 날짜별 합계(달력)", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, NOVEMBER)),
+                denied("조회: 내보내기", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionExportQuery.transactions(actor, ledger, DAY, DAY)),
                 denied("조회: 계좌 잔액", NotLedgerMemberException.class, bBank,
                         (actor, account) -> balanceQuery.balance(actor, account)),
                 denied("조회: 장부의 모든 잔액", NotLedgerMemberException.class, ledgerB,
@@ -408,7 +413,9 @@ class CrossLedgerAccessTest {
                 foreign("수정: A의 장부로 B의 계좌", NotLedgerMemberException.class, bBank, aCash,
                         (actor, account) -> accountService.update(actor, ledgerA, account, accountCommand("바꾼이름"))),
                 denied("수정: B의 카테고리 이름", NotLedgerMemberException.class, bFood,
-                        (actor, category) -> categoryService.rename(actor, category, "바꾼이름")),
+                        (actor, category) -> categoryService.rename(actor, ledgerB, category, "바꾼이름")),
+                foreign("수정: A의 장부로 B의 카테고리 이름", NotLedgerMemberException.class, bFood, aFood,
+                        (actor, category) -> categoryService.rename(actor, ledgerA, category, "바꾼이름")),
                 denied("수정: B의 지출", NotFoundException.class, bExpense.id(),
                         (actor, tx) -> transactionService.update(actor, tx, bExpense.version(),
                                 entry(tx, bCash, bFood, 1), DEVICE)),
@@ -456,14 +463,14 @@ class CrossLedgerAccessTest {
                         (actor, account) -> accountService.delete(actor, account)),
                 denied("순서: 하위 분류가 있는 B의 카테고리 삭제", notMember, bFood, InUseException.class,
                         (actor, category) -> categoryService.delete(actor, category)),
-                denied("순서: B의 미분류 이름 바꾸기", notMember, bUncategorized, invalid,
-                        (actor, category) -> categoryService.rename(actor, category, "바꾼이름")),
+                denied("순서: B의 미분류 이름 바꾸기", notMember, bUncategorized, state,
+                        (actor, category) -> categoryService.rename(actor, ledgerB, category, "바꾼이름")),
                 denied("순서: B의 미분류 삭제", notMember, bUncategorized, invalid,
                         (actor, category) -> categoryService.delete(actor, category)),
                 denied("순서: B의 계좌를 빈 요청으로 수정", notMember, bBank, invalid,
                         (actor, account) -> accountService.update(actor, ledgerB, account, null)),
                 denied("순서: B의 카테고리를 빈 이름으로", notMember, bFood, invalid,
-                        (actor, category) -> categoryService.rename(actor, category, " ")),
+                        (actor, category) -> categoryService.rename(actor, ledgerB, category, " ")),
                 denied("순서: B의 장부에 빈 계좌 요청", notMember, ledgerB, invalid,
                         (actor, ledger) -> accountService.create(actor, ledger, null)),
                 denied("순서: B의 장부에 빈 카테고리 요청", notMember, ledgerB, invalid,

@@ -4,11 +4,14 @@ import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InUseException;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.Names;
 import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.common.Times;
 import app.accountbook.ledger.LedgerAccess;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -44,8 +47,9 @@ public class CategoryService {
     }
 
     /**
-     * 카테고리는 2단계까지다. 부모는 같은 장부·같은 kind의 최상위 분류여야 한다.
+     * 카테고리는 2단계까지다. 상위는 같은 장부·같은 구분의 최상위 분류이고 미분류는 아니다(F-510).
      * 이름은 앞뒤 공백을 지운 1~20자이고 같은 상위 아래에서 겹칠 수 없다(P-221).
+     * 틀린 입력란은 모두 한 번에 알리고, 같은 이름은 나머지가 모두 맞을 때만 본다(#44, 계좌의 #13과 같다).
      */
     @Transactional
     public Category create(UUID actorId, UUID ledgerId, CategoryCommand cmd) {
@@ -54,24 +58,38 @@ public class CategoryService {
             throw new InvalidRequestException(InvalidRequestException.WHOLE_BODY, FieldErrorCode.REQUIRED,
                     "카테고리 정보가 없습니다.");
         }
+        List<InvalidRequestException> errors = new ArrayList<>();
         if (cmd.kind() == null) {
-            throw new InvalidRequestException("kind", FieldErrorCode.REQUIRED, "수입·지출 구분이 없습니다.");
+            errors.add(new InvalidRequestException("kind", FieldErrorCode.REQUIRED, "수입·지출 구분이 없습니다."));
         }
-        String name = Names.normalize(cmd.name(), Category.NAME_MAX_LENGTH);
+        String name = normalizeName(cmd.name(), errors);
         if (cmd.parentId() != null) {
-            requireValidParent(ledgerId, cmd.kind(), cmd.parentId());
+            parentError(ledgerId, cmd.kind(), cmd.parentId()).ifPresent(errors::add);
+        }
+        if (!errors.isEmpty()) {
+            throw InvalidRequestException.ofAll(errors);
         }
         Category category = Category.of(ledgerId, cmd.kind(), name, cmd.parentId());
         requireUniqueName(category, name);
         return saveUnlessDuplicate(category);
     }
 
+    /**
+     * 이름만 바꾼다(F-511). 검증은 만들기와 같고 자기 이름과는 겹치지 않는 것으로 본다. 같은 이름이면 바뀌는 것이 없다.
+     * 그 장부의 카테고리가 아니면(내가 구성원인 다른 장부의 것, 없거나 지운 것) 구성원이 아닌 것과 같은 예외이고 검증보다 먼저다.
+     * 미분류는 입력 검증을 지난 뒤 상태 오류로 거부한다(ADR 002 5절의 순서).
+     */
     @Transactional
-    public Category rename(UUID actorId, UUID categoryId, String name) {
-        Category category = loadForMember(actorId, categoryId);
-        requireNotSystem(category);
+    public Category rename(UUID actorId, UUID ledgerId, UUID categoryId, String name) {
+        ledgerAccess.requireMember(actorId, ledgerId);
+        Category category = categoryRepository.findById(categoryId)
+                .filter(found -> found.getLedgerId().equals(ledgerId))
+                .orElseThrow(NotLedgerMemberException::new);
         String newName = Names.normalize(name, Category.NAME_MAX_LENGTH);
         requireUniqueName(category, newName);
+        if (category.isSystem()) {
+            throw new InvalidStateException("기본 카테고리(미분류)의 이름은 바꿀 수 없습니다.");
+        }
         category.rename(newName);
         return saveUnlessDuplicate(category);
     }
@@ -108,18 +126,40 @@ public class CategoryService {
                         "장부 " + ledgerId + "에 " + kind + " 미분류 카테고리가 없습니다."));
     }
 
-    private void requireValidParent(UUID ledgerId, CategoryKind kind, UUID parentId) {
-        Category parent = categoryRepository.findById(parentId)
-                .filter(candidate -> candidate.getLedgerId().equals(ledgerId))
-                .orElseThrow(() -> new InvalidRequestException("parentId", FieldErrorCode.NOT_FOUND,
-                        "상위 분류를 찾을 수 없습니다."));
-        if (!parent.isTopLevel()) {
-            throw new InvalidRequestException("parentId", FieldErrorCode.NOT_ALLOWED, "카테고리는 2단계까지만 만들 수 있습니다.");
+    /** 규칙에 맞으면 맞춘 이름을, 아니면 오류를 모으고 null을 돌려준다. */
+    private static String normalizeName(String raw, List<InvalidRequestException> errors) {
+        try {
+            return Names.normalize(raw, Category.NAME_MAX_LENGTH);
+        } catch (InvalidRequestException e) {
+            errors.add(e);
+            return null;
         }
-        if (parent.getKind() != kind) {
-            throw new InvalidRequestException("parentId", FieldErrorCode.NOT_ALLOWED,
-                    "상위 분류와 수입·지출 구분이 같아야 합니다.");
+    }
+
+    /**
+     * 상위가 이 장부에 없으면(다른 장부의 것, 지운 것 포함) NOT_FOUND, 하위면 TOO_DEEP, 구분이 다르면 KIND_MISMATCH,
+     * 미분류면 NOT_ALLOWED다(#44). 구분이 없으면 구분은 비교하지 않는다(그 오류는 {@code kind}에 따로 있다).
+     */
+    private Optional<InvalidRequestException> parentError(UUID ledgerId, CategoryKind kind, UUID parentId) {
+        Optional<Category> parent = categoryRepository.findById(parentId)
+                .filter(candidate -> candidate.getLedgerId().equals(ledgerId));
+        if (parent.isEmpty()) {
+            return Optional.of(new InvalidRequestException("parentId", FieldErrorCode.NOT_FOUND,
+                    "상위 분류를 찾을 수 없습니다."));
         }
+        if (!parent.get().isTopLevel()) {
+            return Optional.of(new InvalidRequestException("parentId", FieldErrorCode.TOO_DEEP,
+                    "카테고리는 2단계까지만 만들 수 있습니다."));
+        }
+        if (kind != null && parent.get().getKind() != kind) {
+            return Optional.of(new InvalidRequestException("parentId", FieldErrorCode.KIND_MISMATCH,
+                    "상위 분류와 수입·지출 구분이 같아야 합니다."));
+        }
+        if (parent.get().isSystem()) {
+            return Optional.of(new InvalidRequestException("parentId", FieldErrorCode.NOT_ALLOWED,
+                    "기본 카테고리(미분류) 아래에는 만들 수 없습니다."));
+        }
+        return Optional.empty();
     }
 
     /** 자기 자신과는 겹치지 않는 것으로 본다. 이름은 글자 그대로 비교한다(대소문자, 가운데 공백 구분). */
@@ -146,7 +186,7 @@ public class CategoryService {
         }
     }
 
-    /** 어느 입력란의 잘못도 아니어서 본문 전체의 오류로 알린다. 지금까지와 같은 응답이다. */
+    /** 삭제(#35)의 거부. 어느 입력란의 잘못도 아니어서 본문 전체의 오류로 알린다. 지금까지와 같은 응답이다. */
     private static void requireNotSystem(Category category) {
         if (category.isSystem()) {
             throw new InvalidRequestException(InvalidRequestException.WHOLE_BODY, FieldErrorCode.NOT_ALLOWED,

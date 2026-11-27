@@ -643,7 +643,9 @@ describe('모양', () => {
   it('다 올라온 뒤에 움직임을 남기지 않는다', () => {
     const css = readWebFile(CSS)
     expect(css).not.toMatch(/animation-fill-mode|forwards|both|will-change|transform:/)
-    expect(css.match(/translate:/g)).toHaveLength(1)
+    // 올라오는 움직임과, 머리를 끌어내리는 동안만 따라가는 자리(D-05)
+    expect(css.match(/translate:/g)).toHaveLength(2)
+    expect(readCssRule(CSS, '.screen[data-dragging]')).toContain('translate: 0 var(--drag);')
   })
 
   it('휴대폰 배치의 머리는 면 색 바탕과 아래 1px 선이고 화면 이름이 가운데 제목 크기다', () => {
