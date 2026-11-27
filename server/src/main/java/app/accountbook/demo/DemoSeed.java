@@ -17,12 +17,16 @@ import app.accountbook.user.UserService;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +36,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -40,8 +45,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 로컬 확인용 데모 계정과 예시 데이터를 넣고 지운다(#349, docs/dev/demo-seed.md). 빈은 local 프로파일에서만 생기고(운영은
- * 프로파일이 없다), 쓰기 직전에 활성 프로파일을 다시 봐 {@link #ALLOWED_PROFILES} 밖의 것이 하나라도 있으면 거부한다.
- * 넣기는 가입·계좌·거래 서비스를 거쳐 입력 규칙과 가입 허용 목록을 그대로 지난다. 지우기는 서비스가 없어 SQL로 한다.
+ * 프로파일이 없다), 쓰기 직전에 활성 프로파일과 실제로 붙은 DB의 호스트를 다시 본다. 넣기는 가입·계좌·거래 서비스를 거쳐
+ * 입력 규칙과 가입 허용 목록을 그대로 지난다. 지우기는 서비스가 없어 SQL로 한다.
  */
 @Component
 @Profile(DemoSeed.PROFILE)
@@ -49,6 +54,9 @@ class DemoSeed implements ApplicationRunner {
 
     static final String PROFILE = "local";
     static final Set<String> ALLOWED_PROFILES = Set.of(PROFILE); // 미리보기 프로파일은 아직 없다.
+    // 이 컴퓨터의 DB. compose의 서비스 이름(db)은 운영 DB_URL의 호스트와 같아 넣지 않는다.
+    static final Set<String> LOCAL_DB_HOSTS = Set.of("localhost", "127.0.0.1", "::1");
+    private static final Pattern JDBC_URL = Pattern.compile("jdbc:postgresql://([^/?]+)[^?]*(\\?.*)?");
     static final String MODE = "demo.seed";
     static final String EMAIL = "demo@example.com";
     static final String PASSWORD = "demo1234pw"; // 로컬 전용 값이라 문서에 적는다.
@@ -95,11 +103,10 @@ class DemoSeed implements ApplicationRunner {
     /** {@value #MODE}가 있으면 기동 뒤 넣거나 지우고 앱을 끝낸다. 실패하면 기동 실패가 되어 0이 아닌 코드로 끝난다. */
     @Override
     public void run(ApplicationArguments args) {
-        String mode = context.getEnvironment().getProperty(MODE);
-        if (mode == null) {
-            return;
-        }
-        switch (mode) {
+        switch (context.getEnvironment().getProperty(MODE)) {
+            case null -> {
+                return;
+            }
             case "insert" -> insert();
             case "remove" -> remove();
             default -> throw new IllegalStateException(MODE + "에는 insert나 remove를 준다.");
@@ -115,9 +122,28 @@ class DemoSeed implements ApplicationRunner {
         }
     }
 
+    /**
+     * 접속 주소(jdbc:postgresql://호스트[:포트][,…]/…)의 호스트가 모두 {@link #LOCAL_DB_HOSTS}여야 한다. 다른 모양이거나 주소
+     * 뒤의 설정으로 호스트를 바꾸면(PGHOST) 거부한다. 문구에 주소를 넣지 않는다(비밀번호가 들 수 있다).
+     */
+    static void requireLocalDatabase(String jdbcUrl) {
+        Matcher url = JDBC_URL.matcher(String.valueOf(jdbcUrl));
+        if (!url.matches() || String.valueOf(url.group(2)).toUpperCase(Locale.ROOT).contains("PGHOST")
+                || !Arrays.stream(url.group(1).split(",", -1)).allMatch(host -> LOCAL_DB_HOSTS.contains(
+                        host.replaceFirst(":\\d+$", "").replaceAll("^\\[|]$", "").toLowerCase(Locale.ROOT)))) {
+            throw new IllegalStateException("데모 데이터는 이 컴퓨터의 DB(" + LOCAL_DB_HOSTS + ")에만 넣고 지운다. DB_URL을 확인한다.");
+        }
+    }
+
+    private void requireLocalTarget() {
+        requireAllowedProfiles(context.getEnvironment().getActiveProfiles());
+        requireLocalDatabase(jdbc.getJdbcTemplate().execute(
+                (ConnectionCallback<String>) connection -> connection.getMetaData().getURL()));
+    }
+
     /** 데모 계정, 계좌, 거래를 넣고 참이다. 이미 있으면 아무것도 바꾸지 않고 거짓이다. 트랜잭션 안에서 부르지 않는다. */
     boolean insert() {
-        requireAllowedProfiles(context.getEnvironment().getActiveProfiles());
+        requireLocalTarget();
         UUID actorId;
         try {
             actorId = userService.createUser(EMAIL, PASSWORD, "데모").getId();
@@ -140,12 +166,9 @@ class DemoSeed implements ApplicationRunner {
         return true;
     }
 
-    /**
-     * 데모 계정과 그 장부의 모든 행을 한 트랜잭션으로 지우고 참이다. 데모 계정이 없으면 거짓이다. 데모 장부에 다른 사용자가
-     * 있거나 다른 행이 FK로 데모 계정을 가리키면 아무것도 지우지 않고 실패한다.
-     */
+    /** 데모 계정과 그 장부의 행을 한 트랜잭션으로 지우고 참, 없으면 거짓이다. 장부에 다른 사용자가 있거나 FK에 걸리면 실패한다. */
     boolean remove() {
-        requireAllowedProfiles(context.getEnvironment().getActiveProfiles());
+        requireLocalTarget();
         boolean removed = Boolean.TRUE.equals(transactionTemplate.execute(status -> deleteDemoRows()));
         log.info(removed ? "데모 계정 {}과 그 장부의 데이터를 지웠다." : "지울 데모 계정 {}이 없다.", EMAIL);
         return removed;

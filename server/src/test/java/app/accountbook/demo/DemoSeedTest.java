@@ -14,7 +14,6 @@ import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.support.StoppedClockConfig.StoppedClock;
 import app.accountbook.transaction.TransactionService;
-import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.User;
 import app.accountbook.user.UserService;
 import jakarta.persistence.EntityManager;
@@ -66,11 +65,12 @@ class DemoSeedTest {
         clock.stopAt(SEOUL_MARCH_FIRST);
         seed = new DemoSeed(app.getBean(UserService.class), app.getBean(LedgerService.class),
                 app.getBean(AccountService.class), app.getBean(CategoryService.class),
-                app.getBean(TransactionService.class), jdbc, app.getBean(TransactionTemplate.class), seedContext, clock);
+                app.getBean(TransactionService.class), jdbc, app.getBean(TransactionTemplate.class), seedContext,
+                clock);
     }
 
     @Test
-    void 넣으면_데모_계정에_장부_하나와_계좌_3개_기본_카테고리_서울_날짜의_거래가_생긴다() {
+    void 넣으면_장부_하나와_계좌_3개_기본_카테고리_서울_날짜의_거래가_생기고_두_번째_넣기는_아무것도_더하지_않는다() {
         assertThat(seed.insert()).isTrue();
 
         UUID ledgerId = demoLedgerId();
@@ -85,13 +85,8 @@ class DemoSeedTest {
                 ledgerId))
                 .allMatch(on -> !on.isBefore(LocalDate.of(2026, 2, 1)) && !on.isAfter(LocalDate.of(2026, 3, 1)))
                 .contains(LocalDate.of(2026, 3, 1), LocalDate.of(2026, 2, 28));
-    }
 
-    @Test
-    void 두_번_넣으면_두_번째는_건너뛰고_아무것도_더하지_않는다() {
-        seed.insert();
         Map<String, Integer> once = rowCounts();
-
         assertThat(seed.insert()).isFalse();
         assertThat(rowCounts()).isEqualTo(once);
     }
@@ -102,19 +97,16 @@ class DemoSeedTest {
         UUID otherLedger = fixtures.personalLedgerId(other);
         Account otherAccount = fixtures.account(other, otherLedger, "다른 통장", AccountType.BANK, 10_000,
                 LocalDate.of(2026, 2, 1));
-        TransactionView otherExpense = fixtures.expense(other, otherLedger, otherAccount.getId(), null,
-                LocalDate.of(2026, 2, 27), 5_000);
+        fixtures.expense(other, otherLedger, otherAccount.getId(), null, LocalDate.of(2026, 2, 27), 5_000);
         loginService.login(OTHER_EMAIL, "password1", null);
         Map<String, Integer> before = rowCounts();
 
         seed.insert();
-        // 웹에서 데모 계정으로 로그인한 것처럼 refresh token 행을 만든다.
-        loginService.login(DemoSeed.EMAIL, DemoSeed.PASSWORD, null);
+        loginService.login(DemoSeed.EMAIL, DemoSeed.PASSWORD, null); // 웹에서 로그인한 것처럼 refresh token 행을 만든다
         entityManager.flush();
         assertThat(seed.remove()).isTrue();
 
         assertThat(rowCounts()).isEqualTo(before);
-        assertThat(count("select count(*) from transaction where id = ?", otherExpense.id())).isEqualTo(1);
         assertThat(seed.remove()).as("지울 데모 계정이 없다").isFalse();
     }
 
@@ -134,13 +126,11 @@ class DemoSeedTest {
         Map<String, Integer> before = rowCounts();
 
         environment.addActiveProfile("prod");
-
         assertThatThrownBy(seed::insert).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(seed::remove).isInstanceOf(IllegalStateException.class);
         assertThat(rowCounts()).isEqualTo(before);
     }
 
-    /** 데모 계정이 구성원인 장부는 가입이 만든 개인 장부 하나다. */
     private UUID demoLedgerId() {
         entityManager.flush();
         return jdbc.queryForObject("select m.ledger_id from ledger_member m join users u on u.id = m.user_id "
@@ -149,8 +139,7 @@ class DemoSeedTest {
 
     private int count(String sql, Object... args) {
         entityManager.flush();
-        Integer count = jdbc.queryForObject(sql, Integer.class, args);
-        return count == null ? 0 : count;
+        return jdbc.queryForObject(sql, Integer.class, args);
     }
 
     /** 스키마의 모든 테이블(Flyway 기록 제외)의 행 수. */

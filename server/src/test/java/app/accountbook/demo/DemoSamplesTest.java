@@ -19,19 +19,20 @@ class DemoSamplesTest {
     @ValueSource(strings = {"2026-01-01", "2026-03-31", "2028-02-29", "2026-12-31", "2026-11-27"})
     void 거래는_지난달_1일부터_오늘까지이고_두_달에_걸친다(LocalDate today) {
         List<LocalDate> dates = DemoSamples.SAMPLES.stream().map(sample -> sample.date(today)).toList();
-
         assertThat(dates).allMatch(date -> !date.isBefore(DemoSamples.openingDate(today)) && !date.isAfter(today));
         assertThat(dates).anyMatch(date -> YearMonth.from(date).equals(YearMonth.from(today)));
         assertThat(dates).anyMatch(date -> YearMonth.from(date).equals(YearMonth.from(today).minusMonths(1)));
     }
 
     @Test
-    void 지출_수입_이체가_섞인_20건쯤이고_금액은_입력_범위_안이다() {
+    void 지출_수입_이체가_섞인_20건쯤이고_금액은_입력_범위_안이며_카드_잔액은_0_이하다() {
         assertThat(DemoSamples.SAMPLES).hasSizeBetween(18, 24)
                 .extracting(Sample::type).contains(TransactionType.values());
+        assertThat(DemoSamples.CARD.openingBalance() + DemoSamples.SAMPLES.stream().mapToLong(sample ->
+                sample.toAccount() == DemoSamples.CARD ? sample.amount() : sample.account() == DemoSamples.CARD
+                        ? -sample.amount() : 0).sum()).as("카드(부채) 잔액").isNotPositive();
         assertThat(DemoSamples.SAMPLES).allSatisfy(sample -> {
             assertThat(sample.amount()).isBetween(1L, 9_999_999_999L);
-            assertThat(sample.monthsAgo()).isBetween(0, 1);
             assertThat(sample.text()).isNotBlank().isEqualTo(sample.text().strip());
             if (sample.type() == TransactionType.TRANSFER) {
                 assertThat(sample.category()).isNull();

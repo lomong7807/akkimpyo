@@ -10,8 +10,8 @@ import java.time.YearMonth;
 import java.util.List;
 
 /**
- * 데모 장부의 계좌 3개와 지난달·이번 달 거래(#349). 이름과 가맹점은 지어낸 일반 이름이고 금액은 원 정수다.
- * 날짜는 실행한 날(장부 시간대의 오늘)로 정한다. 이번 달 거래는 오늘을 넘지 않는다.
+ * 데모 장부의 계좌 3개와 지난달·이번 달 거래(#349). 이름과 가맹점은 지어낸 일반 이름이고 금액은 원 정수다. 날짜는 실행한 날
+ * (장부 시간대의 오늘)로 정하고 이번 달 거래는 오늘을 넘지 않는다. 카드 대금은 그 전의 카드 지출보다 크지 않다(부채 계좌).
  */
 final class DemoSamples {
 
@@ -24,10 +24,7 @@ final class DemoSamples {
     static final DemoAccount CARD = new DemoAccount("신용카드", AccountType.CARD, 0);
     static final List<DemoAccount> ACCOUNTS = List.of(CASH, BANK, CARD);
 
-    /**
-     * 거래 하나. monthsAgo는 0이면 이번 달, 1이면 지난달이다. 이체는 카테고리 없이 account에서 toAccount로 옮기고
-     * text는 메모다. 지출과 수입의 text는 가맹점이고 category는 기본 카테고리(P-223)의 이름이다.
-     */
+    /** 거래 하나. monthsAgo 0은 이번 달, 1은 지난달. text는 지출·수입의 가맹점이고 이체(카테고리 없음)의 메모다. */
     record Sample(int monthsAgo, int day, TransactionType type, DemoAccount account, DemoAccount toAccount,
                   String category, long amount, String text) {
 
@@ -47,7 +44,7 @@ final class DemoSamples {
             entry(1, 10, INCOME, BANK, "급여", 3_200_000, "월급"),
             entry(1, 12, EXPENSE, CARD, "생활용품", 23_800, "동네 마트"),
             entry(1, 15, EXPENSE, CARD, "문화·여가", 15_000, "동네 영화관"),
-            transfer(1, 20, BANK, CARD, 120_000, "카드 대금"),
+            transfer(1, 20, BANK, CARD, 55_300, "카드 대금"),
             entry(1, 22, EXPENSE, CARD, "의료·건강", 8_200, "동네 약국"),
             entry(1, 25, INCOME, BANK, "부수입", 150_000, "중고 거래"),
             entry(1, 27, EXPENSE, CASH, "식비", 9_000, "시장 국밥"),
@@ -59,7 +56,7 @@ final class DemoSamples {
             entry(0, 10, INCOME, BANK, "급여", 3_200_000, "월급"),
             entry(0, 14, EXPENSE, CARD, "쇼핑", 39_000, "온라인 쇼핑몰"),
             entry(0, 18, EXPENSE, CARD, "식비", 32_000, "동네 마트"),
-            transfer(0, 20, BANK, CARD, 98_300, "카드 대금"),
+            transfer(0, 20, BANK, CARD, 63_500, "카드 대금"),
             entry(0, 21, EXPENSE, CASH, "경조사·선물", 50_000, "꽃집"));
 
     private DemoSamples() {

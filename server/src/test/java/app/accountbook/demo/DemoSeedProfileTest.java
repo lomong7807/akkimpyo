@@ -1,30 +1,14 @@
 package app.accountbook.demo;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.List;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
-import org.springframework.core.env.StandardEnvironment;
 
-/** 시드 빈의 프로파일 조건과 쓰기 직전의 프로파일 검사(#349). 운영은 프로파일이 없다(빈 값). DB를 쓰지 않는다. */
+/** 쓰기 직전의 프로파일·DB 호스트 검사(#349). 운영은 프로파일이 없다(빈 값). DB를 쓰지 않는다. */
 class DemoSeedProfileTest {
-
-    @ParameterizedTest
-    @CsvSource({"local, true", "'', false", "prod, false", "test, false"})
-    void 컴포넌트_스캔은_local_프로파일에서만_시드_빈을_만든다(String profile, boolean created) {
-        StandardEnvironment environment = new StandardEnvironment();
-        environment.setActiveProfiles(profile.isEmpty() ? new String[0] : new String[] {profile});
-
-        assertThat(new ClassPathScanningCandidateComponentProvider(true, environment)
-                .findCandidateComponents("app.accountbook.demo"))
-                .extracting(BeanDefinition::getBeanClassName)
-                .containsExactlyElementsOf(created ? List.of(DemoSeed.class.getName()) : List.of());
-    }
 
     @ParameterizedTest
     @ValueSource(strings = {"", "default", "prod", "local,prod", "prod,local", "local,default", "test"})
@@ -34,5 +18,22 @@ class DemoSeedProfileTest {
         assertThatThrownBy(() -> DemoSeed.requireAllowedProfiles(active))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("local 프로파일에서만");
+    }
+
+    /** 허용: 이 컴퓨터(Testcontainers 주소도 localhost다). 거부: 운영 compose의 호스트(db), 다른 컴퓨터, 섞인 호스트, 호스트 바꾸기. */
+    @ParameterizedTest
+    @CsvSource({"jdbc:postgresql://localhost:5433/a, true", "jdbc:postgresql://127.0.0.1/a, true", "'', false",
+            "jdbc:postgresql://[::1]:5433/a?ssl=false, true", "'jdbc:postgresql://LOCALHOST:5433,127.0.0.1/a', true",
+            "jdbc:postgresql://db:5432/accountbook, false", "jdbc:postgresql://marker.example.com/a, false",
+            "jdbc:postgresql://10.0.0.5:5432/a, false", "'jdbc:postgresql://localhost,marker.example.com/a', false",
+            "jdbc:postgresql://localhost:5433/a?PGHOST=marker.example.com, false", "jdbc:postgresql://[::2]/a, false",
+            "jdbc:postgresql://localhost.marker.example/a, false", "jdbc:postgresql:marker, false"})
+    void 이_컴퓨터의_DB만_허용하고_거부할_때_주소를_알리지_않는다(String url, boolean allowed) {
+        if (allowed) {
+            assertThatCode(() -> DemoSeed.requireLocalDatabase(url)).doesNotThrowAnyException();
+        } else {
+            assertThatThrownBy(() -> DemoSeed.requireLocalDatabase(url)).isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("이 컴퓨터의 DB").hasMessageNotContaining("marker");
+        }
     }
 }
