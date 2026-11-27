@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ListButton, ListGroup, ListLink } from '../src/components/ListRow'
 import { readCssRule } from './support/cssRule'
+import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
 const CSS = 'src/components/ListRow.module.css'
@@ -28,7 +29,10 @@ function renderRows(onClick = () => {}) {
 /** 글자 앞뒤의 아이콘 */
 const iconsOf = (row: HTMLElement) => [...row.querySelectorAll('svg')]
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  resetViewport()
+})
 
 describe('목록 줄', () => {
   it('이동은 링크, 동작은 버튼이고 묶음의 목록에 든다', () => {
@@ -106,10 +110,22 @@ describe('목록 줄', () => {
     expect(readCssRule(CSS, '.row:focus-visible')).toContain('outline-offset: calc(-1 * var(--focus-ring-width))')
   })
 
-  it('묶음은 내용 좌우 여백만큼 넓어 줄의 바탕이 화면 끝까지 닿는다', () => {
+  it.each([320, 390, 767])('폭 %dpx에서는 줄의 바탕과 묶음 사이의 선이 화면 끝까지 닿는다', (width) => {
     renderRows()
+    setViewportWidth(width)
     const [group] = screen.getAllByRole('list')
+    const [item] = screen.getAllByRole('listitem')
     expect(getComputedStyle(group).getPropertyValue('margin-inline')).toBe('calc(-1 * var(--space-16))')
+    expect(getComputedStyle(item).getPropertyValue('margin-inline')).not.toContain('var(--space-16)')
+  })
+
+  it.each([768, 1024, 1280])('폭 %dpx에서는 선이 내용 폭에 맞고 줄의 바탕만 좌우 16px 넓다', (width) => {
+    renderRows()
+    setViewportWidth(width)
+    const [group] = screen.getAllByRole('list')
+    const [item] = screen.getAllByRole('listitem')
+    expect(getComputedStyle(group).getPropertyValue('margin-inline')).toBe('0px')
+    expect(getComputedStyle(item).getPropertyValue('margin-inline')).toBe('calc(-1 * var(--space-16))')
   })
 
   it('묶음이 이어질 때만 사이에 1px 선을 긋고 선 위아래를 24px 띄운다', () => {

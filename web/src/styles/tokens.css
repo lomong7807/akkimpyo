@@ -76,6 +76,8 @@
   --size-icon-20: 1.25rem; /* 20 줄 안, 버튼 안 */
   --size-icon-24: 1.5rem; /* 24 하단 탭, 상단 바 */
   --size-row: 3.5rem; /* 56 목록 한 줄의 최솟값 */
+  --size-toast: 3.5rem; /* 56 토스트의 최솟값 */
+  --size-sheet-handle: 2.25rem; /* 36 바닥 시트 손잡이의 폭 */
 
   /* 화면 폭. 배치를 나누는 768px와 1024px는 변수를 쓸 수 없는 미디어 조건에 직접 쓴다 */
   --width-content-narrow: 40rem; /* 640 휴대폰 배치 내용 폭 */
@@ -84,6 +86,14 @@
   --width-sidebar: 15rem; /* 240 */
   --width-list-min: 22.5rem; /* 360 목록 칸의 최소 폭 */
   --width-side-panel: 27.5rem; /* 440 오른쪽 칸 */
+  --width-field-panel: 20rem; /* 320 칸 아래 펼친 판 */
+  --width-full-screen-form: 35rem; /* 560 전체 화면 입력의 넓은 화면 폭 */
+  --width-dialog: 30rem; /* 480 가운데 창 */
+  --width-toast: 30rem; /* 480 토스트의 넓은 화면 최대 폭 */
+  --width-welcome: 30rem; /* 480 첫 실행 안내(C-02)의 넓은 화면 폭 */
+
+  /* 높이 */
+  --height-field-panel: 22.5rem; /* 360 칸 아래 펼친 판(고르기 목록)의 최대 높이 */
 
   /* 2px 선 (tokens.md 확인 필요 T-1) */
   --focus-ring-width: 2px;

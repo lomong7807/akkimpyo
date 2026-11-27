@@ -55,6 +55,11 @@ function routesWith(ledgerName?: string): RouteObject[] {
         },
         { path: '/more', element: main('더보기'), handle: { navigationItem: more } },
         { path: '/accounts', element: sub('계좌', '/more'), handle: { navigationItem: accounts } },
+        {
+          path: '/accounts/new',
+          element: <main>{links}</main>,
+          handle: { navigationItem: accounts, fullScreen: true },
+        },
         { path: '*', element: main('없음') },
       ],
     },
@@ -260,6 +265,25 @@ describe('사이드바', () => {
     expect(readCssRule('src/app/Sidebar.module.css', '.more')).toContain('border-top: 1px solid var(--color-border)')
   })
 
+  it('주 메뉴가 없으면 더보기 항목 위에 선을 두지 않는다', () => {
+    const moreOnly = { tabs: [], sidebar: { main: [], more: [accounts] } }
+    renderRoutes(
+      [
+        {
+          element: <AppLayout navigation={moreOnly} onLogout={onLogout} />,
+          children: [{ path: '/', element: <MainScreen>내용</MainScreen> }],
+        },
+      ],
+      '/',
+    )
+    setViewportWidth(1280)
+    const list = styleOf(within(menu()).getByRole('list'))
+    expect(list.marginTop).not.toBe('var(--space-8)')
+    expect(list.paddingTop).not.toBe('var(--space-8)')
+    const logout = within(menu()).getByRole('button', { name: '로그아웃' })
+    expect(styleOf(logout.parentElement!).marginTop).toBe('var(--space-8)')
+  })
+
   it('더보기 항목 아래에 구분선 뒤 이름만 있는 44px 로그아웃 줄을 둔다. 누르면 로그아웃한다', () => {
     onLogout.mockClear()
     open('/home', wide)
@@ -348,6 +372,51 @@ describe('하단 탭', () => {
     expect(iconOf('홈')).toBe(current)
     expect(styleOf(menuLink('홈')).color).toBe('var(--color-text-secondary)')
     expect(styleOf(menuLink('홈')).font).toBe('var(--text-caption)')
+  })
+
+  it('칸 이름은 아이콘 아래의 따로 된 글이고 링크의 이름은 그대로다', () => {
+    open('/home')
+    for (const name of ['홈', '내역', '더보기']) {
+      const label = menuLink(name).querySelector('svg + span')!
+      expect(label.textContent).toBe(name)
+      expect(label.className).toMatch(/label/)
+    }
+  })
+
+  /*
+   * designer 검토(#90): 칸 이름이 칸 폭에 들어가지 않으면 모든 칸의 이름을 함께 숨기고 아이콘만 둔다. 재지 않는다.
+   * 칸마다 자기 폭을 보는 컨테이너이고 모든 칸의 폭이 같으므로(1fr), 가장 긴 이름(세 글자, 2.594em)보다 조금 넓은 같은 기준으로
+   * 보면 모든 칸이 함께 바뀐다. 320px 글자 200%의 네 칸은 2.46em, 390px 200%는 3.13em, 1B의 다섯 칸 390px 200%는 2.5em이다.
+   */
+  it('칸 이름이 칸 폭에 들어가지 않으면 모든 칸의 이름을 함께 화면 읽기에만 남기고 아이콘을 칸 가운데에 둔다', () => {
+    const CSS = 'src/app/TabBar.module.css'
+    const cell = readCssRule(CSS, '.tabs > li')
+    expect(cell).toContain('container-type: inline-size;')
+    expect(cell).toContain('font: var(--text-caption);')
+    const css = readWebFile(CSS)
+    const narrow = css.slice(css.indexOf('@container (width < 2.75em) {'))
+    expect(narrow).toMatch(/^@container \(width < 2\.75em\) \{\s*\.label \{/)
+    const hidden = narrow.slice(narrow.indexOf('.label {'), narrow.indexOf('}'))
+    for (const declaration of ['position: absolute;', 'width: 1px;', 'height: 1px;', 'overflow: hidden;', 'clip-path: inset(50%);']) {
+      expect(hidden).toContain(declaration)
+    }
+    expect(narrow.slice(narrow.indexOf('.tab {'))).toMatch(/^\.tab \{\s*justify-content: center;/)
+    // 높이, 누르는 영역, 지금 칸의 색은 그대로다
+    expect(readCssRule(CSS, '.tab')).toContain('min-height: var(--size-touch);')
+    expect(readCssRule(CSS, '.tab[aria-current]')).toContain('color: var(--color-accent);')
+  })
+
+  it('칸 수가 달라도(1B의 다섯 칸) 모든 칸이 같은 폭의 같은 컨테이너다', () => {
+    const stats: MainNavigationItem = { label: '통계', to: '/stats', icon: 'Info' }
+    const five: Navigation = { ...navigation, tabs: [home, transactions, 'quick-entry', stats, more], quickEntry: accounts }
+    renderRoutes(
+      [{ element: <AppLayout navigation={five} canWrite onLogout={onLogout} />, children: [{ path: '/home', element: <MainScreen>내용</MainScreen> }] }],
+      '/home',
+    )
+    const cells = within(menu()).getAllByRole('listitem')
+    expect(cells).toHaveLength(5)
+    expect(new Set(cells.map((each) => each.className)).size).toBe(1)
+    expect(styleOf(within(menu()).getByRole('list')).gridAutoColumns).toBe('minmax(0, 1fr)')
   })
 
   it('항목이 하나도 없어도 틀은 그린다', () => {
@@ -453,5 +522,26 @@ describe.each([
     expect(handledByApp).toBe(false)
     expect(scrollTo).not.toHaveBeenCalled()
     expect(router.state.location.key).toBe(key)
+  })
+})
+
+describe('전체 화면 입력', () => {
+  const tabBar = () => document.querySelector('nav[class*="tabBar"]')
+  const frame = () => document.querySelector('[class*="frame"]')!
+
+  it.each([390, 768])('%dpx에서 하단 탭이 없다. 다른 화면으로 가면 다시 보인다', async (width) => {
+    open('/accounts/new', { width })
+    expect(tabBar()).toBeNull()
+    expect(frame().className).not.toMatch(/withTabs/)
+    fireEvent.click(contentLink('계좌 화면'))
+    expect(await screen.findByRole('heading', { name: '계좌' })).toBeTruthy()
+    expect(tabBar()).toBeTruthy()
+    expect(frame().className).toMatch(/withTabs/)
+  })
+
+  it('넓은 화면에는 사이드바가 그대로 있고 화면이 속한 항목을 강조한다', () => {
+    open('/accounts/new', { width: 1280 })
+    expect(menuNames()).toEqual(['홈', '내역', '계좌', '휴지통'])
+    expect(currentNames()).toEqual(['계좌'])
   })
 })

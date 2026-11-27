@@ -1,5 +1,5 @@
+import type { FieldErrors } from '../../components/useFormFields'
 import { emailError } from './email'
-import type { FieldErrors } from './useFormFields'
 
 export interface LoginValues {
   email: string

@@ -1,0 +1,33 @@
+.window {
+  position: absolute;
+  inset: 0;
+  width: min(var(--width-dialog), 100% - 2 * var(--space-24));
+  height: fit-content;
+  max-height: calc(100% - 2 * var(--space-24));
+  margin: auto;
+  padding: var(--space-24);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-12);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-dialog);
+  /* 그림자와 가림막이 없는 고대비 모드에서는 투명한 테두리가 보이게 된다 */
+  outline: 1px solid transparent;
+  transition: opacity var(--motion-sheet-duration) var(--motion-sheet-easing);
+  animation: appear var(--motion-sheet-duration) var(--motion-sheet-easing);
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+}
+
+dialog[data-closing] > .window {
+  opacity: 0;
+}
+
+.title {
+  margin-bottom: var(--space-8);
+  font: var(--text-title);
+}

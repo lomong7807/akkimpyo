@@ -17,6 +17,13 @@ type ButtonLook =
       'aria-label': string
       children?: never
     }
+  | {
+      /** 짧은 기호를 적은 44x44px 보조 버튼 */
+      kind: 'square'
+      children: string
+      icon?: never
+      'aria-label': string
+    }
 
 // 모양은 종류로만 고른다. 화면에서 덮어쓸 수 있는 속성은 받지 않는다.
 type WithoutLook<Props> = Omit<Props, 'className' | 'style' | 'children' | 'aria-label' | 'disabled'>
@@ -38,6 +45,7 @@ const kindClasses = {
   'text-danger': styles.textDanger,
   danger: styles.danger,
   icon: styles.icon,
+  square: `${styles.secondary} ${styles.square}`,
 }
 
 function classNameOf(kind: ButtonLook['kind']): string {

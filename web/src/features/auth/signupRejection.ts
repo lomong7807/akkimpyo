@@ -1,7 +1,7 @@
 import { ApiError, type FieldError } from '../../api/apiError'
+import type { FieldErrors } from '../../components/useFormFields'
 import { invalidEmail } from './email'
 import { nameRequired, nameTooLong, nameUnusable, passwordRule, passwordTooLong, type SignupField } from './signupForm'
-import type { FieldErrors } from './useFormFields'
 
 /* 가입이 거부된 입력란의 이름과 code(ADR 002 4절, #29)는 이 파일에만 있다. */
 
