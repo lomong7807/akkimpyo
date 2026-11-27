@@ -476,9 +476,9 @@ public class TransactionService {
         return tx.getLines().stream().map(TransactionLine::getAccountId).collect(Collectors.toUnmodifiableSet());
     }
 
+    /** 카테고리를 FK 확인과 같은 잠금으로 거래 행보다 먼저 읽는다. 지우는 중이면 기다렸다가 없는 카테고리로 거부한다(#3). */
     private void requireCategoryInLedger(UUID ledgerId, CategoryKind kind, UUID categoryId) {
-        Category category = categoryRepository.findById(categoryId)
-                .filter(candidate -> candidate.getLedgerId().equals(ledgerId))
+        Category category = categoryRepository.findForReference(ledgerId, categoryId)
                 .orElseThrow(() -> new InvalidRequestException("categoryId", FieldErrorCode.NOT_FOUND,
                         "장부에 없는 카테고리입니다."));
         if (category.getKind() != kind) {

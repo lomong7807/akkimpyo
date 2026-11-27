@@ -5,6 +5,7 @@
 - 보완: 2026-11-25, 결정 7에서 완전 삭제 기록 행의 `version`이 "그 거래의 마지막 `version` + 1"에서 "거래 행의 `version` + 1"로 바뀐다(PR #156)
 - 보완: 2026-11-25, 앞 보완 줄의 "이 PR"을 PR #147로 바꾸고 고칠 문서와 이슈 표의 낡은 행을 지금 상태로 맞춘다. 결정 10에 기기 값이 없는 요청을 더한다(PR #168)
 - 보완: 2026-11-26, 배경, 결정 4, 결정 7, 검토한 대안, 고칠 이슈 표를 PR #175와 #179가 들어간 main과 맞춘다. 결정 2에 완전 삭제의 트랜잭션, 결정 4에 `lines`의 순서, 결정 6에 action 값, 결정 10에 기기 값이 없는 요청을 구현하는 이슈를 적는다(PR #184)
+- 보완: 2026-11-27, 결정 6에 카테고리 삭제에 따른 이동(F-512)의 action 값 `CATEGORY_MOVE`를 더한다(#3)
 - 보완: 2026-11-27, 결정 6에 승인취소 되돌리기(F-226)의 action 값 `UNCANCEL`을 더한다(#7)
 - 결정한 사람: owner(삭제 때 이력 처리 세 가지, 2026-11-24), dba(이력의 순서와 자동 삭제의 "누가", #60과 #102), planner(자동 삭제의 화면 문구, #102), architect(나머지). 검토: dba, security
 
@@ -85,7 +86,8 @@ owner 결정(2026-11-24)은 다음 세 가지다.
 
 - 30일 자동 영구 삭제처럼 서버가 한 일은 `actor_id`를 NULL로 두고 action 값으로 구분한다(dba 결정). 완전 삭제의 action 값은 사람이 한 것이 `PURGE`, 30일 자동 삭제가 `AUTO_PURGE`다(PR #175).
 - 따라서 `actor_id`가 NULL인 행은 action이 서버 동작이면 "자동", 사람 동작이면 "탈퇴한 사용자"다.
-- 승인취소 되돌리기(F-226)의 action 값은 `UNCANCEL`이다. 사람 동작이고 거래 `version`을 올린 뒤의 값이며, 전후 값의 `status`가 취소에서 취소 직전 상태로 바뀐다(#7). 앱의 `ChangeAction`과 DB의 `ck_change_log_action_values`에 함께 더했다(V22).
+- 카테고리 삭제에 따른 이동(F-512)의 action 값은 `CATEGORY_MOVE`다. 옮긴 거래마다 한 행이고 거래 `version`을 올린 뒤의 값이며, 바꾼 사람은 카테고리를 지운 사람이다(#3). 앱의 `ChangeAction`과 DB의 `ck_change_log_action_values`에 함께 더했다(V22).
+- 승인취소 되돌리기(F-226)의 action 값은 `UNCANCEL`이다. 사람 동작이고 거래 `version`을 올린 뒤의 값이며, 전후 값의 `status`가 취소에서 취소 직전 상태로 바뀐다(#7). 앱의 `ChangeAction`과 DB의 `ck_change_log_action_values`에 함께 더했다(V23).
 - 화면 문구는 planner가 "자동 삭제"로 정했다([#102 댓글](https://github.com/lomong7807/akkimpyo/issues/102#issuecomment-7126144686)). P-215와 F-232의 미정 문장을 고치는 것은 planner의 몫이다.
 
 ### 7. 순서와 장부 단위 처리
