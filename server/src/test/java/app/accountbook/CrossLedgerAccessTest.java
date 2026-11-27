@@ -33,6 +33,7 @@ import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
 import app.accountbook.transaction.TransactionListQuery;
+import app.accountbook.transaction.TransactionPage.DayTotals;
 import app.accountbook.transaction.TransactionScope.Day;
 import app.accountbook.transaction.TransactionScope.Month;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
@@ -269,6 +270,7 @@ class CrossLedgerAccessTest {
         // 100,000 - 지출 1,100 - 이체 2,200. 삭제한 3,300은 빠진다.
         assertThat(balanceQuery.balances(a, ledgerA))
                 .containsOnly(Map.entry(aBank, 96_700L), Map.entry(aCash, 2_200L));
+        assertThat(transactionListQuery.dailyTotals(a, ledgerA, NOVEMBER)).containsExactly(new DayTotals(DAY, 0, 1_100));
         MonthlySummary summary = monthlyStatsQuery.monthly(a, ledgerA, NOVEMBER);
         assertThat(summary.expense()).isEqualTo(1_100);
         assertThat(summary.income()).isZero();
@@ -309,6 +311,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Day(DAY), null, 50)),
                 denied("조회: 거래 목록(장부 전체)", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new WholeLedger(), null, 50)),
+                denied("조회: 날짜별 합계(달력)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, NOVEMBER)),
                 denied("조회: 계좌 잔액", NotLedgerMemberException.class, bBank,
                         (actor, account) -> balanceQuery.balance(actor, account)),
                 denied("조회: 장부의 모든 잔액", NotLedgerMemberException.class, ledgerB,
@@ -461,6 +465,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, null)),
                 denied("순서: B의 장부 거래 목록을 범위 밖 limit으로", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 0)),
+                denied("순서: B의 장부 날짜별 합계를 범위 밖 달로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, YearMonth.of(1999, 12))),
                 denied("순서: B의 지출을 낡은 version으로 취소", notFound, bExpense.id(), StaleVersionException.class,
                         (actor, tx) -> transactionService.cancel(actor, tx, bExpense.version() + 1, DEVICE)),
                 denied("순서: B의 지출을 빈 요청으로 수정", notFound, bExpense.id(), invalid,
