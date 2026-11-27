@@ -157,7 +157,7 @@ export async function expectHomeBalances(page: Page, byType: [string, string][],
 
 /**
  * 로그아웃한다. 휴대폰은 하단 탭의 더보기(M-01) 맨 아래, 넓은 화면은 사이드바 맨 아래의 "로그아웃"이다(1A 임시 자리).
- * 확인 창 "로그아웃할까요?"의 "로그아웃"을 누르면 로그인(A-02)으로 간다.
+ * 이 기기에 보내지 않은 입력이 없으므로 확인 없이 로그인(A-02)으로 간다(F-016. 있을 때만 "로그아웃할까요?"를 묻는다).
  */
 export async function logOut(page: Page, isMobile: boolean) {
   if (isMobile) {
@@ -165,7 +165,6 @@ export async function logOut(page: Page, isMobile: boolean) {
     await expect(page).toHaveURL('/more')
   }
   await page.getByRole('button', { name: '로그아웃', exact: true }).click()
-  await page.getByRole('dialog', { name: '로그아웃할까요?' }).getByRole('button', { name: '로그아웃', exact: true }).click()
 
   await expect(page.getByRole('heading', { level: 1, name: '로그인' })).toBeVisible()
   await expect(page).toHaveURL('/login')
