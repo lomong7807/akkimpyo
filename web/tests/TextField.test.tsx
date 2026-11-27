@@ -5,7 +5,7 @@ import { PasswordField, TextField } from '../src/components/TextField'
 import { readCssRule } from './support/cssRule'
 import { readWebFile } from './support/webFile'
 
-const ruleBody = (selector: string) => readCssRule('src/components/TextField.module.css', selector)
+const ruleBody = (selector: string) => readCssRule('src/components/Field.module.css', selector)
 
 afterEach(cleanup)
 
@@ -53,6 +53,11 @@ describe.each(fields)('%s', (_, Field) => {
     const icon = document.getElementById(screen.getByLabelText('이메일').getAttribute('aria-describedby')!)!.querySelector('svg')!
     expect(icon.getAttribute('aria-hidden')).toBe('true')
     expect(getComputedStyle(icon).width).toBe('var(--size-icon-20)')
+  })
+
+  it('오류 문구의 낱말이 줄보다 길어도 칸을 넘지 않는다', () => {
+    render(<Field label="이메일" error="9,999,999,999원까지" />)
+    expect(getComputedStyle(screen.getByText('9,999,999,999원까지')).minWidth).toBe('0px')
   })
 
   it('칸 둘을 그려도 이름과 설명이 섞이지 않는다', () => {
@@ -110,14 +115,15 @@ describe.each(fields)('%s', (_, Field) => {
   })
 
   it('초점은 안쪽 테두리 하나로 보인다. 바깥 테두리는 고대비 모드에서 남도록 없애지 않고 투명하게 둔다', () => {
-    const rule = ruleBody('.input:focus-visible')
+    const rule = ruleBody('.control:focus-visible')
     expect(rule).toContain('outline-color: transparent')
-    expect(readWebFile('src/components/TextField.module.css')).not.toMatch(/outline(-style|-width)?:/)
+    expect(readWebFile('src/components/Field.module.css')).not.toMatch(/outline(-style|-width)?:/)
+    expect(readWebFile('src/components/TextField.module.css')).not.toContain('outline')
   })
 
   it('테두리가 굵어진 만큼 안쪽 여백을 줄여 글자가 움직이지 않는다', () => {
-    expect(ruleBody('.input')).toContain('border: var(--border-width) solid var(--border-color)')
-    expect(ruleBody('.input')).toContain('padding: 0 calc(var(--space-12) + 1px - var(--border-width))')
+    expect(ruleBody('.control')).toContain('border: var(--border-width) solid var(--border-color)')
+    expect(ruleBody('.control')).toContain('padding: 0 calc(var(--space-12) + 1px - var(--border-width))')
   })
 
   it('칸보다 긴 글자는 말줄임표로 줄인다', () => {
@@ -164,6 +170,40 @@ describe('비밀번호 보기', () => {
     await user.click(screen.getByRole('button', { name: '비밀번호 숨기기' }))
     expect(input.type).toBe('password')
     expect(screen.getByRole('button', { name: '비밀번호 보기' })).toBeTruthy()
+  })
+
+  it('버튼 이름은 칸 이름에서 만든 "{칸 이름} 보기"이고, 누르면 "{칸 이름} 숨기기"다', async () => {
+    const user = userEvent.setup()
+    render(<PasswordField label="비밀번호 확인" />)
+    expect(screen.queryByRole('button', { name: '비밀번호 보기' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 확인 보기' }))
+    expect(screen.getByLabelText<HTMLInputElement>('비밀번호 확인').type).toBe('text')
+    expect(screen.queryByRole('button', { name: '비밀번호 확인 보기' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 확인 숨기기' }))
+    expect(screen.getByLabelText<HTMLInputElement>('비밀번호 확인').type).toBe('password')
+  })
+
+  it('칸이 둘이면 버튼은 칸 이름으로 따로 찾히고 따로 움직인다', async () => {
+    const user = userEvent.setup()
+    render(
+      <>
+        <PasswordField label="비밀번호" />
+        <PasswordField label="비밀번호 확인" />
+      </>,
+    )
+    const first = screen.getByLabelText<HTMLInputElement>('비밀번호')
+    const second = screen.getByLabelText<HTMLInputElement>('비밀번호 확인')
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 확인 보기' }))
+    expect([first.type, second.type]).toEqual(['password', 'text'])
+    expect(screen.getByRole('button', { name: '비밀번호 보기' })).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 보기' }))
+    expect([first.type, second.type]).toEqual(['text', 'text'])
+    expect(screen.getByRole('button', { name: '비밀번호 숨기기' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '비밀번호 확인 숨기기' })).toBeTruthy()
   })
 
   it('키보드로 누를 수 있고 초점이 버튼에 남는다', async () => {

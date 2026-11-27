@@ -16,11 +16,25 @@ export interface Me {
   ledgers: [Ledger, ...Ledger[]]
 }
 
+/** 편집 이상(소유자, 편집 가능)의 권한. 모르는 값은 보기 전용처럼 다룬다. */
+const editorRoles = ['OWNER', 'MEMBER']
+
+/** 장부의 거래, 계좌, 카테고리를 만들고 고칠 수 있다(기능정의서 1.3의 편집 이상). */
+export function canEdit({ role }: Ledger): boolean {
+  return editorRoles.includes(role)
+}
+
 /** 실패하면 ApiError를 던진다. */
 export async function fetchMe(): Promise<Me> {
-  const body = await request<Partial<Me> | null | undefined>('/me')
-  if (!isMe(body)) throw ApiError.unreadable()
-  return body
+  const body = await request<unknown>('/me')
+  const me = parseMe(body)
+  if (!me) throw ApiError.unreadable()
+  return me
+}
+
+/** 약속(#30)대로인 내 정보. 기기에 남긴 사본도 이것으로 읽는다(값은 믿지 않는다). 아니면 없다. */
+export function parseMe(value: unknown): Me | undefined {
+  return isMe(value as Partial<Me> | null | undefined) ? (value as Me) : undefined
 }
 
 function isMe(body: Partial<Me> | null | undefined): body is Me {

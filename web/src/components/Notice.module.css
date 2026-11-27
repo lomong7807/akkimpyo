@@ -10,3 +10,8 @@
   color: var(--color-text);
   font: var(--text-secondary);
 }
+
+/* 덧붙일 말은 다음 줄이다(로그인 풀림의 "쓰던 내용은 이 기기에 남아 있어요.", #234 C2) */
+.detail {
+  display: block;
+}

@@ -40,7 +40,7 @@ export async function withSessionLock<T>(
     if (isAbortError(error)) {
       // 기다리다 그만두었거나 다른 탭의 로그인이 잠금을 빼앗았다
       lost.abort()
-      throw ApiError.timeout()
+      throw ApiError.lockTimeout()
     }
     if (!granted) return await work(lost.signal)
     throw error

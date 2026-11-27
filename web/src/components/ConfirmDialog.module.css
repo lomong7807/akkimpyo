@@ -1,0 +1,30 @@
+.description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}
+
+/* 두 버튼이 같은 폭으로 한 줄에 들어가지 않으면 뒤의 실행 버튼이 위로 쌓인다 */
+.actions {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  gap: var(--space-8);
+  margin-top: var(--space-24);
+}
+
+/* 실행하지 못한 까닭은 설명 아래 24px, 버튼 바로 위 8px에 둔다(00-common 4.3의 "그 자리") */
+.failure {
+  margin-top: var(--space-24);
+}
+
+.failure + .actions {
+  margin-top: var(--space-8);
+}
+
+/* 칸의 최소 폭은 버튼의 글자와 안쪽 여백이다 */
+.actions > div {
+  display: grid;
+  flex: 1 1 calc(50% - var(--space-8) / 2);
+  grid-template-columns: minmax(max-content, 1fr);
+  min-height: var(--size-button);
+}
