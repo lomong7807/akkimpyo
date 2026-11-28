@@ -181,7 +181,7 @@ class CrossLedgerAccessTest {
         bSpare = category(b, ledgerB, "B안쓰는분류", CategoryKind.EXPENSE, null);
         bUncategorized = categoryService.uncategorized(ledgerB, CategoryKind.EXPENSE).getId();
         bExpense = transactionService.create(b, ledgerB, new Entry(UUID.randomUUID(), TransactionType.EXPENSE,
-                DAY, null, bBank, bLunch, 73_100, false, "B단골식당", "B의메모", null), DEVICE);
+                DAY, null, bBank, bLunch, 73_100, null, "B단골식당", "B의메모", null), DEVICE);
         bTransfer = fixtures.transfer(userB, ledgerB, bBank, bCash, DAY, 41_700);
         bDeleted = fixtures.delete(userB, fixtures.expense(userB, ledgerB, bBank, bFood, DAY, 58_300));
         bCanceled = fixtures.cancel(userB, fixtures.expense(userB, ledgerB, bBank, bFood, DAY, 66_900));
@@ -377,6 +377,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, NOVEMBER)),
                 denied("조회: 내보내기", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionExportQuery.transactions(actor, ledger, DAY, DAY)),
+                denied("조회: 내보내기(장부 전체)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionExportQuery.allTransactions(actor, ledger)),
                 denied("조회: 계좌 잔액", NotLedgerMemberException.class, bBank,
                         (actor, account) -> balanceQuery.balance(actor, account)),
                 denied("조회: 장부의 모든 잔액", NotLedgerMemberException.class, ledgerB,
@@ -441,7 +443,7 @@ class CrossLedgerAccessTest {
                 foreign("생성: A의 지출에 결제한 사람으로 B", invalid, b, a,
                         (actor, payer) -> transactionService.create(actor, ledgerA,
                                 new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null, aBank, aFood, 1_000,
-                                        false, null, null, payer), DEVICE)),
+                                        null, null, null, payer), DEVICE)),
                 foreign("생성: A의 카테고리의 상위로 B의 카테고리", invalid, bFood, aFood,
                         (actor, parent) -> categoryService.create(actor, ledgerA,
                                 new CategoryCommand("A하위", CategoryKind.EXPENSE, parent))),
@@ -496,7 +498,9 @@ class CrossLedgerAccessTest {
                 denied("취소: B의 지출", NotFoundException.class, bExpense.id(),
                         (actor, tx) -> transactionService.cancel(actor, tx, bExpense.version(), DEVICE)),
                 denied("취소: B의 이체", NotFoundException.class, bTransfer.id(),
-                        (actor, tx) -> transactionService.cancel(actor, tx, bTransfer.version(), DEVICE)));
+                        (actor, tx) -> transactionService.cancel(actor, tx, bTransfer.version(), DEVICE)),
+                denied("취소 되돌리기: B의 취소한 거래", NotFoundException.class, bCanceled.id(),
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bCanceled.version(), DEVICE)));
     }
 
     /** 삭제·복원. */
@@ -592,6 +596,13 @@ class CrossLedgerAccessTest {
                         (actor, tx) -> transactionService.delete(actor, tx, bDeleted.version(), DEVICE)),
                 denied("순서: B의 삭제하지 않은 거래를 복원", notFound, bExpense.id(), state,
                         (actor, tx) -> transactionService.restore(actor, tx, bExpense.version(), DEVICE)),
+                denied("순서: B의 취소하지 않은 거래를 되돌리기", notFound, bExpense.id(), state,
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bExpense.version(), DEVICE)),
+                denied("순서: B의 취소한 거래를 낡은 version으로 되돌리기", notFound, bCanceled.id(),
+                        StaleVersionException.class,
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bCanceled.version() - 1, DEVICE)),
+                denied("순서: B의 취소한 거래를 형식이 틀린 기기 값으로 되돌리기", notFound, bCanceled.id(), invalid,
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bCanceled.version(), MALFORMED_DEVICE)),
                 denied("순서: B의 장부에 형식이 틀린 기기 값으로 지출", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionService.create(actor, ledger,
                                 entry(UUID.randomUUID(), bBank, bFood, 1_000), MALFORMED_DEVICE)),
@@ -703,7 +714,7 @@ class CrossLedgerAccessTest {
     }
 
     static TransactionCommand entry(UUID id, UUID accountId, UUID categoryId, long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, accountId, categoryId, amount, false, null, null,
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, accountId, categoryId, amount, null, null, null,
                 null);
     }
 

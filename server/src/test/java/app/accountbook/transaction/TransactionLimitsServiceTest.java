@@ -76,7 +76,7 @@ class TransactionLimitsServiceTest {
     }
 
     private Entry expense(UUID id, LocalDate on, LocalTime time, long amount) {
-        return new Entry(id, TransactionType.EXPENSE, on, time, cash.getId(), null, amount, false, null, null,
+        return new Entry(id, TransactionType.EXPENSE, on, time, cash.getId(), null, amount, null, null, null,
                 null);
     }
 
@@ -85,7 +85,8 @@ class TransactionLimitsServiceTest {
     }
 
     private Entry entry(TransactionType type, boolean refund, LocalDate on, long amount) {
-        return new Entry(UUID.randomUUID(), type, on, null, cash.getId(), null, amount, refund, null, null, null);
+        return new Entry(UUID.randomUUID(), type, on, null, cash.getId(), null, amount,
+                refund ? RefundKind.REFUND : null, null, null, null);
     }
 
     /** 이 장부의 거래 수. 테이블 전체를 세지 않아 커밋하는 테스트의 흔적이 남아도 깨지지 않는다(#14 테스트 보강). */

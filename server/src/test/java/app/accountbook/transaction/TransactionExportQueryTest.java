@@ -24,6 +24,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -118,6 +119,40 @@ class TransactionExportQueryTest {
         assertThat(exportQuery.transactions(owner.getId(), ledgerId, OCT_1, OCT_31)).isEmpty();
     }
 
+    /**
+     * 장부 전체(#379)는 기간 조건만 없다. 가장 이른 날(P-202의 2000-01-01)도 미래 날짜도 들고, 휴지통 거래는 첫 거래보다 이르거나
+     * 마지막 거래보다 늦어도 빠진다. 첫 거래와 마지막 거래의 날짜가 파일 이름의 기간이 된다.
+     */
+    @Test
+    void 장부_전체는_휴지통만_빼고_오래된_것부터이며_다른_장부의_거래는_없다() {
+        fixtures.delete(owner, fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2000, 1, 1), 1_000));
+        UUID earliest = expense(LocalDate.of(2000, 1, 2), null);
+        UUID middle = expense(OCT_1, LocalTime.of(9, 0));
+        UUID latest = fixtures.cancel(owner,
+                fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2027, 1, 1), 2_000)).id();
+        fixtures.delete(owner, fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2027, 1, 2), 3_000));
+        User other = fixtures.user("export-other@example.com");
+        UUID otherLedger = fixtures.personalLedgerId(other);
+        UUID otherCash = fixtures.account(other, otherLedger, "현금", AccountType.CASH, 0, OCT_1).getId();
+        fixtures.expense(other, otherLedger, otherCash, null, LocalDate.of(2000, 1, 1), 1_000);
+
+        assertThat(exportQuery.allTransactions(owner.getId(), ledgerId))
+                .extracting(ExportedTransaction::id, ExportedTransaction::occurredOn, ExportedTransaction::status)
+                .containsExactly(tuple(earliest, LocalDate.of(2000, 1, 2), TransactionStatus.POSTED),
+                        tuple(middle, OCT_1, TransactionStatus.POSTED),
+                        tuple(latest, LocalDate.of(2027, 1, 1), TransactionStatus.CANCELED));
+        assertThat(exportQuery.allTransactions(other.getId(), otherLedger)).hasSize(1);
+    }
+
+    @Test
+    void 장부_전체도_구성원이_아니면_거부한다() {
+        expense(OCT_1, null);
+        User stranger = fixtures.user("export-stranger@example.com");
+
+        assertThat(catchThrowable(() -> exportQuery.allTransactions(stranger.getId(), ledgerId)))
+                .isInstanceOf(NotLedgerMemberException.class);
+    }
+
     @Test
     void 종료일이_시작일보다_앞이면_to의_NOT_ALLOWED이고_구성원_확인이_먼저다() {
         InvalidRequestException rejected = catchThrowableOfType(InvalidRequestException.class,
@@ -130,23 +165,29 @@ class TransactionExportQueryTest {
                 .isInstanceOf(NotLedgerMemberException.class);
     }
 
-    /** 거래와 라인을 한 문장으로 읽는다(#57 구조 결정). 거래가 늘어도 문장 수가 같고, 라인을 읽는 문장은 하나다. */
+    /**
+     * 거래와 라인을 한 문장으로 읽는다(#57 구조 결정). 거래가 늘어도 문장 수가 같고, 라인을 읽는 문장은 하나다. 장부 전체(#379)도
+     * 기간을 정한 조회와 문장 수가 같다(첫·마지막 날짜를 따로 묻지 않는다).
+     */
     @Test
     void 거래가_늘어도_문장_수가_같다() {
         expense(OCT_1, null);
-        List<String> one = statements();
+        List<String> one = statements(() -> exportQuery.transactions(owner.getId(), ledgerId, OCT_1, OCT_31));
         for (int day = 2; day <= 20; day++) {
             expense(LocalDate.of(2026, 10, day), null);
             fixtures.transfer(owner, ledgerId, bank, cash, LocalDate.of(2026, 10, day), 1_000);
         }
 
-        List<String> many = statements();
+        List<String> many = statements(() -> exportQuery.transactions(owner.getId(), ledgerId, OCT_1, OCT_31));
         assertThat(many).as("거래가 하나일 때 %s", one).hasSameSizeAs(one);
         assertThat(many).filteredOn(sql -> sql.contains("transaction_line")).hasSize(1);
+        List<String> whole = statements(() -> exportQuery.allTransactions(owner.getId(), ledgerId));
+        assertThat(whole).as("기간을 정했을 때 %s", one).hasSameSizeAs(one);
+        assertThat(whole).filteredOn(sql -> sql.contains("transaction_line")).hasSize(1);
     }
 
     /** 조회 한 번에 Hibernate가 보낸 문장(구성원 확인 포함). 앞서 만든 거래는 먼저 DB에 쓴다. */
-    private List<String> statements() {
+    private List<String> statements(Supplier<List<ExportedTransaction>> read) {
         entityManager.flush();
         Logger sqlLog = (Logger) LoggerFactory.getLogger("org.hibernate.SQL");
         Level level = sqlLog.getLevel();
@@ -155,7 +196,7 @@ class TransactionExportQueryTest {
         sqlLog.addAppender(appender);
         sqlLog.setLevel(Level.DEBUG);
         try {
-            assertThat(exportQuery.transactions(owner.getId(), ledgerId, OCT_1, OCT_31)).isNotEmpty();
+            assertThat(read.get()).isNotEmpty();
         } finally {
             sqlLog.setLevel(level);
             sqlLog.detachAppender(appender);
@@ -165,7 +206,7 @@ class TransactionExportQueryTest {
 
     private UUID expense(LocalDate on, LocalTime at) {
         return transactionService.create(owner.getId(), ledgerId, new Entry(UUID.randomUUID(),
-                TransactionType.EXPENSE, on, at, cash, null, 1_000, false, "가맹점", null, null), DEVICE).id();
+                TransactionType.EXPENSE, on, at, cash, null, 1_000, null, "가맹점", null, null), DEVICE).id();
     }
 
     private List<UUID> ids(LocalDate from, LocalDate to) {

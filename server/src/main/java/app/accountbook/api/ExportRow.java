@@ -2,6 +2,7 @@ package app.accountbook.api;
 
 import app.accountbook.category.Category;
 import app.accountbook.transaction.ExportedTransaction;
+import app.accountbook.transaction.RefundKind;
 import app.accountbook.transaction.TransactionStatus;
 import app.accountbook.transaction.TransactionType;
 import app.accountbook.transaction.TransactionView.Line;
@@ -35,8 +36,9 @@ record ExportRow(LocalDate date, LocalTime time, String type, long amount, Strin
             TransactionType.EXPENSE, "지출", TransactionType.INCOME, "수입", TransactionType.TRANSFER, "이체");
     private static final Map<TransactionStatus, String> STATUSES = Map.of(
             TransactionStatus.PENDING, "승인 대기", TransactionStatus.POSTED, "완료", TransactionStatus.CANCELED, "취소");
-    /** 1단계의 환불은 지출 입력의 "환불"뿐이다(P-209). 돌려받음(P-210)은 아직 저장하지 않는다(#46). */
-    private static final String REFUND = "환불";
+    /** 저장된 환불 구분(#8)의 열 값. 사용자가 고른 이름 그대로다(P-209, P-210). 일반 지출과 수입·이체는 비운다. */
+    private static final Map<RefundKind, String> REFUND_KINDS = Map.of(
+            RefundKind.REFUND, "환불", RefundKind.REIMBURSEMENT, "돌려받음");
 
     static List<ExportRow> of(List<ExportedTransaction> transactions, Names names) {
         return IntStream.range(0, transactions.size()).boxed()
@@ -53,7 +55,7 @@ record ExportRow(LocalDate date, LocalTime time, String type, long amount, Strin
         }
         return tx.lines().stream()
                 .map(line -> row(tx, number, names, Math.abs(line.amount()),
-                        tx.type() == TransactionType.EXPENSE && line.amount() > 0 ? REFUND : null,
+                        tx.refundKind() == null ? null : REFUND_KINDS.get(tx.refundKind()),
                         line.accountId(), null, find(names.categories(), line.categoryId())))
                 .toList();
     }

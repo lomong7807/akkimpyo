@@ -59,7 +59,7 @@ record HistoryResponse(List<Item> items) {
         fields.put("amount", !known ? null : transfer ? (Object) to.amount() : (Object) Math.abs(entry.amount()));
         fields.put("payee", entry == null ? null : value.payee());
         fields.put("memo", known ? value.memo() : null);
-        fields.put("refund", entry == null ? null : value.type() == TransactionType.EXPENSE && entry.amount() > 0);
+        fields.put("refundKind", known && value.refundKind() != null ? value.refundKind().name() : null);
         fields.put("paidBy", entry == null ? null : text(value.paidBy()));
         fields.put("fromAccountId", from == null ? null : text(from.accountId()));
         fields.put("toAccountId", to == null ? null : text(to.accountId()));

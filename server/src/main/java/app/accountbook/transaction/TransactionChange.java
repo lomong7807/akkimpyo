@@ -34,12 +34,14 @@ public record TransactionChange(ChangeAction action, UUID actorId, String device
     /**
      * 그 시점 거래의 값 가운데 사람이 바꾸는 것. 거래 id, 장부, 만든 사람, version, 기록 시각은 뺐다.
      *
-     * @param paidBy  사용자 id. 탈퇴로 비워졌으면 null이다
-     * @param deleted 휴지통에 있었는가
-     * @param lines   분개 라인. 순서는 뜻이 없다(ADR 007 결정 4)
+     * @param paidBy     사용자 id. 탈퇴로 비워졌으면 null이다
+     * @param refundKind 지출의 환불 구분(#8). 일반 지출과 수입·이체는 null이다
+     * @param deleted    휴지통에 있었는가
+     * @param lines      분개 라인. 순서는 뜻이 없다(ADR 007 결정 4)
      */
     public record Value(TransactionType type, LocalDate occurredOn, LocalTime occurredTime, String payee, String memo,
-                        TransactionStatus status, UUID paidBy, boolean deleted, List<Line> lines) {
+                        TransactionStatus status, UUID paidBy, RefundKind refundKind, boolean deleted,
+                        List<Line> lines) {
 
         public Value {
             lines = List.copyOf(lines);
@@ -47,7 +49,8 @@ public record TransactionChange(ChangeAction action, UUID actorId, String device
 
         static Value of(ChangeLogValue stored) {
             return stored == null ? null : new Value(stored.type(), stored.occurredOn(), stored.occurredTime(),
-                    stored.payee(), stored.memo(), stored.status(), stored.paidBy(), stored.deleted(),
+                    stored.payee(), stored.memo(), stored.status(), stored.paidBy(), stored.refundKind(),
+                    stored.deleted(),
                     stored.lines().stream()
                             .map(line -> new Line(line.accountId(), line.categoryId(), line.amount()))
                             .toList());

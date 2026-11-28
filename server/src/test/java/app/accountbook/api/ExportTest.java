@@ -10,6 +10,7 @@ import app.accountbook.category.CategoryService;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.StoppedClockConfig.StoppedClock;
 import app.accountbook.support.TestAccessTokens;
+import app.accountbook.transaction.RefundKind;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
 import app.accountbook.transaction.TransactionService;
@@ -78,14 +79,15 @@ class ExportTest {
         UUID food = category("식비", CategoryKind.EXPENSE, null);
         UUID lunch = category("점심", CategoryKind.EXPENSE, food);
         UUID salary = category("급여", CategoryKind.INCOME, null);
-        entry(TransactionType.EXPENSE, 1, LocalTime.MIDNIGHT, cash, lunch, 16_500, false, "올래국수", "회식, 2차");
-        entry(TransactionType.EXPENSE, 2, null, cash, food, 3_000, true, "올래국수", null);
-        entry(TransactionType.INCOME, 3, LocalTime.of(9, 0), bank, salary, 3_200_000, false, "회사", null);
+        entry(TransactionType.EXPENSE, 1, LocalTime.MIDNIGHT, cash, lunch, 16_500, null, "올래국수", "회식, 2차");
+        entry(TransactionType.EXPENSE, 2, null, cash, food, 3_000, RefundKind.REFUND, "올래국수", null);
+        entry(TransactionType.INCOME, 3, LocalTime.of(9, 0), bank, salary, 3_200_000, null, "회사", null);
         transactionService.create(owner.getId(), ledgerId, new Transfer(UUID.randomUUID(), OCT_1.withDayOfMonth(4),
                 LocalTime.of(8, 0), bank, cash, 50_000, "용돈"), "test-device");
         fixtures.cancel(owner, fixtures.expense(owner, ledgerId, cash, null, OCT_1.withDayOfMonth(5), 7_000));
         fixtures.delete(owner, fixtures.expense(owner, ledgerId, cash, food, OCT_1.withDayOfMonth(6), 8_000));
-        entry(TransactionType.EXPENSE, 31, LocalTime.of(23, 59), spare, food, 1_000, false, "=HYPERLINK(\"x\")",
+        entry(TransactionType.EXPENSE, 7, null, cash, food, 2_000, RefundKind.REIMBURSEMENT, null, null);
+        entry(TransactionType.EXPENSE, 31, LocalTime.of(23, 59), spare, food, 1_000, null, "=HYPERLINK(\"x\")",
                 "@SUM(A1)");
         String me = owner.getDisplayName();
 
@@ -105,14 +107,15 @@ class ExportTest {
                 + "2026-10-03,09:00,수입,3200000,,은행,,급여,,회사,,,완료,,," + me + ",3\r\n"
                 + "2026-10-04,08:00,이체,50000,,은행,현금,,,,용돈,,완료,,," + me + ",4\r\n"
                 + "2026-10-05,,지출,7000,,현금,,미분류,,,,,취소,,," + me + ",5\r\n"
+                + "2026-10-07,,지출,2000,돌려받음,현금,,식비,,,,,완료,,," + me + ",6\r\n"
                 + "2026-10-31,23:59,지출,1000,,'-비상금,,식비,,\"'=HYPERLINK(\"\"x\"\")\",'@SUM(A1),,완료,,," + me
-                + ",6\r\n");
+                + ",7\r\n");
     }
 
     /** 열과 행은 CSV와 같다. 가맹점·메모는 수식으로 시작해도 원래 글자의 글자 칸이다(칸 종류는 XlsxExportTest가 본다). */
     @Test
     void 엑셀은_xlsx_파일이고_CSV와_같은_행을_쓴다() throws Exception {
-        entry(TransactionType.EXPENSE, 1, null, cash, null, 16_500, false, "=1+1", "@SUM(A1)");
+        entry(TransactionType.EXPENSE, 1, null, cash, null, 16_500, null, "=1+1", "@SUM(A1)");
         fixtures.expense(owner, ledgerId, cash, null, OCT_1.withDayOfMonth(31), 1_000);
 
         HttpResponse<byte[]> response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create(
@@ -134,20 +137,64 @@ class ExportTest {
         assertThat(cells).doesNotContainKey("A4");
     }
 
+    /**
+     * from과 to를 둘 다 비우면(빠지거나 빈 값) 장부 전체이고, 파일 이름의 기간은 내보낸 첫 거래와 마지막 거래의 날짜다(#379,
+     * K-01 (5)). 취소한 거래는 들고 휴지통 거래는 그보다 이르거나 늦어도 이름에 들지 않는다.
+     */
     @Test
-    void 내보낼_거래가_없거나_휴지통_거래뿐이면_본문_없는_204다() throws Exception {
+    void 기간을_비우면_장부_전체이고_파일_이름은_첫_거래와_마지막_거래의_날짜다() throws Exception {
+        fixtures.delete(owner, fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2026, 9, 30), 1_000));
+        fixtures.expense(owner, ledgerId, cash, null, OCT_1.withDayOfMonth(3), 2_000);
+        fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2026, 11, 20), 3_000);
+        fixtures.cancel(owner, fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2027, 1, 15), 4_000));
+        fixtures.delete(owner, fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2027, 2, 1), 5_000));
+
+        Reply csv = client.get(path() + "?format=csv");
+        Reply xlsx = client.get(path() + "?format=xlsx&from=&to=");
+
+        assertThat(csv.status()).as(csv.body()).isEqualTo(200);
+        assertThat(csv.header("Content-Disposition"))
+                .startsWith("attachment; filename=\"_ ____20261003_20270115.csv\"; filename*=UTF-8''");
+        assertThat(csv.body().lines().skip(1).map(line -> line.substring(0, line.indexOf(','))))
+                .containsExactly("2026-10-03", "2026-11-20", "2027-01-15");
+        assertThat(xlsx.status()).isEqualTo(200);
+        assertThat(xlsx.header("Content-Disposition"))
+                .startsWith("attachment; filename=\"_ ____20261003_20270115.xlsx\"; filename*=UTF-8''");
+    }
+
+    @Test
+    void 거래가_하루뿐인_장부_전체는_시작일과_종료일이_같다() throws Exception {
+        fixtures.expense(owner, ledgerId, cash, null, OCT_1.withDayOfMonth(15), 1_000);
+        fixtures.expense(owner, ledgerId, cash, null, OCT_1.withDayOfMonth(15), 2_000);
+
+        Reply reply = client.get(path() + "?format=csv");
+
+        assertThat(reply.status()).as(reply.body()).isEqualTo(200);
+        assertThat(reply.header("Content-Disposition"))
+                .startsWith("attachment; filename=\"_ ____20261015_20261015.csv\"; filename*=UTF-8''");
+    }
+
+    @Test
+    void 내보낼_거래가_없거나_휴지통_거래뿐이면_장부_전체도_본문_없는_204다() throws Exception {
         assertNoContent(client.get(path() + OCTOBER));
+        assertNoContent(client.get(path() + "?format=csv"));
 
         fixtures.delete(owner, fixtures.expense(owner, ledgerId, cash, null, OCT_1.withDayOfMonth(15), 1_000));
+        assertNoContent(client.get(path() + "?format=xlsx&from=&to="));
         fixtures.expense(owner, ledgerId, cash, null, LocalDate.of(2026, 11, 1), 1_000);
         assertNoContent(client.get(path() + OCTOBER));
     }
 
-    /** 오류는 Accept와 무관하게 problem+json이다. */
+    /**
+     * 오류는 Accept와 무관하게 problem+json이다. from과 to는 둘 다 비우면 장부 전체라 하나만 비웠을 때 그쪽이 REQUIRED다(#379).
+     * 같은 이름을 두 번 보낸 빈 값은 비운 것이 아니라 형식 오류다.
+     */
     @Test
     void format_from_to가_없거나_형식이_틀리거나_종료일이_앞서면_그_입력란의_400이다() throws Exception {
         Map<String, String[]> rejected = Map.ofEntries(
-                Map.entry("", new String[] {"format:REQUIRED", "from:REQUIRED", "to:REQUIRED"}),
+                Map.entry("", new String[] {"format:REQUIRED"}),
+                Map.entry("from=&to=", new String[] {"format:REQUIRED"}),
+                Map.entry("format=&from=&to=", new String[] {"format:INVALID_FORMAT"}),
                 Map.entry("from=2026-10-01&to=2026-10-31", new String[] {"format:REQUIRED"}),
                 Map.entry("format=pdf&from=2026-10-01&to=2026-10-31", new String[] {"format:INVALID_FORMAT"}),
                 Map.entry("format=XLSX&from=2026-10-01&to=2026-10-31", new String[] {"format:INVALID_FORMAT"}),
@@ -155,7 +202,11 @@ class ExportTest {
                 Map.entry("format=csv&to=2026-10-31", new String[] {"from:REQUIRED"}),
                 Map.entry("format=csv&from=2026-10-01", new String[] {"to:REQUIRED"}),
                 Map.entry("format=csv&from=2026-02-29&to=2026-10-31", new String[] {"from:INVALID_FORMAT"}),
-                Map.entry("format=csv&from=&to=", new String[] {"from:INVALID_FORMAT", "to:INVALID_FORMAT"}),
+                Map.entry("format=csv&from=&to=2026-10-31", new String[] {"from:REQUIRED"}),
+                Map.entry("format=csv&from=2026-10-01&to=", new String[] {"to:REQUIRED"}),
+                Map.entry("format=csv&from=bad", new String[] {"from:INVALID_FORMAT", "to:REQUIRED"}),
+                Map.entry("format=csv&from=&from=", new String[] {"from:INVALID_FORMAT", "to:REQUIRED"}),
+                Map.entry("format=csv&from=%20&to=%20", new String[] {"from:INVALID_FORMAT", "to:INVALID_FORMAT"}),
                 Map.entry("format=csv&from=2026-10-01&to=2026-10-31&to=2026-11-30", new String[] {"to:INVALID_FORMAT"}),
                 Map.entry("format=csv&from=0000-12-31&to=2026-10-31", new String[] {"from:OUT_OF_RANGE"}),
                 Map.entry("format=csv&from=2026-10-01&to=0000-01-01", new String[] {"to:OUT_OF_RANGE"}),
@@ -172,11 +223,13 @@ class ExportTest {
 
         client.get(stranger + OCTOBER).assertProblem(404, "Not Found", "NOT_FOUND");
         client.get(stranger + "?format=pdf&from=bad").assertProblem(404, "Not Found", "NOT_FOUND");
+        client.get(stranger + "?format=csv").assertProblem(404, "Not Found", "NOT_FOUND");
         ServerClient.anonymous(port).get(path() + OCTOBER).assertProblem(401, "Unauthorized", "UNAUTHENTICATED");
+        ServerClient.anonymous(port).get(path() + "?format=csv").assertProblem(401, "Unauthorized", "UNAUTHENTICATED");
     }
 
     private void entry(TransactionType type, int october, LocalTime at, UUID account, UUID category, long amount,
-                       boolean refund, String payee, String memo) {
+                       RefundKind refund, String payee, String memo) {
         transactionService.create(owner.getId(), ledgerId, new Entry(UUID.randomUUID(), type,
                 OCT_1.withDayOfMonth(october), at, account, category, amount, refund, payee, memo, null), "test-device");
     }

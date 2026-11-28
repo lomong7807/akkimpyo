@@ -31,7 +31,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #43, #34, #44, #14, #36, #38, #47, #62, #48). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
+ * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #43, #34, #44, #14, #36, #38, #47, #62, #48, #64, #379). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
  * 없는 id와 같은 404이고, 응답에 B의 값이 없으며, DB가 그대로다. 대조로 B 자신은 같은 요청이 열린다(틀린 본문이면 400).
  * 틀린 본문과 B가 이미 쓰는 이름도 404라, 장부가 있는지와 그 안의 이름을 알 수 없다. B의 거래 id로 만들어도 409가 아니라 404다.
  */
@@ -137,11 +137,15 @@ class AccountAccessTest {
                         + bBank + "&categoryId=" + bFood + "&type=EXPENSE&status=POSTED"), 200),
                 new Case("거래 목록(틀린 필터 값)", (client, ledger) ->
                         client.get(transactions(ledger) + "?accountId=x&type=y"), 400),
+                new Case("거래 검색", (client, ledger) ->
+                        client.get(transactions(ledger) + "/search?q=B&accountId=" + bBank), 200),
+                new Case("거래 검색(조건 없음)", (client, ledger) -> client.get(transactions(ledger) + "/search"), 400),
                 new Case("중복 경고", (client, ledger) -> client.get(transactions(ledger)
                         + "/duplicates?occurredOn=2026-11-18&amount=1000&payee=B"), 200),
                 new Case("중복 경고(금액 없음)", (client, ledger) ->
                         client.get(transactions(ledger) + "/duplicates?occurredOn=2026-11-18"), 400),
                 new Case("휴지통", (client, ledger) -> client.get(transactions(ledger) + "/trash"), 200),
+                new Case("거래 상세", (client, ledger) -> client.get(transactions(ledger) + "/" + bExpense), 200),
                 new Case("변경 이력", (client, ledger) ->
                         client.get(transactions(ledger) + "/" + bExpense + "/history"), 200),
                 new Case("휴지통(틀린 cursor)", (client, ledger) -> client.get(transactions(ledger) + "/trash?cursor=x"), 400),
@@ -150,12 +154,17 @@ class AccountAccessTest {
                         client.get(suggestions(ledger) + "?payee=" + "x".repeat(101)), 400),
                 new Case("월별 통계", (client, ledger) ->
                         client.get("/api/v1/ledgers/" + ledger + "/stats/monthly?month=2026-11"), 200),
+                new Case("일별 합계", (client, ledger) ->
+                        client.get("/api/v1/ledgers/" + ledger + "/stats/daily?month=2026-11"), 200),
                 new Case("카테고리별 통계", (client, ledger) ->
                         client.get("/api/v1/ledgers/" + ledger + "/stats/categories?month=2026-11"), 200),
                 new Case("연 단위 통계", (client, ledger) ->
                         client.get("/api/v1/ledgers/" + ledger + "/stats/yearly?year=2026"), 200),
                 new Case("내보내기", (client, ledger) -> client.get(exports(ledger, "2026-11-18")), 200),
                 new Case("내보내기(종료일이 앞섬)", (client, ledger) -> client.get(exports(ledger, "2026-11-17")), 400),
+                new Case("내보내기(장부 전체)", (client, ledger) ->
+                        client.get("/api/v1/ledgers/" + ledger + "/exports?format=csv"), 200),
+                new Case("내보내기(종료일만 비움)", (client, ledger) -> client.get(exports(ledger, "")), 400),
                 new Case("거래 만들기", (client, ledger) ->
                         client.postJson(transactions(ledger), expense(UUID.randomUUID())), 201),
                 new Case("거래 만들기(B의 거래 id에 다른 내용)", (client, ledger) ->
@@ -176,7 +185,11 @@ class AccountAccessTest {
                 new Case("거래 되살리기(지우지 않은 거래)", (client, ledger) ->
                         client.postJson(transactions(ledger) + "/" + bExpense + "/restore", "{\"version\":1}"), 409),
                 new Case("거래 되살리기(틀린 본문)", (client, ledger) ->
-                        client.postJson(transactions(ledger) + "/" + bExpense + "/restore", "{}"), 400));
+                        client.postJson(transactions(ledger) + "/" + bExpense + "/restore", "{}"), 400),
+                new Case("거래 승인취소(낡은 version)", (client, ledger) ->
+                        client.postJson(transactions(ledger) + "/" + bExpense + "/cancel", "{\"version\":2}"), 409),
+                new Case("거래 취소 되돌리기(취소하지 않은 거래)", (client, ledger) ->
+                        client.postJson(transactions(ledger) + "/" + bExpense + "/uncancel", "{\"version\":1}"), 409));
     }
 
     private Reply putAccount(ServerClient client, UUID ledger, String json) throws Exception {

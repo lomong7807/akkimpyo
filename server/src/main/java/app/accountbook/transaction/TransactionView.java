@@ -11,6 +11,7 @@ import java.util.UUID;
  *
  * @param updatedBy 마지막으로 고친 사람(만든 뒤 고친 적이 없으면 만든 사람). 탈퇴로 비워졌으면 null이다(ADR 002 2절)
  * @param deletedAt 휴지통에 넣은 시각. 휴지통이 아니면 null이다
+ * @param refundKind 지출의 환불 구분(#8). 일반 지출과 수입·이체는 null이다
  */
 public record TransactionView(
         UUID id,
@@ -23,6 +24,7 @@ public record TransactionView(
         TransactionStatus status,
         UUID createdBy,
         UUID paidBy,
+        RefundKind refundKind,
         UUID updatedBy,
         long version,
         Instant deletedAt,
@@ -42,6 +44,7 @@ public record TransactionView(
                 tx.getStatus(),
                 tx.getCreatedBy(),
                 tx.getPaidBy(),
+                tx.getRefundKind(),
                 updatedBy,
                 tx.getVersion(),
                 tx.getDeletedAt(),

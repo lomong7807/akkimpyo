@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import Amount from '../../components/Amount'
+import { totalKind } from '../../components/amountDisplay'
 import { Link } from '../../components/Link'
 import StatusChip from '../../components/StatusChip'
 import { formatDate } from '../../lib/calendarDate'
@@ -56,24 +57,27 @@ export function DayGroup({ date, today, total, items, names, highlighted, headin
   )
 }
 
-/** 그날 합계(0.5). 지출만이면 지출, 수입만이면 수입, 둘 다면 수입과 지출, 둘 다 0이면 비운다. */
+/**
+ * 그날 합계(0.5). 지출만이면 지출, 수입만이면 수입, 둘 다면 수입과 지출, 둘 다 0이면 비운다. 환불만 있는 날의 음수 합계도
+ * 0이 아니라 보이고, 본문 글자색과 "-"다(totalKind, #390).
+ */
 function DaySums({ total }: { total: DayTotal }) {
   if (total.income === 0 && total.expense === 0) return null
   return (
     <dl className={styles.daySums}>
-      {total.income > 0 && (
+      {total.income !== 0 && (
         <div className={styles.daySum}>
           <dt className={styles.daySumName}>수입</dt>
           <dd className={styles.daySumAmount}>
-            <Amount kind="income" value={total.income} />
+            <Amount kind={totalKind('income', total.income)} value={total.income} />
           </dd>
         </div>
       )}
-      {total.expense > 0 && (
+      {total.expense !== 0 && (
         <div className={styles.daySum}>
           <dt className={styles.daySumName}>지출</dt>
           <dd className={styles.daySumAmount}>
-            <Amount kind="expense" value={total.expense} />
+            <Amount kind={totalKind('expense', total.expense)} value={total.expense} />
           </dd>
         </div>
       )}

@@ -279,7 +279,7 @@ class TransactionListTest {
     private UUID expense(LocalDate on, String time) {
         UUID id = UUID.randomUUID();
         transactionService.create(owner.getId(), ledgerId, new Entry(id, TransactionType.EXPENSE, on,
-                time == null ? null : LocalTime.parse(time), cash, null, 1_000, false, null, null, null), "test-device");
+                time == null ? null : LocalTime.parse(time), cash, null, 1_000, null, null, null, null), "test-device");
         return id;
     }
 

@@ -319,7 +319,7 @@ class TransactionTextTest {
     }
 
     private Entry expense(UUID id, String payee, String memo) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, NOON, cash, null, 12_000, false, payee, memo, null);
+        return new Entry(id, TransactionType.EXPENSE, DAY, NOON, cash, null, 12_000, null, payee, memo, null);
     }
 
     private static String nfd(String text) {

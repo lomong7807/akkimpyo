@@ -150,7 +150,7 @@ class TransactionListFilterTest {
         for (int i = 0; i < 7; i++) {
             transactionService.create(owner.getId(), ledgerId, new TransactionCommand.Entry(UUID.randomUUID(), EXPENSE,
                     DAY.minusDays(i % 3), i % 3 == 0 ? null : LocalTime.of(9, i), i % 2 == 0 ? cash : bank, lunch, 100,
-                    false, null, null, null), "test-device");
+                    null, null, null, null), "test-device");
         }
         TransactionFilter cashFood = filter(Set.of(cash), Set.of(food), Set.of(), null);
         List<UUID> walked = new ArrayList<>();

@@ -77,6 +77,6 @@ class TransactionUpdatedByTest {
     }
 
     private Entry expense(UUID id, long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, amount, false, null, null, null);
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, amount, null, null, null, null);
     }
 }
