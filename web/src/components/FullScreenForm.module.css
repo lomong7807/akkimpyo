@@ -15,6 +15,20 @@
   animation: rise var(--motion-sheet-duration) var(--motion-sheet-easing);
 }
 
+/*
+ * 머리를 끌어내리는 동안만 손가락을 바로 따라간다(D-05 (1), 바닥 시트와 같은 끌기). 놓으면 닫거나 제자리로 돌아온다.
+ * 끄는 동안이 아니면 움직임을 남기지 않는다(아래 rise와 같은 까닭)
+ */
+.screen[data-dragging] {
+  translate: 0 var(--drag);
+}
+
+.dragHandle {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* 다 올라오면 움직임을 남기지 않는다. 남으면 안의 고정된 요소가 화면이 아니라 이 요소를 기준으로 놓인다 */
 @keyframes rise {
   from {

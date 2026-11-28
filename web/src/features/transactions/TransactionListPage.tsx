@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Navigate, useNavigate, useSearchParams } from 'react-router'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router'
 import Amount from '../../components/Amount'
+import { totalKind } from '../../components/amountDisplay'
 import { ButtonLink } from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
+import { CalendarBlank } from '../../components/icons'
 import { holdKeyboard } from '../../components/keyboardBridge'
 import MonthNavigation from '../../components/MonthNavigation'
-import RetryMessage from '../../components/RetryMessage'
 import { MainScreen } from '../../components/Screen'
-import Skeleton from '../../components/Skeleton'
 import { formatMonth, isMonth, monthOf, moveMonth, selectableMonths, today } from '../../lib/calendarDate'
 import { parseAccounts } from '../accounts/accounts'
 import { accountsKey, useAccounts } from '../accounts/useAccounts'
@@ -22,12 +22,15 @@ import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { useKeptCopy } from '../me/ledgerCopy'
 import { canEdit } from '../me/me'
 import { DayGroup } from './DayGroup'
+import { calendarAddressOf } from './calendarAddress'
 import { groupByDate } from './groupByDate'
-import { keptMonthOf, useKeptLastMonth } from './lastMonth'
+import { keptMonthOf } from './keptMonth'
+import { useKeptLastMonth } from './lastMonth'
 import { nameBookOf, type NameBook } from './listedText'
-import { useListMemory } from './listMemory'
+import { listKeyOf, useListMemory } from './listMemory'
 import { mergeMonth, pendingRow, pendingSums, usePendingTransactions, withPendingDays } from './pendingTransactions'
-import TransactionListSkeleton, { RowsSkeleton } from './TransactionListSkeleton'
+import ListEnd from './ListEnd'
+import TransactionListSkeleton from './TransactionListSkeleton'
 import type { Category } from '../categories/categories'
 import type { DayTotal, IncomeAndExpense, ListedTransaction } from './transactions'
 import { transactionListKey, useTransactionList } from './useTransactionList'
@@ -36,17 +39,16 @@ import styles from './TransactionList.module.css'
 /** 저장한 줄을 강조하는 시간 */
 const HIGHLIGHT_MS = 1000
 
-/** 목록 끝이 화면 아래로 한 화면 높이 안에 들어오면 다음 쪽을 요청한다(00-common 5.10). */
-const NEAR_END = '0px 0px 100% 0px'
-
 /**
  * D-01 내역(1A). 주소의 달(`?month=YYYY-MM`)을 보인다. 달이 없거나 고를 수 없는 달이면 기억한 달이나 기기의 오늘이 속한
- * 달로 바꿔 간다. 1A에는 필터 줄, 달력·검색 버튼, 넓은 화면의 상세 칸이 없다.
+ * 달로 바꿔 간다. 이 항목에서 연 달력(D-02)이 달을 옮겼으면 돌아왔을 때 그 달로 바꿔 간다(D-02 (1), architect #300 B).
+ * 월 이동 오른쪽의 "달력"(D-01 (2), 1B)은 지금 고른 달의 달력을 연다. 필터 줄, 검색 버튼, 넓은 화면의 상세 칸은 아직 없다.
  * 연결이 없거나 받지 못하면 기기에 남긴 최근 한 달(P-902)로 읽기 전용으로 보인다(F-908, #238).
  */
 export default function TransactionListPage() {
   const memory = useListMemory()
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   // 화면을 연 날의 오늘. 범위와 달 이름(올해인지)을 정한다
   const [openedOn] = useState(today)
@@ -63,6 +65,13 @@ export default function TransactionListPage() {
     if (month) memory.rememberMonth(month)
   }, [month, memory])
 
+  // 이 항목에서 연 달력이 옮긴 달. 같은 항목으로 돌아왔을 때만 쓴다. 바꿔 가도 표시를 이어 가 그 뒤 다시 연 달력의 것도 받는다(#342)
+  const listKey = listKeyOf(location)
+  const handed = memory.handedMonth(listKey)
+  if (month && handed && handed !== month && isSelectable(handed, range)) {
+    return <Navigate to={addressOf(handed)} replace state={{ listKey }} />
+  }
+
   if (!month) {
     const remembered = memory.month()
     const fallback = remembered && isSelectable(remembered, range) ? remembered : monthOf(openedOn)
@@ -76,13 +85,23 @@ export default function TransactionListPage() {
   return (
     <MainScreen>
       <div className={styles.history}>
-        <div className={styles.monthNavigation}>
-          <MonthNavigation
-            month={month}
-            label={formatMonth(month, openedOn)}
-            first={range.first}
-            last={range.last}
-            onMove={move}
+        <div className={`${styles.monthNavigation} ${styles.monthBar}`}>
+          <div className={styles.monthMove}>
+            <MonthNavigation
+              month={month}
+              label={formatMonth(month, openedOn)}
+              first={range.first}
+              last={range.last}
+              onMove={move}
+            />
+          </div>
+          {/* 켠 필터는 넘기지 않는다(F-222) */}
+          <ButtonLink
+            kind="icon"
+            icon={CalendarBlank}
+            aria-label="달력"
+            to={calendarAddressOf(month)}
+            state={{ listKey }}
           />
         </div>
         <MonthTransactions
@@ -321,13 +340,13 @@ function TotalFigures({ totals }: { totals: IncomeAndExpense }) {
       <div className={styles.total}>
         <dt className={styles.totalName}>수입</dt>
         <dd className={styles.totalAmount}>
-          <Amount kind={totals.income > 0 ? 'income' : 'balance'} value={totals.income} />
+          <Amount kind={totalKind('income', totals.income)} value={totals.income} />
         </dd>
       </div>
       <div className={styles.total}>
         <dt className={styles.totalName}>지출</dt>
         <dd className={styles.totalAmount}>
-          <Amount kind="expense" value={totals.expense} />
+          <Amount kind={totalKind('expense', totals.expense)} value={totals.expense} />
         </dd>
       </div>
     </dl>
@@ -344,68 +363,5 @@ function EmptyMonth({ month, today }: { month: string; today: string }) {
         </ButtonLink>
       )}
     </EmptyState>
-  )
-}
-
-interface ListEndProps {
-  list: TransactionListQuery
-  /** 줄 목록. 다시 시도할 때 마지막 줄로 초점을 옮긴다. */
-  rows: RefObject<HTMLDivElement | null>
-}
-
-/**
- * 목록 끝(00-common 5.10). 끝이 가까워지면 다음 쪽을 요청하고, 그동안 뼈대 줄 3개, 실패하면 "더 불러오지 못했어요"와
- * "다시 시도"를 보인다. 받으면 받은 건수를 화면 읽기에 알린다. 받는 중이거나 실패한 뒤에는 저절로 다시 요청하지 않는다.
- */
-function ListEnd({ list, rows }: ListEndProps) {
-  const target = useRef<HTMLDivElement>(null)
-  const [nearEnd, setNearEnd] = useState(false)
-  const { hasNextPage, isFetching, isFetchNextPageError, isFetchingNextPage, fetchNextPage } = list
-  const pages = list.data?.pages ?? []
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => setNearEnd(entry.isIntersecting), { rootMargin: NEAR_END })
-    observer.observe(target.current!)
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    if (nearEnd && hasNextPage && !isFetching && !isFetchNextPageError) void fetchNextPage({ cancelRefetch: false })
-  }, [nearEnd, hasNextPage, isFetching, isFetchNextPageError, fetchNextPage])
-
-  // 쪽이 늘면 새로 받은 건수를 알린다. 같은 글이 이어져도 다시 읽히도록 매번 새 요소로 넣는다
-  const [pageCount, setPageCount] = useState(pages.length)
-  const [loaded, setLoaded] = useState<{ count: number; message: string }>()
-  if (pages.length !== pageCount) {
-    setPageCount(pages.length)
-    if (pages.length > pageCount) {
-      setLoaded({ count: (loaded?.count ?? 0) + 1, message: `${pages.at(-1)!.items.length}건을 더 불러왔어요` })
-    }
-  }
-
-  function retry() {
-    // 누른 버튼이 사라지므로 마지막 줄로 초점을 옮겨, 받은 뒤 다음 Tab이 새 줄로 이어지게 한다
-    const links = rows.current?.querySelectorAll<HTMLElement>('li > a')
-    links?.item(links.length - 1)?.focus()
-    if (!isFetching) void fetchNextPage({ cancelRefetch: false })
-  }
-
-  return (
-    <>
-      <div ref={target} />
-      {isFetchingNextPage && (
-        <Skeleton>
-          <RowsSkeleton count={3} />
-        </Skeleton>
-      )}
-      {isFetchNextPageError && !isFetchingNextPage && (
-        <div className={styles.moreFailure}>
-          <RetryMessage onRetry={retry}>더 불러오지 못했어요</RetryMessage>
-        </div>
-      )}
-      <p className={styles.announcement} aria-live="polite">
-        {loaded && <span key={loaded.count}>{loaded.message}</span>}
-      </p>
-    </>
   )
 }

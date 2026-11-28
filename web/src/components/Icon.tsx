@@ -1,55 +1,10 @@
-import calendarBlank from '../assets/icons/phosphor/calendar-blank.svg?raw'
-import caretDown from '../assets/icons/phosphor/caret-down.svg?raw'
-import caretLeft from '../assets/icons/phosphor/caret-left.svg?raw'
-import caretRight from '../assets/icons/phosphor/caret-right.svg?raw'
-import caretUp from '../assets/icons/phosphor/caret-up.svg?raw'
-import check from '../assets/icons/phosphor/check.svg?raw'
-import cloudArrowUp from '../assets/icons/phosphor/cloud-arrow-up.svg?raw'
-import dotsThree from '../assets/icons/phosphor/dots-three.svg?raw'
-import eyeSlash from '../assets/icons/phosphor/eye-slash.svg?raw'
-import eye from '../assets/icons/phosphor/eye.svg?raw'
-import house from '../assets/icons/phosphor/house.svg?raw'
-import info from '../assets/icons/phosphor/info.svg?raw'
-import listBullets from '../assets/icons/phosphor/list-bullets.svg?raw'
-import magnifyingGlass from '../assets/icons/phosphor/magnifying-glass.svg?raw'
-import plus from '../assets/icons/phosphor/plus.svg?raw'
-import signOut from '../assets/icons/phosphor/sign-out.svg?raw'
-import tag from '../assets/icons/phosphor/tag.svg?raw'
-import wallet from '../assets/icons/phosphor/wallet.svg?raw'
-import warningCircle from '../assets/icons/phosphor/warning-circle.svg?raw'
-import wifiSlash from '../assets/icons/phosphor/wifi-slash.svg?raw'
-import x from '../assets/icons/phosphor/x.svg?raw'
 import styles from './Icon.module.css'
 
-// Phosphor Icons Regular (phosphor-icons/core v2.0.8, MIT). 라이선스: ../assets/icons/phosphor/LICENSE
-const svgs = {
-  CalendarBlank: calendarBlank,
-  CaretDown: caretDown,
-  CaretLeft: caretLeft,
-  CaretRight: caretRight,
-  CaretUp: caretUp,
-  Check: check,
-  CloudArrowUp: cloudArrowUp,
-  DotsThree: dotsThree,
-  Eye: eye,
-  EyeSlash: eyeSlash,
-  House: house,
-  Info: info,
-  ListBullets: listBullets,
-  MagnifyingGlass: magnifyingGlass,
-  Plus: plus,
-  SignOut: signOut,
-  Tag: tag,
-  Wallet: wallet,
-  WarningCircle: warningCircle,
-  WifiSlash: wifiSlash,
-  X: x,
-}
-
-export type IconName = keyof typeof svgs
+/** 아이콘 하나의 SVG 파일 글. components/icons.ts에서 이름으로 가져온다(예: `import { Plus } from './icons'`). */
+export type IconSvg = string
 
 interface IconProps {
-  name: IconName
+  icon: IconSvg
   size: 20 | 24
   /** 아이콘 혼자 뜻을 전할 때만 준다. 없으면 장식으로 보고 화면 낭독기가 읽지 않는다. */
   label?: string
@@ -59,14 +14,17 @@ const sizeClasses = { 20: styles.size20, 24: styles.size24 }
 
 // Phosphor Regular의 SVG 파일은 viewBox가 모두 같고 path만 다르다.
 function pathsOf(svg: string): string[] {
-  return Array.from(svg.matchAll(/ d="([^"]+)"/g), (match) => match[1])
+  const paths = Array.from(svg.matchAll(/ d="([^"]+)"/g), (match) => match[1])
+  // icons.ts의 아이콘이 아닌 글을 넘기면 빈 아이콘이 된다. 개발 중과 테스트에서 바로 알게 한다
+  if (import.meta.env.DEV && paths.length === 0) throw new Error('Icon의 icon에는 components/icons.ts의 아이콘을 넘긴다')
+  return paths
 }
 
-export default function Icon({ name, size, label }: IconProps) {
+export default function Icon({ icon, size, label }: IconProps) {
   const accessibility = label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true }
   return (
     <svg className={sizeClasses[size]} viewBox="0 0 256 256" fill="currentColor" {...accessibility}>
-      {pathsOf(svgs[name]).map((d) => (
+      {pathsOf(icon).map((d) => (
         <path key={d} d={d} />
       ))}
     </svg>

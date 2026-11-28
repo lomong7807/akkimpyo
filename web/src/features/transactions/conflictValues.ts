@@ -1,6 +1,6 @@
 import { formatDate } from '../../lib/calendarDate'
 import { wallTimeOf } from '../../lib/clock'
-import { normalizeTime } from '../../lib/timeText'
+import { normalizeTime } from '../../lib/timeInput'
 import type { NameBook } from './listedText'
 import { normalizePayee, transactionFields, type TransactionValues } from './transactionForm'
 import type { TransactionType } from './transactions'

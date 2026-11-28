@@ -19,8 +19,18 @@ import org.springframework.context.annotation.Import;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT,
-        properties = "spring.datasource.hikari.maximum-pool-size=2")
+        properties = {"spring.datasource.hikari.maximum-pool-size=2", "WEB_ORIGIN=" + HttpServerTest.ORIGIN,
+                HttpServerTest.SIGNUP_ALLOWLIST, HttpServerTest.NO_SCHEDULED_JOBS})
 @Import({PostgresContainerConfig.class, TestPasswordHasherConfig.class, TestAccessTokens.KeyConfig.class,
         SignedInUser.class})
 public @interface HttpServerTest {
+
+    /** 운영에서 환경 변수로 받는 우리 출처. */
+    String ORIGIN = "https://app.example.com";
+
+    /** 가입 허용 목록(P-102). 테스트용 도메인은 테스트 설정에만 있고 운영 기본값에는 없다(SignupAllowlistTest). */
+    String SIGNUP_ALLOWLIST = "SIGNUP_ALLOWLIST=@example.com";
+
+    /** 매일 도는 작업(30일 자동 삭제)을 끈다. 테스트는 작업 메서드를 직접 부른다(TrashAutoPurgeTest). */
+    String NO_SCHEDULED_JOBS = "accountbook.trash-purge.cron=-";
 }

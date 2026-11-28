@@ -10,9 +10,19 @@ enum ErrorCode {
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "요청의 값이 규칙에 맞지 않는다"),
     MALFORMED_REQUEST(HttpStatus.BAD_REQUEST, "요청을 읽을 수 없다"),
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "유효한 access token이 없다"),
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 맞지 않다"),
     FORBIDDEN(HttpStatus.FORBIDDEN, "이 동작을 할 권한이 없다"),
+    ORIGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "다른 출처에서 왔거나 전용 헤더가 없는 요청이다"),
     NOT_FOUND(HttpStatus.NOT_FOUND, "대상을 찾을 수 없다"),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "이 경로에서 받지 않는 메서드다"),
+    /** 낡은 version으로 고치려 했다. {@code current}가 있다. */
+    STALE_VERSION(HttpStatus.CONFLICT, "요청의 version이 저장된 version과 다르다"),
+    /** 그 id로 만들 수 없다. 이유를 구분할 수 없게 문구가 고정이다(ADR 006 결정 3). */
+    ID_CONFLICT(HttpStatus.CONFLICT, "그 id로는 만들 수 없다"),
+    /** 입력란과 무관한 상태 오류("이미 삭제된 거래" 등). */
+    INVALID_STATE(HttpStatus.CONFLICT, "대상의 지금 상태로는 할 수 없다"),
+    /** 계좌를 쓰는 거래(휴지통·취소 포함)가 있어 지울 수 없다(F-508). 화면은 숨기기를 안내한다. */
+    ACCOUNT_HAS_TRANSACTIONS(HttpStatus.CONFLICT, "거래가 있는 계좌는 지울 수 없다"),
     PAYLOAD_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "요청 본문이 너무 크다"),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 Content-Type이다"),
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청이 많아 지금은 처리할 수 없다"),

@@ -104,6 +104,18 @@ class TransactionLimitsTest {
         assertRejected(LocalDate.of(2028, 2, 29), clock);
     }
 
+    /**
+     * 1년은 달력으로 센다. 윤일(2028-02-29)을 지나는 1년은 366일이라, 365일로 세면 끝날(2028-06-15)이 범위 밖이 된다
+     * (#14 테스트 보강, 거래 쪽만 365일로 바꿔도 실패하게).
+     */
+    @Test
+    void date_oneYearAcrossLeapDayIsCountedOnTheCalendar() {
+        Clock clock = seoulNoon(LocalDate.of(2027, 6, 15));
+
+        assertAccepted(LocalDate.of(2028, 6, 15), clock);
+        assertRejected(LocalDate.of(2028, 6, 16), clock);
+    }
+
     @Test
     void date_rejectsFarOutOfRangeValues() {
         Clock clock = seoulNoon(LocalDate.of(2026, 11, 25));

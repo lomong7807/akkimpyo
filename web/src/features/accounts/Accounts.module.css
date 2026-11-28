@@ -91,3 +91,34 @@
   min-height: var(--size-row);
   padding-block: var(--space-8);
 }
+
+/*
+ * 누르면 계좌 수정으로 가는 계좌 줄(4, designer #243). 눌림과 올림은 거래 줄과 같은 면 색이다. 휴대폰에서는 줄이 화면 끝까지
+ * 닿아 초점 표시를 안쪽에 그린다.
+ */
+.link {
+  color: var(--color-text);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.link:active {
+  background-color: var(--color-press);
+}
+
+/* 손가락으로 누른 뒤 바탕이 남지 않도록 마우스가 있을 때만 건다 */
+@media (hover: hover) {
+  .link:hover {
+    background-color: var(--color-press);
+  }
+}
+
+.link:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+@media (width >= 768px) {
+  .link:focus-visible {
+    outline-offset: var(--focus-ring-offset);
+  }
+}

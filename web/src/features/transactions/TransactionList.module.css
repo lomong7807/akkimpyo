@@ -20,6 +20,17 @@
   margin: var(--space-8) var(--space-4) 0;
 }
 
+/* 월 이동과 그 오른쪽의 달력 버튼(D-01 (1)(2)). 달 이름은 월 이동의 남은 폭 가운데다 */
+.monthBar {
+  display: flex;
+  align-items: center;
+}
+
+.monthMove {
+  flex: 1;
+  min-width: 0;
+}
+
 /* 휴대폰 배치는 두 줄이다 */
 .totals {
   display: flex;

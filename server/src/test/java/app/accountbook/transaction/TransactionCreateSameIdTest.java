@@ -92,7 +92,7 @@ class TransactionCreateSameIdTest {
     Stream<DynamicTest> 내가_만든_version_1과_내용이_같으면_재전송이다() {
         UUID uncategorized = categoryService.uncategorized(ledgerId, CategoryKind.EXPENSE).getId();
         Entry withMillis = new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY,
-                LocalTime.of(7, 5, 9, 123_456_789), cash, food, 5_000, true, null, null, null);
+                LocalTime.of(7, 5, 9, 123_456_789), cash, food, 5_000, RefundKind.REFUND, null, null, null);
         Transfer transfer = new Transfer(UUID.randomUUID(), DAY, NOON, bank, cash, 30_000, "인출");
         createAs(owner, request);
         createAs(owner, withMillis);
@@ -122,42 +122,66 @@ class TransactionCreateSameIdTest {
 
     // ---------------------------------------------------------------- 3줄: 내 것, version 1, 다른 내용
 
-    /** 비교하는 것은 요청이 정할 수 있는 값 전부다(유형, 날짜, 시각, 가맹점, 메모, 결제한 사람, 라인). */
+    /** 비교하는 것은 요청이 정할 수 있는 값 전부다(유형, 날짜, 시각, 가맹점, 메모, 결제한 사람, 환불 구분, 라인). */
     @TestFactory
     Stream<DynamicTest> 내가_만든_version_1과_내용이_다르면_저장된_거래를_담은_충돌이다() {
         createAs(owner, request);
         return Stream.of(
-                conflicts("유형(수입)", entry(TransactionType.INCOME, DAY, NOON, cash, null, 12_000, false, "김밥천국", "점심",
+                conflicts("유형(수입)", entry(TransactionType.INCOME, DAY, NOON, cash, null, 12_000, null, "김밥천국", "점심",
                         null)),
                 conflicts("유형(이체)", new Transfer(id, DAY, NOON, cash, bank, 12_000, "점심")),
-                conflicts("날짜", entry(TransactionType.EXPENSE, DAY.plusDays(1), NOON, cash, null, 12_000, false,
+                conflicts("날짜", entry(TransactionType.EXPENSE, DAY.plusDays(1), NOON, cash, null, 12_000, null,
                         "김밥천국", "점심", null)),
-                conflicts("시각", entry(TransactionType.EXPENSE, DAY, NOON.plusMinutes(1), cash, null, 12_000, false,
+                conflicts("시각", entry(TransactionType.EXPENSE, DAY, NOON.plusMinutes(1), cash, null, 12_000, null,
                         "김밥천국", "점심", null)),
-                conflicts("시각 없음", entry(TransactionType.EXPENSE, DAY, null, cash, null, 12_000, false, "김밥천국", "점심",
+                conflicts("시각 없음", entry(TransactionType.EXPENSE, DAY, null, cash, null, 12_000, null, "김밥천국", "점심",
                         null)),
-                conflicts("가맹점", entry(TransactionType.EXPENSE, DAY, NOON, cash, null, 12_000, false, "분식집", "점심",
+                conflicts("가맹점", entry(TransactionType.EXPENSE, DAY, NOON, cash, null, 12_000, null, "분식집", "점심",
                         null)),
-                conflicts("메모", entry(TransactionType.EXPENSE, DAY, NOON, cash, null, 12_000, false, "김밥천국", null,
+                conflicts("메모", entry(TransactionType.EXPENSE, DAY, NOON, cash, null, 12_000, null, "김밥천국", null,
                         null)),
                 conflicts("결제한 사람", expense(id, cash, null, 12_000, member.getId())),
                 conflicts("계좌", expense(id, bank, null, 12_000, null)),
                 conflicts("카테고리", expense(id, cash, food, 12_000, null)),
                 conflicts("금액", expense(id, cash, null, 12_001, null)),
-                conflicts("환불 여부", entry(TransactionType.EXPENSE, DAY, NOON, cash, null, 12_000, true, "김밥천국", "점심",
-                        null)));
+                conflicts("환불", entry(TransactionType.EXPENSE, DAY, NOON, cash, null, 12_000, RefundKind.REFUND,
+                        "김밥천국", "점심", null)),
+                conflicts("돌려받음", entry(TransactionType.EXPENSE, DAY, NOON, cash, null, 12_000,
+                        RefundKind.REIMBURSEMENT, "김밥천국", "점심", null)));
     }
 
     private DynamicTest conflicts(String label, TransactionCommand command) {
         return dynamicTest(label, () -> {
-            TransactionView before = stored();
+            TransactionView before = stored(idOf(command));
 
             IdConflictException conflict = conflictOf(owner, ledgerId, command);
 
             assertThat(conflict.current()).contains(before);
-            assertThat(stored()).isEqualTo(before);
-            assertThat(actions()).containsExactly(ChangeAction.CREATE);
+            assertThat(stored(idOf(command))).isEqualTo(before);
+            assertThat(actions(idOf(command))).containsExactly(ChangeAction.CREATE);
         });
+    }
+
+    /** 이체도 값 하나만 달라도 충돌이다. 시각은 저장하는 정밀도(밀리초)로 맞춰 비교한다(#14 테스트 보강 2). */
+    @TestFactory
+    Stream<DynamicTest> 내가_만든_version_1_이체와_값_하나라도_다르면_충돌이다() {
+        UUID card = fixtures.account(owner, ledgerId, "카드", AccountType.CARD, 0, OPENING).getId();
+        UUID txId = UUID.randomUUID();
+        createAs(owner, new Transfer(txId, DAY, NOON, bank, cash, 30_000, "인출"));
+        return Stream.of(
+                replayed("시각에 저장하지 않는 자릿수", new Transfer(txId, DAY, NOON.plusNanos(999_999), bank, cash, 30_000,
+                        "인출")),
+                conflicts("날짜", new Transfer(txId, DAY.plusDays(1), NOON, bank, cash, 30_000, "인출")),
+                conflicts("시각(1밀리초)", new Transfer(txId, DAY, NOON.plusNanos(1_000_000), bank, cash, 30_000, "인출")),
+                conflicts("시각 없음", new Transfer(txId, DAY, null, bank, cash, 30_000, "인출")),
+                conflicts("메모", new Transfer(txId, DAY, NOON, bank, cash, 30_000, "출금")),
+                conflicts("메모 없음", new Transfer(txId, DAY, NOON, bank, cash, 30_000, null)),
+                conflicts("금액", new Transfer(txId, DAY, NOON, bank, cash, 30_001, "인출")),
+                conflicts("보내는 계좌", new Transfer(txId, DAY, NOON, card, cash, 30_000, "인출")),
+                conflicts("받는 계좌", new Transfer(txId, DAY, NOON, bank, card, 30_000, "인출")),
+                conflicts("방향", new Transfer(txId, DAY, NOON, cash, bank, 30_000, "인출")),
+                conflicts("유형(지출)", new Entry(txId, TransactionType.EXPENSE, DAY, NOON, bank, null, 30_000, null,
+                        null, "인출", null)));
     }
 
     // ---------------------------------------------------------------- 4줄: 내 것, 이미 고쳐졌다
@@ -202,6 +226,23 @@ class TransactionCreateSameIdTest {
                 ChangeAction.RESTORE);
     }
 
+    /** 고쳐진 거래(취소, 휴지통)는 내용을 비교하지 않는다. 내용이나 유형이 달라도 지금 거래의 재전송이다(#14 테스트 보강 2). */
+    @Test
+    void 취소하거나_휴지통에_넣은_거래에_다른_내용을_보내도_지금_거래의_재전송이다() {
+        createAs(owner, request);
+        Entry otherContent = expense(id, bank, food, 99_000, null);
+        Transfer otherType = new Transfer(id, DAY, NOON, cash, bank, 12_000, null);
+
+        TransactionView canceled = transactionService.cancel(owner.getId(), id, 1, DEVICE);
+        assertThat(createAs(owner, otherContent)).as("취소").isEqualTo(new CreateResult(canceled, false));
+        TransactionView deleted = transactionService.delete(owner.getId(), id, 2, DEVICE);
+        assertThat(createAs(owner, otherContent)).as("휴지통").isEqualTo(new CreateResult(deleted, false));
+        assertThat(createAs(owner, otherType)).as("휴지통, 유형이 다름").isEqualTo(new CreateResult(deleted, false));
+
+        assertThat(stored()).isEqualTo(deleted);
+        assertThat(actions()).containsExactly(ChangeAction.CREATE, ChangeAction.CANCEL, ChangeAction.DELETE);
+    }
+
     /** 결정 4의 이유: 고친 뒤 지운 카테고리와 계좌를 가리키는 재전송이 참조 검증에 걸리지 않는다. */
     @Test
     void 처음_쓴_계좌와_카테고리가_지워진_뒤에도_재전송이다() {
@@ -210,8 +251,8 @@ class TransactionCreateSameIdTest {
         TransactionView updated = transactionService.update(owner.getId(), id, 1,
                 expense(id, bank, null, 12_000, null), DEVICE);
         entityManager.flush();
-        accountService.delete(owner.getId(), cash);
-        categoryService.delete(owner.getId(), food);
+        accountService.delete(owner.getId(), ledgerId, cash);
+        categoryService.delete(owner.getId(), ledgerId, food, null, DEVICE);
 
         assertThat(createAs(owner, first)).isEqualTo(new CreateResult(updated, false));
     }
@@ -293,7 +334,7 @@ class TransactionCreateSameIdTest {
     private void assertUnusable(String label, UUID txId) {
         List.of(7_300L, 9_900L).forEach(amount -> {
             IdConflictException conflict = conflictOf(member, ledgerId, new Entry(txId, TransactionType.EXPENSE, DAY,
-                    null, cash, null, amount, false, null, null, owner.getId()));
+                    null, cash, null, amount, null, null, null, owner.getId()));
             assertThat(conflict).as(label).isExactlyInstanceOf(IdConflictException.class)
                     .hasMessage("이 id는 쓸 수 없습니다.").hasNoCause();
             assertThat(conflict.current()).as(label).isEmpty();
@@ -337,12 +378,12 @@ class TransactionCreateSameIdTest {
     }
 
     private Entry expense(UUID txId, UUID accountId, UUID categoryId, long amount, UUID paidBy) {
-        return new Entry(txId, TransactionType.EXPENSE, DAY, NOON, accountId, categoryId, amount, false, "김밥천국",
+        return new Entry(txId, TransactionType.EXPENSE, DAY, NOON, accountId, categoryId, amount, null, "김밥천국",
                 "점심", paidBy);
     }
 
     private Entry entry(TransactionType type, LocalDate on, LocalTime at, UUID accountId, UUID categoryId, long amount,
-                        boolean refund, String payee, String memo, UUID paidBy) {
+                        RefundKind refund, String payee, String memo, UUID paidBy) {
         return new Entry(id, type, on, at, accountId, categoryId, amount, refund, payee, memo, paidBy);
     }
 }
