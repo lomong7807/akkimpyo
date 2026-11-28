@@ -1,5 +1,6 @@
 package app.accountbook.user;
 
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import java.util.Locale;
 
@@ -10,16 +11,23 @@ import java.util.Locale;
  */
 final class EmailNormalizer {
 
+    private static final String FIELD = "email";
+    private static final String FORMAT_ERROR = "이메일 형식이 올바르지 않습니다.";
+
     private EmailNormalizer() {
     }
 
     /**
      * 맞춘 이메일. 형식은 {@code @}가 정확히 하나이고 그 앞뒤가 비어 있지 않은지와
      * {@value User#EMAIL_MAX_LENGTH}자 이하인지만 본다. 아니면 {@link InvalidRequestException}이고 문구에 입력값을 넣지 않는다.
+     * 입력란은 {@code email}이고, 지운 뒤 비었으면 {@code REQUIRED}, 길면 {@code TOO_LONG}, 나머지는 {@code INVALID_FORMAT}이다.
      * 돌려준 값은 DB의 ck_users_email_normalized, ck_users_email_length도 지난다.
      */
     static String normalize(String raw) {
         String trimmed = raw == null ? "" : trim(raw);
+        if (trimmed.isEmpty()) {
+            throw new InvalidRequestException(FIELD, FieldErrorCode.REQUIRED, FORMAT_ERROR);
+        }
         // 소문자로 바꾸기 전에 본다. 바꾼 뒤에 보면 켈빈 기호(U+212A)가 ASCII k가 되어 통과한다.
         if (!trimmed.chars().allMatch(EmailNormalizer::isPrintableAscii)) {
             throw invalidFormat();
@@ -30,7 +38,8 @@ final class EmailNormalizer {
             throw invalidFormat();
         }
         if (email.length() > User.EMAIL_MAX_LENGTH) {
-            throw new InvalidRequestException("이메일은 " + User.EMAIL_MAX_LENGTH + "자 이하여야 합니다.");
+            throw new InvalidRequestException(FIELD, FieldErrorCode.TOO_LONG,
+                    "이메일은 " + User.EMAIL_MAX_LENGTH + "자 이하여야 합니다.");
         }
         return email;
     }
@@ -57,6 +66,6 @@ final class EmailNormalizer {
     }
 
     private static InvalidRequestException invalidFormat() {
-        return new InvalidRequestException("이메일 형식이 올바르지 않습니다.");
+        return new InvalidRequestException(FIELD, FieldErrorCode.INVALID_FORMAT, FORMAT_ERROR);
     }
 }

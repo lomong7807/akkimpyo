@@ -12,7 +12,7 @@ public sealed interface TransactionCommand {
                  LocalDate occurredOn, LocalTime occurredTime,
                  UUID accountId, UUID categoryId,    // categoryId null이면 미분류
                  long amount,                        // 항상 양수로 받는다
-                 boolean refund,                     // EXPENSE에서만 true 가능
+                 RefundKind refundKind,              // EXPENSE에서만 값이 있다. null이면 일반 지출
                  String payee, String memo, UUID paidBy) implements TransactionCommand {
     }
 

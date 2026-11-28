@@ -22,6 +22,7 @@ class ThrowingFilter extends OncePerRequestFilter {
     static final String READ_PARAMETER = "/test/filter/read-parameter";
     static final String CLIENT_ABORT = "/test/filter/client-abort";
     static final String WRAPPED_CLIENT_ABORT = "/test/filter/wrapped-client-abort";
+    static final String FORBIDDEN = "/test/filter/forbidden";
 
     static final String MESSAGE = "필터 예외의 문구";
 
@@ -38,6 +39,7 @@ class ThrowingFilter extends OncePerRequestFilter {
             }
             case CLIENT_ABORT -> throw new ClientAbortException();
             case WRAPPED_CLIENT_ABORT -> throw new ServletException(MESSAGE, new ClientAbortException());
+            case FORBIDDEN -> response.sendError(HttpServletResponse.SC_FORBIDDEN);
             case READ_PARAMETER -> request.getParameter("token");
             default -> chain.doFilter(request, response);
         }

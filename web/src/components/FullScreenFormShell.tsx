@@ -1,6 +1,7 @@
 import { use, useLayoutEffect, type ReactNode } from 'react'
 import { Button } from './Button'
 import layout from './layout.module.css'
+import { X } from './icons'
 import { usePressShield } from './pressGuard'
 import { markShellRise } from './shellShown'
 import { ShellContext } from './ShellContext'
@@ -29,7 +30,7 @@ export default function FullScreenFormShell({ title, parent, children }: FullScr
     <div className={styles.screen}>
       <header className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.head}`}>
         <div className={styles.close}>
-          <Button kind="icon" icon="X" aria-label="닫기" onClick={goBack} />
+          <Button kind="icon" icon={X} aria-label="닫기" onClick={goBack} />
         </div>
         <h1 className={styles.title}>{title}</h1>
       </header>

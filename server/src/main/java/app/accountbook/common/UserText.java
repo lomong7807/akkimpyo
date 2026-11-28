@@ -63,16 +63,31 @@ public final class UserText {
      * 입력란은 {@code payee}다.
      */
     public static String payee(String raw, int maxLength) {
+        return trimmed(raw, maxLength, PAYEE_FIELD, "가맹점/내용", "가맹점/내용은");
+    }
+
+    /**
+     * 거래 검색어(P-232, #64). 가맹점/내용({@link #payee})과 같게 맞추고 검사한다. 비었거나 공백류뿐이면
+     * 값 없음({@code null})이다.
+     *
+     * @param field 쿼리 이름(예: {@code q})
+     */
+    public static String searchText(String raw, int maxLength, String field) {
+        return trimmed(raw, maxLength, field, "검색어", "검색어는");
+    }
+
+    /** 거부 글자 검사 → 앞뒤 공백류 지우기 → NFC → 글자 수. 비었으면 null이다. */
+    private static String trimmed(String raw, int maxLength, String field, String label, String subject) {
         if (raw == null) {
             return null;
         }
-        requireAllowed(raw, false, PAYEE_FIELD, "가맹점/내용");
-        String payee = nfc(trimSpaces(raw));
-        if (payee.isEmpty()) {
+        requireAllowed(raw, false, field, label);
+        String text = nfc(trimSpaces(raw));
+        if (text.isEmpty()) {
             return null;
         }
-        requireMaxLength(payee, maxLength, PAYEE_FIELD, "가맹점/내용은");
-        return payee;
+        requireMaxLength(text, maxLength, field, subject);
+        return text;
     }
 
     /**

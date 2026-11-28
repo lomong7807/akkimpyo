@@ -9,6 +9,8 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -20,8 +22,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 가입의 해시는 DB 트랜잭션 밖에서 한다(#20). 해시하는 동안과 해시 자리를 기다리는 동안 DB 연결을 잡지 않는다.
- * 연결이 하나뿐인 풀에서 해시를 붙잡아 두고 다른 일이 되는지 본다. 가입이 하나라도 연결을 잡고 있으면 2초 뒤 실패한다.
+ * 가입의 해시와 로그인의 비교는 DB 트랜잭션 밖에서 한다(#20, #12). 해시하는 동안과 해시 자리를 기다리는 동안 DB 연결을 잡지 않는다.
+ * 연결이 하나뿐인 풀에서 해시를 붙잡아 두고 다른 일이 되는지 본다. 하나라도 연결을 잡고 있으면 2초 뒤 실패한다.
  * 가입이 실제로 커밋하므로 테스트 트랜잭션 없이 돌고, 커밋된 가입은 끝에 지운다.
  */
 @IntegrationTest
@@ -50,6 +52,7 @@ class SignupHashOutsideTransactionTest {
     }
 
     private final List<RunningTask<User>> started = new ArrayList<>();
+    private final List<RunningTask<Optional<UUID>>> logins = new ArrayList<>();
 
     /** 붙잡은 해시를 놓아 가입 스레드를 모두 끝낸 뒤 지운다. 남은 스레드가 연결과 잠금을 쥐고 있으면 다른 테스트가 멈춘다. */
     @AfterEach
@@ -57,6 +60,9 @@ class SignupHashOutsideTransactionTest {
         ENCODER.open(100);
         for (RunningTask<User> signup : started) {
             signup.awaitFinished();
+        }
+        for (RunningTask<Optional<UUID>> login : logins) {
+            login.awaitFinished();
         }
         ENCODER.reset();
         EMAILS.forEach(email -> SignupRows.delete(jdbc, email));
@@ -98,6 +104,32 @@ class SignupHashOutsideTransactionTest {
                 .containsExactly("먼저 저장");
         assertThat(SignupRows.counts(jdbc)).containsExactly(
                 before.get(0) + 1, before.get(1) + 1, before.get(2) + 1, before.get(3) + 17);
+    }
+
+    @Test
+    void comparingAndWaitingForSlotHoldNoConnection() throws Exception {
+        UUID userId = userService.createUser(EMAILS.get(0), "password1", "하나").getId();
+
+        RunningTask<Optional<UUID>> known = startLogin(EMAILS.get(0), "held-pass-1");
+        RunningTask<Optional<UUID>> unknown = startLogin("nobody@example.com", "held-pass-2");
+        ENCODER.awaitEntered(2);
+        RunningTask<Optional<UUID>> waiting = startLogin(EMAILS.get(0), "held-pass-3").awaitWaitingForSlot();
+
+        assertThat(dataSource.getHikariPoolMXBean().getActiveConnections()).isZero();
+        assertThat(jdbc.queryForObject("select 1", Integer.class)).isEqualTo(1);
+
+        ENCODER.open(3);
+        // 이 인코더는 무엇이든 맞다고 한다. 가짜 저장값과 맞아도 로그인되지 않는다.
+        assertThat(known.result()).contains(userId);
+        assertThat(unknown.result()).isEmpty();
+        assertThat(waiting.result()).contains(userId);
+        assertThat(ENCODER.sawTransaction()).isFalse();
+    }
+
+    private RunningTask<Optional<UUID>> startLogin(String email, String password) {
+        RunningTask<Optional<UUID>> login = RunningTask.start(() -> userService.authenticate(email, password));
+        logins.add(login);
+        return login;
     }
 
     private RunningTask<User> startSignup(String email, String password, String displayName) {

@@ -7,10 +7,14 @@ import { RouterProvider } from 'react-router/dom'
 import { expect, vi } from 'vitest'
 import { accountOf, startAccounts } from './accounts'
 import { ledgerIdOf, startBackend } from './backend'
-import { categoryWithChildren, startCategories } from './categories'
+import { categoryWithChildren, startCategories, startCategorySuggestions } from './categories'
+import { loadDeviceHelpers } from './device'
 import { untilOpened } from './dialog'
+import { preloadLoginScreen } from './openApp'
+import { fetchScreenCodeFirst } from './screenCode'
+import { withShownLocation } from './shownScreen'
 import { enableTestClock, setupUser } from './testClock'
-import { startTransactions } from './transactions'
+import { startDuplicates, startTransactions } from './transactions'
 import { installLocks, createFakeLocks } from './webLocks'
 import { installMatchMedia } from './viewport'
 
@@ -18,6 +22,8 @@ import { installMatchMedia } from './viewport'
 
 // 앱을 그리는 테스트는 공용 시계 하나로 돈다(docs/qa/test-strategy.md 8절 1)
 enableTestClock()
+// 파일의 첫 테스트가 화면 코드를 받는 시간을 테스트 밖에서 먼저 쓴다(#291)
+fetchScreenCodeFirst()
 
 export const id = {
   salary: '11111111-1111-4111-8111-111111111111',
@@ -56,7 +62,7 @@ export const categoryItems = [
 export const LEDGER = ledgerIdOf('user-1')
 export const LAST_ACCOUNT_KEY = 'akkimpyo-last-account'
 
-/** 로그인한 user-1의 장부에 계좌, 카테고리, 거래 만들기가 되는 가짜 서버 */
+/** 로그인한 user-1의 장부에 계좌, 카테고리, 거래 만들기, 중복 경고 조회가 되는 가짜 서버 */
 export function startServer(server: SetupServer) {
   installMatchMedia(390)
   installLocks(createFakeLocks())
@@ -67,7 +73,9 @@ export function startServer(server: SetupServer) {
   const categories = startCategories(server, backend)
   categories.items = [...categoryItems]
   const transactions = startTransactions(server, backend)
-  return { backend, accounts, categories, transactions }
+  const suggestions = startCategorySuggestions(server, backend)
+  const duplicates = startDuplicates(server, backend)
+  return { backend, accounts, categories, transactions, suggestions, duplicates }
 }
 
 /**
@@ -75,11 +83,14 @@ export function startServer(server: SetupServer) {
  * 쓰는 라우터로 연다.
  */
 export async function openApp(path: string) {
+  // 앱이 열린 뒤 기기 도우미가 모듈을 새로 불러오지 않게 먼저 불러 둔다(#292)
+  await loadDeviceHelpers()
   vi.resetModules()
   window.history.replaceState(null, '', path)
   const { routes } = await import('../../src/app/routes')
   const { createQueryClient } = await import('../../src/app/queryClient')
-  const router = createBrowserRouter(routes)
+  await preloadLoginScreen()
+  const router = withShownLocation(routes, createBrowserRouter)
   render(
     <QueryClientProvider client={createQueryClient()}>
       <RouterProvider router={router} />
@@ -168,4 +179,13 @@ export function resetGlobals() {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
+}
+
+/** 카테고리 칸 아래의 제안 도움말(P-219) */
+export const SUGGESTED = '지난번 같은 가맹점에 쓴 카테고리예요'
+
+/** 카테고리 칸에 제안 도움말이 이어져 있다 */
+export function hasSuggestedHelp(): boolean {
+  const ids = categoryField().getAttribute('aria-describedby')?.split(' ') ?? []
+  return ids.some((each) => document.getElementById(each)?.textContent === SUGGESTED)
 }

@@ -180,7 +180,7 @@ class TransactionCreateRaceTest {
 
     private CreateResult create(User actor, UUID ledger, UUID account, long amount) {
         return transactionService.createOrReplay(actor.getId(), ledger, new Entry(id, TransactionType.EXPENSE, DAY,
-                null, account, null, amount, false, "김밥천국", null, null), "iphone.safari");
+                null, account, null, amount, null, "김밥천국", null, null), "iphone.safari");
     }
 
     private static IdConflictException conflictOf(Race race) {

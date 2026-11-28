@@ -2,6 +2,7 @@ import { useId, type ReactNode, type Ref } from 'react'
 import Field, { type FieldLabels } from './Field'
 import FieldPopup from './FieldPopup'
 import Icon from './Icon'
+import { CaretDown } from './icons'
 import { useFieldPopup } from './useFieldPopup'
 import styles from './FieldButton.module.css'
 
@@ -41,7 +42,7 @@ export default function PickerField({ valueText, readOnly = false, ref, children
             <span id={valueId} className={styles.value}>
               {valueText}
             </span>
-            <Icon name="CaretDown" size={20} />
+            <Icon icon={CaretDown} size={20} />
           </button>
         )}
       </Field>

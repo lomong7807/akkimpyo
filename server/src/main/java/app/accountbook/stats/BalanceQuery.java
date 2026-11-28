@@ -77,7 +77,7 @@ public class BalanceQuery {
                 .getResultList().stream()
                 .collect(Collectors.toMap(row -> row.get(0, UUID.class),
                         row -> row.get(1, BigInteger.class).longValueExact()));
-        return accountRepository.findByLedgerIdOrderByCreatedAtAsc(ledgerId).stream()
+        return accountRepository.findByLedgerIdOrderByCreatedAtAscIdAsc(ledgerId).stream()
                 .collect(Collectors.toMap(Account::getId,
                         account -> Math.addExact(account.getOpeningBalance(),
                                 lineSums.getOrDefault(account.getId(), 0L))));
