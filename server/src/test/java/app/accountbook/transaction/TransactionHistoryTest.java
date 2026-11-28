@@ -196,7 +196,7 @@ class TransactionHistoryTest {
     }
 
     private Entry expense(UUID txId, long amount) {
-        return new Entry(txId, TransactionType.EXPENSE, DAY, null, cash, null, amount, false, "김밥천국", null, null);
+        return new Entry(txId, TransactionType.EXPENSE, DAY, null, cash, null, amount, null, "김밥천국", null, null);
     }
 
     /** 전체 복원 절차가 하는 일(ADR 008 결정 10). 이력은 남기지 않는다. */

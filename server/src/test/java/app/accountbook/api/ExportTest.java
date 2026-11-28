@@ -10,6 +10,7 @@ import app.accountbook.category.CategoryService;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.StoppedClockConfig.StoppedClock;
 import app.accountbook.support.TestAccessTokens;
+import app.accountbook.transaction.RefundKind;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
 import app.accountbook.transaction.TransactionService;
@@ -78,14 +79,15 @@ class ExportTest {
         UUID food = category("식비", CategoryKind.EXPENSE, null);
         UUID lunch = category("점심", CategoryKind.EXPENSE, food);
         UUID salary = category("급여", CategoryKind.INCOME, null);
-        entry(TransactionType.EXPENSE, 1, LocalTime.MIDNIGHT, cash, lunch, 16_500, false, "올래국수", "회식, 2차");
-        entry(TransactionType.EXPENSE, 2, null, cash, food, 3_000, true, "올래국수", null);
-        entry(TransactionType.INCOME, 3, LocalTime.of(9, 0), bank, salary, 3_200_000, false, "회사", null);
+        entry(TransactionType.EXPENSE, 1, LocalTime.MIDNIGHT, cash, lunch, 16_500, null, "올래국수", "회식, 2차");
+        entry(TransactionType.EXPENSE, 2, null, cash, food, 3_000, RefundKind.REFUND, "올래국수", null);
+        entry(TransactionType.INCOME, 3, LocalTime.of(9, 0), bank, salary, 3_200_000, null, "회사", null);
         transactionService.create(owner.getId(), ledgerId, new Transfer(UUID.randomUUID(), OCT_1.withDayOfMonth(4),
                 LocalTime.of(8, 0), bank, cash, 50_000, "용돈"), "test-device");
         fixtures.cancel(owner, fixtures.expense(owner, ledgerId, cash, null, OCT_1.withDayOfMonth(5), 7_000));
         fixtures.delete(owner, fixtures.expense(owner, ledgerId, cash, food, OCT_1.withDayOfMonth(6), 8_000));
-        entry(TransactionType.EXPENSE, 31, LocalTime.of(23, 59), spare, food, 1_000, false, "=HYPERLINK(\"x\")",
+        entry(TransactionType.EXPENSE, 7, null, cash, food, 2_000, RefundKind.REIMBURSEMENT, null, null);
+        entry(TransactionType.EXPENSE, 31, LocalTime.of(23, 59), spare, food, 1_000, null, "=HYPERLINK(\"x\")",
                 "@SUM(A1)");
         String me = owner.getDisplayName();
 
@@ -105,14 +107,15 @@ class ExportTest {
                 + "2026-10-03,09:00,수입,3200000,,은행,,급여,,회사,,,완료,,," + me + ",3\r\n"
                 + "2026-10-04,08:00,이체,50000,,은행,현금,,,,용돈,,완료,,," + me + ",4\r\n"
                 + "2026-10-05,,지출,7000,,현금,,미분류,,,,,취소,,," + me + ",5\r\n"
+                + "2026-10-07,,지출,2000,돌려받음,현금,,식비,,,,,완료,,," + me + ",6\r\n"
                 + "2026-10-31,23:59,지출,1000,,'-비상금,,식비,,\"'=HYPERLINK(\"\"x\"\")\",'@SUM(A1),,완료,,," + me
-                + ",6\r\n");
+                + ",7\r\n");
     }
 
     /** 열과 행은 CSV와 같다. 가맹점·메모는 수식으로 시작해도 원래 글자의 글자 칸이다(칸 종류는 XlsxExportTest가 본다). */
     @Test
     void 엑셀은_xlsx_파일이고_CSV와_같은_행을_쓴다() throws Exception {
-        entry(TransactionType.EXPENSE, 1, null, cash, null, 16_500, false, "=1+1", "@SUM(A1)");
+        entry(TransactionType.EXPENSE, 1, null, cash, null, 16_500, null, "=1+1", "@SUM(A1)");
         fixtures.expense(owner, ledgerId, cash, null, OCT_1.withDayOfMonth(31), 1_000);
 
         HttpResponse<byte[]> response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create(
@@ -176,7 +179,7 @@ class ExportTest {
     }
 
     private void entry(TransactionType type, int october, LocalTime at, UUID account, UUID category, long amount,
-                       boolean refund, String payee, String memo) {
+                       RefundKind refund, String payee, String memo) {
         transactionService.create(owner.getId(), ledgerId, new Entry(UUID.randomUUID(), type,
                 OCT_1.withDayOfMonth(october), at, account, category, amount, refund, payee, memo, null), "test-device");
     }

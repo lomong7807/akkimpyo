@@ -6,6 +6,7 @@ import app.accountbook.api.HistoryResponse.Change;
 import app.accountbook.api.HistoryResponse.Item;
 import app.accountbook.api.TransactionResponse.Person;
 import app.accountbook.transaction.ChangeAction;
+import app.accountbook.transaction.RefundKind;
 import app.accountbook.transaction.TransactionChange;
 import app.accountbook.transaction.TransactionChange.Value;
 import app.accountbook.transaction.TransactionStatus;
@@ -42,22 +43,27 @@ class HistoryResponseTest {
                 new Change("occurredOn", null, "2026-11-18"), new Change("occurredTime", null, "08:05"),
                 new Change("accountId", null, CASH.toString()), new Change("categoryId", null, FOOD.toString()),
                 new Change("amount", null, 12_000L), new Change("payee", null, "김밥천국"),
-                new Change("refund", null, false), new Change("paidBy", null, OWNER.toString()),
-                new Change("status", null, "POSTED"));
+                new Change("paidBy", null, OWNER.toString()), new Change("status", null, "POSTED"));
+        assertThat(item(ChangeAction.CREATE, OWNER, null,
+                expense(CASH, 12_000, null, RefundKind.REIMBURSEMENT, TransactionStatus.POSTED)).changes())
+                .contains(new Change("refundKind", null, "REIMBURSEMENT"));
     }
 
     @Test
     void 고치기와_취소는_바뀐_칸만이고_지우기와_되살리기는_바뀐_칸이_없다() {
         Value before = expense(CASH, -12_000, null, TransactionStatus.POSTED);
 
-        assertThat(item(ChangeAction.UPDATE, OWNER, before, expense(CARD, 15_000, "환불", TransactionStatus.POSTED))
-                .changes()).containsExactly(new Change("accountId", CASH.toString(), CARD.toString()),
-                new Change("amount", 12_000L, 15_000L), new Change("memo", null, "환불"),
-                new Change("refund", false, true));
+        Value refund = expense(CARD, 15_000, "환불", RefundKind.REFUND, TransactionStatus.POSTED);
+        assertThat(item(ChangeAction.UPDATE, OWNER, before, refund).changes()).containsExactly(
+                new Change("accountId", CASH.toString(), CARD.toString()), new Change("amount", 12_000L, 15_000L),
+                new Change("memo", null, "환불"), new Change("refundKind", null, "REFUND"));
+        assertThat(item(ChangeAction.UPDATE, OWNER, refund,
+                expense(CARD, 15_000, "환불", RefundKind.REIMBURSEMENT, TransactionStatus.POSTED)).changes())
+                .containsExactly(new Change("refundKind", "REFUND", "REIMBURSEMENT"));
         assertThat(item(ChangeAction.CANCEL, OWNER, before, expense(CASH, -12_000, null, TransactionStatus.CANCELED))
                 .changes()).containsExactly(new Change("status", "POSTED", "CANCELED"));
         Value trashed = new Value(before.type(), DAY, before.occurredTime(), before.payee(), null, before.status(),
-                OWNER, true, before.lines());
+                OWNER, null, true, before.lines());
         assertThat(item(ChangeAction.DELETE, OWNER, before, trashed).changes()).isEmpty();
         assertThat(item(ChangeAction.RESTORE, OWNER, trashed, before).changes()).isEmpty();
     }
@@ -88,11 +94,16 @@ class HistoryResponseTest {
     }
 
     private static Value expense(UUID account, long amount, String memo, TransactionStatus status) {
-        return new Value(TransactionType.EXPENSE, DAY, LocalTime.of(8, 5, 30), "김밥천국", memo, status, OWNER, false,
-                List.of(new Line(account, FOOD, amount)));
+        return expense(account, amount, memo, null, status);
+    }
+
+    private static Value expense(UUID account, long amount, String memo, RefundKind kind, TransactionStatus status) {
+        return new Value(TransactionType.EXPENSE, DAY, LocalTime.of(8, 5, 30), "김밥천국", memo, status, OWNER, kind,
+                false, List.of(new Line(account, FOOD, amount)));
     }
 
     private static Value transfer(List<Line> lines) {
-        return new Value(TransactionType.TRANSFER, DAY, null, null, null, TransactionStatus.POSTED, null, false, lines);
+        return new Value(TransactionType.TRANSFER, DAY, null, null, null, TransactionStatus.POSTED, null, null, false,
+                lines);
     }
 }

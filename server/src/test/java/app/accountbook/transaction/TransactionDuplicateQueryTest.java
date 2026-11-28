@@ -205,7 +205,7 @@ class TransactionDuplicateQueryTest {
 
     private UUID saveWithId(UUID id, String payee) {
         UUID saved = transactionService.create(owner.getId(), ledgerId, new Entry(id, TransactionType.EXPENSE, DAY,
-                null, cash, null, AMOUNT, false, payee, null, null), DEVICE).id();
+                null, cash, null, AMOUNT, null, payee, null, null), DEVICE).id();
         savedAt(saved, 1);
         return saved;
     }
@@ -218,6 +218,7 @@ class TransactionDuplicateQueryTest {
 
     private static Entry entry(TransactionType type, boolean refund, LocalDate on, LocalTime at, UUID accountId,
                                String payee, long amount) {
-        return new Entry(UUID.randomUUID(), type, on, at, accountId, null, amount, refund, payee, null, null);
+        return new Entry(UUID.randomUUID(), type, on, at, accountId, null, amount, refund ? RefundKind.REFUND : null,
+                payee, null, null);
     }
 }

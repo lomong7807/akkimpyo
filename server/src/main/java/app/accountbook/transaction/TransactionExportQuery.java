@@ -28,7 +28,7 @@ public class TransactionExportQuery {
     /** 날짜 구간은 {@code >=}와 {@code <}로 쓴다(schema-standards 4절). 같은 거래의 라인은 이어서 온다. */
     private static final String LINES = """
             select t.id, t.type, t.occurredOn, t.occurredTime, t.payee, t.memo, t.status, t.createdBy,
-                   l.accountId, l.categoryId, l.amount
+                   t.refundKind, l.accountId, l.categoryId, l.amount
               from TransactionLine l
               join l.transaction t
              where l.ledgerId = :ledgerId

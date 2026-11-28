@@ -2,6 +2,7 @@ package app.accountbook.api;
 
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.transaction.RefundKind;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
@@ -18,9 +19,11 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * 거래 만들기 요청의 본문(#14 요청 계약). {@code type}으로 지출·수입과 이체의 모양이 갈린다.
- * 지출·수입: {@code id, type, occurredOn, occurredTime, accountId, categoryId, amount, payee, memo}.
+ * 지출·수입: {@code id, type, occurredOn, occurredTime, accountId, categoryId, amount, payee, memo, refundKind}.
  * 이체: {@code id, type, occurredOn, occurredTime, fromAccountId, toAccountId, amount, memo}.
- * 그 종류의 모양에 없는 입력란과 1A에서 보내지 않는 {@code refund}·{@code paidBy}는 읽지 않는다(환불은 아님, 결제한 사람은 작성자).
+ * 그 종류의 모양에 없는 입력란과 1A에서 보내지 않는 {@code paidBy}(결제한 사람은 작성자), 예전의 {@code refund}는 읽지 않는다.
+ * {@code refundKind}는 예외로 수입·이체에서도 읽어, 값이 있으면 {@code NOT_ALLOWED}로 거부한다(#102 계약). 빠졌거나
+ * {@code null}이면 일반 지출이다.
  *
  * <p>입력란을 하나씩 읽어 빠졌거나({@code REQUIRED}) 읽을 수 없는({@code INVALID_FORMAT}) 칸을 모두 알린다. 값을 다른 형으로
  * 바꿔 받지 않는다(ADR 002 2절). 범위, 글자 수, 같은 계좌 이체, 계좌·카테고리가 있는지는 서비스가 본다.
@@ -28,7 +31,7 @@ import tools.jackson.databind.JsonNode;
  */
 record TransactionRequest(JsonNode id, JsonNode type, JsonNode occurredOn, JsonNode occurredTime,
                           JsonNode accountId, JsonNode categoryId, JsonNode amount, JsonNode payee, JsonNode memo,
-                          JsonNode fromAccountId, JsonNode toAccountId) {
+                          JsonNode refundKind, JsonNode fromAccountId, JsonNode toAccountId) {
 
     /** 36자 표준 표기만 받고 대소문자는 가리지 않는다. 응답은 소문자다(architect 결정 2026-11-26, #102). */
     static final Pattern UUID_TEXT = Pattern.compile(
@@ -57,9 +60,10 @@ record TransactionRequest(JsonNode id, JsonNode type, JsonNode occurredOn, JsonN
         LocalDate date = date(errors);
         LocalTime time = time(errors);
         Long amountValue = amount(errors);
+        RefundKind kind = refundKind(txType, errors);
         return switch (txType) {
             case EXPENSE, INCOME -> new Entry(txId, txType, date, time, uuid("accountId", accountId, true, errors),
-                    uuid("categoryId", categoryId, false, errors), orZero(amountValue), false,
+                    uuid("categoryId", categoryId, false, errors), orZero(amountValue), kind,
                     text("payee", payee, errors), text("memo", memo, errors), null);
             case TRANSFER -> new Transfer(txId, date, time, uuid("fromAccountId", fromAccountId, true, errors),
                     uuid("toAccountId", toAccountId, true, errors), orZero(amountValue), text("memo", memo, errors));
@@ -80,6 +84,32 @@ record TransactionRequest(JsonNode id, JsonNode type, JsonNode occurredOn, JsonN
                 .findFirst()
                 .orElseGet(() -> {
                     errors.add(unreadable("type"));
+                    return null;
+                });
+    }
+
+    /**
+     * 환불 구분. 이름이 똑같은 문자열만 받는다(소문자, 빈 문자열, 불리언, 수는 {@code INVALID_FORMAT}). 수입·이체에 값이 있으면
+     * 그 값이 무엇이든 {@code NOT_ALLOWED}다. 종류를 읽지 못했으면 형식만 본다.
+     */
+    private RefundKind refundKind(TransactionType txType, List<InvalidRequestException> errors) {
+        if (isAbsent(refundKind)) {
+            return null;
+        }
+        if (txType == TransactionType.INCOME || txType == TransactionType.TRANSFER) {
+            errors.add(new InvalidRequestException("refundKind", FieldErrorCode.NOT_ALLOWED,
+                    "환불·돌려받음은 지출에만 표시할 수 있습니다."));
+            return null;
+        }
+        String text = text("refundKind", refundKind, errors);
+        if (text == null) {
+            return null;
+        }
+        return Arrays.stream(RefundKind.values())
+                .filter(value -> value.name().equals(text))
+                .findFirst()
+                .orElseGet(() -> {
+                    errors.add(unreadable("refundKind"));
                     return null;
                 });
     }

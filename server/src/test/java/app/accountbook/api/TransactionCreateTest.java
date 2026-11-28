@@ -81,7 +81,7 @@ class TransactionCreateTest {
         assertThat(created.header("Content-Type")).isEqualTo("application/json");
         JsonNode tx = created.json();
         assertThat(tx.propertyNames()).containsExactlyInAnyOrder("id", "type", "occurredOn", "occurredTime",
-                "accountId", "categoryId", "amount", "payee", "memo", "refund", "paidBy", "fromAccountId",
+                "accountId", "categoryId", "amount", "payee", "memo", "refundKind", "paidBy", "fromAccountId",
                 "toAccountId", "status", "version", "createdAt", "createdBy", "updatedAt", "updatedBy", "deletedAt",
                 "purgeAt");
         assertThat(tx.get("id").asString()).as("소문자").isEqualTo(id.toString());
@@ -90,7 +90,7 @@ class TransactionCreateTest {
                 "김밥천국", "점심", "POSTED");
         assertThat(tx.get("amount").isIntegralNumber()).isTrue();
         assertThat(tx.get("amount").asLong()).as("양수").isEqualTo(12_000);
-        assertThat(tx.get("refund").asBoolean()).isFalse();
+        assertThat(tx.get("refundKind").isNull()).isTrue();
         assertThat(tx.get("version").asLong()).isEqualTo(1);
         assertThat(tx.get("createdAt").asString()).matches(SERVER_TIME).isEqualTo(tx.get("updatedAt").asString());
         JsonNode me = person(owner);
@@ -114,7 +114,7 @@ class TransactionCreateTest {
         JsonNode tx = created.json();
         assertThat(tx.get("categoryId").asString()).isEqualTo(uncategorized.toString());
         assertThat(List.of(tx.get("occurredTime"), tx.get("payee"), tx.get("memo"))).allMatch(JsonNode::isNull);
-        assertThat(tx.get("refund").asBoolean()).isFalse();
+        assertThat(tx.get("refundKind").isNull()).isTrue();
         assertThat(tx.get("amount").asLong()).isEqualTo(3_000_000);
         assertThat(jdbc.queryForList("select amount from transaction_line where transaction_id = ?", Long.class, id))
                 .containsExactly(3_000_000L);
@@ -131,11 +131,32 @@ class TransactionCreateTest {
         assertThat(text(tx, "type", "fromAccountId", "toAccountId", "occurredTime", "memo"))
                 .containsExactly("TRANSFER", bank.toString(), cash.toString(), "23:59", "용돈");
         assertThat(tx.get("amount").asLong()).isEqualTo(50_000);
-        assertThat(List.of(tx.get("accountId"), tx.get("categoryId"), tx.get("payee"), tx.get("refund"),
+        assertThat(List.of(tx.get("accountId"), tx.get("categoryId"), tx.get("payee"), tx.get("refundKind"),
                 tx.get("paidBy"))).allMatch(JsonNode::isNull);
         assertThat(tx.get("createdBy")).isEqualTo(person(owner));
         assertThat(jdbc.queryForList("select amount from transaction_line where transaction_id = ? order by amount",
                 Long.class, id)).containsExactly(-50_000L, 50_000L);
+    }
+
+    /** 돌려받음도 환불처럼 양수 라인이다(#8). 수입·이체에 구분을 보내면 저장하지 않고 400이다(#102 계약). */
+    @Test
+    void 돌려받음은_양수_라인으로_저장되고_수입과_이체에는_구분을_보낼_수_없다() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        Reply created = create(withRefundKind(expense(id.toString(), cash, food, 12_000, "null"), "\"REIMBURSEMENT\""));
+
+        assertThat(created.status()).as(created.body()).isEqualTo(201);
+        assertThat(created.json().get("refundKind").asString()).isEqualTo("REIMBURSEMENT");
+        assertThat(created.json().get("amount").asLong()).isEqualTo(12_000);
+        assertThat(jdbc.queryForList("select amount from transaction_line where transaction_id = ?", Long.class, id))
+                .containsExactly(12_000L);
+        create(json(Map.of("id", quoted(UUID.randomUUID()), "type", "\"INCOME\"", "occurredOn", "\"2026-11-18\"",
+                "accountId", quoted(bank), "amount", "3000000", "refundKind", "\"REFUND\"")))
+                .assertFieldErrors("refundKind:NOT_ALLOWED");
+        create(withRefundKind(transfer(UUID.randomUUID(), bank, cash, 50_000), "\"REIMBURSEMENT\""))
+                .assertFieldErrors("refundKind:NOT_ALLOWED");
+        assertThat(jdbc.queryForObject("select count(*) from transaction where ledger_id = ?", Long.class, ledgerId))
+                .isEqualTo(1);
     }
 
     @Test
@@ -270,6 +291,11 @@ class TransactionCreateTest {
         return "{\"id\":\"" + id + "\",\"type\":\"TRANSFER\",\"occurredOn\":\"2026-11-18\",\"occurredTime\":\"23:59\""
                 + ",\"fromAccountId\":\"" + from + "\",\"toAccountId\":\"" + to + "\",\"amount\":" + amount
                 + ",\"memo\":\"용돈\"}";
+    }
+
+    /** @param kind JSON 글자 그대로 */
+    private static String withRefundKind(String body, String kind) {
+        return body.substring(0, body.length() - 1) + ",\"refundKind\":" + kind + "}";
     }
 
     /** 값은 JSON 글자 그대로다. */

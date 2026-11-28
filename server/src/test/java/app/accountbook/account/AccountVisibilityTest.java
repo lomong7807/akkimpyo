@@ -251,7 +251,7 @@ class AccountVisibilityTest {
     }
 
     private Entry expense(UUID id, UUID accountId, long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, accountId, food, amount, false, null, null, null);
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, accountId, food, amount, null, null, null, null);
     }
 
     private static TransactionCommand transfer(UUID id, UUID fromAccountId, UUID toAccountId) {

@@ -144,7 +144,7 @@ class TransactionDeviceIdTest {
         transactionService.create(owner, ledgerId, expense(id), null);
         // 같은 내용으로 고치면 아무것도 바꾸지 않으므로(#36) 금액을 바꾼다.
         transactionService.update(owner, id, 1,
-                new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, 16_000, false, "김밥천국", null, null), null);
+                new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, 16_000, null, "김밥천국", null, null), null);
         transactionService.cancel(owner, id, 2, null);
         transactionService.delete(owner, id, 3, null);
         transactionService.restore(owner, id, 4, null);
@@ -186,7 +186,7 @@ class TransactionDeviceIdTest {
     }
 
     private Entry expense(UUID id) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, 15_000, false, "김밥천국", null, null);
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, 15_000, null, "김밥천국", null, null);
     }
 
     private List<ChangeLogView> historyOf(UUID id) {

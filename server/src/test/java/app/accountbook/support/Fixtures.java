@@ -10,6 +10,7 @@ import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRole;
 import app.accountbook.transaction.ChangeAction;
+import app.accountbook.transaction.RefundKind;
 import app.accountbook.transaction.Transaction;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionRepository;
@@ -99,19 +100,26 @@ public class Fixtures {
     /** 지출. categoryId가 null이면 미분류. */
     public TransactionView expense(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
                                    long amount) {
-        return entry(actor, ledgerId, TransactionType.EXPENSE, false, accountId, categoryId, on, amount);
+        return entry(actor, ledgerId, TransactionType.EXPENSE, null, accountId, categoryId, on, amount);
     }
 
     /** 환불: 지출 카테고리에 양수 라인. */
     public TransactionView refund(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
                                   long amount) {
-        return entry(actor, ledgerId, TransactionType.EXPENSE, true, accountId, categoryId, on, amount);
+        return entry(actor, ledgerId, TransactionType.EXPENSE, RefundKind.REFUND, accountId, categoryId, on, amount);
+    }
+
+    /** 돌려받음: 환불과 같이 지출 카테고리에 양수 라인(P-210). */
+    public TransactionView reimbursement(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
+                                         long amount) {
+        return entry(actor, ledgerId, TransactionType.EXPENSE, RefundKind.REIMBURSEMENT, accountId, categoryId, on,
+                amount);
     }
 
     /** 수입. categoryId가 null이면 미분류. */
     public TransactionView income(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
                                   long amount) {
-        return entry(actor, ledgerId, TransactionType.INCOME, false, accountId, categoryId, on, amount);
+        return entry(actor, ledgerId, TransactionType.INCOME, null, accountId, categoryId, on, amount);
     }
 
     public TransactionView transfer(User actor, UUID ledgerId, UUID fromAccountId, UUID toAccountId, LocalDate on,
@@ -156,7 +164,7 @@ public class Fixtures {
                 ChangeAction.PURGE.name(), actorId);
     }
 
-    private TransactionView entry(User actor, UUID ledgerId, TransactionType type, boolean refund, UUID accountId,
+    private TransactionView entry(User actor, UUID ledgerId, TransactionType type, RefundKind refund, UUID accountId,
                                   UUID categoryId, LocalDate on, long amount) {
         return transactionService.create(actor.getId(), ledgerId,
                 new TransactionCommand.Entry(UUID.randomUUID(), type, on, null, accountId, categoryId, amount,

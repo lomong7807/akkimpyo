@@ -67,7 +67,7 @@ class TransactionDetailTest {
         UUID bank = fixtures.account(owner, ledgerId, "은행", AccountType.BANK, 0, DAY).getId();
         Reply expense = client.postJson(path(), "{\"id\":\"" + UUID.randomUUID() + "\",\"type\":\"EXPENSE\","
                 + "\"occurredOn\":\"2026-11-18\",\"occurredTime\":\"08:05\",\"accountId\":\"" + cash + "\","
-                + "\"amount\":12000,\"payee\":\"김밥천국\",\"memo\":\"점심\",\"refund\":true}");
+                + "\"amount\":12000,\"payee\":\"김밥천국\",\"memo\":\"점심\",\"refundKind\":\"REFUND\"}");
         Reply transfer = client.postJson(path(), "{\"id\":\"" + UUID.randomUUID() + "\",\"type\":\"TRANSFER\","
                 + "\"occurredOn\":\"2026-11-18\",\"fromAccountId\":\"" + bank + "\",\"toAccountId\":\"" + cash + "\","
                 + "\"amount\":50000}");

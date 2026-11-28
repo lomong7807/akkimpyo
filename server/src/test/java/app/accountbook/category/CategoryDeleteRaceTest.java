@@ -127,7 +127,7 @@ class CategoryDeleteRaceTest {
 
     private TransactionView create(UUID id) {
         return transactionService.create(owner.getId(), ledgerId, new Entry(id, TransactionType.EXPENSE, DAY, null,
-                cash, food, 12_000, false, null, null, null), DEVICE);
+                cash, food, 12_000, null, null, null, null), DEVICE);
     }
 
     /**

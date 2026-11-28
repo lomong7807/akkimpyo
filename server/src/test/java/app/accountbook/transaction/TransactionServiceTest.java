@@ -81,7 +81,7 @@ class TransactionServiceTest {
 
     private Entry expense(UUID id, long amount, UUID categoryId) {
         return new Entry(id, TransactionType.EXPENSE, DAY, LocalTime.of(12, 30), cash.getId(), categoryId,
-                amount, false, "김밥천국", "점심", null);
+                amount, null, "김밥천국", "점심", null);
     }
 
     private TransactionView create(TransactionCommand cmd) {
@@ -137,9 +137,10 @@ class TransactionServiceTest {
         UUID id = UUID.randomUUID();
 
         TransactionView view = create(new Entry(id, TransactionType.EXPENSE, DAY, null, cash.getId(),
-                food.getId(), 2_000, true, "김밥천국", "환불", null));
+                food.getId(), 2_000, RefundKind.REFUND, "김밥천국", "환불", null));
 
         assertThat(view.type()).isEqualTo(TransactionType.EXPENSE);
+        assertThat(view.refundKind()).isEqualTo(RefundKind.REFUND);
         assertThat(view.lines()).containsExactly(new Line(cash.getId(), food.getId(), 2_000));
     }
 
@@ -148,7 +149,7 @@ class TransactionServiceTest {
         UUID id = UUID.randomUUID();
 
         TransactionView view = create(new Entry(id, TransactionType.INCOME, DAY, null, bank.getId(),
-                salary.getId(), 50_000, false, "회사", null, null));
+                salary.getId(), 50_000, null, "회사", null, null));
 
         assertThat(view.type()).isEqualTo(TransactionType.INCOME);
         assertThat(view.paidBy()).isEqualTo(owner.getId());
@@ -200,7 +201,7 @@ class TransactionServiceTest {
         Account otherCash = account(other, otherLedgerId, "현금", AccountType.CASH);
         assertThatThrownBy(() -> transactionService.create(other.getId(), otherLedgerId,
                 new Entry(id, TransactionType.EXPENSE, DAY, LocalTime.of(12, 30), otherCash.getId(), null,
-                        12_000, false, "김밥천국", "점심", null), DEVICE))
+                        12_000, null, "김밥천국", "점심", null), DEVICE))
                 .isInstanceOf(IdConflictException.class);
 
         TransactionView stored = transactionService.get(owner.getId(), id);
@@ -233,7 +234,7 @@ class TransactionServiceTest {
         Account othersCash = account(other, fixtures.personalLedgerId(other), "현금", AccountType.CASH);
 
         assertThatThrownBy(() -> create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                othersCash.getId(), null, 12_000, false, null, null, null)))
+                othersCash.getId(), null, 12_000, null, null, null, null)))
                 .isInstanceOf(InvalidRequestException.class);
         assertThatThrownBy(() -> create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(),
                 othersCash.getId(), 10_000, null)))
@@ -259,16 +260,16 @@ class TransactionServiceTest {
     @Test
     void create_rejectsRefundOnIncomeAndTooLongText() {
         assertThatThrownBy(() -> create(new Entry(UUID.randomUUID(), TransactionType.INCOME, DAY, null,
-                bank.getId(), salary.getId(), 1_000, true, null, null, null)))
+                bank.getId(), salary.getId(), 1_000, RefundKind.REFUND, null, null, null)))
                 .isInstanceOf(InvalidRequestException.class);
         assertThatThrownBy(() -> create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                cash.getId(), null, 1_000, false, "가".repeat(101), null, null)))
+                cash.getId(), null, 1_000, null, "가".repeat(101), null, null)))
                 .isInstanceOf(InvalidRequestException.class);
         assertThatThrownBy(() -> create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                cash.getId(), null, 1_000, false, null, "가".repeat(501), null)))
+                cash.getId(), null, 1_000, null, null, "가".repeat(501), null)))
                 .isInstanceOf(InvalidRequestException.class);
         assertThatCode(() -> create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                cash.getId(), null, 1_000, false, "가".repeat(100), "가".repeat(500), null)))
+                cash.getId(), null, 1_000, null, "가".repeat(100), "가".repeat(500), null)))
                 .doesNotThrowAnyException();
     }
 
@@ -289,11 +290,11 @@ class TransactionServiceTest {
         fixtures.addMember(ledgerId, member, LedgerRole.MEMBER);
 
         assertThatThrownBy(() -> create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                cash.getId(), null, 12_000, false, null, null, outsider.getId())))
+                cash.getId(), null, 12_000, null, null, null, outsider.getId())))
                 .isInstanceOf(InvalidRequestException.class);
 
         TransactionView paidByMember = create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                cash.getId(), null, 12_000, false, null, null, member.getId()));
+                cash.getId(), null, 12_000, null, null, null, member.getId()));
         assertThat(paidByMember.paidBy()).isEqualTo(member.getId());
         assertThat(paidByMember.createdBy()).isEqualTo(owner.getId());
     }
@@ -322,7 +323,7 @@ class TransactionServiceTest {
 
         UUID expense = create(expense(UUID.randomUUID(), 12_000)).id();
         UUID income = create(new Entry(UUID.randomUUID(), TransactionType.INCOME, DAY, null, bank.getId(),
-                salary.getId(), 50_000, false, "회사", null, null)).id();
+                salary.getId(), 50_000, null, "회사", null, null)).id();
         UUID transfer = create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(), cash.getId(), 30_000,
                 null)).id();
         UUID others = fixtures.expense(other, otherLedgerId, othersCash.getId(), null, DAY, 1_000).id();
@@ -407,7 +408,7 @@ class TransactionServiceTest {
         create(expense(id, 12_000));
 
         assertThatThrownBy(() -> transactionService.update(owner.getId(), id, 1,
-                new Entry(id, TransactionType.INCOME, DAY, null, cash.getId(), salary.getId(), 12_000, false,
+                new Entry(id, TransactionType.INCOME, DAY, null, cash.getId(), salary.getId(), 12_000, null,
                         null, null, null), DEVICE))
                 .isInstanceOfSatisfying(InvalidRequestException.class, e -> assertTypeNotAllowed(e));
         assertThatThrownBy(() -> transactionService.update(owner.getId(), id, 1,

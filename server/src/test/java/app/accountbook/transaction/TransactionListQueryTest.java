@@ -371,7 +371,7 @@ class TransactionListQueryTest {
         UUID id = UUID.randomUUID();
         LocalTime at = time == null ? null : LocalTime.parse(time);
         transactionService.create(owner.getId(), ledgerId, new Entry(id, TransactionType.EXPENSE, on, at, cash, null,
-                1_000, false, null, null, null), DEVICE);
+                1_000, null, null, null, null), DEVICE);
         made.add(new TransactionKey(on, at, id));
         return id;
     }
