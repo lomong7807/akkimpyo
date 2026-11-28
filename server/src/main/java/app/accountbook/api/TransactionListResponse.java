@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * 거래 목록의 한 쪽(#15 응답 계약). 거래는 만들기 응답(#14)과 같은 모양이다. 마지막 쪽이면 {@code nextCursor}가 null이다.
@@ -16,7 +17,8 @@ import java.util.UUID;
  * @param totals     그 달(하루 모드면 그날) 전체의 합계. 첫 쪽(cursor 없는 요청)에만 있고, 다음 쪽과 장부 전체 모드는 null
  * @param days       이 쪽에 나온 날마다 그날 전체의 합계. 날짜 역순이고 거래가 없는 날은 없다
  */
-record TransactionListResponse(List<TransactionResponse> items, String nextCursor, Totals totals, List<Day> days) {
+record TransactionListResponse(List<TransactionResponse> items, @Nullable String nextCursor, @Nullable Totals totals,
+                               List<Day> days) {
 
     /** @param names 장부 구성원의 표시 이름. 쪽마다 한 번 읽는다 */
     static TransactionListResponse of(TransactionPage page, Map<UUID, String> names, String nextCursor) {

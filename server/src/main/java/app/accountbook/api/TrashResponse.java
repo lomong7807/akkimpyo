@@ -4,6 +4,7 @@ import app.accountbook.transaction.TrashPage;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * 휴지통의 한 쪽(#47 응답 계약). 거래는 만들기 응답(#14)과 같은 모양이고 {@code deletedAt}과 {@code purgeAt}이 채워져 온다.
@@ -12,7 +13,7 @@ import java.util.UUID;
  *
  * @param nextCursor {@link TrashCursor}. 다음 요청에 그대로 보낸다
  */
-record TrashResponse(List<TransactionResponse> items, String nextCursor) {
+record TrashResponse(List<TransactionResponse> items, @Nullable String nextCursor) {
 
     /** @param names 장부 구성원의 표시 이름. 쪽마다 한 번 읽는다 */
     static TrashResponse of(TrashPage page, Map<UUID, String> names, String nextCursor) {

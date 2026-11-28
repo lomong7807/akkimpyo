@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * 거래 검색의 한 쪽(#64 응답 계약). 거래는 목록(#15)과 같은 모양이고 마지막 쪽이면 {@code nextCursor}가 null이다.
@@ -12,7 +13,7 @@ import java.util.UUID;
  * @param nextCursor {@link TransactionCursor}. 다음 요청에 같은 조건과 함께 그대로 보낸다
  * @param totals     검색 조건 전체의 건수와 P-205 합계. 첫 쪽(cursor 없는 요청)에만 있고 다음 쪽은 null
  */
-record TransactionSearchResponse(List<TransactionResponse> items, String nextCursor, Totals totals) {
+record TransactionSearchResponse(List<TransactionResponse> items, @Nullable String nextCursor, @Nullable Totals totals) {
 
     /** @param names 장부 구성원의 표시 이름. 쪽마다 한 번 읽는다 */
     static TransactionSearchResponse of(TransactionPage page, Map<UUID, String> names, String nextCursor) {

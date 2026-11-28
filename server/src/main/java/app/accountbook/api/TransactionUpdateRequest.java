@@ -1,11 +1,18 @@
 package app.accountbook.api;
 
+import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
+
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.transaction.RefundKind;
 import app.accountbook.transaction.TransactionCommand;
+import app.accountbook.transaction.TransactionType;
+import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -16,10 +23,29 @@ import tools.jackson.databind.JsonNode;
  *
  * @param version 고치기 전에 본 version
  */
-record TransactionUpdateRequest(JsonNode type, JsonNode occurredOn, JsonNode occurredTime, JsonNode accountId,
-                                JsonNode categoryId, JsonNode amount, JsonNode payee, JsonNode memo,
-                                JsonNode refundKind, JsonNode fromAccountId, JsonNode toAccountId,
-                                JsonNode version) {
+record TransactionUpdateRequest(@Schema(requiredMode = REQUIRED, implementation = TransactionType.class) JsonNode type,
+                                @Schema(requiredMode = REQUIRED, implementation = LocalDate.class) JsonNode occurredOn,
+                                @Schema(implementation = String.class, pattern = TransactionRequest.TIME_PATTERN,
+                                        description = "없거나 null이면 시각 없음") JsonNode occurredTime,
+                                @Schema(implementation = UUID.class, description = TransactionRequest.ENTRY_ONLY + " 필수")
+                                JsonNode accountId,
+                                @Schema(implementation = UUID.class,
+                                        description = TransactionRequest.ENTRY_ONLY + " 없거나 null이면 미분류")
+                                JsonNode categoryId,
+                                @Schema(requiredMode = REQUIRED, implementation = Long.class, minimum = "1",
+                                        maximum = "9999999999", description = "원 단위 양수") JsonNode amount,
+                                @Schema(implementation = String.class, description = TransactionRequest.ENTRY_ONLY)
+                                JsonNode payee,
+                                @Schema(implementation = String.class) JsonNode memo,
+                                @Schema(implementation = RefundKind.class,
+                                        description = "지출에만. 없으면 저장된 값을 두고, null이면 일반 지출")
+                                @Nullable JsonNode refundKind,
+                                @Schema(implementation = UUID.class, description = TransactionRequest.TRANSFER_ONLY)
+                                JsonNode fromAccountId,
+                                @Schema(implementation = UUID.class, description = TransactionRequest.TRANSFER_ONLY)
+                                JsonNode toAccountId,
+                                @Schema(requiredMode = REQUIRED, implementation = Long.class,
+                                        description = "고치기 전에 본 version") JsonNode version) {
 
     /** 빠지거나 읽을 수 없는 칸이 하나라도 있으면 version까지 모두 담아 거부한다. */
     Change change(UUID transactionId) {

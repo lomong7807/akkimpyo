@@ -8,9 +8,15 @@ import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionListQuery;
 import app.accountbook.transaction.TransactionPage;
 import app.accountbook.transaction.TransactionService;
+import app.accountbook.transaction.TransactionType;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.UserService;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -55,9 +61,22 @@ class TransactionController {
      * {@link TransactionListRequest}에 있다.
      */
     @GetMapping
+    @Parameter(name = "accountId", in = ParameterIn.QUERY, description = ApiDoc.ANY_OF, array = @ArraySchema(
+            maxItems = TransactionListRequest.MAX_FILTER_VALUES, schema = @Schema(implementation = UUID.class)))
+    @Parameter(name = "categoryId", in = ParameterIn.QUERY, description = ApiDoc.ANY_OF, array = @ArraySchema(
+            maxItems = TransactionListRequest.MAX_FILTER_VALUES, schema = @Schema(implementation = UUID.class)))
+    @Parameter(name = "type", in = ParameterIn.QUERY, description = ApiDoc.ANY_OF, array = @ArraySchema(
+            maxItems = TransactionListRequest.MAX_FILTER_VALUES, schema = @Schema(implementation = TransactionType.class)))
+    @Parameter(name = "status", in = ParameterIn.QUERY, description = ApiDoc.STATUS,
+            schema = @Schema(type = "string", types = "string", allowableValues = {"POSTED", "CANCELED"}))
     TransactionListResponse listTransactions(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                                 @Parameter(schema = @Schema(type = "string", types = "string", pattern = "^[0-9]{4}-[0-9]{2}$"))
                                  @RequestParam(name = "month", required = false) String month,
+                                 @Parameter(schema = @Schema(implementation = LocalDate.class))
                                  @RequestParam(name = "date", required = false) String date,
+                                 @Parameter(schema = @Schema(implementation = Integer.class, minimum = "1",
+                                         maximum = "" + TransactionListQuery.MAX_LIMIT,
+                                         defaultValue = "" + TransactionListQuery.MAX_LIMIT))
                                  @RequestParam(name = "limit", required = false) String limit,
                                  @RequestParam(name = "cursor", required = false) String cursor,
                                  @Parameter(hidden = true) @RequestParam MultiValueMap<String, String> query) {
@@ -75,6 +94,14 @@ class TransactionController {
      * {@link LedgerMemberInterceptor}가 먼저 404로 답한다. 경로는 {@code /{transactionId}}보다 이것이 먼저 맞는다.
      */
     @GetMapping("/duplicates")
+    @Parameter(name = "occurredOn", in = ParameterIn.QUERY, required = true,
+            schema = @Schema(implementation = LocalDate.class))
+    @Parameter(name = "amount", in = ParameterIn.QUERY, required = true, description = "원 단위 양수",
+            schema = @Schema(implementation = Long.class, minimum = "1", maximum = "9999999999"))
+    @Parameter(name = "payee", in = ParameterIn.QUERY, description = ApiDoc.ONCE_PAYEE,
+            schema = @Schema(implementation = String.class))
+    @Parameter(name = "exclude", in = ParameterIn.QUERY, description = "결과에서 뺄 거래",
+            schema = @Schema(implementation = UUID.class))
     TransactionDuplicatesResponse findDuplicateTransactions(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                              @Parameter(hidden = true) @RequestParam MultiValueMap<String, String> query) {
         TransactionDuplicateRequest request = TransactionDuplicateRequest.of(query);
@@ -89,6 +116,9 @@ class TransactionController {
      * 서비스가 트랜잭션을 스스로 열므로 여기서 열지 않는다. 이름은 저장한 뒤 따로 읽는다(ADR 004 결정 6).
      */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ApiResponse(responseCode = "201", description = "만들었다")
+    @ApiResponse(responseCode = "200", description = "같은 id로 같은 거래를 다시 보냈다. 저장된 거래를 준다")
+    @ApiResponse(responseCode = "409", ref = ApiDoc.CONFLICT)
     ResponseEntity<TransactionResponse> createTransaction(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                                @RequestHeader(name = DEVICE_HEADER, required = false) String device,
                                                @RequestBody TransactionRequest request) {
