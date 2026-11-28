@@ -2446,7 +2446,7 @@
             }
           },
           "deviceId" : {
-            "type" : "string"
+            "type" : [ "string", "null" ]
           }
         },
         "required" : [ "action", "actor", "at", "changes", "deviceId" ]
@@ -2990,7 +2990,7 @@
             "description" : "지출·수입에만."
           },
           "refundKind" : {
-            "type" : "string",
+            "type" : [ "string", "null" ],
             "description" : "지출에만. 없으면 저장된 값을 두고, null이면 일반 지출",
             "enum" : [ "REFUND", "REIMBURSEMENT" ]
           },

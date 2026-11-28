@@ -88,7 +88,8 @@ record HistoryResponse(List<Item> items) {
      * @param deviceId 저장된 기기 값 그대로(예: {@code iphone.safari}, {@code unknown}). 화면이 이름으로 바꾼다(D-07)
      * @param at       기록한 시각(ADR 002 2절의 서버 시각)
      */
-    record Item(ChangeAction action, @Nullable Person actor, String deviceId, String at, List<Change> changes) {
+    record Item(ChangeAction action, @Nullable Person actor, @Nullable String deviceId, String at,
+                List<Change> changes) {
 
         @Override
         public String toString() {

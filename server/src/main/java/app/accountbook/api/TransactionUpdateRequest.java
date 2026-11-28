@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -37,7 +38,8 @@ record TransactionUpdateRequest(@Schema(requiredMode = REQUIRED, implementation 
                                 JsonNode payee,
                                 @Schema(implementation = String.class) JsonNode memo,
                                 @Schema(implementation = RefundKind.class,
-                                        description = "지출에만. 없으면 저장된 값을 두고, null이면 일반 지출") JsonNode refundKind,
+                                        description = "지출에만. 없으면 저장된 값을 두고, null이면 일반 지출")
+                                @Nullable JsonNode refundKind,
                                 @Schema(implementation = UUID.class, description = TransactionRequest.TRANSFER_ONLY)
                                 JsonNode fromAccountId,
                                 @Schema(implementation = UUID.class, description = TransactionRequest.TRANSFER_ONLY)
