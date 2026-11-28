@@ -1,5 +1,6 @@
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import Amount from '../../components/Amount'
+import { totalKind } from '../../components/amountDisplay'
 import { Button, ButtonLink } from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
 import Icon from '../../components/Icon'
@@ -288,7 +289,8 @@ function MonthTotals({ month, label, totals, basis, state, queries, skeletonShow
 }
 
 /**
- * 지출(큰 숫자), 수입, 차액. 수입이 0원이면 부호와 강조색 없이 "0원"이다(내역의 합계와 같다). 차액은 부호를 늘 붙인다.
+ * 지출(큰 숫자), 수입, 차액. 수입이 0원이면 부호와 강조색 없이 "0원"이다(내역의 합계와 같다). 음수인 합계(환불이 더 큰 달)는
+ * 본문 글자색과 "-"다(totalKind, #390). 차액은 부호를 늘 붙인다.
  * 큰 숫자는 칸 폭을 넘으면 text-title로 내린다(L-12). 재지 않고 CSS로 고르도록 두 벌을 두고, 작은 짝은 화면 읽기에 숨긴다.
  */
 function Figures({ totals }: { totals: IncomeAndExpense }) {
@@ -300,18 +302,18 @@ function Figures({ totals }: { totals: IncomeAndExpense }) {
           <span className={styles.heroFallback} aria-hidden="true">
             <span className={styles.heroStrut} />
             <span className={styles.heroFallbackAmount}>
-              <Amount kind="expense" value={totals.expense} />
+              <Amount kind={totalKind('expense', totals.expense)} value={totals.expense} />
             </span>
           </span>
           <span className={styles.heroAmount}>
-            <Amount kind="expense" value={totals.expense} />
+            <Amount kind={totalKind('expense', totals.expense)} value={totals.expense} />
           </span>
         </dd>
       </div>
       <div className={styles.figure}>
         <dt className={styles.figureName}>수입</dt>
         <dd className={styles.figureAmount}>
-          <Amount kind={totals.income > 0 ? 'income' : 'balance'} value={totals.income} />
+          <Amount kind={totalKind('income', totals.income)} value={totals.income} />
         </dd>
       </div>
       <div className={styles.figure}>

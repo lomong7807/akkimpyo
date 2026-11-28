@@ -338,18 +338,26 @@ function MonthGrid(props: MonthGridProps) {
   )
 }
 
-/** 칸의 지출과 수입. 0원인 값은 없다. 읽는 것은 칸의 접근 이름이 한다 */
+/**
+ * 칸의 지출과 수입. 0원인 값은 없다. 음수(환불이 더 큰 날, #390)는 수입도 강조색 없이 지출과 같은 본문 글자색과 "-"다
+ * (00-common 2.2, designer #390). 읽는 것은 칸의 접근 이름이 한다
+ */
 function Figures({ total, wide }: { total: IncomeAndExpense; wide: boolean }) {
+  const gained = total.income > 0
   return (
     <>
-      {total.expense > 0 && (
+      {total.expense !== 0 && (
         <span data-figure="" aria-hidden="true" className={`${styles.figure} ${styles.expense} tabular-nums`}>
           {cellAmount(total.expense, wide)}
         </span>
       )}
-      {total.income > 0 && (
-        <span data-figure="" aria-hidden="true" className={`${styles.figure} ${styles.income} tabular-nums`}>
-          {`+${cellAmount(total.income, wide)}`}
+      {total.income !== 0 && (
+        <span
+          data-figure=""
+          aria-hidden="true"
+          className={`${styles.figure} ${gained ? styles.income : styles.expense} tabular-nums`}
+        >
+          {`${gained ? '+' : ''}${cellAmount(total.income, wide)}`}
         </span>
       )}
     </>

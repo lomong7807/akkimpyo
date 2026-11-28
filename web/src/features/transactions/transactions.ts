@@ -132,7 +132,10 @@ export interface ListedTransfer extends ListedBase {
 
 export type ListedTransaction = ListedIncomeOrExpense | ListedTransfer
 
-/** 수입·지출 합계(P-205: 이체, 취소, 삭제를 뺀다). 지출도 양수다. */
+/**
+ * 수입·지출 합계(P-205: 이체, 취소, 삭제를 뺀다). 원 단위 정수이고 지출도 양수로 센다. 환불·돌려받음이 더 큰 날과 달은
+ * 음수다(서버 #8, #102). 화면은 음수를 "-"와 본문 글자색으로 보인다(00-common 2.2, totalKind).
+ */
 export interface IncomeAndExpense {
   income: number
   expense: number
@@ -236,10 +239,11 @@ export function isListedTransaction(value: unknown): value is ListedTransaction 
   )
 }
 
+/** 합계의 모양. 음수도 받는다(#390). 정수가 아니거나 안전한 정수 범위 밖이면 받지 않는다. */
 export function isIncomeAndExpense(value: unknown): value is IncomeAndExpense {
   if (typeof value !== 'object' || value === null) return false
   const { income, expense } = value as Partial<Record<keyof IncomeAndExpense, unknown>>
-  return [income, expense].every((amount) => Number.isSafeInteger(amount) && (amount as number) >= 0)
+  return [income, expense].every((amount) => Number.isSafeInteger(amount))
 }
 
 export function isDayTotal(value: unknown): value is DayTotal {
