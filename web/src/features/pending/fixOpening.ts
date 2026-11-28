@@ -12,6 +12,9 @@ import { INVALID_VALUE } from './rejectionText'
  * 2단계라 1단계에서는 그 밖의 검증 실패로 읽힌다.
  */
 
+/** 그사이 다른 탭이 버렸거나 먼저 고쳐 보낸 입력(designer #237 D7). 비교해서 고르기(#280)도 같다(designer #280 D4) */
+export const CHANGED_ELSEWHERE = '다른 곳에서 먼저 바뀐 입력이에요. 목록에서 확인해 주세요.'
+
 /** 띠 "보내지 못한 이유: {이유}"의 이유(D-04 (33), designer #237 D1) */
 export const FIX_REASONS = {
   account: '계좌가 삭제되었어요',
@@ -70,9 +73,9 @@ function shownFields(type: TransactionValues['type']): TransactionField[] {
 
 /**
  * 쌓은 거래 만들기 본문(pendingTransactions의 queueNewTransaction)을 칸의 값으로. 빈 값(null)은 빈 칸이고, 이체의 보내는 계좌는
- * 계좌 칸이 맡는다. 기기 저장소의 값이라 모양을 다시 보고, 읽을 수 없으면 없다.
+ * 계좌 칸이 맡는다. 기기 저장소의 값이라 모양을 다시 보고, 읽을 수 없으면 없다. 비교해서 고르기(#280)의 "내 입력"도 이것이다.
  */
-function pendingValuesOf(body: PendingBody): TransactionValues | undefined {
+export function pendingValuesOf(body: PendingBody): TransactionValues | undefined {
   const { type, occurredOn, occurredTime, amount, memo } = body
   if (typeof occurredOn !== 'string' || !isDate(occurredOn)) return undefined
   if (occurredTime !== null && !(typeof occurredTime === 'string' && isValidTime(occurredTime))) return undefined

@@ -89,7 +89,7 @@ class TransactionCreateOrderTest {
         transactionService.create(owner.getId(), ledgerId, expense(mine, 12_000, null), DEVICE);
         UUID others = UUID.randomUUID();
         transactionService.create(stranger.getId(), strangerLedgerId,
-                new Entry(others, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 5_000, false,
+                new Entry(others, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 5_000, null,
                         null, null, null), DEVICE);
 
         // 내 거래의 id든 쓸 수 없는 id든, 형식 검증이 먼저라 충돌이 아니라 입력 오류다.
@@ -98,7 +98,7 @@ class TransactionCreateOrderTest {
         assertRejected("amount:OUT_OF_RANGE",
                 () -> transactionService.create(owner.getId(), ledgerId, expense(others, 0, null), DEVICE));
         assertRejected("accountId:REQUIRED", () -> transactionService.create(owner.getId(), ledgerId,
-                new Entry(mine, TransactionType.EXPENSE, DAY, null, null, null, 12_000, false, null, null, null),
+                new Entry(mine, TransactionType.EXPENSE, DAY, null, null, null, 12_000, null, null, null, null),
                 DEVICE));
     }
 
@@ -108,7 +108,7 @@ class TransactionCreateOrderTest {
         transactionService.create(owner.getId(), ledgerId, mine, DEVICE);
         UUID others = UUID.randomUUID();
         transactionService.create(stranger.getId(), strangerLedgerId,
-                new Entry(others, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 5_000, false,
+                new Entry(others, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 5_000, null,
                         null, null, null), DEVICE);
 
         // 내용까지 같은 재전송이든 쓸 수 없는 id든, 이미 저장된 거래를 돌려주거나 충돌로 답하지 않는다.
@@ -142,7 +142,7 @@ class TransactionCreateOrderTest {
 
         // 계좌가 내 장부의 것이 아니지만, 그 전에 같은 id의 다른 내용으로 판정된다.
         assertThatThrownBy(() -> transactionService.create(owner.getId(), ledgerId,
-                new Entry(id, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 12_000, false,
+                new Entry(id, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 12_000, null,
                         "김밥천국", null, null), DEVICE))
                 .isInstanceOf(IdConflictException.class);
     }
@@ -160,7 +160,7 @@ class TransactionCreateOrderTest {
                 () -> transactionService.create(owner.getId(), ledgerId, expense(purged, 0, null), DEVICE));
         // 계좌가 내 장부의 것이 아니지만, 그 전에 쓸 수 없는 id로 판정된다.
         assertThatThrownBy(() -> transactionService.create(owner.getId(), ledgerId,
-                new Entry(purged, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 12_000, false,
+                new Entry(purged, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 12_000, null,
                         "김밥천국", null, null), DEVICE))
                 .isInstanceOf(IdConflictException.class);
     }
@@ -170,7 +170,7 @@ class TransactionCreateOrderTest {
         UUID id = UUID.randomUUID();
 
         assertRejected("accountId:NOT_FOUND", () -> transactionService.create(owner.getId(), ledgerId,
-                new Entry(id, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 12_000, false,
+                new Entry(id, TransactionType.EXPENSE, DAY, null, strangerCash.getId(), null, 12_000, null,
                         "김밥천국", null, null), DEVICE));
         assertThat(transactionRepository.existsById(id)).isFalse();
     }
@@ -192,13 +192,13 @@ class TransactionCreateOrderTest {
                 new Transfer(transferId, DAY, null, bank, cash.getId(), 6_000, null), DEVICE);
         return Stream.of(
                 rejectedAs("payee:TOO_LONG", new Entry(entryId, TransactionType.EXPENSE, DAY, null, cash.getId(), null,
-                        13_000, false, "가".repeat(101), null, null)),
+                        13_000, null, "가".repeat(101), null, null)),
                 rejectedAs("memo:TOO_LONG", new Entry(entryId, TransactionType.EXPENSE, DAY, null, cash.getId(), null,
-                        13_000, false, null, "가".repeat(501), null)),
+                        13_000, null, null, "가".repeat(501), null)),
                 rejectedAs("occurredOn:OUT_OF_RANGE", new Entry(entryId, TransactionType.EXPENSE,
-                        LocalDate.of(1999, 12, 31), null, cash.getId(), null, 13_000, false, null, null, null)),
-                rejectedAs("refund:NOT_ALLOWED", new Entry(entryId, TransactionType.INCOME, DAY, null, cash.getId(),
-                        null, 13_000, true, null, null, null)),
+                        LocalDate.of(1999, 12, 31), null, cash.getId(), null, 13_000, null, null, null, null)),
+                rejectedAs("refundKind:NOT_ALLOWED", new Entry(entryId, TransactionType.INCOME, DAY, null, cash.getId(),
+                        null, 13_000, RefundKind.REFUND, null, null, null)),
                 rejectedAs("toAccountId:NOT_ALLOWED",
                         new Transfer(transferId, DAY, null, cash.getId(), cash.getId(), 6_000, null)),
                 rejectedAs("amount:OUT_OF_RANGE", new Transfer(transferId, DAY, null, bank, cash.getId(), 0, null)));
@@ -232,7 +232,7 @@ class TransactionCreateOrderTest {
     }
 
     private Entry expense(UUID id, long amount, UUID paidBy) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash.getId(), null, amount, false, "김밥천국",
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash.getId(), null, amount, null, "김밥천국",
                 null, paidBy);
     }
 

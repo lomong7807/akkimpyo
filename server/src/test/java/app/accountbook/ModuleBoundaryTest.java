@@ -42,7 +42,8 @@ class ModuleBoundaryTest {
             "user", Set.of("common", "ledger", "category"),
             "auth", Set.of("common", "user"),
             "stats", Set.of("common", "account", "category", "ledger", "transaction"),
-            "api", Set.of("common", "account", "auth", "category", "ledger", "stats", "transaction", "user"));
+            "api", Set.of("common", "account", "auth", "category", "ledger", "stats", "transaction", "user"),
+            "demo", Set.of("common", "account", "category", "ledger", "transaction", "user"));
 
     @ArchTest
     static final ArchRule 최상위_패키지_사이에_순환_의존이_없다 =
@@ -59,7 +60,7 @@ class ModuleBoundaryTest {
     static final Set<String> NOT_FOR_API = Set.of("CategoryService.uncategorized", "UserService.createUser");
 
     /**
-     * api는 리포지토리, 삭제 제한용 포트(AccountUsage, CategoryUsage와 그 구현의 isUsed), {@link #NOT_FOR_API}를 직접 쓰지 않는다.
+     * api는 리포지토리, 삭제용 포트(AccountUsage, CategoryUsage와 그 구현), {@link #NOT_FOR_API}를 직접 쓰지 않는다.
      * 이것들은 구성원 확인을 하지 않으므로 서비스가 확인한 뒤에 부른다(security, PR #142 검토).
      */
     @ArchTest

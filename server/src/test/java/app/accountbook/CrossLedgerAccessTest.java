@@ -11,9 +11,10 @@ import app.accountbook.account.AccountService;
 import app.accountbook.account.AccountType;
 import app.accountbook.category.Category;
 import app.accountbook.category.CategoryCommand;
+import app.accountbook.auth.PasswordChangeService;
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
-import app.accountbook.common.InUseException;
+import app.accountbook.common.AccountHasTransactionsException;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotFoundException;
@@ -25,18 +26,26 @@ import app.accountbook.ledger.LedgerService;
 import app.accountbook.stats.BalanceQuery;
 import app.accountbook.stats.MonthlyStatsQuery;
 import app.accountbook.stats.MonthlySummary;
+import app.accountbook.stats.YearlyStatsQuery;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
+import app.accountbook.transaction.CategorySuggestionQuery;
 import app.accountbook.transaction.IdConflictException;
 import app.accountbook.transaction.StaleVersionException;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
+import app.accountbook.transaction.TransactionExportQuery;
+import app.accountbook.transaction.TransactionFilter;
+import app.accountbook.transaction.TransactionHistoryQuery;
 import app.accountbook.transaction.TransactionListQuery;
+import app.accountbook.transaction.TransactionPage.DayTotals;
 import app.accountbook.transaction.TransactionScope.Day;
 import app.accountbook.transaction.TransactionScope.Month;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
+import app.accountbook.transaction.TransactionSearch;
 import app.accountbook.transaction.TransactionService;
+import app.accountbook.transaction.TransactionTrashQuery;
 import app.accountbook.transaction.TransactionType;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.User;
@@ -44,6 +53,7 @@ import app.accountbook.user.UserProfile;
 import app.accountbook.user.UserService;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.YearMonth;
 import java.util.HashSet;
 import java.util.List;
@@ -97,11 +107,17 @@ class CrossLedgerAccessTest {
     @Autowired CategoryService categoryService;
     @Autowired TransactionService transactionService;
     @Autowired TransactionListQuery transactionListQuery;
+    @Autowired TransactionTrashQuery transactionTrashQuery;
+    @Autowired TransactionHistoryQuery transactionHistoryQuery;
+    @Autowired CategorySuggestionQuery categorySuggestionQuery;
+    @Autowired TransactionExportQuery transactionExportQuery;
     @Autowired BalanceQuery balanceQuery;
     @Autowired MonthlyStatsQuery monthlyStatsQuery;
+    @Autowired YearlyStatsQuery yearlyStatsQuery;
     @Autowired LedgerAccess ledgerAccess;
     @Autowired LedgerService ledgerService;
     @Autowired UserService userService;
+    @Autowired PasswordChangeService passwordChangeService;
     @Autowired Fixtures fixtures;
     @Autowired EntityManager entityManager;
     @Autowired JdbcTemplate jdbc;
@@ -111,6 +127,7 @@ class CrossLedgerAccessTest {
     UUID aBank;
     UUID aCash;
     UUID aFood;
+    UUID aUncategorized;
     TransactionView aExpense;
     TransactionView aTransfer;
     TransactionView aDeleted;
@@ -148,6 +165,7 @@ class CrossLedgerAccessTest {
         aBank = fixtures.account(userA, ledgerA, "A은행", AccountType.BANK, 100_000, OPENING).getId();
         aCash = fixtures.account(userA, ledgerA, "A현금", AccountType.CASH, 0, OPENING).getId();
         aFood = category(a, ledgerA, "A식비", CategoryKind.EXPENSE, null);
+        aUncategorized = categoryService.uncategorized(ledgerA, CategoryKind.EXPENSE).getId();
         aExpense = fixtures.expense(userA, ledgerA, aBank, aFood, DAY, 1_100);
         aTransfer = fixtures.transfer(userA, ledgerA, aBank, aCash, DAY, 2_200);
         aDeleted = fixtures.delete(userA, fixtures.expense(userA, ledgerA, aBank, aFood, DAY, 3_300));
@@ -163,7 +181,7 @@ class CrossLedgerAccessTest {
         bSpare = category(b, ledgerB, "B안쓰는분류", CategoryKind.EXPENSE, null);
         bUncategorized = categoryService.uncategorized(ledgerB, CategoryKind.EXPENSE).getId();
         bExpense = transactionService.create(b, ledgerB, new Entry(UUID.randomUUID(), TransactionType.EXPENSE,
-                DAY, null, bBank, bLunch, 73_100, false, "B단골식당", "B의메모", null), DEVICE);
+                DAY, null, bBank, bLunch, 73_100, null, "B단골식당", "B의메모", null), DEVICE);
         bTransfer = fixtures.transfer(userB, ledgerB, bBank, bCash, DAY, 41_700);
         bDeleted = fixtures.delete(userB, fixtures.expense(userB, ledgerB, bBank, bFood, DAY, 58_300));
         bCanceled = fixtures.cancel(userB, fixtures.expense(userB, ledgerB, bBank, bFood, DAY, 66_900));
@@ -180,11 +198,17 @@ class CrossLedgerAccessTest {
         categoryService = recorded(categoryService);
         transactionService = recorded(transactionService);
         transactionListQuery = recorded(transactionListQuery);
+        transactionTrashQuery = recorded(transactionTrashQuery);
+        transactionHistoryQuery = recorded(transactionHistoryQuery);
+        categorySuggestionQuery = recorded(categorySuggestionQuery);
+        transactionExportQuery = recorded(transactionExportQuery);
         balanceQuery = recorded(balanceQuery);
         monthlyStatsQuery = recorded(monthlyStatsQuery);
+        yearlyStatsQuery = recorded(yearlyStatsQuery);
         ledgerAccess = recorded(ledgerAccess);
         ledgerService = recorded(ledgerService);
         userService = recorded(userService);
+        passwordChangeService = recorded(passwordChangeService);
     }
 
     @TestFactory
@@ -194,6 +218,7 @@ class CrossLedgerAccessTest {
                 Stream.of(
                         dynamicTest("구성원 확인: 예외 없이 답하는 isMember", this::verifyIsMember),
                         dynamicTest("내 정보: 대상 없이 호출자의 것만 답한다", this::verifyOwnInfo),
+                        dynamicTest("표시 이름 바꾸기: 대상 없이 호출자의 것만 바꾼다", this::verifyOwnDisplayName),
                         dynamicTest("표가 호출자를 받는 공개 메서드를 모두 다룬다", this::verifyTableCoversInventory)));
     }
 
@@ -218,6 +243,25 @@ class CrossLedgerAccessTest {
         assertThat(ledgers.toString()).doesNotContain(secretsOfB);
         assertThat(ledgerService.memberships(b)).as("대조: B는 자기 장부").extracting(LedgerMembership::ledgerId)
                 .containsExactly(ledgerB);
+        // 비밀번호 바꾸기(#31)도 대상 없이 호출자의 것만 본다. 틀린 현재 비밀번호로는 아무것도 바꾸지 않는다.
+        assertThat(asA(() -> userService.checkPasswordChange(a, "password1", "password2")).userId()).isEqualTo(a);
+        assertThat(asA(() -> catchThrowable(() -> passwordChangeService.changePassword(a, "wrong-pass1", "password2",
+                null)))).isInstanceOf(InvalidRequestException.class);
+        assertThat(snapshot()).isEqualTo(baseline);
+    }
+
+    /**
+     * 표시 이름 바꾸기(#68)도 대상 id를 받지 않는다. A가 부르면 A의 이름만 바뀌고 돌려준 값에 B의 것이 없다.
+     * 바꾼 것은 SAVEPOINT로 되돌린다.
+     */
+    void verifyOwnDisplayName() {
+        Throwable failure = rolledBack(() -> {
+            UserProfile profile = asA(() -> userService.changeDisplayName(a, "A새이름"));
+            assertThat(profile).isEqualTo(new UserProfile("a@example.com", "A새이름"));
+            assertThat(jdbc.queryForList("select display_name from users where id in (?, ?) order by email",
+                    String.class, a, b)).containsExactly("A새이름", "b");
+        });
+        assertThat(failure).isNull();
         assertThat(snapshot()).isEqualTo(baseline);
     }
 
@@ -262,17 +306,20 @@ class CrossLedgerAccessTest {
         assertThat(accountService.list(a, ledgerA)).extracting(Account::getId)
                 .containsExactlyInAnyOrder(aBank, aCash);
         assertThat(categoryService.list(a, ledgerA)).extracting(Category::getLedgerId).containsOnly(ledgerA);
-        assertThat(transactionService.listDeleted(a, ledgerA)).extracting(TransactionView::id)
+        assertThat(transactionTrashQuery.page(a, ledgerA, null).items()).extracting(TransactionView::id)
                 .containsExactly(aDeleted.id());
-        assertThat(transactionListQuery.page(a, ledgerA, new WholeLedger(), null, 50).items())
+        assertThat(transactionListQuery.page(a, ledgerA, new WholeLedger(), TransactionFilter.NONE, null, 50).items())
                 .extracting(TransactionView::id).containsExactlyInAnyOrder(aExpense.id(), aTransfer.id());
         // 100,000 - 지출 1,100 - 이체 2,200. 삭제한 3,300은 빠진다.
         assertThat(balanceQuery.balances(a, ledgerA))
                 .containsOnly(Map.entry(aBank, 96_700L), Map.entry(aCash, 2_200L));
+        assertThat(transactionListQuery.dailyTotals(a, ledgerA, NOVEMBER)).containsExactly(new DayTotals(DAY, 0, 1_100));
         MonthlySummary summary = monthlyStatsQuery.monthly(a, ledgerA, NOVEMBER);
         assertThat(summary.expense()).isEqualTo(1_100);
         assertThat(summary.income()).isZero();
         assertThat(summary.categories()).extracting(total -> total.categoryId()).containsExactly(aFood);
+        assertThat(yearlyStatsQuery.yearly(a, ledgerA, Year.of(2026)).categories())
+                .extracting(total -> total.categoryId()).containsExactly(aFood);
     }
 
     // ---------------------------------------------------------------- 표
@@ -301,20 +348,45 @@ class CrossLedgerAccessTest {
                         (actor, tx) -> transactionService.history(actor, tx)),
                 denied("조회: 변경 이력(삭제한 거래)", NotFoundException.class, bDeleted.id(),
                         (actor, tx) -> transactionService.history(actor, tx)),
+                denied("조회: 변경 이력(B의 장부 경로)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionHistoryQuery.history(actor, ledger, bExpense.id())),
+                foreign("조회: A의 장부 경로로 B의 거래 변경 이력", NotFoundException.class, bExpense.id(), aExpense.id(),
+                        (actor, tx) -> transactionHistoryQuery.history(actor, ledgerA, tx)),
                 denied("조회: 휴지통", NotLedgerMemberException.class, ledgerB,
-                        (actor, ledger) -> transactionService.listDeleted(actor, ledger)),
+                        (actor, ledger) -> transactionTrashQuery.page(actor, ledger, null)),
                 denied("조회: 거래 목록(달)", NotLedgerMemberException.class, ledgerB,
-                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 50)),
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
+                                TransactionFilter.NONE, null, 50)),
                 denied("조회: 거래 목록(하루)", NotLedgerMemberException.class, ledgerB,
-                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Day(DAY), null, 50)),
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Day(DAY),
+                                TransactionFilter.NONE, null, 50)),
                 denied("조회: 거래 목록(장부 전체)", NotLedgerMemberException.class, ledgerB,
-                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new WholeLedger(), null, 50)),
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new WholeLedger(),
+                                TransactionFilter.NONE, null, 50)),
+                denied("조회: 거래 목록(필터)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
+                                new TransactionFilter(Set.of(bBank), Set.of(bFood), Set.of(TransactionType.EXPENSE),
+                                        null), null, 50)),
+                denied("조회: 거래 검색", NotLedgerMemberException.class, ledgerB, (actor, ledger) -> transactionListQuery
+                        .search(actor, ledger, new TransactionSearch("B단골식당", DAY, DAY), TransactionFilter.NONE, null)),
+                denied("조회: 중복 경고", NotLedgerMemberException.class, ledgerB, (actor, ledger) ->
+                        transactionListQuery.duplicates(actor, ledger, DAY, 73_100, "B단골식당", null)),
+                denied("조회: 가맹점의 최근 카테고리 제안", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> categorySuggestionQuery.suggest(actor, ledger, "B단골식당")),
+                denied("조회: 날짜별 합계(달력)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, NOVEMBER)),
+                denied("조회: 내보내기", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionExportQuery.transactions(actor, ledger, DAY, DAY)),
+                denied("조회: 내보내기(장부 전체)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionExportQuery.allTransactions(actor, ledger)),
                 denied("조회: 계좌 잔액", NotLedgerMemberException.class, bBank,
                         (actor, account) -> balanceQuery.balance(actor, account)),
                 denied("조회: 장부의 모든 잔액", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> balanceQuery.balances(actor, ledger)),
                 denied("조회: 월 통계", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, NOVEMBER)),
+                denied("조회: 연 통계", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> yearlyStatsQuery.yearly(actor, ledger, Year.of(2026))),
                 denied("구성원 확인: B의 장부", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> ledgerAccess.requireMember(actor, ledger)),
                 denied("소유자 확인: B의 장부", NotLedgerOwnerException.class, ledgerB,
@@ -371,7 +443,7 @@ class CrossLedgerAccessTest {
                 foreign("생성: A의 지출에 결제한 사람으로 B", invalid, b, a,
                         (actor, payer) -> transactionService.create(actor, ledgerA,
                                 new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null, aBank, aFood, 1_000,
-                                        false, null, null, payer), DEVICE)),
+                                        null, null, null, payer), DEVICE)),
                 foreign("생성: A의 카테고리의 상위로 B의 카테고리", invalid, bFood, aFood,
                         (actor, parent) -> categoryService.create(actor, ledgerA,
                                 new CategoryCommand("A하위", CategoryKind.EXPENSE, parent))),
@@ -386,16 +458,33 @@ class CrossLedgerAccessTest {
                                 transfer(aTransfer.id(), account, aCash, 2_200), DEVICE)),
                 foreign("수정: A의 이체에서 받는 계좌를 B의 계좌로", invalid, bBank, aCash,
                         (actor, account) -> transactionService.update(actor, aTransfer.id(), aTransfer.version(),
-                                transfer(aTransfer.id(), aBank, account, 2_200), DEVICE)));
+                                transfer(aTransfer.id(), aBank, account, 2_200), DEVICE)),
+                foreign("조회: A의 거래 목록을 B의 계좌로 거름", invalid, bBank, aCash,
+                        (actor, account) -> transactionListQuery.page(actor, ledgerA, new Month(NOVEMBER),
+                                new TransactionFilter(Set.of(account), Set.of(), Set.of(), null), null, 50)),
+                foreign("조회: A의 거래 목록을 B의 카테고리(하위가 있는)로 거름", invalid, bFood, aFood,
+                        (actor, category) -> transactionListQuery.page(actor, ledgerA, new Month(NOVEMBER),
+                                new TransactionFilter(Set.of(), Set.of(category), Set.of(), null), null, 50)),
+                foreign("조회: A의 거래 검색을 B의 계좌로 거름", invalid, bBank, aCash,
+                        (actor, account) -> transactionListQuery.search(actor, ledgerA, new TransactionSearch(null,
+                                null, null), new TransactionFilter(Set.of(account), Set.of(), Set.of(), null), null)));
     }
 
     /** 수정·취소. version은 지금 값이고 요청 내용은 B가 보내면 통과하는 것이다. */
     Stream<Row> changeRows() {
         return Stream.of(
                 denied("수정: B의 계좌", NotLedgerMemberException.class, bBank,
-                        (actor, account) -> accountService.update(actor, account, accountCommand("바꾼이름"))),
+                        (actor, account) -> accountService.update(actor, ledgerB, account, accountCommand("바꾼이름"))),
+                foreign("수정: A의 장부로 B의 계좌", NotLedgerMemberException.class, bBank, aCash,
+                        (actor, account) -> accountService.update(actor, ledgerA, account, accountCommand("바꾼이름"))),
+                denied("숨기기: B의 계좌", NotLedgerMemberException.class, bBank,
+                        (actor, account) -> accountService.setHidden(actor, ledgerB, account, true)),
+                foreign("숨기기: A의 장부로 B의 계좌", NotLedgerMemberException.class, bBank, aCash,
+                        (actor, account) -> accountService.setHidden(actor, ledgerA, account, true)),
                 denied("수정: B의 카테고리 이름", NotLedgerMemberException.class, bFood,
-                        (actor, category) -> categoryService.rename(actor, category, "바꾼이름")),
+                        (actor, category) -> categoryService.rename(actor, ledgerB, category, "바꾼이름")),
+                foreign("수정: A의 장부로 B의 카테고리 이름", NotLedgerMemberException.class, bFood, aFood,
+                        (actor, category) -> categoryService.rename(actor, ledgerA, category, "바꾼이름")),
                 denied("수정: B의 지출", NotFoundException.class, bExpense.id(),
                         (actor, tx) -> transactionService.update(actor, tx, bExpense.version(),
                                 entry(tx, bCash, bFood, 1), DEVICE)),
@@ -409,16 +498,29 @@ class CrossLedgerAccessTest {
                 denied("취소: B의 지출", NotFoundException.class, bExpense.id(),
                         (actor, tx) -> transactionService.cancel(actor, tx, bExpense.version(), DEVICE)),
                 denied("취소: B의 이체", NotFoundException.class, bTransfer.id(),
-                        (actor, tx) -> transactionService.cancel(actor, tx, bTransfer.version(), DEVICE)));
+                        (actor, tx) -> transactionService.cancel(actor, tx, bTransfer.version(), DEVICE)),
+                denied("취소 되돌리기: B의 취소한 거래", NotFoundException.class, bCanceled.id(),
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bCanceled.version(), DEVICE)));
     }
 
     /** 삭제·복원. */
     Stream<Row> removeRows() {
         return Stream.of(
                 denied("삭제: B의 계좌(거래 없음)", NotLedgerMemberException.class, bEmptyAccount,
-                        (actor, account) -> accountService.delete(actor, account)),
+                        (actor, account) -> accountService.delete(actor, ledgerB, account)),
+                // 대조: A의 장부로 A의 계좌는 거래가 있다는 데까지 간다.
+                new Row("삭제: A의 장부로 B의 계좌(거래 없음)", NotLedgerMemberException.class, bEmptyAccount,
+                        (actor, account) -> accountService.delete(actor, ledgerA, account), a, aBank,
+                        AccountHasTransactionsException.class),
                 denied("삭제: B의 카테고리(거래 없음)", NotLedgerMemberException.class, bSpare,
-                        (actor, category) -> categoryService.delete(actor, category)),
+                        (actor, category) -> categoryService.delete(actor, ledgerB, category, null, DEVICE)),
+                foreign("삭제: A의 장부로 B의 카테고리", NotLedgerMemberException.class, bSpare, aFood,
+                        (actor, category) -> categoryService.delete(actor, ledgerA, category, null, DEVICE)),
+                // 옮길 곳만 B의 것이다. 대조는 A의 미분류로 옮기는 것이다.
+                foreign("삭제: A의 카테고리를 B의 카테고리로 옮기며", InvalidRequestException.class, bFood, aUncategorized,
+                        (actor, target) -> categoryService.delete(actor, ledgerA, aFood, target, DEVICE)),
+                denied("삭제 전 거래 수: B의 카테고리", NotLedgerMemberException.class, bFood,
+                        (actor, category) -> categoryService.countAffectedTransactions(actor, ledgerB, category)),
                 denied("삭제: B의 지출", NotFoundException.class, bExpense.id(),
                         (actor, tx) -> transactionService.delete(actor, tx, bExpense.version(), DEVICE)),
                 denied("삭제: B의 이체", NotFoundException.class, bTransfer.id(),
@@ -426,7 +528,9 @@ class CrossLedgerAccessTest {
                 denied("삭제: B의 취소한 거래", NotFoundException.class, bCanceled.id(),
                         (actor, tx) -> transactionService.delete(actor, tx, bCanceled.version(), DEVICE)),
                 denied("복원: B의 삭제한 거래", NotFoundException.class, bDeleted.id(),
-                        (actor, tx) -> transactionService.restore(actor, tx, bDeleted.version(), DEVICE)));
+                        (actor, tx) -> transactionService.restore(actor, tx, bDeleted.version(), DEVICE)),
+                denied("완전 삭제: B의 삭제한 거래", NotFoundException.class, bDeleted.id(),
+                        (actor, tx) -> transactionService.purge(actor, tx, bDeleted.version())));
     }
 
     /**
@@ -439,18 +543,20 @@ class CrossLedgerAccessTest {
         Class<InvalidRequestException> invalid = InvalidRequestException.class;
         Class<InvalidStateException> state = InvalidStateException.class;
         return Stream.of(
-                denied("순서: 거래가 있는 B의 계좌 삭제", notMember, bBank, InUseException.class,
-                        (actor, account) -> accountService.delete(actor, account)),
-                denied("순서: 하위 분류가 있는 B의 카테고리 삭제", notMember, bFood, InUseException.class,
-                        (actor, category) -> categoryService.delete(actor, category)),
-                denied("순서: B의 미분류 이름 바꾸기", notMember, bUncategorized, invalid,
-                        (actor, category) -> categoryService.rename(actor, category, "바꾼이름")),
-                denied("순서: B의 미분류 삭제", notMember, bUncategorized, invalid,
-                        (actor, category) -> categoryService.delete(actor, category)),
+                denied("순서: 거래가 있는 B의 계좌 삭제", notMember, bBank, AccountHasTransactionsException.class,
+                        (actor, account) -> accountService.delete(actor, ledgerB, account)),
+                denied("순서: B의 계좌를 값 없이 숨기기", notMember, bBank, invalid,
+                        (actor, account) -> accountService.setHidden(actor, ledgerB, account, null)),
+                denied("순서: B의 카테고리를 그 하위로 옮기며 삭제", notMember, bFood, invalid,
+                        (actor, category) -> categoryService.delete(actor, ledgerB, category, bLunch, DEVICE)),
+                denied("순서: B의 미분류 이름 바꾸기", notMember, bUncategorized, state,
+                        (actor, category) -> categoryService.rename(actor, ledgerB, category, "바꾼이름")),
+                denied("순서: B의 미분류 삭제", notMember, bUncategorized, state,
+                        (actor, category) -> categoryService.delete(actor, ledgerB, category, null, DEVICE)),
                 denied("순서: B의 계좌를 빈 요청으로 수정", notMember, bBank, invalid,
-                        (actor, account) -> accountService.update(actor, account, null)),
+                        (actor, account) -> accountService.update(actor, ledgerB, account, null)),
                 denied("순서: B의 카테고리를 빈 이름으로", notMember, bFood, invalid,
-                        (actor, category) -> categoryService.rename(actor, category, " ")),
+                        (actor, category) -> categoryService.rename(actor, ledgerB, category, " ")),
                 denied("순서: B의 장부에 빈 계좌 요청", notMember, ledgerB, invalid,
                         (actor, ledger) -> accountService.create(actor, ledger, null)),
                 denied("순서: B의 장부에 빈 카테고리 요청", notMember, ledgerB, invalid,
@@ -459,8 +565,26 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionService.create(actor, ledger, null, DEVICE)),
                 denied("순서: B의 장부 월 통계를 달 없이", notMember, ledgerB, invalid,
                         (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, null)),
+                denied("순서: B의 장부 월 통계를 범위 밖 달로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> monthlyStatsQuery.monthly(actor, ledger, YearMonth.of(1999, 12))),
+                denied("순서: B의 장부 연 통계를 해 없이", notMember, ledgerB, invalid,
+                        (actor, ledger) -> yearlyStatsQuery.yearly(actor, ledger, null)),
+                denied("순서: B의 장부 연 통계를 범위 밖 해로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> yearlyStatsQuery.yearly(actor, ledger, Year.of(1999))),
                 denied("순서: B의 장부 거래 목록을 범위 밖 limit으로", notMember, ledgerB, invalid,
-                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER), null, 0)),
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
+                                TransactionFilter.NONE, null, 0)),
+                denied("순서: B의 장부 거래 목록을 없는 계좌로 거름", notMember, ledgerB, invalid,
+                        (actor, ledger) -> transactionListQuery.page(actor, ledger, new Month(NOVEMBER),
+                                new TransactionFilter(Set.of(missing), Set.of(), Set.of(), null), null, 50)),
+                denied("순서: B의 장부를 조건 없이 검색", notMember, ledgerB, invalid, (actor, ledger) -> transactionListQuery
+                        .search(actor, ledger, new TransactionSearch(null, null, null), TransactionFilter.NONE, null)),
+                denied("순서: B의 장부에 101자 가맹점으로 중복 경고", notMember, ledgerB, invalid, (actor, ledger) ->
+                        transactionListQuery.duplicates(actor, ledger, DAY, 73_100, "가".repeat(101), null)),
+                denied("순서: B의 장부에 101자 가맹점으로 카테고리 제안", notMember, ledgerB, invalid,
+                        (actor, ledger) -> categorySuggestionQuery.suggest(actor, ledger, "가".repeat(101))),
+                denied("순서: B의 장부 날짜별 합계를 범위 밖 달로", notMember, ledgerB, invalid,
+                        (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, YearMonth.of(1999, 12))),
                 denied("순서: B의 지출을 낡은 version으로 취소", notFound, bExpense.id(), StaleVersionException.class,
                         (actor, tx) -> transactionService.cancel(actor, tx, bExpense.version() + 1, DEVICE)),
                 denied("순서: B의 지출을 빈 요청으로 수정", notFound, bExpense.id(), invalid,
@@ -474,6 +598,15 @@ class CrossLedgerAccessTest {
                         (actor, tx) -> transactionService.delete(actor, tx, bDeleted.version(), DEVICE)),
                 denied("순서: B의 삭제하지 않은 거래를 복원", notFound, bExpense.id(), state,
                         (actor, tx) -> transactionService.restore(actor, tx, bExpense.version(), DEVICE)),
+                denied("순서: B의 삭제하지 않은 거래를 완전 삭제", notFound, bExpense.id(), state,
+                        (actor, tx) -> transactionService.purge(actor, tx, bExpense.version())),
+                denied("순서: B의 취소하지 않은 거래를 되돌리기", notFound, bExpense.id(), state,
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bExpense.version(), DEVICE)),
+                denied("순서: B의 취소한 거래를 낡은 version으로 되돌리기", notFound, bCanceled.id(),
+                        StaleVersionException.class,
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bCanceled.version() - 1, DEVICE)),
+                denied("순서: B의 취소한 거래를 형식이 틀린 기기 값으로 되돌리기", notFound, bCanceled.id(), invalid,
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bCanceled.version(), MALFORMED_DEVICE)),
                 denied("순서: B의 장부에 형식이 틀린 기기 값으로 지출", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionService.create(actor, ledger,
                                 entry(UUID.randomUUID(), bBank, bFood, 1_000), MALFORMED_DEVICE)),
@@ -585,7 +718,7 @@ class CrossLedgerAccessTest {
     }
 
     static TransactionCommand entry(UUID id, UUID accountId, UUID categoryId, long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, accountId, categoryId, amount, false, null, null,
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, accountId, categoryId, amount, null, null, null,
                 null);
     }
 

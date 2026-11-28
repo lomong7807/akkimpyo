@@ -57,11 +57,11 @@ class TransactionCreateFieldErrorTest {
         cash = fixtures.account(owner, ledgerId, "현금", AccountType.CASH, 0, DAY).getId();
         bank = fixtures.account(owner, ledgerId, "은행", AccountType.BANK, 0, DAY).getId();
         removedAccount = fixtures.account(owner, ledgerId, "지운계좌", AccountType.CASH, 0, DAY).getId();
-        accountService.delete(owner.getId(), removedAccount);
+        accountService.delete(owner.getId(), ledgerId, removedAccount);
         food = category(owner, ledgerId, "식비", CategoryKind.EXPENSE);
         salary = category(owner, ledgerId, "급여", CategoryKind.INCOME);
         removedCategory = category(owner, ledgerId, "지운분류", CategoryKind.EXPENSE);
-        categoryService.delete(owner.getId(), removedCategory);
+        categoryService.delete(owner.getId(), ledgerId, removedCategory, null, null);
 
         User other = fixtures.user("other@example.com");
         UUID otherLedger = fixtures.personalLedgerId(other);
@@ -74,16 +74,16 @@ class TransactionCreateFieldErrorTest {
         return Stream.of(
                 rejected("id:REQUIRED", () -> expense(null, cash, null, 1_000)),
                 rejected("occurredOn:REQUIRED", () -> new Entry(UUID.randomUUID(), TransactionType.EXPENSE, null,
-                        null, cash, null, 1_000, false, null, null, null)),
+                        null, cash, null, 1_000, null, null, null, null)),
                 rejected("occurredOn:OUT_OF_RANGE", () -> new Entry(UUID.randomUUID(), TransactionType.EXPENSE,
-                        LocalDate.of(1999, 12, 31), null, cash, null, 1_000, false, null, null, null)),
+                        LocalDate.of(1999, 12, 31), null, cash, null, 1_000, null, null, null, null)),
                 rejected("type:REQUIRED", () -> new Entry(UUID.randomUUID(), null, DAY, null, cash, null, 1_000,
-                        false, null, null, null)),
+                        null, null, null, null)),
                 rejected("amount:OUT_OF_RANGE", () -> expense(UUID.randomUUID(), cash, null, 0)),
                 rejected("amount:OUT_OF_RANGE", () -> expense(UUID.randomUUID(), cash, null, 10_000_000_000L)),
                 rejected("amount:OUT_OF_RANGE", () -> transfer(cash, bank, 0)),
-                rejected("refund:NOT_ALLOWED", () -> new Entry(UUID.randomUUID(), TransactionType.INCOME, DAY, null,
-                        cash, null, 1_000, true, null, null, null)),
+                rejected("refundKind:NOT_ALLOWED", () -> new Entry(UUID.randomUUID(), TransactionType.INCOME, DAY, null,
+                        cash, null, 1_000, RefundKind.REFUND, null, null, null)),
                 rejected("accountId:REQUIRED", () -> expense(UUID.randomUUID(), null, null, 1_000)),
                 rejected("fromAccountId:REQUIRED", () -> transfer(null, bank, 1_000)),
                 rejected("toAccountId:REQUIRED", () -> transfer(cash, null, 1_000)),
@@ -98,7 +98,7 @@ class TransactionCreateFieldErrorTest {
                 rejected("categoryId:NOT_FOUND", () -> expense(UUID.randomUUID(), cash, othersFood, 1_000)),
                 rejected("categoryId:NOT_ALLOWED", () -> expense(UUID.randomUUID(), cash, salary, 1_000)),
                 rejected("categoryId:NOT_ALLOWED", () -> new Entry(UUID.randomUUID(), TransactionType.INCOME, DAY,
-                        null, cash, food, 1_000, false, null, null, null)));
+                        null, cash, food, 1_000, null, null, null, null)));
     }
 
     @TestFactory
@@ -124,7 +124,7 @@ class TransactionCreateFieldErrorTest {
     }
 
     private Entry expense(UUID id, UUID accountId, UUID categoryId, long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, accountId, categoryId, amount, false, null, null,
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, accountId, categoryId, amount, null, null, null,
                 null);
     }
 

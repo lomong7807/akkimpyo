@@ -95,6 +95,49 @@ class TransactionUpdateTest {
         assertThat(history(created)).containsExactly("CREATE unknown null -12000", "UPDATE iphone.safari -12000 -15000");
     }
 
+    /** 고치기에서 refundKind가 빠지면 저장된 값을 유지하고, null이면 일반 지출, 값이면 그 값이다(#8, #102 계약). */
+    @Test
+    void 환불_구분은_빠지면_유지하고_null이면_일반_지출이며_바꾼_전후가_이력에_남는다() throws Exception {
+        JsonNode created = create(withRefundKind(expense(cash, food, 12_000, "null"), "\"REFUND\""));
+
+        Reply kept = update(created, expense(cash, food, 13_000, "null"), 1);
+        Reply switched = update(created, withRefundKind(expense(cash, food, 13_000, "null"), "\"REIMBURSEMENT\""), 2);
+        Reply cleared = update(created, withRefundKind(expense(cash, food, 13_000, "null"), "null"), 3);
+
+        assertThat(List.of(kept, switched, cleared)).allSatisfy(reply -> assertThat(reply.status())
+                .as(reply.body()).isEqualTo(200));
+        assertThat(created.get("refundKind").asString()).isEqualTo("REFUND");
+        assertThat(kept.json().get("refundKind").asString()).isEqualTo("REFUND");
+        assertThat(switched.json().get("refundKind").asString()).isEqualTo("REIMBURSEMENT");
+        assertThat(cleared.json().get("refundKind").isNull()).isTrue();
+        assertThat(history(created)).containsExactly("CREATE unknown null 12000", "UPDATE unknown 12000 13000",
+                "UPDATE unknown 13000 13000", "UPDATE unknown 13000 -13000");
+        assertThat(jdbc.queryForList("""
+                select coalesce(before_value ->> 'refundKind', 'null') || ' ' || coalesce(after_value ->> 'refundKind', 'null')
+                  from change_log where transaction_id = ? order by version
+                """, String.class, id(created)))
+                .containsExactly("null REFUND", "REFUND REFUND", "REFUND REIMBURSEMENT", "REIMBURSEMENT null");
+    }
+
+    /** 일반 지출을 고쳐 환불로 바꾸면 양수 라인이 된다. 수입·이체를 고칠 때 구분을 보내면 400이고 바꾸지 않는다(#46). */
+    @Test
+    void 일반_지출을_환불로_고칠_수_있고_수입과_이체를_고칠_때_구분을_보내면_400이다() throws Exception {
+        JsonNode spent = create(expense(cash, food, 12_000, "null"));
+        JsonNode earned = create(expense(bank, null, 3_000_000, "null").replace("EXPENSE", "INCOME"));
+        JsonNode moved = create(transfer(bank, cash, 50_000, "null"));
+
+        Reply refunded = update(spent, withRefundKind(expense(cash, food, 12_000, "null"), "\"REFUND\""), 1);
+
+        assertThat(refunded.status()).as(refunded.body()).isEqualTo(200);
+        assertThat(refunded.json().get("refundKind").asString()).isEqualTo("REFUND");
+        assertThat(history(spent)).containsExactly("CREATE unknown null -12000", "UPDATE unknown -12000 12000");
+        update(earned, withRefundKind(expense(bank, null, 3_000_000, "null").replace("EXPENSE", "INCOME"),
+                "\"REFUND\""), 1).assertFieldErrors("refundKind:NOT_ALLOWED");
+        update(moved, withRefundKind(transfer(bank, cash, 50_000, "null"), "\"REIMBURSEMENT\""), 1)
+                .assertFieldErrors("refundKind:NOT_ALLOWED");
+        assertThat(List.of(history(earned), history(moved))).allSatisfy(log -> assertThat(log).hasSize(1));
+    }
+
     /** 수정 때 시각이 반영되고, 비우면 옛 값이 남지 않고 시각 없음이 된다(#36 테스트 보강). 기기 헤더가 없으면 unknown이다. */
     @Test
     void 이체를_고치면_계좌와_금액이_바뀌고_시각을_비우면_시각_없음이_된다() throws Exception {
@@ -293,6 +336,11 @@ class TransactionUpdateTest {
 
     private static UUID id(JsonNode tx) {
         return UUID.fromString(tx.get("id").asString());
+    }
+
+    /** @param kind JSON 글자 그대로 */
+    private static String withRefundKind(String body, String kind) {
+        return body.substring(0, body.length() - 1) + ",\"refundKind\":" + kind + "}";
     }
 
     /** @param version JSON 글자 그대로 */

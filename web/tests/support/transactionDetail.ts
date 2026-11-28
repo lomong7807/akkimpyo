@@ -125,6 +125,8 @@ export function startTransactionDetail(server: SetupServer, backend: Backend) {
 
   server.use(
     http.get('/api/v1/ledgers/:ledgerId/transactions/:id', async ({ request, params }) => {
+      // 중복 경고 조회(#59)는 같은 모양의 경로다. 그 가짜 서버(startDuplicates)에 넘긴다
+      if (params.id === 'duplicates') return undefined
       const sent = await received(request, params)
       detail.requests.get.push(sent)
       if (!sent.user) return problem(401, 'UNAUTHENTICATED')

@@ -10,11 +10,13 @@ import app.accountbook.transaction.TransactionPage;
 import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.UserService;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,20 +50,36 @@ class TransactionController {
     /**
      * 거래 목록의 한 쪽(F-215, F-113, F-222, #15 응답 계약). {@code month}면 그 달, {@code date}면 그날, 둘 다 없으면 장부
      * 전체(장부 시간대의 오늘까지)다. 쿼리 값의 형식 오류는 여기서, 범위 오류는 서비스가 400으로 거절한다. 구성원이 아니면
-     * 쿼리 값이 틀려도 {@link LedgerMemberInterceptor}가 먼저 404로 답한다. 이름은 쪽마다 한 번 읽는다.
+     * 쿼리 값이 틀려도 {@link LedgerMemberInterceptor}가 먼저 404로 답한다. 이름은 쪽마다 한 번 읽는다. 필터(#62)는
+     * {@link TransactionListRequest}에 있다.
      */
     @GetMapping
     TransactionListResponse list(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                  @RequestParam(name = "month", required = false) String month,
                                  @RequestParam(name = "date", required = false) String date,
                                  @RequestParam(name = "limit", required = false) String limit,
-                                 @RequestParam(name = "cursor", required = false) String cursor) {
-        TransactionListRequest request = TransactionListRequest.of(ledgerId, month, date, limit, cursor);
-        TransactionPage page = transactionListQuery.page(actorId, ledgerId, request.scope(), request.after(),
-                request.limit());
+                                 @RequestParam(name = "cursor", required = false) String cursor,
+                                 @RequestParam MultiValueMap<String, String> query) {
+        TransactionListRequest request = TransactionListRequest.of(ledgerId, month, date, limit, cursor, query);
+        TransactionPage page = transactionListQuery.page(actorId, ledgerId, request.scope(), request.filter(),
+                request.after(), request.limit());
         String nextCursor = page.next() == null ? null
-                : TransactionCursor.encode(ledgerId, request.scope(), page.next());
+                : TransactionCursor.encode(ledgerId, request.scope(), request.filter(), page.next());
         return TransactionListResponse.of(page, userService.memberDisplayNames(actorId, ledgerId), nextCursor);
+    }
+
+    /**
+     * 중복 경고(F-209, P-218, #59 응답 계약): {@code GET ?occurredOn=&amount=&payee=&exclude=}. 경고만 하고 저장을 막지
+     * 않는다. 형식 오류는 여기서, 금액의 범위와 가맹점의 글자는 조회가 400으로 거절한다. 구성원이 아니면 쿼리 값이 틀려도
+     * {@link LedgerMemberInterceptor}가 먼저 404로 답한다. 경로는 {@code /{transactionId}}보다 이것이 먼저 맞는다.
+     */
+    @GetMapping("/duplicates")
+    TransactionDuplicatesResponse duplicates(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                                             @RequestParam MultiValueMap<String, String> query) {
+        TransactionDuplicateRequest request = TransactionDuplicateRequest.of(query);
+        List<TransactionView> found = transactionListQuery.duplicates(actorId, ledgerId, request.occurredOn(),
+                request.amount(), request.payee(), request.exclude());
+        return TransactionDuplicatesResponse.of(found, userService.memberDisplayNames(actorId, ledgerId));
     }
 
     /**

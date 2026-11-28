@@ -143,6 +143,21 @@ class TransactionReadRaceTest {
                 stale -> assertThat(stale.current()).isEqualTo(updated));
     }
 
+    /** 승인취소 되돌리기도 같은 조건부 UPDATE다(#7). 같은 version으로 두 번 되돌리면 나중 것은 먼저 되돌린 거래를 담는다. */
+    @Test
+    void 되돌리는_사이_다른_요청이_먼저_되돌리면_충돌의_current는_그_되돌린_거래다() {
+        transactionService.cancel(owner.getId(), id, 1, DEVICE);
+
+        CompletableFuture<TransactionView> late = whileUncommitted(
+                () -> transactionService.uncancel(owner.getId(), id, 2, DEVICE),
+                () -> transactionService.uncancel(owner.getId(), id, 2, DEVICE));
+
+        TransactionView reverted = stored();
+        assertThat(reverted.version()).isEqualTo(3);
+        assertThat(outcome(late)).isInstanceOfSatisfying(StaleVersionException.class,
+                stale -> assertThat(stale.current()).isEqualTo(reverted));
+    }
+
     @Test
     void 복원하는_사이_완전히_지워지면_없는_거래다() {
         transactionService.delete(owner.getId(), id, 1, DEVICE);
@@ -202,7 +217,7 @@ class TransactionReadRaceTest {
     }
 
     private Entry expense(long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, amount, false, "김밥천국", null, null);
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, amount, null, "김밥천국", null, null);
     }
 
     /** 받은 값이나 던진 예외. 실패 메시지에 실제로 받은 답이 보이게 한다. */

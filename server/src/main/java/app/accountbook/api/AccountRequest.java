@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 계좌 추가 요청의 본문(#13). 입력란을 하나씩 읽어 여러 칸이 틀려도 모두 알린다. 형으로 바로 읽으면 첫 오류에서 멈춘다.
+ * 계좌 추가·수정 요청의 본문(#13, #33). 입력란을 하나씩 읽어 여러 칸이 틀려도 모두 알린다. 형으로 바로 읽으면 첫 오류에서 멈춘다.
  * 값을 다른 형으로 바꿔 받지 않는다(ADR 002 2절): 시작 잔액은 JSON 정수, 기준일은 {@code YYYY-MM-DD} 글자,
  * 이름과 종류는 글자다. 글자 수, 범위, 같은 이름 같은 규칙은 서비스가 본다.
  */
@@ -90,6 +90,31 @@ record AccountRequest(JsonNode name, JsonNode type, JsonNode openingBalance, Jso
 
     private static boolean isAbsent(JsonNode node) {
         return node == null || node.isNull() || node.isMissingNode();
+    }
+
+    /**
+     * 숨기기·다시 보이기 요청의 본문(#43). {@code hidden}만 읽는다. JSON 참거짓만 받는다(글자 {@code "true"}와
+     * 숫자는 아니다). 읽을 수 없는 값은 값 없음으로 넘겨, 경로의 계좌가 이 장부에 없으면 본문이 틀려도 404가 먼저 나가게 한다
+     * (계좌 고치기와 같다).
+     */
+    record Visibility(JsonNode hidden) {
+
+        Read read() {
+            if (isAbsent(hidden)) {
+                return new Read(null, false);
+            }
+            return hidden.isBoolean() ? new Read(hidden.booleanValue(), false) : new Read(null, true);
+        }
+
+        /** @param unreadable 참거짓이 아니었다. 서비스가 {@code REQUIRED}로 거부하면 {@code INVALID_FORMAT}으로 바꾼다 */
+        record Read(Boolean hidden, boolean unreadable) {
+
+            InvalidRequestException explain(InvalidRequestException rejected) {
+                return unreadable && "hidden".equals(rejected.field()) && rejected.code() == FieldErrorCode.REQUIRED
+                        ? new InvalidRequestException("hidden", FieldErrorCode.INVALID_FORMAT, "읽을 수 없는 값입니다.")
+                        : rejected;
+            }
+        }
     }
 
     /**

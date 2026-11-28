@@ -25,6 +25,7 @@ class TransactionUpdatedByTest {
     static final String DEVICE = "iphone.safari";
 
     @Autowired TransactionService transactionService;
+    @Autowired TransactionTrashQuery transactionTrashQuery;
     @Autowired Fixtures fixtures;
 
     User owner;
@@ -68,7 +69,7 @@ class TransactionUpdatedByTest {
         assertThat(resent.transaction()).isEqualTo(deleted);
         assertThat(resent.transaction().updatedBy()).isEqualTo(member.getId());
         assertThat(resent.transaction().deletedAt()).isNotNull().isEqualTo(deleted.updatedAt());
-        assertThat(transactionService.listDeleted(owner.getId(), ledgerId)).containsExactly(deleted);
+        assertThat(transactionTrashQuery.page(owner.getId(), ledgerId, null).items()).containsExactly(deleted);
     }
 
     private Entry expense(long amount) {
@@ -76,6 +77,6 @@ class TransactionUpdatedByTest {
     }
 
     private Entry expense(UUID id, long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, amount, false, null, null, null);
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, amount, null, null, null, null);
     }
 }
