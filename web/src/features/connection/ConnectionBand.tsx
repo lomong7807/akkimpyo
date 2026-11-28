@@ -1,4 +1,5 @@
 import Icon from '../../components/Icon'
+import { WifiSlash } from '../../components/icons'
 import { useConnectionBand } from './bandState'
 import styles from './ConnectionBand.module.css'
 
@@ -13,7 +14,7 @@ export default function ConnectionBand() {
     <div role="status" className={styles.connectionBand}>
       {band === 'shown' && (
         <p className={styles.bar}>
-          <Icon name="WifiSlash" size={20} />
+          <Icon icon={WifiSlash} size={20} />
           <span>연결이 없어요. 새 거래 입력만 돼요.</span>
         </p>
       )}

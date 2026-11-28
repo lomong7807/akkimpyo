@@ -1,5 +1,6 @@
 import type { MouseEvent, ReactNode } from 'react'
-import { Link, useLocation } from 'react-router'
+import { useLocation } from 'react-router'
+import { Link } from '../components/Link'
 import type { NavigationItem } from './navigation'
 
 interface NavigationLinkProps {

@@ -9,6 +9,7 @@ import app.accountbook.common.DuplicateCategoryNameException;
 import app.accountbook.common.DuplicateEmailException;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
 import app.accountbook.user.PasswordHashBusyException;
@@ -76,6 +77,12 @@ class InputErrorTest {
     static Stream<Arguments> wrongTypes() {
         return Stream.of(
                 argumentSet("수 자리에 글자", "{\"name\":\"a\",\"amount\":\"abc\"}", "amount:INVALID_FORMAT"),
+                argumentSet("글자로 적은 수", "{\"name\":\"a\",\"amount\":\"5\"}", "amount:INVALID_FORMAT"),
+                argumentSet("정수 자리에 소수", "{\"name\":\"a\",\"amount\":1.9}", "amount:INVALID_FORMAT"),
+                argumentSet("글자 자리에 수", "{\"name\":1,\"amount\":1}", "name:INVALID_FORMAT"),
+                argumentSet("정해진 값 자리에 수", "{\"name\":\"a\",\"amount\":1,\"kind\":0}", "kind:INVALID_FORMAT"),
+                argumentSet("목록 안에 글자로 적은 수", "{\"name\":\"a\",\"amount\":1,\"lines\":[{\"amount\":\"1\"}]}",
+                        "lines[0].amount:INVALID_FORMAT"),
                 argumentSet("수 자리에 객체", "{\"name\":\"a\",\"amount\":{}}", "amount:INVALID_FORMAT"),
                 argumentSet("글자 자리에 객체", "{\"name\":{},\"amount\":1}", "name:INVALID_FORMAT"),
                 argumentSet("날짜가 아니다", "{\"name\":\"a\",\"amount\":1,\"occurredOn\":\"2026-02-30\"}",
@@ -154,10 +161,21 @@ class InputErrorTest {
     }
 
     @Test
-    void 입력란을_담지_않은_서비스의_입력_오류는_본문_전체의_오류로_알린다() throws Exception {
-        probe.willThrow(new InvalidRequestException("이미 있는 생성자"));
+    void 본문_전체의_입력_오류는_빈_입력란으로_알린다() throws Exception {
+        probe.willThrow(new InvalidRequestException(InvalidRequestException.WHOLE_BODY, FieldErrorCode.NOT_ALLOWED,
+                "미분류는 바꿀 수 없습니다."));
 
         server.get(THROW).assertFieldErrors(":NOT_ALLOWED");
+    }
+
+    /** 입력란과 무관한 상태 오류는 400이 아니라 입력란 없는 409다(ADR 002 5절, #14). 문구는 나가지 않는다. */
+    @Test
+    void 상태_오류는_409_INVALID_STATE다() throws Exception {
+        probe.willThrow(new InvalidStateException("이미 삭제된 거래입니다."));
+
+        Reply reply = server.get(THROW).assertProblem(409, "Conflict", "INVALID_STATE");
+
+        assertThat(reply.body()).doesNotContain("이미 삭제된 거래입니다.");
     }
 
     static Stream<Arguments> duplicates() {

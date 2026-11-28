@@ -1,0 +1,88 @@
+/* K-01. 칸 사이는 16px, 칸과 "내보내기" 사이는 24px(designer #240 D3) */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  padding-top: var(--space-24);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+/* (1) 장부 이름 글자. 길면 줄을 바꿔 다 보인다 */
+.ledgerName {
+  margin: 0;
+  font: var(--text-body);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * (3) 시작일 ~ 종료일. 한 줄이면 두 칸은 같은 폭이고 오류 문구는 칸마다 아래에 둔다. 칸의 바탕 폭은 글자 크기를 따라가므로
+ * 글자를 키워(200%) 한 줄에 들어가지 않으면 "~ 종료일"이 다음 줄로 내려가 칸마다 한 줄을 다 쓴다(F-903).
+ */
+.range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-16) var(--space-8);
+  align-items: start;
+}
+
+.rangeStart {
+  flex: 1 1 calc(3 * var(--size-field));
+  min-width: 0;
+}
+
+/* 바탕 폭에 "~"와 그 옆 간격을 더해 두 칸이 같이 늘어나도 칸 폭이 같다 */
+.rangeEnd {
+  display: flex;
+  flex: 1 1 calc(3 * var(--size-field) + 1em + var(--space-8));
+  gap: var(--space-8);
+  align-items: start;
+  min-width: 0;
+}
+
+.rangeField {
+  flex: 1;
+  min-width: 0;
+}
+
+/* "~"를 칸(이름 아래)의 높이 가운데에 둔다. 이름 한 줄(text-label)과 이름 아래 간격 8px만큼 내린다. 글자를 키워도 같이 커진다 */
+.between {
+  padding-top: calc(1lh + var(--space-8));
+  font: var(--text-label);
+}
+
+.tilde {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  min-height: var(--size-field);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* 거래가 없을 때의 안내(보조 글자). 오류가 아니다 */
+.notice {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-secondary);
+}
+
+/* 넓은 화면: 입력란 폭은 내용 영역 가운데 480px(작성자 판단 61, designer #240 D4) */
+@media (width >= 1024px) {
+  .form {
+    width: 100%;
+    max-width: var(--width-content-form);
+    margin-inline: auto;
+  }
+}

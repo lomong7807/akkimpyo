@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react'
 import Icon from './Icon'
+import { WarningCircle } from './icons'
 import styles from './ErrorMessage.module.css'
 
 type ErrorMessageProps = Pick<ComponentProps<'p'>, 'id' | 'role'> & { children: string }
@@ -8,7 +9,7 @@ type ErrorMessageProps = Pick<ComponentProps<'p'>, 'id' | 'role'> & { children: 
 export default function ErrorMessage({ children, ...rest }: ErrorMessageProps) {
   return (
     <p {...rest} className={styles.message}>
-      <Icon name="WarningCircle" size={20} />
+      <Icon icon={WarningCircle} size={20} />
       <span>{children}</span>
     </p>
   )

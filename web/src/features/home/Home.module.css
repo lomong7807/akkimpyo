@@ -30,6 +30,32 @@
   }
 }
 
+/*
+ * (1) 한 줄 입력(C-01, #233). 휴대폰 배치는 화면 맨 위 첫 구역이고 넓은 화면은 화면 이름 아래 전체 폭이다. 아래 선으로 다른 구역과
+ * 나눈다(designer #233 5). 결과 확인(D-05)을 넓은 화면에서 펼치면 이 구역 안에서 아래로 늘어난다
+ */
+.oneLine {
+  grid-column: 1 / -1;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* 입력칸 오른쪽의 "입력"(보조 버튼). 입력칸과 같은 높이로 선다 */
+.oneLineRow {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.oneLineInput {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 오류 아래 4px의 "자세히 입력". 글자 버튼의 안쪽 여백만큼 당겨 글자를 문구와 같은 선에서 시작한다 */
+.detailEntry {
+  margin-top: var(--space-4);
+  margin-inline-start: calc(-1 * var(--space-8));
+}
+
 /* 화면 이름. 휴대폰 배치는 상단 바에 제목을 두지 않으므로(00-common 6.1) 화면 읽기에만 둔다 */
 .title {
   position: absolute;

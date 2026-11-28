@@ -7,7 +7,6 @@ import static org.assertj.core.util.Throwables.getStackTrace;
 
 import app.accountbook.account.AccountType;
 import app.accountbook.common.InvalidRequestException;
-import app.accountbook.common.StaleVersionException;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
 import app.accountbook.transaction.TransactionCommand.Entry;
@@ -68,6 +67,7 @@ class TransactionDeviceIdTest {
     UUID cash;
     TransactionView posted;
     TransactionView trashed;
+    TransactionView canceled;
 
     @BeforeEach
     void setUp() {
@@ -77,6 +77,7 @@ class TransactionDeviceIdTest {
         cash = fixtures.account(user, ledgerId, "현금", AccountType.CASH, 0, LocalDate.of(2026, 11, 1)).getId();
         posted = fixtures.expense(user, ledgerId, cash, null, DAY, 12_000);
         trashed = fixtures.delete(user, fixtures.expense(user, ledgerId, cash, null, DAY, 7_300));
+        canceled = fixtures.cancel(user, fixtures.expense(user, ledgerId, cash, null, DAY, 4_100));
         DETAILED_LOGGERS.forEach(logger -> logger.setLevel(Level.TRACE));
     }
 
@@ -98,7 +99,7 @@ class TransactionDeviceIdTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"update", "cancel", "delete", "restore"})
+    @ValueSource(strings = {"update", "cancel", "uncancel", "delete", "restore"})
     void 기기_값의_형식은_version보다_먼저_본다(String method) {
         assertThatThrownBy(() -> call(method, MALFORMED, true))
                 .isExactlyInstanceOf(InvalidRequestException.class)
@@ -141,7 +142,9 @@ class TransactionDeviceIdTest {
     void 기기_값이_없는_변경은_비운_채로_이력에_남는다() {
         UUID id = UUID.randomUUID();
         transactionService.create(owner, ledgerId, expense(id), null);
-        transactionService.update(owner, id, 1, expense(id), null);
+        // 같은 내용으로 고치면 아무것도 바꾸지 않으므로(#36) 금액을 바꾼다.
+        transactionService.update(owner, id, 1,
+                new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, 16_000, null, "김밥천국", null, null), null);
         transactionService.cancel(owner, id, 2, null);
         transactionService.delete(owner, id, 3, null);
         transactionService.restore(owner, id, 4, null);
@@ -173,6 +176,8 @@ class TransactionDeviceIdTest {
             case "update" -> transactionService.update(owner, posted.id(), posted.version() + staleBy,
                     expense(posted.id()), deviceId);
             case "cancel" -> transactionService.cancel(owner, posted.id(), posted.version() + staleBy, deviceId);
+            case "uncancel" -> transactionService.uncancel(owner, canceled.id(), canceled.version() + staleBy,
+                    deviceId);
             case "delete" -> transactionService.delete(owner, posted.id(), posted.version() + staleBy, deviceId);
             case "restore" -> transactionService.restore(owner, trashed.id(), trashed.version() + staleBy, deviceId);
             default -> throw new IllegalArgumentException("이 테스트에 없는 메서드: " + method);
@@ -181,7 +186,7 @@ class TransactionDeviceIdTest {
     }
 
     private Entry expense(UUID id) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, 15_000, false, "김밥천국", null, null);
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, 15_000, null, "김밥천국", null, null);
     }
 
     private List<ChangeLogView> historyOf(UUID id) {

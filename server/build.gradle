@@ -16,6 +16,7 @@ java {
 repositories {
     mavenCentral()
 }
+apply from: 'gradle/demo-seed.gradle'
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
@@ -28,6 +29,8 @@ dependencies {
     implementation 'org.springframework.security:spring-security-crypto'
     // access token(JWT)의 서명과 검증. 리소스 서버 스타터는 쓰지 않는다(공개 주소를 스스로 연다, ADR 001·#12).
     implementation 'org.springframework.security:spring-security-oauth2-jose'
+    // 장부 거래 내보내기의 엑셀(xlsx) 쓰기(#57). 쓰기 artifact만 쓴다(읽기인 fastexcel-reader는 넣지 않는다).
+    implementation 'org.dhatim:fastexcel:0.20.2'
     runtimeOnly 'org.postgresql:postgresql'
     // Argon2PasswordEncoder가 실행할 때 요구한다. Spring Boot가 버전을 관리하지 않아 직접 적는다.
     runtimeOnly 'org.bouncycastle:bcprov-jdk18on:1.87'
@@ -41,4 +44,18 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // 실행 계획 테스트(LookupIndexPlanTest)가 "[plan] "으로 시작해 출력한 줄만 빌드 로그에 옮긴다(#67).
+    // CI가 테스트 보고서를 남기지 않아, 계획을 PR에 옮기려면 로그에 있어야 한다. 다른 출력은 지금처럼 숨긴다.
+    onOutput { descriptor, event ->
+        if (event.message.startsWith('[plan] ')) {
+            logger.lifecycle(event.message.stripTrailing())
+        }
+    }
+    // 테스트 수를 빌드 로그에 남긴다.
+    afterSuite { descriptor, result ->
+        if (descriptor.parent == null) {
+            logger.lifecycle("tests: ${result.testCount} run, ${result.successfulTestCount} passed, " +
+                    "${result.failedTestCount} failed, ${result.skippedTestCount} skipped")
+        }
+    }
 }

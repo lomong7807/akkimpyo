@@ -35,8 +35,8 @@ final class DefaultCategories {
 
     /**
      * 그 장부의 기본 카테고리를 명세 순서대로 돌려준다(저장은 하지 않는다).
-     * 카테고리 목록은 created_at으로만 정렬하는데 한꺼번에 만들면 시각이 같아져 순서가 흔들릴 수 있다.
-     * 그래서 만든 시각을 firstCreatedAt부터 1마이크로초(DB 정밀도)씩 늘려 준다.
+     * 카테고리 목록은 미분류가 아닌 것끼리 created_at 순이고 같으면 id 순인데, 한꺼번에 만들면 시각이 같아져
+     * 명세 순서가 아니라 무작위 id 순이 된다. 그래서 만든 시각을 firstCreatedAt부터 1마이크로초(DB 정밀도)씩 늘려 준다.
      */
     static List<Category> forLedger(UUID ledgerId, Instant firstCreatedAt) {
         return IntStream.range(0, SPECS.size())

@@ -70,3 +70,68 @@ export function startTransactions(server: SetupServer, backend: Backend) {
 }
 
 export type Transactions = ReturnType<typeof startTransactions>
+
+/** 서버가 받은 중복 경고 조회 하나(#59) */
+export interface DuplicateQuery {
+  ledgerId: string
+  /** 토큰의 사용자. 토큰이 없거나 만료됐으면 없다. */
+  user: string | undefined
+  occurredOn: string | null
+  amount: string | null
+  payee: string | null
+  exclude: string | null
+  /** 받은 쿼리의 이름 */
+  names: string[]
+}
+
+type Stored = ReturnType<typeof savedOf>
+
+/** 서버처럼 가맹점을 맞춘다: 조합형, 공백류를 모두 빼고, 대소문자 무시(#61, #59의 PayeeMatch) */
+const payeeKey = (payee: unknown) => (typeof payee === 'string' ? payee.normalize('NFC').replace(/\s/g, '').toLowerCase() : '')
+
+/**
+ * 중복 경고 조회가 되는 가짜 서버(#59의 계약, `{ items }`). `items`는 장부에 저장된 거래를 서버의 순서(저장 시각 최신 순)로
+ * 넣어 둔다. 지출·수입만, 휴지통 제외, 같은 날짜·금액·가맹점, exclude는 뺀 것을 5건까지 준다. 가맹점이 비면 빈 items다.
+ */
+export function startDuplicates(server: SetupServer, backend: Backend) {
+  const duplicates = {
+    items: [] as Stored[],
+    requests: [] as DuplicateQuery[],
+    /** 정해 두면 그 응답을 준다. */
+    response: undefined as ((query: DuplicateQuery) => Response | Promise<Response>) | undefined,
+  }
+  server.use(
+    http.get('/api/v1/ledgers/:ledgerId/transactions/duplicates', ({ request, params }) => {
+      const search = new URL(request.url).searchParams
+      const query: DuplicateQuery = {
+        ledgerId: String(params.ledgerId),
+        user: backend.userOf(request),
+        occurredOn: search.get('occurredOn'),
+        amount: search.get('amount'),
+        payee: search.get('payee'),
+        exclude: search.get('exclude'),
+        names: [...search.keys()],
+      }
+      duplicates.requests.push(query)
+      if (!query.user) return problem(401, 'UNAUTHENTICATED')
+      if (duplicates.response) return duplicates.response(query)
+      const wanted = payeeKey(query.payee)
+      if (wanted === '') return HttpResponse.json({ items: [] })
+      const items = duplicates.items
+        .filter(
+          (item) =>
+            item.type !== 'TRANSFER' &&
+            item.deletedAt === null &&
+            item.occurredOn === query.occurredOn &&
+            String(item.amount) === query.amount &&
+            payeeKey(item.payee) === wanted &&
+            String(item.id) !== query.exclude,
+        )
+        .slice(0, 5)
+      return HttpResponse.json({ items })
+    }),
+  )
+  return duplicates
+}
+
+export type Duplicates = ReturnType<typeof startDuplicates>

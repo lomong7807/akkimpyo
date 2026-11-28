@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 async function openDevice() {
   vi.resetModules()
   return {
-    synced: await import('../src/device/syncedAt'),
+    synced: { ...(await import('../src/device/syncedAt')), ...(await import('../src/device/markSent')) },
     copies: await import('../src/device/copies'),
     userData: await import('../src/device/userData'),
     loginRecord: await import('../src/device/loginRecord'),

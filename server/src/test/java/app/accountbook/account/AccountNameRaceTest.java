@@ -49,7 +49,7 @@ class AccountNameRaceTest {
         accountService.create(owner.getId(), ledgerId, command("생활비"));
         Account savings = accountService.create(owner.getId(), ledgerId, command("비상금"));
 
-        assertThatThrownBy(() -> accountService.update(owner.getId(), savings.getId(), command("생활비")))
+        assertThatThrownBy(() -> accountService.update(owner.getId(), ledgerId, savings.getId(), command("생활비")))
                 .isInstanceOf(DuplicateAccountNameException.class);
     }
 

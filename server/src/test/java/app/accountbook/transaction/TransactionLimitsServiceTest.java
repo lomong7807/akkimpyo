@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * 금액(P-201)과 날짜(P-202) 범위가 거래 만들기와 수정에 걸려 있고, 경계값이 실제로 저장되는지 확인한다.
@@ -58,6 +60,7 @@ class TransactionLimitsServiceTest {
     @Autowired LedgerRepository ledgerRepository;
     @Autowired Fixtures fixtures;
     @Autowired EntityManager entityManager;
+    @Autowired JdbcTemplate jdbc;
 
     User owner;
     UUID ledgerId;
@@ -73,12 +76,22 @@ class TransactionLimitsServiceTest {
     }
 
     private Entry expense(UUID id, LocalDate on, LocalTime time, long amount) {
-        return new Entry(id, TransactionType.EXPENSE, on, time, cash.getId(), null, amount, false, null, null,
+        return new Entry(id, TransactionType.EXPENSE, on, time, cash.getId(), null, amount, null, null, null,
                 null);
     }
 
     private TransactionView create(TransactionCommand cmd) {
         return transactionService.create(owner.getId(), ledgerId, cmd, DEVICE);
+    }
+
+    private Entry entry(TransactionType type, boolean refund, LocalDate on, long amount) {
+        return new Entry(UUID.randomUUID(), type, on, null, cash.getId(), null, amount,
+                refund ? RefundKind.REFUND : null, null, null, null);
+    }
+
+    /** 이 장부의 거래 수. 테이블 전체를 세지 않아 커밋하는 테스트의 흔적이 남아도 깨지지 않는다(#14 테스트 보강). */
+    private long storedCount() {
+        return jdbc.queryForObject("select count(*) from transaction where ledger_id = ?", Long.class, ledgerId);
     }
 
     /** 영속성 컨텍스트를 비워 다음 조회가 DB에 저장된 값을 읽게 한다. */
@@ -115,7 +128,14 @@ class TransactionLimitsServiceTest {
         assertThatThrownBy(() -> create(new Transfer(UUID.randomUUID(), SEOUL_TODAY, null, bank.getId(),
                 cash.getId(), MAX_AMOUNT + 1, null)))
                 .isInstanceOf(InvalidRequestException.class);
-        assertThat(transactionRepository.count()).isZero();
+        // 수입과 환불도 각각 막는다(#14 테스트 보강). 종류마다 금액을 따로 보는 코드로 바뀌어도 빠지지 않게 한다.
+        for (long amount : new long[] {0, MAX_AMOUNT + 1}) {
+            assertThatThrownBy(() -> create(entry(TransactionType.INCOME, false, SEOUL_TODAY, amount)))
+                    .as("수입 %d", amount).isInstanceOf(InvalidRequestException.class);
+            assertThatThrownBy(() -> create(entry(TransactionType.EXPENSE, true, SEOUL_TODAY, amount)))
+                    .as("환불 %d", amount).isInstanceOf(InvalidRequestException.class);
+        }
+        assertThat(storedCount()).isZero();
     }
 
     @Test
@@ -140,7 +160,15 @@ class TransactionLimitsServiceTest {
         assertThatThrownBy(() -> create(new Transfer(UUID.randomUUID(), LAST_DAY.plusDays(1), null, bank.getId(),
                 cash.getId(), 1_000, null)))
                 .isInstanceOf(InvalidRequestException.class);
-        assertThat(transactionRepository.count()).isZero();
+        // 이체의 하한과 수입의 두 끝도 각각 막는다(#14 테스트 보강).
+        assertThatThrownBy(() -> create(new Transfer(UUID.randomUUID(), LocalDate.of(1999, 12, 31), null,
+                bank.getId(), cash.getId(), 1_000, null)))
+                .isInstanceOf(InvalidRequestException.class);
+        for (LocalDate on : List.of(LocalDate.of(1999, 12, 31), LAST_DAY.plusDays(1))) {
+            assertThatThrownBy(() -> create(entry(TransactionType.INCOME, false, on, 1_000)))
+                    .as("수입 %s", on).isInstanceOf(InvalidRequestException.class);
+        }
+        assertThat(storedCount()).isZero();
     }
 
     /** "오늘"은 그 장부의 시간대로 정한다. 서울은 2026-11-26이지만 로스앤젤레스 장부는 아직 2026-11-25(15:30)다. */
@@ -205,5 +233,19 @@ class TransactionLimitsServiceTest {
         assertThat(stored.occurredOn()).isEqualTo(SEOUL_TODAY);
         assertThat(stored.occurredTime()).isEqualTo(LocalTime.of(23, 59));
         assertThat(reload(withoutTime).occurredTime()).isNull();
+    }
+
+    /** 시각은 분으로 자르지 않고 받은 그대로 남는다(P-202). 이체도 시각을 저장한다(#14 테스트 보강). */
+    @Test
+    void create_keepsSecondsAndStoresTransferTime() {
+        UUID entryId = UUID.randomUUID();
+        UUID transferId = UUID.randomUUID();
+
+        create(expense(entryId, SEOUL_TODAY, LocalTime.of(8, 5, 9), 1_000));
+        create(new Transfer(transferId, SEOUL_TODAY, LocalTime.of(23, 59, 58), bank.getId(), cash.getId(), 1_000,
+                null));
+
+        assertThat(reload(entryId).occurredTime()).isEqualTo(LocalTime.of(8, 5, 9));
+        assertThat(reload(transferId).occurredTime()).isEqualTo(LocalTime.of(23, 59, 58));
     }
 }

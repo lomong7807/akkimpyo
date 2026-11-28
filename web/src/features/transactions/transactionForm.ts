@@ -1,6 +1,7 @@
 import type { FieldErrors } from '../../components/useFormFields'
 import { today } from '../../lib/calendarDate'
-import { currentTime, isValidTime, normalizeTime } from '../../lib/timeText'
+import { currentTime, normalizeTime } from '../../lib/timeInput'
+import { isValidTime } from '../../lib/timeText'
 import { hasUnusableCharacter, lengthOf, trimSpaces } from '../../lib/visibleText'
 import type {
   NewTransaction,

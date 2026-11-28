@@ -8,3 +8,17 @@
 .notice:not(:empty) {
   margin-top: var(--space-4);
 }
+
+/* 칸과 그 아래 늘 있는 안내(G-02 (5))를 한 덩어리로 둔다. 안내는 칸 바로 아래 8px이다 */
+.withNotice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* 종류의 알림과 같은 글자다. 늘 있어 알림 영역(role)이 아니다 */
+.recalculation {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+}
