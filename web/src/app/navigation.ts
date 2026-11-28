@@ -35,6 +35,8 @@ export interface ScreenHandle {
   navigationItem?: NavigationItem
   /** 전체 화면 입력. 하단 탭이 없다. */
   fullScreen?: boolean
+  /** 넓은 화면에서 사이드바의 "거래 입력"을 목록 옆 오른쪽 칸에 연다(00-common 5.5) */
+  entryInPane?: boolean
 }
 
 export const homeItem: MainNavigationItem = { label: '홈', to: '/home', icon: House }

@@ -5,9 +5,11 @@ import { sessionUserId } from '../../api/session'
 import Amount from '../../components/Amount'
 import { Button, ButtonLink } from '../../components/Button'
 import { ConfirmQuestion, type ConfirmFailure } from '../../components/ConfirmDialog'
+import { openedFromList } from '../../components/openedFromList'
 import DialogFrame from '../../components/DialogFrame'
 import Notice from '../../components/Notice'
 import { SubScreen } from '../../components/Screen'
+import { InPaneContext } from '../../components/sidePane'
 import { LoadingStatus, SkeletonSpace } from '../../components/Skeleton'
 import { useGoBack } from '../../components/useGoBack'
 import { useLoadingMessage } from '../../components/useLoadingMessage'
@@ -184,9 +186,11 @@ function DetailContent({ transaction, names, today, actions = true }: DetailCont
 /**
  * (1) 수정. 상단 바 오른쪽 끝의 글자 버튼이고(계좌 G-01의 "추가"와 같다) 거래 수정(D-04)을 연다(F-208).
  * 연결이 없으면 비활성이고 문구를 붙이지 않는다(D-06 네트워크 오류, 띠가 알린다).
+ * 넓은 화면 오른쪽 칸의 상세면 수정도 그 칸에 연다. 목록의 스크롤은 그대로다(D-04 수정 넓은 화면, #244).
  */
 function EditLink({ id }: { id: string }) {
   const online = useConnection() === 'online'
+  const inPane = use(InPaneContext)
   if (!online) {
     return (
       <Button kind="text" disabled>
@@ -195,7 +199,12 @@ function EditLink({ id }: { id: string }) {
     )
   }
   return (
-    <ButtonLink kind="text" to={`/transactions/${id}/edit`}>
+    <ButtonLink
+      kind="text"
+      to={`/transactions/${id}/edit`}
+      state={inPane ? openedFromList : undefined}
+      preventScrollReset={inPane}
+    >
       수정
     </ButtonLink>
   )

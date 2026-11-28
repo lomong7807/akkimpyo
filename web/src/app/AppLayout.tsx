@@ -1,6 +1,7 @@
 import { useSyncExternalStore, type ReactNode } from 'react'
-import { Outlet } from 'react-router'
+import { Outlet, useLocation } from 'react-router'
 import { LedgerNameContext } from '../components/LedgerNameContext'
+import { isOpenedFromList } from '../components/openedFromList'
 import { ShellContext, type ShellParts } from '../components/ShellContext'
 import { keyboardShown, onKeyboardChange } from '../components/visibleArea'
 import { QUICK_ENTRY, type MainNavigationItem, type Navigation } from './navigation'
@@ -30,10 +31,13 @@ interface AppLayoutProps {
  */
 export default function AppLayout({ navigation, ledgerName, canWrite = false, onLogout, shell = {} }: AppLayoutProps) {
   const { band, syncStatus, sidebarBottom } = shell
-  const { navigationItem: screenItem, fullScreen } = useScreenHandle()
+  const { navigationItem: screenItem, fullScreen, entryInPane } = useScreenHandle()
+  const { state } = useLocation()
   const screenTabs = navigation.tabs.filter((tab): tab is MainNavigationItem => tab !== QUICK_ENTRY)
   const currentTab = useCurrentTab({ tabs: screenTabs, fallbackTab: navigation.fallbackTab }, screenItem)
   const quickEntry = canWrite ? navigation.quickEntry : undefined
+  // 두 칸 화면에 목록이 보이면(전체 화면 입력이 아니거나 그 칸에 연 입력이면) "거래 입력"도 그 오른쪽 칸에 연다
+  const quickEntryInPane = entryInPane === true && (!fullScreen || isOpenedFromList(state))
   const keyboard = useSyncExternalStore(onKeyboardChange, keyboardShown)
   const tabs = !fullScreen && !keyboard
   return (
@@ -43,6 +47,7 @@ export default function AppLayout({ navigation, ledgerName, canWrite = false, on
         current={screenItem}
         ledgerName={ledgerName}
         quickEntry={quickEntry}
+        quickEntryInPane={quickEntryInPane}
         onLogout={onLogout}
         bottom={sidebarBottom}
       />

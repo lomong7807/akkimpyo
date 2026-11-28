@@ -59,8 +59,13 @@ export default function TransactionListPage() {
   const [openedOn] = useState(today)
   const range = selectableMonths(openedOn)
   const requested = searchParams.get('month')
-  // 넓은 화면 오른쪽 칸에 상세를 연 거래
-  const selected = useMatch('/transactions/:id')?.params.id
+  // 넓은 화면 오른쪽 칸에 상세나 수정을 연 거래. 칸이 거래 입력이면 고른 거래가 없다
+  const entering = useMatch('/transactions/new') !== null
+  const detailOf = useMatch('/transactions/:id')?.params.id
+  const editOf = useMatch('/transactions/:id/edit')?.params.id
+  const selected = entering ? undefined : (detailOf ?? editOf)
+  // 오른쪽 칸에 무엇이 열려 있다. 그때 달은 주소가 아니라 기억한 달이다
+  const paneOpen = entering || selected !== undefined
   const split = use(SidePaneContext) !== undefined
   const queryClient = useQueryClient()
   const ledger = useCurrentLedger()
@@ -75,7 +80,7 @@ export default function TransactionListPage() {
   const remembered = memory.month()
   const fallback = remembered && isSelectable(remembered, range) ? remembered : monthOf(openedOn)
   const month =
-    selected !== undefined
+    paneOpen
       ? (handedMonth ?? fallback)
       : requested !== null && isSelectable(requested, range)
         ? requested
@@ -89,6 +94,16 @@ export default function TransactionListPage() {
   useEffect(() => {
     if (month) memory.rememberMonth(month)
   }, [month, memory])
+
+  // 오른쪽 칸에서 거래를 고쳐 저장하면 목록은 그대로 남아 있다. 수정은 무효 표시만 하고(돌아간 화면이 그릴 때 받는다,
+  // useUpdateTransaction) 이 목록은 다시 그리지 않으므로, 수정 칸이 닫히면 무효가 된 그 달을 여기서 다시 받는다(#244)
+  useEffect(() => {
+    if (editOf !== undefined || !month) return
+    void queryClient.refetchQueries(
+      { queryKey: transactionListKey(ledger.id, month), predicate: (query) => query.state.isInvalidated },
+      { cancelRefetch: false },
+    )
+  }, [editOf, month, queryClient, ledger.id])
 
   // 오른쪽 칸이 닫혀 안내 문구로 돌아간 뒤(상세가 사라진 뒤) 초점을 옮긴다
   useEffect(() => {
@@ -113,7 +128,7 @@ export default function TransactionListPage() {
     }
   }, [selected, month, queryClient, ledger.id, navigate])
 
-  if (selected === undefined && month && handedMonth && handedMonth !== month) {
+  if (!paneOpen && month && handedMonth && handedMonth !== month) {
     return <Navigate to={addressOf(handedMonth)} replace state={{ listKey }} />
   }
 

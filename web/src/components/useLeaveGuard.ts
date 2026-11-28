@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { use, useEffect, useRef, useState } from 'react'
 import { useBlocker } from 'react-router'
+import { InPaneContext } from './sidePane'
 import { startNextScreenAtTop } from './startAtTop'
 import { useGoBack } from './useGoBack'
 
@@ -20,6 +21,7 @@ export type LeaveGuard = ReturnType<typeof useLeaveGuard>
  */
 export function useLeaveGuard({ parent, changed, busy }: LeaveGuardOptions) {
   const goBack = useGoBack(parent)
+  const inPane = use(InPaneContext)
   const leaving = useRef(false)
   const [asking, setAsking] = useState(false)
   const blocker = useBlocker(() => !leaving.current && (changed || busy))
@@ -52,10 +54,13 @@ export function useLeaveGuard({ parent, changed, busy }: LeaveGuardOptions) {
       leave(blocker.state === 'blocked' ? blocker.proceed : goBack)
     },
     leave,
-    /** 저장에 성공해 묻지 않고 떠난다. 돌아간 화면은 앞서 보던 위치가 아니라 맨 위에서 시작한다(#245). */
+    /**
+     * 저장에 성공해 묻지 않고 떠난다. 돌아간 화면은 앞서 보던 위치가 아니라 맨 위에서 시작한다(#245).
+     * 넓은 화면 오른쪽 칸이면 목록이 그대로 남으므로 목록의 스크롤도 그대로 둔다(#244).
+     */
     leaveAfterSave(go: () => void) {
       leave(() => {
-        startNextScreenAtTop()
+        if (!inPane) startNextScreenAtTop()
         go()
       })
     },

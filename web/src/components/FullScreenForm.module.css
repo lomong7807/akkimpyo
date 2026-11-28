@@ -127,3 +127,21 @@
     padding-block: var(--space-12);
   }
 }
+
+/*
+ * 넓은 화면 목록 옆 오른쪽 칸(D-04·G-02 넓은 화면, #244). 칸의 높이(Screen의 --side-pane-height)를 채워 저장 자리를 칸 맨 아래에
+ * 둔다. 머리는 칸 머리(상세)와 같이 "닫기" 다음에 제목을 왼쪽부터 놓고 제목은 칸 제목의 글자다.
+ */
+.inPane {
+  height: var(--side-pane-height);
+  /* 머리, 칸. 연결 없음 띠는 목록 화면의 것이 보이므로 칸에는 두지 않는다 */
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.inPane .head {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.inPane .title {
+  font: var(--text-title);
+}
