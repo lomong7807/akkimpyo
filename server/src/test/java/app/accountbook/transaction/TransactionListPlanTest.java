@@ -14,6 +14,8 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -23,10 +25,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.sql.DataSource;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -84,34 +89,129 @@ class TransactionListPlanTest {
     @Autowired YearlyStatsQuery yearlyStatsQuery;
     @Autowired StoppedClock clock;
     @Autowired JdbcTemplate jdbc;
+    @Autowired DataSource dataSource;
+
+    // 진단(머지하지 않는다): main CI에서 둘째 경우부터 한 경우가 60초 걸린 곳을 찾는다.
+    private static volatile String step = "";
+    private static volatile long stepStarted;
+    private static volatile Thread worker;
+    private static volatile long afterEachAt;
+    private static Thread watchdog;
+
+    @AfterEach
+    void markAfterEach() {
+        afterEachAt = System.nanoTime();
+    }
 
     @BeforeEach
     void seedManyLedgersAndAnalyze() {
+        if (afterEachAt != 0) {
+            System.out.printf("[plan] 진단 앞 경우 끝에서 이 준비까지: %d ms%n", (System.nanoTime() - afterEachAt) / 1_000_000);
+        }
+        startWatchdog();
+        print("진단 표 상태", jdbc.queryForList("""
+                select relname, n_live_tup, n_dead_tup, autovacuum_count, autoanalyze_count,
+                       pg_relation_size(relid) / 8192 as pages
+                from pg_stat_user_tables
+                where relname in ('users', 'ledger', 'ledger_member', 'account', 'category', 'transaction',
+                                  'transaction_line')
+                order by relname
+                """).stream().map(Object::toString).toList());
+        lap("시드 전체", this::seed);
+    }
+
+    private void seed() {
         clock.stopAt(Instant.parse("2026-11-27T03:00:00Z"));
-        jdbc.update("""
+        lap("시드 users", () -> jdbc.update("""
                 insert into users (id, email, password_hash, display_name, created_at)
                 select %s, 'list-plan-' || g || '@example.com', 'hash', 'u' || g, now() from generate_series(1, %d) g
-                """.formatted(idSql(USER, "g"), LEDGERS));
-        jdbc.update("insert into ledger (id, name, created_at) select %s, 'l' || g, now() from generate_series(1, %d) g"
-                .formatted(idSql(LEDGER, "g"), LEDGERS));
-        jdbc.update("""
+                """.formatted(idSql(USER, "g"), LEDGERS)));
+        lap("시드 ledger", () -> jdbc.update(
+                "insert into ledger (id, name, created_at) select %s, 'l' || g, now() from generate_series(1, %d) g"
+                .formatted(idSql(LEDGER, "g"), LEDGERS)));
+        lap("시드 ledger_member", () -> jdbc.update("""
                 insert into ledger_member (id, ledger_id, user_id, role, created_at)
                 select %s, %s, %s, 'OWNER', now() from generate_series(1, %d) g
-                """.formatted(idSql(MEMBER, "g"), idSql(LEDGER, "g"), idSql(USER, "g"), LEDGERS));
-        jdbc.update("""
+                """.formatted(idSql(MEMBER, "g"), idSql(LEDGER, "g"), idSql(USER, "g"), LEDGERS)));
+        lap("시드 account", () -> jdbc.update("""
                 insert into account (id, ledger_id, name, type, opening_balance, opening_date, created_at)
                 select %s, %s, 'a', 'BANK', 0, date '2016-01-01', now() from generate_series(1, %d) g
-                """.formatted(idSql(ACCOUNT, "g"), idSql(LEDGER, "g"), LEDGERS));
-        jdbc.update("""
+                """.formatted(idSql(ACCOUNT, "g"), idSql(LEDGER, "g"), LEDGERS)));
+        lap("시드 category", () -> jdbc.update("""
                 insert into category (id, ledger_id, kind, name, parent_id, system, created_at)
                 select %s, %s, 'EXPENSE', 'c', null, false, now() from generate_series(1, %d) g
-                """.formatted(idSql(CATEGORY, "g"), idSql(LEDGER, "g"), LEDGERS));
+                """.formatted(idSql(CATEGORY, "g"), idSql(LEDGER, "g"), LEDGERS)));
         // 거래 번호 n: 큰 장부는 1..BIG, 나머지 장부 l(2..)은 BIG + (l - 2) * SMALL + t.
-        insertTransactions("1", "generate_series(1, %d) t".formatted(BIG), "t",
-                "date '2026-11-27' - mod(t, 3650)");
-        insertTransactions("l", "generate_series(2, %d) l, generate_series(1, %d) t".formatted(LEDGERS, SMALL),
-                "%d + (l - 2) * %d + t".formatted(BIG, SMALL), "date '2026-11-27' - mod(l * 37 + t * 365, 3650)");
-        jdbc.execute("analyze users, ledger, ledger_member, account, category, transaction, transaction_line");
+        lap("시드 큰 장부 거래", () -> insertTransactions("1", "generate_series(1, %d) t".formatted(BIG), "t",
+                "date '2026-11-27' - mod(t, 3650)"));
+        lap("시드 작은 장부 거래", () -> insertTransactions("l", "generate_series(2, %d) l, generate_series(1, %d) t".formatted(LEDGERS, SMALL),
+                "%d + (l - 2) * %d + t".formatted(BIG, SMALL), "date '2026-11-27' - mod(l * 37 + t * 365, 3650)"));
+        lap("analyze", () -> jdbc.execute(
+                "analyze users, ledger, ledger_member, account, category, transaction, transaction_line"));
+    }
+
+    private void lap(String name, Runnable work) {
+        String outer = step;
+        long outerStarted = stepStarted;
+        worker = Thread.currentThread();
+        step = name;
+        stepStarted = System.nanoTime();
+        try {
+            work.run();
+        } finally {
+            System.out.printf("[plan] 진단 %s: %d ms (GC 누적 %d ms, 부하 %.2f)%n", name,
+                    (System.nanoTime() - stepStarted) / 1_000_000, gcMillis(),
+                    ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage());
+            step = outer;
+            stepStarted = outerStarted;
+        }
+    }
+
+    private static long gcMillis() {
+        return ManagementFactory.getGarbageCollectorMXBeans().stream()
+                .mapToLong(GarbageCollectorMXBean::getCollectionTime).sum();
+    }
+
+    /** 한 단계가 4초를 넘기면 5초마다 테스트 스레드의 스택 윗부분과 DB의 쉬지 않는 세션을 남긴다. */
+    private synchronized void startWatchdog() {
+        if (watchdog != null) {
+            return;
+        }
+        JdbcTemplate other = new JdbcTemplate(dataSource);
+        watchdog = new Thread(() -> {
+            while (true) {
+                try {
+                    TimeUnit.SECONDS.sleep(5);
+                    String name = step;
+                    long seconds = (System.nanoTime() - stepStarted) / 1_000_000_000;
+                    Thread target = worker;
+                    if (name.isEmpty() || seconds < 4 || target == null) {
+                        continue;
+                    }
+                    List<String> lines = new ArrayList<>();
+                    lines.add("단계 " + name + " " + seconds + "초째, 스레드 " + target.getState());
+                    for (StackTraceElement frame : List.of(target.getStackTrace()).subList(0,
+                            Math.min(12, target.getStackTrace().length))) {
+                        lines.add("  at " + frame);
+                    }
+                    other.queryForList("""
+                            select backend_type, state,
+                                   coalesce(wait_event_type, '-') || '/' || coalesce(wait_event, '-') as wait,
+                                   round(extract(epoch from clock_timestamp() - xact_start))::int as xact_s,
+                                   left(regexp_replace(coalesce(query, ''), '\\s+', ' ', 'g'), 80) as query
+                            from pg_stat_activity
+                            where pid <> pg_backend_pid() and state is distinct from 'idle'
+                            """).forEach(row -> lines.add("  db " + row));
+                    print("진단 느린 단계", lines);
+                } catch (InterruptedException e) {
+                    return;
+                } catch (RuntimeException e) {
+                    System.out.println("[plan] 진단 실패: " + e);
+                }
+            }
+        }, "list-plan-watchdog");
+        watchdog.setDaemon(true);
+        watchdog.start();
     }
 
     private void insertTransactions(String ledger, String rows, String n, String date) {
@@ -335,7 +435,7 @@ class TransactionListPlanTest {
         sqlLog.setLevel(Level.DEBUG);
         bindLog.setLevel(Level.TRACE);
         try {
-            call.run();
+            lap(label + " 호출", call);
         } finally {
             sqlLog.setLevel(sqlLevel);
             bindLog.setLevel(bindLevel);
