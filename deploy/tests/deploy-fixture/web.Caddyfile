@@ -1,0 +1,11 @@
+# 배포 스크립트 시험용. 운영 프록시 설정(deploy/Caddyfile)이 아니다. 오래 도는 프로세스만 있으면 된다.
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:8080 {
+	root * /srv
+	file_server
+}

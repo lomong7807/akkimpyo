@@ -4,6 +4,7 @@ name: Backup test
 # 스키마나 점검 쿼리가 바뀌어 명세표·점검 쿼리가 깨지는 것도 여기서 잡는다.
 # ci.yml에 넣지 않은 것은 paths 필터가 job 단위로는 되지 않고, ci.yml은 docs/** 변경에 돌지 않기 때문이다.
 # proxy job은 운영 compose와 프록시 설정(#52)을 서버·웹 이미지와 함께 띄워 본다. 느린 연결처럼 오래 걸리는 시험도 여기서만 돈다.
+# deploy job은 배포 스크립트(#52)를 시험용 레지스트리, 레포, 작은 이미지로 끝까지 돌려 본다. 서버 빌드가 필요 없다.
 on:
   pull_request:
     paths:
@@ -82,3 +83,15 @@ jobs:
 
       - name: Test
         run: deploy/tests/proxy-run
+
+  deploy:
+    name: deploy (배포 스크립트와 타이머 로컬 시험)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test
+        run: deploy/tests/deploy-run
