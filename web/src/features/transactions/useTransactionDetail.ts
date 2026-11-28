@@ -3,8 +3,9 @@ import { useState } from 'react'
 import { isMonth } from '../../lib/calendarDate'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { ledgerKey } from '../me/ledgerKey'
-import { fetchTransaction, type ListedTransaction, type RecentTransactions, type TransactionPage } from './transactions'
-import { recentTransactionsKey } from './useTransactionList'
+import { fetchTransaction } from './transactionDetail'
+import type { ListedTransaction, RecentTransactions, TransactionPage } from './transactions'
+import { recentTransactionsKey } from './transactionListQueries'
 
 /**
  * 거래 하나의 캐시 키(장부 앞부분 + transactions + id). 거래를 저장하거나 지우면 장부 앞부분을 무효로 만들어 이것도 다시 받는다.

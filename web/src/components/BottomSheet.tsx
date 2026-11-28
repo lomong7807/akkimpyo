@@ -1,10 +1,9 @@
-import { useId, useRef, type PointerEvent, type ReactNode, type RefObject } from 'react'
+import { useId, useRef, type ReactNode } from 'react'
 import { Button } from './Button'
+import { useDragDown } from './dragDown'
+import { X } from './icons'
 import Overlay from './Overlay'
 import styles from './BottomSheet.module.css'
-
-/** 시트 높이에서 이만큼보다 많이 끌어내리고 놓으면 닫는다. */
-const CLOSE_RATIO = 1 / 4
 
 interface BottomSheetProps {
   open: boolean
@@ -13,6 +12,10 @@ interface BottomSheetProps {
   closeDisabled?: boolean
   /** 안의 내용이 제목에 초점을 줄 수 있게 한다(tabindex=-1, 탭 순서에는 없다). 00-common 5.4 */
   titleFocusable?: boolean
+  /**
+   * 닫을 때 움직임 없이 그 처리 안에서 뺀다(Overlay). 닫은 처리 안에서 뒤 화면의 입력칸에 초점을 줘야 할 때 쓴다(D-05 저장)
+   */
+  instantClose?: boolean
   onClose: () => void
   children: ReactNode
 }
@@ -23,6 +26,7 @@ export default function BottomSheet({
   title,
   closeDisabled = false,
   titleFocusable = false,
+  instantClose = false,
   onClose,
   children,
 }: BottomSheetProps) {
@@ -30,7 +34,7 @@ export default function BottomSheet({
   const sheet = useRef<HTMLDivElement>(null)
   const dragHandlers = useDragDown(sheet, onClose)
   return (
-    <Overlay open={open} aria-labelledby={titleId} scrim onClose={onClose}>
+    <Overlay open={open} instantClose={instantClose} aria-labelledby={titleId} scrim onClose={onClose}>
       <div ref={sheet} className={styles.sheet}>
         <div className={styles.head} {...dragHandlers}>
           <div className={styles.handle} aria-hidden="true" />
@@ -38,56 +42,11 @@ export default function BottomSheet({
             <h2 id={titleId} className={styles.title} tabIndex={titleFocusable ? -1 : undefined}>
               {title}
             </h2>
-            <Button kind="icon" icon="X" aria-label="닫기" disabled={closeDisabled} onClick={onClose} />
+            <Button kind="icon" icon={X} aria-label="닫기" disabled={closeDisabled} onClick={onClose} />
           </div>
         </div>
         <div className={styles.content}>{children}</div>
       </div>
     </Overlay>
   )
-}
-
-/** 머리를 아래로 끌면 시트가 따라 내려온다. */
-function useDragDown(sheet: RefObject<HTMLElement | null>, onClose: () => void) {
-  const startY = useRef<number>(undefined)
-
-  // 손가락을 따라가는 값이라 CSS에 적어 둘 수 없다. 끌 때마다 다시 그리지 않게 요소에 바로 넣는다
-  function moveBy(distance: number) {
-    sheet.current!.style.setProperty('--drag', `${distance}px`)
-  }
-
-  function stop() {
-    startY.current = undefined
-    sheet.current!.removeAttribute('data-dragging')
-    moveBy(0)
-  }
-
-  /** 끄는 중이 아니면 없다. 두 번째 손가락은 보지 않는다. */
-  function distanceOf(event: PointerEvent) {
-    if (startY.current === undefined || !event.isPrimary) return undefined
-    return Math.max(0, event.clientY - startY.current)
-  }
-
-  return {
-    onPointerDown(event: PointerEvent) {
-      const onButton = (event.target as Element).closest('button') !== null
-      if (!event.isPrimary || event.button !== 0 || onButton) return
-      event.currentTarget.setPointerCapture(event.pointerId)
-      startY.current = event.clientY
-      sheet.current!.setAttribute('data-dragging', '')
-    },
-    onPointerMove(event: PointerEvent) {
-      const distance = distanceOf(event)
-      if (distance !== undefined) moveBy(distance)
-    },
-    onPointerUp(event: PointerEvent) {
-      const distance = distanceOf(event)
-      if (distance === undefined) return
-      stop()
-      if (distance > sheet.current!.offsetHeight * CLOSE_RATIO) onClose()
-    },
-    onPointerCancel(event: PointerEvent) {
-      if (distanceOf(event) !== undefined) stop()
-    },
-  }
 }

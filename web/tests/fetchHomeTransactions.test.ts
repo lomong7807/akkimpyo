@@ -54,6 +54,11 @@ describe('이번 달 합계(month, limit=1)', () => {
     expect(await fetchMonthTotals(ledgerId, '2026-11')).toEqual({ income: 3245000, expense: 1052500 })
   })
 
+  it('환불이 지출보다 큰 달의 음수 합계(#390)를 그대로 준다', async () => {
+    respondWith({ ...pageOf('2026-11', [lunch], 0, 1), totals: { income: -5000, expense: -12000 } })
+    expect(await fetchMonthTotals(ledgerId, '2026-11')).toEqual({ income: -5000, expense: -12000 })
+  })
+
   it('거래가 없는 달은 합계가 0이다', async () => {
     respondWith(pageOf('2026-11', [], 0, 1))
     expect(await fetchMonthTotals(ledgerId, '2026-11')).toEqual({ income: 0, expense: 0 })
@@ -61,7 +66,8 @@ describe('이번 달 합계(month, limit=1)', () => {
 
   it.each([
     ['합계가 없다', { totals: null }],
-    ['합계가 음수다', { totals: { income: -1, expense: 0 } }],
+    ['합계가 음수 소수다', { totals: { income: 0, expense: -1.5 } }],
+    ['합계가 안전한 정수 범위 밖이다', { totals: { income: 0, expense: -(2 ** 53) } }],
     ['합계가 정수가 아니다', { totals: { income: 1.5, expense: 0 } }],
     ['다른 달의 거래가 왔다', { items: [salary], days: [{ date: '2026-10-25', income: 3200000, expense: 0 }] }],
   ])('약속과 다른 응답(%s)은 받지 않는다', async (_, changes) => {

@@ -62,3 +62,31 @@ export function startCategories(server: SetupServer, backend: Backend) {
 }
 
 export type Categories = ReturnType<typeof startCategories>
+
+/** 가맹점을 서버처럼 맞춘다(공백류를 모두 빼고 대소문자를 무시한다, P-219) */
+export const payeeKeyOf = (payee: string) => payee.replace(/\s/g, '').toLowerCase()
+
+/**
+ * 가맹점별 최근 카테고리 제안이 되는 가짜 서버(#61의 응답 계약, `{ categoryId }`). `byPayee`는 맞춘 가맹점(payeeKeyOf)마다 줄
+ * 카테고리 id이고, 없으면 제안이 없다(null). 받은 가맹점은 보낸 그대로 `requests`에 남는다.
+ */
+export function startCategorySuggestions(server: SetupServer, backend: Backend) {
+  const suggestions = {
+    byPayee: new Map<string, string>(),
+    /** 정해 두면 그 응답을 준다. */
+    response: undefined as ((payee: string) => Response | Promise<Response>) | undefined,
+    requests: [] as string[],
+  }
+  server.use(
+    http.get('/api/v1/ledgers/:ledgerId/category-suggestions', ({ request }) => {
+      if (!backend.userOf(request)) return problem(401, 'UNAUTHENTICATED')
+      const payee = new URL(request.url).searchParams.get('payee') ?? ''
+      suggestions.requests.push(payee)
+      if (suggestions.response) return suggestions.response(payee)
+      return HttpResponse.json({ categoryId: suggestions.byPayee.get(payeeKeyOf(payee)) ?? null })
+    }),
+  )
+  return suggestions
+}
+
+export type CategorySuggestions = ReturnType<typeof startCategorySuggestions>

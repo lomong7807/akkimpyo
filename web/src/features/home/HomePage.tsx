@@ -1,10 +1,12 @@
 import { useId, useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router'
 import Amount from '../../components/Amount'
+import { totalKind } from '../../components/amountDisplay'
 import { Button, ButtonLink } from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
 import Icon from '../../components/Icon'
+import { CaretRight } from '../../components/icons'
 import { holdKeyboard } from '../../components/keyboardBridge'
+import { Link } from '../../components/Link'
 import { MainScreen } from '../../components/Screen'
 import { LoadingStatus, SkeletonBar, SkeletonSpace } from '../../components/Skeleton'
 import { useLoadingMessage } from '../../components/useLoadingMessage'
@@ -22,6 +24,7 @@ import { useConnection } from '../connection/useConnection'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { useKeptCopy, type Kept } from '../me/ledgerCopy'
 import { canEdit } from '../me/me'
+import { monthlyStatsAddressOf } from '../stats/statsAddress'
 import { DayGroup } from '../transactions/DayGroup'
 import { groupByDate } from '../transactions/groupByDate'
 import { useKeptLastMonth, type LastMonth } from '../transactions/lastMonth'
@@ -33,14 +36,15 @@ import {
   usePendingTransactions,
   withPendingDays,
 } from '../transactions/pendingTransactions'
-import { DayHeadSkeleton, RowsSkeleton } from '../transactions/TransactionListSkeleton'
-import { RECENT_COUNT, type IncomeAndExpense, type RecentTransactions } from '../transactions/transactions'
 import {
   monthTotalsKey,
   recentTransactionsKey,
   useMonthTotals,
   useRecentTransactions,
-} from '../transactions/useTransactionList'
+} from '../transactions/transactionListQueries'
+import { DayHeadSkeleton, RowsSkeleton } from '../transactions/TransactionListSkeleton'
+import { RECENT_COUNT, type IncomeAndExpense, type RecentTransactions } from '../transactions/transactions'
+import OneLineInput from './OneLineInput'
 import styles from './Home.module.css'
 
 /** 구역이 기다리는 서버 조회. 불러오지 못했을 때 받지 못한 것만 다시 받는다 */
@@ -79,9 +83,10 @@ function keptFrom<T>(kept: Kept<LastMonth> | null | undefined, pick: (value: Las
  * 기기에 남긴 값(최근 한 달, 계좌, 카테고리)이 있으면 받는 동안 뼈대 대신 먼저 보이고(00-common 4.5), 연결이 없거나 새로 받지
  * 못하면 그 값을 기준 시각과 함께 보인다(F-908, P-902). 합계와 잔액은 마지막으로 서버와 맞춘 값이라 보내지 않은 입력을 넣지 않는다.
  * 홈을 열면 최근 한 달을 받아 기기에 남긴다(#238).
- * 1A 임시: 이번 달 합계는 눌리지 않고 머리 줄에 화살표가 없다(월별 통계 E-01은 1B). 한 줄 입력과 숨긴 계좌가 없다.
+ * 맨 위는 한 줄 입력(C-01 (1), #233)이고 보기 전용에게는 없다. 이번 달 합계를 누르면 이번 달 월별 통계(E-01, #242)다.
+ * 1A 임시: 숨긴 계좌가 없다.
  * 예산·진행 중 이벤트·확인할 거래는 2·3단계다.
- * 넓은 화면은 두 칸이다: 왼쪽에 합계와 계좌 잔액, 오른쪽에 최근 거래.
+ * 넓은 화면은 한 줄 입력(전체 폭) 아래 두 칸이다: 왼쪽에 합계와 계좌 잔액, 오른쪽에 최근 거래.
  */
 export default function HomePage() {
   // 화면을 연 날의 오늘. 이번 달(기기의 오늘이 속한 달, planner 결정 2026-11-25)과 날짜 이름(올해인지)을 정한다
@@ -121,6 +126,7 @@ export default function HomePage() {
       {/* 뼈대는 구역마다 있지만 화면 읽기에는 한 번만 알린다 */}
       <LoadingStatus message={loading ? message : undefined} />
       <div className={styles.home}>
+        {canEdit(ledger) && <OneLineInput />}
         <div className={styles.column}>
           <MonthTotals
             month={month}
@@ -223,26 +229,54 @@ interface MonthTotalsProps extends SectionProps {
 }
 
 /**
- * (2) 이번 달 합계(F-111). 지출만 큰 숫자이고 수입과 차액은 그 아래 줄이다(designer 결정 14). 1A에는 눌리지 않는다.
+ * (2) 이번 달 합계(F-111). 지출만 큰 숫자이고 수입과 차액은 그 아래 줄이다(designer 결정 14).
  * 보내지 않은 입력은 합계에 더하지 않으므로(작성자 판단 43), 이번 달에 1건 이상이면 차액 아래에 그 건수를 알린다. 같은
- * 화면의 그날 합계(보이는 보내지 않음 줄을 더함)와 다른 까닭을 그 자리에서 알린다(designer #234 B). 누를 곳은 없다(#236).
+ * 화면의 그날 합계(보이는 보내지 않음 줄을 더함)와 다른 까닭을 그 자리에서 알린다(designer #234 B). 그 알림만 누를 곳은 없다(#236).
+ * 합계가 보이면 구역 전체가 이번 달 월별 통계(E-01)로 가는 링크 하나다(planner 2026-11-25, #242). 모양은 계좌 잔액과 같고
+ * 링크 이름에 머리 줄, 세 값, 기준 시각, 보내지 않은 입력 알림을 차례로 담는다(designer #242).
  */
 function MonthTotals({ month, label, totals, basis, state, queries, skeletonShown }: MonthTotalsProps) {
   const headingId = useId()
   const pending = usePendingTransactions()
   const pendingCount = useMemo(() => pendingCountInMonth(pending, month), [pending, month])
+  if (state === 'ready') {
+    const pendingNote = pendingCount > 0 ? `보내지 않은 입력 ${pendingCount}건은 아직 합계에 없어요` : undefined
+    const name = [
+      label,
+      `지출 ${wonOf(totals!.expense)}`,
+      `수입 ${totals!.income > 0 ? '+' : ''}${wonOf(totals!.income)}`,
+      `차액 ${signedWonOf(totals!.income - totals!.expense)}`,
+      basis === undefined ? undefined : basisText(basis),
+      pendingNote,
+    ]
+      .filter((part) => part !== undefined)
+      .join(', ')
+    return (
+      <section aria-labelledby={headingId} className={`${styles.section} ${styles.linkSection}`}>
+        <Link to={monthlyStatsAddressOf(month)} className={styles.sectionLink} aria-label={name}>
+          <div className={styles.head}>
+            <h2 id={headingId} className={styles.heading}>
+              {label}
+            </h2>
+            {basis !== undefined && <BasisTime at={basis} className={styles.basis} />}
+            <span className={styles.caret}>
+              <Icon icon={CaretRight} size={20} />
+            </span>
+          </div>
+          <div className={styles.body}>
+            <Figures totals={totals!} />
+            {pendingNote && <p className={styles.pendingNote}>{pendingNote}</p>}
+          </div>
+        </Link>
+      </section>
+    )
+  }
   return (
     <section aria-labelledby={headingId} className={styles.section}>
       <SectionHead id={headingId} basis={basis}>
         {label}
       </SectionHead>
       <SectionBody>
-        {state === 'ready' && (
-          <>
-            <Figures totals={totals!} />
-            {pendingCount > 0 && <p className={styles.pendingNote}>보내지 않은 입력 {pendingCount}건은 아직 합계에 없어요</p>}
-          </>
-        )}
         {state === 'failed' && <SectionFailure queries={queries} />}
         {state === 'loading' && (
           <SkeletonSpace shown={skeletonShown}>
@@ -255,7 +289,8 @@ function MonthTotals({ month, label, totals, basis, state, queries, skeletonShow
 }
 
 /**
- * 지출(큰 숫자), 수입, 차액. 수입이 0원이면 부호와 강조색 없이 "0원"이다(내역의 합계와 같다). 차액은 부호를 늘 붙인다.
+ * 지출(큰 숫자), 수입, 차액. 수입이 0원이면 부호와 강조색 없이 "0원"이다(내역의 합계와 같다). 음수인 합계(환불이 더 큰 달)는
+ * 본문 글자색과 "-"다(totalKind, #390). 차액은 부호를 늘 붙인다.
  * 큰 숫자는 칸 폭을 넘으면 text-title로 내린다(L-12). 재지 않고 CSS로 고르도록 두 벌을 두고, 작은 짝은 화면 읽기에 숨긴다.
  */
 function Figures({ totals }: { totals: IncomeAndExpense }) {
@@ -267,18 +302,18 @@ function Figures({ totals }: { totals: IncomeAndExpense }) {
           <span className={styles.heroFallback} aria-hidden="true">
             <span className={styles.heroStrut} />
             <span className={styles.heroFallbackAmount}>
-              <Amount kind="expense" value={totals.expense} />
+              <Amount kind={totalKind('expense', totals.expense)} value={totals.expense} />
             </span>
           </span>
           <span className={styles.heroAmount}>
-            <Amount kind="expense" value={totals.expense} />
+            <Amount kind={totalKind('expense', totals.expense)} value={totals.expense} />
           </span>
         </dd>
       </div>
       <div className={styles.figure}>
         <dt className={styles.figureName}>수입</dt>
         <dd className={styles.figureAmount}>
-          <Amount kind={totals.income > 0 ? 'income' : 'balance'} value={totals.income} />
+          <Amount kind={totalKind('income', totals.income)} value={totals.income} />
         </dd>
       </div>
       <div className={styles.figure}>
@@ -337,7 +372,7 @@ function AccountBalances({ accounts, basis, state, queries, skeletonShown }: Acc
             </h2>
             {basis !== undefined && <BasisTime at={basis} className={styles.basis} />}
             <span className={styles.caret}>
-              <Icon name="CaretRight" size={20} />
+              <Icon icon={CaretRight} size={20} />
             </span>
           </div>
           <Balances accounts={accounts!} total={total} />
@@ -414,6 +449,11 @@ function wonOf(value: number): string {
   return `${formatAmount(Math.abs(value), value < 0)}원`
 }
 
+/** 링크 이름에 넣는 차액. 화면의 차액과 같이 양수에 "+"를 붙인다(작성자 판단 37). */
+function signedWonOf(value: number): string {
+  return `${value > 0 ? '+' : ''}${wonOf(value)}`
+}
+
 interface RecentSectionProps extends SectionProps {
   today: string
   recent: RecentTransactions | undefined
@@ -459,7 +499,7 @@ function AllTransactionsLink() {
       <ButtonLink kind="text" to="/transactions">
         <span className={styles.actionLabel}>
           모두 보기
-          <Icon name="CaretRight" size={20} />
+          <Icon icon={CaretRight} size={20} />
         </span>
       </ButtonLink>
     </div>

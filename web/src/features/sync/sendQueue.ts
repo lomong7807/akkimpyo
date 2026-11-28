@@ -1,9 +1,10 @@
 import { ApiError } from '../../api/apiError'
 import { currentUserId } from '../../api/session'
 import { pendingOf, readPending, settlePending, type Outcome, type PendingTransaction } from '../../device/pendingQueue'
-import { markSent } from '../../device/syncedAt'
+import { markSent } from '../../device/markSent'
 import { now } from '../../lib/clock'
-import { createTransaction, needsResendNotice, type NewTransaction } from '../transactions/transactions'
+import type { NewTransaction } from '../transactions/transactions'
+import { createTransaction, needsResendNotice } from '../transactions/transactionWrites'
 import { withQueueLock } from './queueLock'
 
 /*
@@ -162,12 +163,15 @@ async function failed(seen: PendingTransaction, error: unknown): Promise<Step> {
   return error.kind === 'connection' ? { kept: 'connection', stop: true } : { kept: 'trouble' }
 }
 
-/** 서버가 이유(code)를 붙여 거부했다. 본문을 읽을 수 없는 응답(프록시가 낸 4xx 등)은 아니다(code가 없다) */
-function isRefusal(error: ApiError): error is ApiError & { status: number; code: string } {
+/**
+ * 서버가 이유(code)를 붙여 거부했다. 본문을 읽을 수 없는 응답(프록시가 낸 4xx 등)은 아니다(code가 없다). B-05의 비교해서 고르기(#280)도
+ * 같은 표로 줄을 보낼 수 없음으로 바꾼다
+ */
+export function isRefusal(error: ApiError): error is ApiError & { status: number; code: string } {
   return error.kind === 'rejected' && error.code !== undefined && error.status !== 401 && error.status !== 429
 }
 
-function rejectionOf(error: ApiError & { status: number; code: string }): Outcome {
+export function rejectionOf(error: ApiError & { status: number; code: string }): Extract<Outcome, { kind: 'rejected' }> {
   const { status, code, fieldErrors, current } = error
   const rejection: Extract<Outcome, { kind: 'rejected' }> = { kind: 'rejected', status, code, fieldErrors, at: now() }
   // 선택 화면(#280)이 쓰도록 같은 id로 저장된 내 거래를 남긴다
