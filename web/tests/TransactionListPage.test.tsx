@@ -543,6 +543,48 @@ describe('거래 줄(0.4)', () => {
     expect(readCssRule(CSS, '.status')).toContain('margin-top: var(--space-4)')
   })
 
+  // 환불·돌려받음(00-common 2.2, 판단 7, #395): 강조색과 "+", 칩 글자로 수입과 구분한다. 색만으로 뜻을 전하지 않는다
+  const refundOf = (refundKind: string, changes: object = {}) =>
+    expenseOf(
+      { occurredOn: '2026-11-26', occurredTime: '15:40', accountId: id.card, categoryId: id.food, amount: 12000, payee: '올래국수' },
+      { refundKind, ...changes },
+    )
+
+  it.each([
+    ['REFUND', '환불'],
+    ['REIMBURSEMENT', '돌려받음'],
+  ])('환불 구분이 %s인 지출은 강조색과 "+"의 금액이고 둘째 줄 아래에 "%s" 칩을 둔다', async (refundKind, chip) => {
+    list.months.set('2026-11', [refundOf(refundKind)])
+    await openList()
+    const [row] = rowsOf('11월 26일 (목)')
+    expect(row.textContent).toBe(`15:40올래국수+12,000원식비 · 신한카드${chip}`)
+    expect(styleOf(within(row).getByText('+12,000원')).color).toBe('var(--color-accent)')
+    const shown = within(row).getByText(chip)
+    expect([styleOf(shown).backgroundColor, styleOf(shown).color]).toEqual(['var(--color-border)', 'var(--color-text-secondary)'])
+    expect(screen.getByRole('link', { name: `올래국수 +12,000원 11월 26일 (목) 15:40 식비 · 신한카드 ${chip}` })).toBeTruthy()
+  })
+
+  it('취소한 환불은 "+"를 둔 채 보조색과 취소선이고, 칩은 "취소", "환불" 순으로 한 줄에 놓는다(0.4)', async () => {
+    list.months.set('2026-11', [refundOf('REFUND', { status: 'CANCELED' })])
+    await openList()
+    const [row] = rowsOf('11월 26일 (목)')
+    const amount = within(row).getByText('+12,000원')
+    expect([styleOf(amount).color, styleOf(amount).textDecoration]).toEqual(['var(--color-text-secondary)', 'line-through'])
+    expect(row.textContent).toBe('15:40올래국수+12,000원식비 · 신한카드취소환불')
+    const status = within(row).getByText('취소').parentElement!
+    expect([...status.children].map((chip) => chip.textContent)).toEqual(['취소', '환불'])
+    expect(readCssRule(CSS, '.status')).toContain('flex-wrap: wrap')
+    expect(readCssRule(CSS, '.status')).toContain('gap: var(--space-4) var(--space-8)')
+    expect(screen.getByRole('link', { name: '올래국수 +12,000원 11월 26일 (목) 15:40 식비 · 신한카드 취소 환불' })).toBeTruthy()
+  })
+
+  it('환불 구분이 null이거나 없는 지출은 보통 지출 줄이다', async () => {
+    // undefined인 칸은 JSON에 실리지 않는다(전에 받아 기기에 남긴 사본의 모양)
+    list.months.set('2026-11', [{ ...refundOf('REFUND'), refundKind: null }, { ...refundOf('REFUND'), refundKind: undefined }])
+    await openList()
+    expect(texts(rowsOf('11월 26일 (목)'))).toEqual(['15:40올래국수12,000원식비 · 신한카드', '15:40올래국수12,000원식비 · 신한카드'])
+  })
+
   it('시각이 없으면 시각 자리를 비운다', async () => {
     const { bus } = putNovember()
     await openList()

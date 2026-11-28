@@ -660,6 +660,22 @@ describe('최근 거래(F-113)', () => {
     expect(addressOf(opened)).toBe(`/transactions/${lunch.id}`)
   })
 
+  it('환불·돌려받음 줄도 내역과 같다: 강조색과 "+"의 금액, "환불"·"돌려받음" 칩(00-common 2.2, #395)', async () => {
+    const on26 = { occurredOn: '2026-11-26', accountId: id.card, categoryId: id.food }
+    list.months.set('2026-11', [
+      expenseOf({ ...on26, occurredTime: '15:40', amount: 12000, payee: '올래국수' }, { refundKind: 'REFUND' }),
+      expenseOf({ ...on26, occurredTime: '09:00', amount: 3000, payee: '모임 회비' }, { refundKind: 'REIMBURSEMENT' }),
+    ])
+    await openHome()
+    const links = within(within(recentRegion()).getByRole('list', { name: '11월 26일 (목)' })).getAllByRole('link')
+    expect(links.map((link) => link.textContent)).toEqual([
+      '15:40올래국수+12,000원식비 · 신한카드환불',
+      '09:00모임 회비+3,000원식비 · 신한카드돌려받음',
+    ])
+    expect(styleOf(within(links[0]).getByText('+12,000원')).color).toBe('var(--color-accent)')
+    expect(styleOf(within(links[1]).getByText('+3,000원')).color).toBe('var(--color-accent)')
+  })
+
   it('줄의 금액은 text-body이고 내역의 줄과 같은 CSS를 쓴다', async () => {
     putTransactions()
     await openHome()

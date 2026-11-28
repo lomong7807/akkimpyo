@@ -18,6 +18,11 @@ export type TransactionType = (typeof transactionTypes)[number]
 
 const statuses = ['PENDING', 'POSTED', 'CANCELED'] as const
 
+const refundKinds = ['REFUND', 'REIMBURSEMENT'] as const
+
+/** 지출의 환불 구분(서버 #8, PR #397). 환불은 원 거래를 돌려받은 것, 돌려받음은 남이 대신 갚은 것이다(F-206). */
+export type RefundKind = (typeof refundKinds)[number]
+
 /** 지출·수입. 날짜와 시각은 시간대 없이 입력한 그대로 보낸다. */
 export interface NewIncomeOrExpense {
   /** 기기가 만든 UUID v7 */
@@ -122,6 +127,11 @@ export interface ListedIncomeOrExpense extends ListedBase {
   /** 미분류면 그 장부의 미분류 카테고리다. */
   categoryId: string
   payee: string | null
+  /**
+   * 환불·돌려받음이면 그 구분. 지출에만 있고 금액은 양수다. 일반 지출과 수입은 null이다. 이 칸이 생기기 전에 받아 기기에 남긴
+   * 사본에는 없고, 없으면 환불이 아니다.
+   */
+  refundKind?: RefundKind | null
 }
 
 export interface ListedTransfer extends ListedBase {
@@ -230,7 +240,13 @@ export function isListedTransaction(value: unknown): value is ListedTransaction 
     (body.occurredTime === null || (typeof body.occurredTime === 'string' && isValidTime(body.occurredTime))) &&
     Number.isSafeInteger(body.amount) &&
     (body.amount as number) >= 1
-  if (!shared) return false
+  // 환불 구분은 지출에만 있다(PR #397). 모르는 구분은 받지 않는다
+  const refundKind = (value as { refundKind?: unknown }).refundKind
+  const refundKept =
+    refundKind === undefined ||
+    refundKind === null ||
+    (body.type === 'EXPENSE' && refundKinds.some((kind) => kind === refundKind))
+  if (!shared || !refundKept) return false
   if (body.type === 'TRANSFER') return typeof body.fromAccountId === 'string' && typeof body.toAccountId === 'string'
   return (
     typeof body.accountId === 'string' &&
