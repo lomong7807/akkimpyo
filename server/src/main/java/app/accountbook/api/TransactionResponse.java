@@ -6,6 +6,7 @@ import app.accountbook.transaction.TransactionType;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.transaction.TransactionView.Line;
 import app.accountbook.transaction.TrashAutoPurge;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -13,6 +14,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * 거래 하나(#14 응답 계약). 요청과 같은 단식 모양에 서버 값을 더한다. 금액은 늘 양수이고 방향은 종류와
@@ -25,11 +27,13 @@ import java.util.UUID;
  * @param refundKind   저장된 환불 구분(#8, #102 계약). 일반 지출과 수입·이체는 {@code null}
  * @param purgeAt      휴지통 거래가 영구 삭제 대상이 되는 시각({@code deletedAt} + 30일). 실제 삭제는 최대 하루 늦다(#9)
  */
-record TransactionResponse(UUID id, TransactionType type, LocalDate occurredOn, String occurredTime,
-                           UUID accountId, UUID categoryId, long amount, String payee, String memo, RefundKind refundKind,
-                           Person paidBy, UUID fromAccountId, UUID toAccountId, TransactionStatus status,
-                           long version, String createdAt, Person createdBy, String updatedAt, Person updatedBy,
-                           String deletedAt, String purgeAt) {
+record TransactionResponse(UUID id, TransactionType type, LocalDate occurredOn,
+                           @Schema(pattern = TransactionRequest.TIME_PATTERN) @Nullable String occurredTime,
+                           @Nullable UUID accountId, @Nullable UUID categoryId, long amount, @Nullable String payee,
+                           @Nullable String memo, @Nullable RefundKind refundKind, @Nullable Person paidBy,
+                           @Nullable UUID fromAccountId, @Nullable UUID toAccountId, TransactionStatus status,
+                           long version, String createdAt, @Nullable Person createdBy, String updatedAt,
+                           @Nullable Person updatedBy, @Nullable String deletedAt, @Nullable String purgeAt) {
 
     /** 휴지통에 두는 기간(IA 5절 1번). */
     static final Duration TRASH_RETENTION = TrashAutoPurge.RETENTION;

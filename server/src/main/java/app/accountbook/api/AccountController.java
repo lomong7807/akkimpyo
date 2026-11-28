@@ -4,6 +4,7 @@ import app.accountbook.account.Account;
 import app.accountbook.account.AccountService;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.stats.BalanceQuery;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -106,6 +107,7 @@ class AccountController {
      */
     @DeleteMapping(path = "/{accountId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @ApiResponse(responseCode = "409", ref = ApiDoc.CONFLICT)
     void deleteAccount(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId, @PathVariable UUID accountId) {
         accountService.delete(actorId, ledgerId, accountId);
     }

@@ -1,6 +1,9 @@
 package app.accountbook.api;
 
+import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
+
 import app.accountbook.common.InvalidRequestException;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.ArrayList;
 import java.util.List;
 import tools.jackson.databind.JsonNode;
@@ -11,7 +14,9 @@ import tools.jackson.databind.JsonNode;
  *
  * @param version 동작하기 전에 본 그 거래의 version
  */
-record TransactionVersionRequest(JsonNode version) {
+record TransactionVersionRequest(
+        @Schema(requiredMode = REQUIRED, implementation = Long.class, description = "동작하기 전에 본 version")
+        JsonNode version) {
 
     /** 빠지면 {@code version:REQUIRED}, JSON 정수가 아니면 {@code version:INVALID_FORMAT}이다(고치기와 같다). */
     long expectedVersion() {

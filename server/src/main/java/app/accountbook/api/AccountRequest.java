@@ -1,9 +1,12 @@
 package app.accountbook.api;
 
+import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
+
 import app.accountbook.account.AccountCommand;
 import app.accountbook.account.AccountType;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
@@ -17,7 +20,11 @@ import tools.jackson.databind.JsonNode;
  * 값을 다른 형으로 바꿔 받지 않는다(ADR 002 2절): 시작 잔액은 JSON 정수, 기준일은 {@code YYYY-MM-DD} 글자,
  * 이름과 종류는 글자다. 글자 수, 범위, 같은 이름 같은 규칙은 서비스가 본다.
  */
-record AccountRequest(JsonNode name, JsonNode type, JsonNode openingBalance, JsonNode openingDate) {
+record AccountRequest(@Schema(requiredMode = REQUIRED, implementation = String.class) JsonNode name,
+                      @Schema(requiredMode = REQUIRED, implementation = AccountType.class) JsonNode type,
+                      @Schema(requiredMode = REQUIRED, implementation = Long.class, minimum = "-9999999999",
+                              maximum = "9999999999") JsonNode openingBalance,
+                      @Schema(requiredMode = REQUIRED, implementation = LocalDate.class) JsonNode openingDate) {
 
     /** 숫자는 ASCII만이다. {@link LocalDate#parse}는 부호 붙은 다섯 자리 연도도 받는다. */
     private static final Pattern DATE = Pattern.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}");
@@ -97,7 +104,7 @@ record AccountRequest(JsonNode name, JsonNode type, JsonNode openingBalance, Jso
      * 숫자는 아니다). 읽을 수 없는 값은 값 없음으로 넘겨, 경로의 계좌가 이 장부에 없으면 본문이 틀려도 404가 먼저 나가게 한다
      * (계좌 고치기와 같다).
      */
-    record Visibility(JsonNode hidden) {
+    record Visibility(@Schema(requiredMode = REQUIRED, implementation = Boolean.class) JsonNode hidden) {
 
         Read read() {
             if (isAbsent(hidden)) {

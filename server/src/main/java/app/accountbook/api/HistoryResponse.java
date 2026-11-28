@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * 거래의 변경 이력(#47 응답 계약). 오래된 것부터다(F-228). 전후 값은 거래 API(#14)와 같은 단식 모양으로 바꾼 뒤 칸마다 비교해, 바뀐 칸만
@@ -87,7 +88,7 @@ record HistoryResponse(List<Item> items) {
      * @param deviceId 저장된 기기 값 그대로(예: {@code iphone.safari}, {@code unknown}). 화면이 이름으로 바꾼다(D-07)
      * @param at       기록한 시각(ADR 002 2절의 서버 시각)
      */
-    record Item(ChangeAction action, Person actor, String deviceId, String at, List<Change> changes) {
+    record Item(ChangeAction action, @Nullable Person actor, String deviceId, String at, List<Change> changes) {
 
         @Override
         public String toString() {
@@ -96,7 +97,7 @@ record HistoryResponse(List<Item> items) {
     }
 
     /** @param before 바뀌기 전 값. 값이 없었으면 null이다 */
-    record Change(String field, Object before, Object after) {
+    record Change(String field, @Nullable Object before, @Nullable Object after) {
 
         @Override
         public String toString() {

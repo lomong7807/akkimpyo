@@ -1,9 +1,12 @@
 package app.accountbook.api;
 
+import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
+
 import app.accountbook.category.CategoryCommand;
 import app.accountbook.category.CategoryKind;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -16,7 +19,9 @@ import tools.jackson.databind.JsonNode;
  * {@code null}이다. 읽을 수 없는 칸({@code INVALID_FORMAT})은 서비스 검증 전에 모두 모아 알린다(거래 만들기와 같다).
  * 빠진 칸, 글자 수, 상위가 맞는지, 같은 이름은 서비스가 본다.
  */
-record CategoryRequest(JsonNode kind, JsonNode name, JsonNode parentId) {
+record CategoryRequest(@Schema(requiredMode = REQUIRED, implementation = CategoryKind.class) JsonNode kind,
+                       @Schema(requiredMode = REQUIRED, implementation = String.class) JsonNode name,
+                       @Schema(implementation = UUID.class, description = "없거나 null이면 최상위") JsonNode parentId) {
 
     /** 36자 표준 표기만 받고 대소문자는 가리지 않는다({@link TransactionRequest}와 같다). */
     private static final Pattern UUID_TEXT = Pattern.compile(
@@ -70,7 +75,7 @@ record CategoryRequest(JsonNode kind, JsonNode name, JsonNode parentId) {
      * 이름 바꾸기 요청의 본문. 이름만 읽고 다른 칸은 보지 않는다. 읽을 수 없는 이름은 값 없음으로 넘겨, 경로의 카테고리가 이 장부에
      * 없으면 본문이 틀려도 404가 먼저 나가게 한다(계좌 고치기와 같다).
      */
-    record Rename(JsonNode name) {
+    record Rename(@Schema(requiredMode = REQUIRED, implementation = String.class) JsonNode name) {
 
         Read read() {
             if (isAbsent(name)) {

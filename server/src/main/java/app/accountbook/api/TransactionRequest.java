@@ -1,7 +1,10 @@
 package app.accountbook.api;
 
+import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
+
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import io.swagger.v3.oas.annotations.media.Schema;
 import app.accountbook.transaction.RefundKind;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
@@ -29,9 +32,27 @@ import tools.jackson.databind.JsonNode;
  * 바꿔 받지 않는다(ADR 002 2절). 범위, 글자 수, 같은 계좌 이체, 계좌·카테고리가 있는지는 서비스가 본다.
  * 이 검사는 서비스의 같은 id 조회보다 먼저다(ADR 006 결정 4의 형식 검증).
  */
-record TransactionRequest(JsonNode id, JsonNode type, JsonNode occurredOn, JsonNode occurredTime,
-                          JsonNode accountId, JsonNode categoryId, JsonNode amount, JsonNode payee, JsonNode memo,
-                          JsonNode refundKind, JsonNode fromAccountId, JsonNode toAccountId) {
+record TransactionRequest(@Schema(requiredMode = REQUIRED, implementation = UUID.class) JsonNode id,
+                          @Schema(requiredMode = REQUIRED, implementation = TransactionType.class) JsonNode type,
+                          @Schema(requiredMode = REQUIRED, implementation = LocalDate.class) JsonNode occurredOn,
+                          @Schema(implementation = String.class, pattern = TIME_PATTERN, description = "없거나 null이면 시각 없음")
+                          JsonNode occurredTime,
+                          @Schema(implementation = UUID.class, description = ENTRY_ONLY + " 필수") JsonNode accountId,
+                          @Schema(implementation = UUID.class, description = ENTRY_ONLY + " 없거나 null이면 미분류")
+                          JsonNode categoryId,
+                          @Schema(requiredMode = REQUIRED, implementation = Long.class, minimum = "1",
+                                  maximum = "9999999999", description = "원 단위 양수. 방향은 type과 refundKind가 정한다")
+                          JsonNode amount,
+                          @Schema(implementation = String.class, description = ENTRY_ONLY) JsonNode payee,
+                          @Schema(implementation = String.class) JsonNode memo,
+                          @Schema(implementation = RefundKind.class, description = "지출에만. 없거나 null이면 일반 지출")
+                          JsonNode refundKind,
+                          @Schema(implementation = UUID.class, description = TRANSFER_ONLY) JsonNode fromAccountId,
+                          @Schema(implementation = UUID.class, description = TRANSFER_ONLY) JsonNode toAccountId) {
+
+    static final String ENTRY_ONLY = "지출·수입에만.";
+    static final String TRANSFER_ONLY = "이체에만 필수.";
+    static final String TIME_PATTERN = "^[0-9]{2}:[0-9]{2}$";
 
     /** 36자 표준 표기만 받고 대소문자는 가리지 않는다. 응답은 소문자다(architect 결정 2026-11-26, #102). */
     static final Pattern UUID_TEXT = Pattern.compile(
@@ -39,7 +60,7 @@ record TransactionRequest(JsonNode id, JsonNode type, JsonNode occurredOn, JsonN
     /** 숫자는 ASCII만이다. {@link LocalDate#parse}는 부호 붙은 다섯 자리 연도도 받는다. */
     static final Pattern DATE = Pattern.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}");
     /** 사용자가 고른 시각은 {@code HH:mm}만이다. 초와 배열은 받지 않는다(ADR 002 2절). */
-    private static final Pattern TIME = Pattern.compile("[0-9]{2}:[0-9]{2}");
+    private static final Pattern TIME = Pattern.compile(TIME_PATTERN);
 
     /** 빠지거나 읽을 수 없는 칸이 하나라도 있으면 그것들을 모두 담아 거부한다. */
     TransactionCommand command() {

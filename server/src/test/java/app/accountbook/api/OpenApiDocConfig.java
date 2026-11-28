@@ -15,11 +15,14 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springdoc.core.utils.SpringDocUtils;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -36,6 +39,7 @@ class OpenApiDocConfig {
     static final String BEARER = "bearer";
     static final String CLIENT_HEADER = "X-Akkimpyo-Client";
     static final String PROBLEM_JSON = "application/problem+json";
+    private static final String SCHEMA_REF = "#/components/schemas/";
 
     static {
         // 요청 DTO의 JsonNode 필드는 값을 직접 검사하려고 받는 것이라 그 타입의 속성을 싣지 않는다. 필드의 모양은 어노테이션이 적는다.
@@ -56,6 +60,7 @@ class OpenApiDocConfig {
     OpenApiCustomizer errorResponses() {
         return openApi -> {
             Components components = openApi.getComponents();
+            requireResponseFields(openApi);
             problemSchemas().forEach(components::addSchemas);
             statusCodes().forEach((status, codes) -> components.addResponses(responseName(status), new ApiResponse()
                     .description("code: " + codes)
@@ -63,6 +68,46 @@ class OpenApiDocConfig {
                             .schema(new Schema<>().$ref("#/components/schemas/Problem"))))));
             openApi.getPaths().forEach((path, item) -> item.readOperations().forEach(op -> attach(path, op)));
         };
+    }
+
+    /**
+     * 응답 필드는 모두 필수다. 값이 없을 수 있는 필드는 빠지지 않고 null로 온다(ADR 003 결정 6, null은 {@code @Nullable}이 적는다).
+     * 2xx 응답에서 닿는 스키마마다 속성 이름을 모두 required에 적는다.
+     */
+    @SuppressWarnings("rawtypes")
+    private static void requireResponseFields(OpenAPI openApi) {
+        Map<String, Schema> schemas = openApi.getComponents().getSchemas();
+        Set<String> seen = new HashSet<>();
+        openApi.getPaths().values().forEach(item -> item.readOperations().forEach(op -> op.getResponses()
+                .forEach((status, response) -> {
+                    if (status.startsWith("2") && response.getContent() != null) {
+                        response.getContent().values().forEach(media -> require(media.getSchema(), schemas, seen));
+                    }
+                })));
+    }
+
+    @SuppressWarnings("rawtypes")
+    private static void require(Schema<?> schema, Map<String, Schema> schemas, Set<String> seen) {
+        if (schema == null) {
+            return;
+        }
+        if (schema.get$ref() != null) {
+            String name = schema.get$ref().substring(SCHEMA_REF.length());
+            if (seen.add(name)) {
+                require(schemas.get(name), schemas, seen);
+            }
+            return;
+        }
+        if (schema.getProperties() != null) {
+            schema.setRequired(schema.getProperties().keySet().stream().sorted().toList());
+            schema.getProperties().values().forEach(property -> require(property, schemas, seen));
+        }
+        require(schema.getItems(), schemas, seen);
+        if (schema.getAdditionalProperties() instanceof Schema<?> values) {
+            require(values, schemas, seen);
+        }
+        Stream.of(schema.getAllOf(), schema.getOneOf(), schema.getAnyOf()).filter(Objects::nonNull)
+                .forEach(parts -> parts.forEach(part -> require(part, schemas, seen)));
     }
 
     /** 표의 조건으로 붙는 오류 응답(ADR 003 결정 7). 동작에 어노테이션으로 적은 것은 그대로 둔다. */

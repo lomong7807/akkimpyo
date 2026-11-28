@@ -6,6 +6,7 @@ import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.transaction.DeviceIds;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,6 +58,7 @@ class CategoryController {
      * 경로다. 응답할 수 없는 {@code Accept}와 JSON이 아닌 본문은 저장하기 전에 거절된다(ADR 002 5절).
      */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
     ResponseEntity<CategoryResponse> createCategory(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                             @RequestBody CategoryRequest request) {
         Category category = categoryService.create(actorId, ledgerId, request.command());
@@ -69,6 +71,8 @@ class CategoryController {
      * 따로 구한다(ADR 004 결정 6). 이 장부의 카테고리가 아니면(내가 구성원인 다른 장부의 것, 없거나 지운 것) 본문이 틀려도 404다.
      */
     @PutMapping(path = "/{categoryId}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponse(responseCode = "409", ref = ApiDoc.CONFLICT)
     CategoryResponse renameCategory(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                             @PathVariable UUID categoryId, @RequestBody CategoryRequest.Rename request) {
         CategoryRequest.Rename.Read read = request.read();
@@ -86,6 +90,8 @@ class CategoryController {
      * 409 {@code INVALID_STATE}, 이 장부의 카테고리가 아니면 404다. 하위 수는 목록을 따로 읽어 센다(이름 바꾸기와 같다).
      */
     @GetMapping("/{categoryId}/deletion-impact")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponse(responseCode = "409", ref = ApiDoc.CONFLICT)
     CategoryDeletionImpactResponse getCategoryDeletionImpact(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                                   @PathVariable UUID categoryId) {
         long transactionCount = categoryService.countAffectedTransactions(actorId, ledgerId, categoryId);
@@ -101,6 +107,7 @@ class CategoryController {
      */
     @DeleteMapping("/{categoryId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @ApiResponse(responseCode = "409", ref = ApiDoc.CONFLICT)
     void deleteCategory(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId, @PathVariable UUID categoryId,
                 @RequestParam(name = TARGET_PARAM, required = false) String target,
                 @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false) String device) {

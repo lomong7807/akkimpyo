@@ -2,8 +2,13 @@ package app.accountbook.api;
 
 import app.accountbook.transaction.TransactionListQuery;
 import app.accountbook.transaction.TransactionPage;
+import app.accountbook.transaction.TransactionType;
 import app.accountbook.user.UserService;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -34,9 +39,19 @@ class TransactionSearchController {
 
     /** 한 쪽은 {@value TransactionListQuery#MAX_LIMIT}건이다. 이름은 쪽마다 한 번 읽는다. */
     @GetMapping
+    @Parameter(name = "accountId", in = ParameterIn.QUERY, description = ApiDoc.ANY_OF, array = @ArraySchema(
+            maxItems = TransactionListRequest.MAX_FILTER_VALUES, schema = @Schema(implementation = UUID.class)))
+    @Parameter(name = "categoryId", in = ParameterIn.QUERY, description = ApiDoc.ANY_OF, array = @ArraySchema(
+            maxItems = TransactionListRequest.MAX_FILTER_VALUES, schema = @Schema(implementation = UUID.class)))
+    @Parameter(name = "type", in = ParameterIn.QUERY, description = ApiDoc.ANY_OF, array = @ArraySchema(
+            maxItems = TransactionListRequest.MAX_FILTER_VALUES, schema = @Schema(implementation = TransactionType.class)))
+    @Parameter(name = "status", in = ParameterIn.QUERY, description = ApiDoc.STATUS,
+            schema = @Schema(type = "string", types = "string", allowableValues = {"POSTED", "CANCELED"}))
     TransactionSearchResponse searchTransactions(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                      @RequestParam(name = "q", required = false) String q,
+                                     @Parameter(schema = @Schema(implementation = LocalDate.class))
                                      @RequestParam(name = "from", required = false) String from,
+                                     @Parameter(schema = @Schema(implementation = LocalDate.class))
                                      @RequestParam(name = "to", required = false) String to,
                                      @RequestParam(name = "cursor", required = false) String cursor,
                                      @Parameter(hidden = true) @RequestParam MultiValueMap<String, String> query) {

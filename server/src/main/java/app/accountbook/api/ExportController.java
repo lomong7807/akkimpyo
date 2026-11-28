@@ -10,6 +10,10 @@ import app.accountbook.ledger.LedgerService;
 import app.accountbook.transaction.ExportedTransaction;
 import app.accountbook.transaction.TransactionExportQuery;
 import app.accountbook.user.UserService;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDate;
@@ -52,9 +56,19 @@ class ExportController {
 
     /** 200은 파일, 기간(또는 장부 전체)에 내보낼 거래가 없으면 204(본문 없음)다. 둘 다 저장하지 않게 한다. */
     @GetMapping("/api/v1/ledgers/{ledgerId}/exports")
+    @ApiResponse(responseCode = "200", description = "파일. 이름은 Content-Disposition에 있다", content = {
+            @Content(mediaType = "text/csv", schema = @Schema(type = "string", types = "string", format = "binary")),
+            @Content(mediaType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", schema = @Schema(type = "string", types = "string", format = "binary"))})
+    @ApiResponse(responseCode = "204", description = "내보낼 거래가 없다", content = @Content)
     ResponseEntity<byte[]> exportTransactions(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                                  @Parameter(required = true, schema = @Schema(type = "string", types = "string",
+                                          allowableValues = {"csv", "xlsx"}))
                                   @RequestParam(name = "format", required = false) String format,
+                                  @Parameter(description = "시작일. from과 to를 모두 비우면 장부 전체",
+                                          schema = @Schema(implementation = LocalDate.class))
                                   @RequestParam(name = "from", required = false) String from,
+                                  @Parameter(description = "종료일(포함). 하나만 비우면 비운 쪽이 REQUIRED",
+                                          schema = @Schema(implementation = LocalDate.class))
                                   @RequestParam(name = "to", required = false) String to) throws IOException {
         ExportRequest request = ExportRequest.of(format, from, to);
         List<ExportedTransaction> found = request.wholeLedger()
