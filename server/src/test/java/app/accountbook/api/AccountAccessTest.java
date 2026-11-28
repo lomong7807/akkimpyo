@@ -31,7 +31,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #43, #34, #44, #14, #36, #38, #47, #62, #48, #64, #379). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
+ * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #43, #34, #44, #14, #36, #38, #45, #47, #62, #48, #64, #379). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
  * 없는 id와 같은 404이고, 응답에 B의 값이 없으며, DB가 그대로다. 대조로 B 자신은 같은 요청이 열린다(틀린 본문이면 400).
  * 틀린 본문과 B가 이미 쓰는 이름도 404라, 장부가 있는지와 그 안의 이름을 알 수 없다. B의 거래 id로 만들어도 409가 아니라 404다.
  */
@@ -186,6 +186,10 @@ class AccountAccessTest {
                         client.postJson(transactions(ledger) + "/" + bExpense + "/restore", "{\"version\":1}"), 409),
                 new Case("거래 되살리기(틀린 본문)", (client, ledger) ->
                         client.postJson(transactions(ledger) + "/" + bExpense + "/restore", "{}"), 400),
+                new Case("거래 완전히 지우기(휴지통에 없는 거래)", (client, ledger) ->
+                        client.postJson(transactions(ledger) + "/" + bExpense + "/purge", "{\"version\":1}"), 409),
+                new Case("거래 완전히 지우기(틀린 본문)", (client, ledger) ->
+                        client.postJson(transactions(ledger) + "/" + bExpense + "/purge", "{}"), 400),
                 new Case("거래 승인취소(낡은 version)", (client, ledger) ->
                         client.postJson(transactions(ledger) + "/" + bExpense + "/cancel", "{\"version\":2}"), 409),
                 new Case("거래 취소 되돌리기(취소하지 않은 거래)", (client, ledger) ->

@@ -6,7 +6,7 @@ import java.util.List;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 내용 없이 version만 보내는 거래 동작의 본문: {@code { "version": N }}. 되살리기(#38)와 승인취소·취소 되돌리기(#37)가 쓴다.
+ * 내용 없이 version만 보내는 거래 동작의 본문: {@code { "version": N }}. 되살리기(#38), 완전히 지우기(#45), 승인취소·취소 되돌리기(#37)가 쓴다.
  * 그 밖의 칸은 읽지 않는다.
  *
  * @param version 동작하기 전에 본 그 거래의 version
