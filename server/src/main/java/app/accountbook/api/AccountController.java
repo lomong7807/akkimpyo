@@ -38,7 +38,7 @@ class AccountController {
 
     /** 만든 순서(만든 시각, 같으면 id)다. 잔액은 장부 전체를 한 번에 구한다. 계좌가 없으면 빈 목록이다. */
     @GetMapping
-    AccountResponse.Items list(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId) {
+    AccountResponse.Items listAccounts(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId) {
         List<Account> accounts = accountService.list(actorId, ledgerId);
         Map<UUID, Long> balances = balanceQuery.balances(actorId, ledgerId);
         // 두 조회는 트랜잭션이 따로다(ADR 004 결정 6). 그 사이에 지워진 계좌는 잔액이 없고 이미 없는 계좌라 뺀다.
@@ -54,7 +54,7 @@ class AccountController {
      */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    AccountResponse create(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    AccountResponse createAccount(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                            @RequestBody AccountRequest request) {
         AccountRequest.Read read = request.read();
         try {
@@ -71,7 +71,7 @@ class AccountController {
      * 검증은 만들기와 같다. 잔액은 저장한 뒤 따로 구한다(ADR 004 결정 6).
      */
     @PutMapping(path = "/{accountId}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    AccountResponse update(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    AccountResponse updateAccount(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                            @PathVariable UUID accountId, @RequestBody AccountRequest request) {
         AccountRequest.Read read = request.read();
         Account account;
@@ -88,7 +88,7 @@ class AccountController {
      * version은 없다(고치기와 같다). 이 장부의 계좌가 아니면 본문이 틀려도 404다.
      */
     @PutMapping(path = "/{accountId}/visibility", consumes = MediaType.APPLICATION_JSON_VALUE)
-    AccountResponse changeVisibility(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    AccountResponse changeAccountVisibility(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                      @PathVariable UUID accountId, @RequestBody AccountRequest.Visibility request) {
         AccountRequest.Visibility.Read read = request.read();
         Account account;
@@ -106,7 +106,7 @@ class AccountController {
      */
     @DeleteMapping(path = "/{accountId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void delete(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId, @PathVariable UUID accountId) {
+    void deleteAccount(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId, @PathVariable UUID accountId) {
         accountService.delete(actorId, ledgerId, accountId);
     }
 }

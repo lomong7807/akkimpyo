@@ -33,7 +33,7 @@ class TransactionTrashController {
 
     /** 한 쪽은 {@value TransactionTrashQuery#PAGE_SIZE}건이다. 이름은 쪽마다 한 번 읽는다. */
     @GetMapping
-    TrashResponse list(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    TrashResponse listTrash(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                        @RequestParam(name = "cursor", required = false) String cursor) {
         TrashPage.Key after = cursor == null ? null : TrashCursor.decode(cursor, ledgerId)
                 .orElseThrow(() -> new InvalidRequestException("cursor", FieldErrorCode.INVALID_FORMAT,

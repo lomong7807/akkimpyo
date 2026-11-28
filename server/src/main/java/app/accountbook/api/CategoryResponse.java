@@ -2,6 +2,7 @@ package app.accountbook.api;
 
 import app.accountbook.category.Category;
 import app.accountbook.category.CategoryKind;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ record CategoryResponse(UUID id, CategoryKind kind, String name, boolean system,
     private static final List<CategoryKind> KIND_ORDER = List.of(CategoryKind.EXPENSE, CategoryKind.INCOME);
 
     /** 하위 분류. 카테고리는 2단계까지라 하위는 하위를 갖지 않는다. */
+    @Schema(name = "CategoryChild")
     record Child(UUID id, String name) {
     }
 
@@ -34,6 +36,7 @@ record CategoryResponse(UUID id, CategoryKind kind, String name, boolean system,
     }
 
     /** 카테고리 목록. 최상위만 담고 하위는 그 상위의 {@code children}에 넣는다. 나누지 않고 전부 담는다(ADR 002 3절). */
+    @Schema(name = "CategoryItems")
     record Items(List<CategoryResponse> items) {
 
         /**

@@ -78,7 +78,9 @@ class AccessControlTest {
             "/", "/nope", "/api/v1/nope", "/favicon.ico", "/index.html", "/error", "/error/x",
             // 보안 라이브러리가 스스로 여는 주소
             "/login", "/logout", "/default-ui.css", "/oauth2/authorization/x", "/login/oauth2/code/x",
-            "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server"})
+            "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server",
+            // OpenAPI 문서 주소. 문서는 server/openapi.json으로만 낸다(ADR 003 결정 3, 4)
+            "/v3/api-docs", "/v3/api-docs.yaml", "/swagger-ui.html", "/swagger-ui/index.html"})
     void 토큰이_없으면_있는_주소든_없는_주소든_401이다(String path) throws Exception {
         for (String method : List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")) {
             assertUnauthenticated(anyone.send(method, path, null, "Accept", "text/html"));
@@ -104,7 +106,8 @@ class AccessControlTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"/", "/nope", "/api/v1/nope", "/error", "/error/x", "/actuator", "/actuator/",
-            "/actuator/info", "/actuator/env", "/actuator/healthz", "/login", "/logout", "/.well-known/oauth-protected-resource"})
+            "/actuator/info", "/actuator/env", "/actuator/healthz", "/login", "/logout", "/.well-known/oauth-protected-resource",
+            "/v3/api-docs", "/v3/api-docs.yaml", "/swagger-ui.html", "/swagger-ui/index.html"})
     void 토큰이_있으면_없는_주소는_404다(String path) throws Exception {
         for (String method : List.of("GET", "POST")) {
             anyone.send(method, path, null, "Authorization", bearer).assertProblem(404, "Not Found", "NOT_FOUND");

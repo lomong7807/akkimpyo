@@ -52,7 +52,7 @@ class TransactionChangeController {
 
     /** 200이고 본문은 고친 거래다. 같은 내용이면 version을 올리지 않고 지금 거래를 준다. */
     @PutMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    TransactionResponse update(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    TransactionResponse updateTransaction(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                @PathVariable UUID transactionId,
                                @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false)
                                String device,
@@ -65,7 +65,7 @@ class TransactionChangeController {
 
     /** 휴지통에 넣는다. 200이고 본문은 바뀐 거래({@code deletedAt}, {@code purgeAt}, version+1)다. 본문은 읽지 않는다. */
     @DeleteMapping
-    TransactionResponse delete(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    TransactionResponse deleteTransaction(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                @PathVariable UUID transactionId,
                                @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false)
                                String device,
@@ -78,7 +78,7 @@ class TransactionChangeController {
 
     /** 휴지통에서 되살린다(삭제 직후의 "되돌리기"가 부른다). 200이고 본문은 바뀐 거래다. */
     @PostMapping(path = "/restore", consumes = MediaType.APPLICATION_JSON_VALUE)
-    TransactionResponse restore(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    TransactionResponse restoreTransaction(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                 @PathVariable UUID transactionId,
                                 @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false)
                                 String device,
@@ -95,7 +95,7 @@ class TransactionChangeController {
      */
     @PostMapping(path = "/purge", consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void purge(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId, @PathVariable UUID transactionId,
+    void purgeTransaction(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId, @PathVariable UUID transactionId,
                @RequestBody TransactionVersionRequest request) {
         requireInLedger(actorId, ledgerId, transactionId);
         long expectedVersion = request.expectedVersion();
@@ -108,7 +108,7 @@ class TransactionChangeController {
 
     /** 승인취소(F-225). 200이고 본문은 바뀐 거래({@code status}가 {@code CANCELED}, version+1)다. 잔액과 통계에서 빠진다. */
     @PostMapping(path = "/cancel", consumes = MediaType.APPLICATION_JSON_VALUE)
-    TransactionResponse cancel(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    TransactionResponse cancelTransaction(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                @PathVariable UUID transactionId,
                                @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false)
                                String device,
@@ -121,7 +121,7 @@ class TransactionChangeController {
 
     /** 승인취소 되돌리기(F-226). 200이고 본문은 취소 직전 상태로 돌아간 거래(version+1)다. 잔액과 통계에 다시 든다. */
     @PostMapping(path = "/uncancel", consumes = MediaType.APPLICATION_JSON_VALUE)
-    TransactionResponse uncancel(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    TransactionResponse uncancelTransaction(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                  @PathVariable UUID transactionId,
                                  @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false)
                                  String device,

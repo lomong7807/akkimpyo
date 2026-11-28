@@ -1,0 +1,2782 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "아낌표 API",
+    "version" : "v1"
+  },
+  "servers" : [ {
+    "url" : "/"
+  } ],
+  "security" : [ {
+    "bearer" : [ ]
+  } ],
+  "paths" : {
+    "/api/v1/auth/login" : {
+      "post" : {
+        "operationId" : "login",
+        "parameters" : [ {
+          "description" : "화면이 보낸 요청이라는 표시. 값은 보지 않는다",
+          "in" : "header",
+          "name" : "X-Akkimpyo-Client",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccessTokenResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Error403"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/Error429"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/auth/logout" : {
+      "post" : {
+        "operationId" : "logout",
+        "parameters" : [ {
+          "description" : "화면이 보낸 요청이라는 표시. 값은 보지 않는다",
+          "in" : "header",
+          "name" : "X-Akkimpyo-Client",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Error403"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/auth/password" : {
+      "post" : {
+        "operationId" : "changePassword",
+        "parameters" : [ {
+          "description" : "화면이 보낸 요청이라는 표시. 값은 보지 않는다",
+          "in" : "header",
+          "name" : "X-Akkimpyo-Client",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PasswordChangeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Error403"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/Error429"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/auth/refresh" : {
+      "post" : {
+        "operationId" : "refresh",
+        "parameters" : [ {
+          "description" : "화면이 보낸 요청이라는 표시. 값은 보지 않는다",
+          "in" : "header",
+          "name" : "X-Akkimpyo-Client",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccessTokenResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Error403"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/auth/signup" : {
+      "post" : {
+        "operationId" : "signup",
+        "parameters" : [ {
+          "description" : "화면이 보낸 요청이라는 표시. 값은 보지 않는다",
+          "in" : "header",
+          "name" : "X-Akkimpyo-Client",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SignupRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccessTokenResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Error403"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/Error429"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/accounts" : {
+      "get" : {
+        "operationId" : "listAccounts",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountItems"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      },
+      "post" : {
+        "operationId" : "createAccount",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccountRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/accounts/{accountId}" : {
+      "delete" : {
+        "operationId" : "deleteAccount",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "accountId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      },
+      "put" : {
+        "operationId" : "updateAccount",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "accountId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccountRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/accounts/{accountId}/visibility" : {
+      "put" : {
+        "operationId" : "changeAccountVisibility",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "accountId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Visibility"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/categories" : {
+      "get" : {
+        "operationId" : "listCategories",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CategoryItems"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "category-controller" ]
+      },
+      "post" : {
+        "operationId" : "createCategory",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CategoryRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CategoryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "category-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/categories/{categoryId}" : {
+      "delete" : {
+        "operationId" : "deleteCategory",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "categoryId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "query",
+          "name" : "targetCategoryId",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Akkimpyo-Device",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "category-controller" ]
+      },
+      "put" : {
+        "operationId" : "renameCategory",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "categoryId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Rename"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CategoryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "category-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/categories/{categoryId}/deletion-impact" : {
+      "get" : {
+        "operationId" : "getCategoryDeletionImpact",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "categoryId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CategoryDeletionImpactResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "category-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/category-suggestions" : {
+      "get" : {
+        "operationId" : "suggestCategories",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CategorySuggestionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "category-suggestion-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/exports" : {
+      "get" : {
+        "operationId" : "exportTransactions",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "query",
+          "name" : "format",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "byte"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "export-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/stats/categories" : {
+      "get" : {
+        "operationId" : "getCategoryStats",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "query",
+          "name" : "month",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CategoryStatsResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "stats-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/stats/daily" : {
+      "get" : {
+        "operationId" : "getDailyStats",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "query",
+          "name" : "month",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DailyTotalsResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "stats-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/stats/monthly" : {
+      "get" : {
+        "operationId" : "getMonthlyStats",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "query",
+          "name" : "month",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MonthlyStatsResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "stats-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/stats/yearly" : {
+      "get" : {
+        "operationId" : "getYearlyStats",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "query",
+          "name" : "year",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/YearlyStatsResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "stats-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/transactions" : {
+      "get" : {
+        "operationId" : "listTransactions",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "query",
+          "name" : "month",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "date",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionListResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-controller" ]
+      },
+      "post" : {
+        "operationId" : "createTransaction",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Akkimpyo-Device",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TransactionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/transactions/duplicates" : {
+      "get" : {
+        "operationId" : "findDuplicateTransactions",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionDuplicatesResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/transactions/search" : {
+      "get" : {
+        "operationId" : "searchTransactions",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "query",
+          "name" : "q",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionSearchResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-search-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/transactions/trash" : {
+      "get" : {
+        "operationId" : "listTrash",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TrashResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-trash-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/transactions/{transactionId}" : {
+      "delete" : {
+        "operationId" : "deleteTransaction",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "transactionId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Akkimpyo-Device",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "version",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-change-controller" ]
+      },
+      "get" : {
+        "operationId" : "getTransaction",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "transactionId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-controller" ]
+      },
+      "put" : {
+        "operationId" : "updateTransaction",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "transactionId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Akkimpyo-Device",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TransactionUpdateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-change-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/transactions/{transactionId}/cancel" : {
+      "post" : {
+        "operationId" : "cancelTransaction",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "transactionId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Akkimpyo-Device",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TransactionVersionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-change-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/transactions/{transactionId}/history" : {
+      "get" : {
+        "operationId" : "getTransactionHistory",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "transactionId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/HistoryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-history-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/transactions/{transactionId}/purge" : {
+      "post" : {
+        "operationId" : "purgeTransaction",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "transactionId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TransactionVersionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-change-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/transactions/{transactionId}/restore" : {
+      "post" : {
+        "operationId" : "restoreTransaction",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "transactionId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Akkimpyo-Device",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TransactionVersionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-change-controller" ]
+      }
+    },
+    "/api/v1/ledgers/{ledgerId}/transactions/{transactionId}/uncancel" : {
+      "post" : {
+        "operationId" : "uncancelTransaction",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "ledgerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "path",
+          "name" : "transactionId",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Akkimpyo-Device",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TransactionVersionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/Error404"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "transaction-change-controller" ]
+      }
+    },
+    "/api/v1/me" : {
+      "get" : {
+        "operationId" : "getMe",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      }
+    },
+    "/api/v1/me/display-name" : {
+      "put" : {
+        "operationId" : "changeDisplayName",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DisplayNameRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "400" : {
+            "$ref" : "#/components/responses/Error400"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Error401"
+          },
+          "415" : {
+            "$ref" : "#/components/responses/Error415"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/Error500"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      }
+    }
+  },
+  "components" : {
+    "responses" : {
+      "Error400" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "code: VALIDATION_FAILED, MALFORMED_REQUEST"
+      },
+      "Error401" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "code: UNAUTHENTICATED, INVALID_CREDENTIALS"
+      },
+      "Error403" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "code: FORBIDDEN, ORIGIN_NOT_ALLOWED"
+      },
+      "Error404" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "code: NOT_FOUND"
+      },
+      "Error405" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "code: METHOD_NOT_ALLOWED"
+      },
+      "Error409" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "code: STALE_VERSION, ID_CONFLICT, INVALID_STATE, ACCOUNT_HAS_TRANSACTIONS"
+      },
+      "Error413" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "code: PAYLOAD_TOO_LARGE"
+      },
+      "Error415" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "code: UNSUPPORTED_MEDIA_TYPE"
+      },
+      "Error429" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "code: TOO_MANY_REQUESTS"
+      },
+      "Error500" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "code: INTERNAL_ERROR"
+      }
+    },
+    "schemas" : {
+      "AccessTokenResponse" : {
+        "type" : "object",
+        "properties" : {
+          "accessToken" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AccountItems" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/AccountResponse"
+            }
+          }
+        }
+      },
+      "AccountRequest" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "object"
+          },
+          "openingBalance" : {
+            "type" : "object"
+          },
+          "openingDate" : {
+            "type" : "object"
+          },
+          "type" : {
+            "type" : "object"
+          }
+        }
+      },
+      "AccountResponse" : {
+        "type" : "object",
+        "properties" : {
+          "balance" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "hidden" : {
+            "type" : "boolean"
+          },
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "openingBalance" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "openingDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "type" : {
+            "type" : "string",
+            "enum" : [ "BANK", "CARD", "CASH" ]
+          }
+        }
+      },
+      "CategoryChild" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CategoryDeletionImpactResponse" : {
+        "type" : "object",
+        "properties" : {
+          "childCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "transactionCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "CategoryItems" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CategoryResponse"
+            }
+          }
+        }
+      },
+      "CategoryRequest" : {
+        "type" : "object",
+        "properties" : {
+          "kind" : {
+            "type" : "object"
+          },
+          "name" : {
+            "type" : "object"
+          },
+          "parentId" : {
+            "type" : "object"
+          }
+        }
+      },
+      "CategoryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "children" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CategoryChild"
+            }
+          },
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "INCOME", "EXPENSE" ]
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "system" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "CategoryStatsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "categories" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/StatsCategory"
+            }
+          },
+          "month" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CategorySuggestionResponse" : {
+        "type" : "object",
+        "properties" : {
+          "categoryId" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }
+      },
+      "Change" : {
+        "type" : "object",
+        "properties" : {
+          "after" : { },
+          "before" : { },
+          "field" : {
+            "type" : "string"
+          }
+        }
+      },
+      "DailyTotalsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "days" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Day"
+            }
+          },
+          "month" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Day" : {
+        "type" : "object",
+        "properties" : {
+          "date" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "expense" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "income" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "DisplayNameRequest" : {
+        "type" : "object",
+        "properties" : {
+          "displayName" : {
+            "type" : "string"
+          }
+        }
+      },
+      "HistoryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Item"
+            }
+          }
+        }
+      },
+      "InvalidField" : {
+        "type" : "object",
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "enum" : [ "REQUIRED", "INVALID_FORMAT", "OUT_OF_RANGE", "TOO_LONG", "DUPLICATE", "NOT_ALLOWED", "NOT_FOUND", "TOO_DEEP", "KIND_MISMATCH", "INCORRECT" ]
+          },
+          "field" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "code", "field", "message" ]
+      },
+      "Item" : {
+        "type" : "object",
+        "properties" : {
+          "action" : {
+            "type" : "string",
+            "enum" : [ "CREATE", "UPDATE", "CANCEL", "UNCANCEL", "DELETE", "RESTORE", "PURGE", "AUTO_PURGE", "CATEGORY_MOVE" ]
+          },
+          "actor" : {
+            "$ref" : "#/components/schemas/Person"
+          },
+          "at" : {
+            "type" : "string"
+          },
+          "changes" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Change"
+            }
+          },
+          "deviceId" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LoginRequest" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "password" : {
+            "type" : "string",
+            "format" : "password",
+            "minLength" : 1,
+            "writeOnly" : true
+          }
+        },
+        "required" : [ "email", "password" ]
+      },
+      "MeResponse" : {
+        "type" : "object",
+        "properties" : {
+          "displayName" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "ledgers" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MyLedger"
+            }
+          }
+        }
+      },
+      "MonthTotals" : {
+        "type" : "object",
+        "properties" : {
+          "expense" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "income" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "month" : {
+            "type" : "string"
+          },
+          "net" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "MonthlyStatsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "expense" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "income" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "month" : {
+            "type" : "string"
+          },
+          "net" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "topExpenseCategories" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TopExpenseCategory"
+            }
+          }
+        }
+      },
+      "MyLedger" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "role" : {
+            "type" : "string",
+            "enum" : [ "OWNER", "MEMBER" ]
+          }
+        }
+      },
+      "PasswordChangeRequest" : {
+        "type" : "object",
+        "properties" : {
+          "currentPassword" : {
+            "type" : "string",
+            "format" : "password",
+            "writeOnly" : true
+          },
+          "newPassword" : {
+            "type" : "string",
+            "format" : "password",
+            "writeOnly" : true
+          }
+        }
+      },
+      "Person" : {
+        "type" : "object",
+        "properties" : {
+          "displayName" : {
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }
+      },
+      "Problem" : {
+        "type" : "object",
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "description" : "오류 코드. 늘어날 수 있다. 모르는 code는 status로 처리한다",
+            "enum" : [ "VALIDATION_FAILED", "MALFORMED_REQUEST", "UNAUTHENTICATED", "INVALID_CREDENTIALS", "FORBIDDEN", "ORIGIN_NOT_ALLOWED", "NOT_FOUND", "METHOD_NOT_ALLOWED", "STALE_VERSION", "ID_CONFLICT", "INVALID_STATE", "ACCOUNT_HAS_TRANSACTIONS", "PAYLOAD_TOO_LARGE", "UNSUPPORTED_MEDIA_TYPE", "TOO_MANY_REQUESTS", "INTERNAL_ERROR" ]
+          },
+          "current" : { },
+          "detail" : {
+            "type" : "string"
+          },
+          "fieldErrors" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/InvalidField"
+            }
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "code", "detail", "requestId", "status", "title", "type" ]
+      },
+      "Rename" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "object"
+          }
+        }
+      },
+      "SignupRequest" : {
+        "type" : "object",
+        "properties" : {
+          "displayName" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "password" : {
+            "type" : "string",
+            "format" : "password",
+            "writeOnly" : true
+          }
+        }
+      },
+      "StatsCategory" : {
+        "type" : "object",
+        "properties" : {
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "categoryId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "children" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/StatsCategoryChild"
+            }
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "INCOME", "EXPENSE" ]
+          }
+        }
+      },
+      "StatsCategoryChild" : {
+        "type" : "object",
+        "properties" : {
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "categoryId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "INCOME", "EXPENSE" ]
+          }
+        }
+      },
+      "TopExpenseCategory" : {
+        "type" : "object",
+        "properties" : {
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "categoryId" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }
+      },
+      "TransactionDuplicatesResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TransactionResponse"
+            }
+          }
+        }
+      },
+      "TransactionListResponse" : {
+        "type" : "object",
+        "properties" : {
+          "days" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Day"
+            }
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TransactionResponse"
+            }
+          },
+          "nextCursor" : {
+            "type" : "string"
+          },
+          "totals" : {
+            "$ref" : "#/components/schemas/TransactionListTotals"
+          }
+        }
+      },
+      "TransactionListTotals" : {
+        "type" : "object",
+        "properties" : {
+          "expense" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "income" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "TransactionRequest" : {
+        "type" : "object",
+        "properties" : {
+          "accountId" : {
+            "type" : "object"
+          },
+          "amount" : {
+            "type" : "object"
+          },
+          "categoryId" : {
+            "type" : "object"
+          },
+          "fromAccountId" : {
+            "type" : "object"
+          },
+          "id" : {
+            "type" : "object"
+          },
+          "memo" : {
+            "type" : "object"
+          },
+          "occurredOn" : {
+            "type" : "object"
+          },
+          "occurredTime" : {
+            "type" : "object"
+          },
+          "payee" : {
+            "type" : "object"
+          },
+          "refundKind" : {
+            "type" : "object"
+          },
+          "toAccountId" : {
+            "type" : "object"
+          },
+          "type" : {
+            "type" : "object"
+          }
+        }
+      },
+      "TransactionResponse" : {
+        "type" : "object",
+        "properties" : {
+          "accountId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "categoryId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "createdBy" : {
+            "$ref" : "#/components/schemas/Person"
+          },
+          "deletedAt" : {
+            "type" : "string"
+          },
+          "fromAccountId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "memo" : {
+            "type" : "string"
+          },
+          "occurredOn" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "occurredTime" : {
+            "type" : "string"
+          },
+          "paidBy" : {
+            "$ref" : "#/components/schemas/Person"
+          },
+          "payee" : {
+            "type" : "string"
+          },
+          "purgeAt" : {
+            "type" : "string"
+          },
+          "refundKind" : {
+            "type" : "string",
+            "enum" : [ "REFUND", "REIMBURSEMENT" ]
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "POSTED", "CANCELED" ]
+          },
+          "toAccountId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "type" : {
+            "type" : "string",
+            "enum" : [ "EXPENSE", "INCOME", "TRANSFER" ]
+          },
+          "updatedAt" : {
+            "type" : "string"
+          },
+          "updatedBy" : {
+            "$ref" : "#/components/schemas/Person"
+          },
+          "version" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "TransactionSearchResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TransactionResponse"
+            }
+          },
+          "nextCursor" : {
+            "type" : "string"
+          },
+          "totals" : {
+            "$ref" : "#/components/schemas/TransactionSearchTotals"
+          }
+        }
+      },
+      "TransactionSearchTotals" : {
+        "type" : "object",
+        "properties" : {
+          "count" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "expense" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "income" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "TransactionUpdateRequest" : {
+        "type" : "object",
+        "properties" : {
+          "accountId" : {
+            "type" : "object"
+          },
+          "amount" : {
+            "type" : "object"
+          },
+          "categoryId" : {
+            "type" : "object"
+          },
+          "fromAccountId" : {
+            "type" : "object"
+          },
+          "memo" : {
+            "type" : "object"
+          },
+          "occurredOn" : {
+            "type" : "object"
+          },
+          "occurredTime" : {
+            "type" : "object"
+          },
+          "payee" : {
+            "type" : "object"
+          },
+          "refundKind" : {
+            "type" : "object"
+          },
+          "toAccountId" : {
+            "type" : "object"
+          },
+          "type" : {
+            "type" : "object"
+          },
+          "version" : {
+            "type" : "object"
+          }
+        }
+      },
+      "TransactionVersionRequest" : {
+        "type" : "object",
+        "properties" : {
+          "version" : {
+            "type" : "object"
+          }
+        }
+      },
+      "TrashResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TransactionResponse"
+            }
+          },
+          "nextCursor" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Visibility" : {
+        "type" : "object",
+        "properties" : {
+          "hidden" : {
+            "type" : "object"
+          }
+        }
+      },
+      "YearlyStatsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "categories" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/StatsCategory"
+            }
+          },
+          "expense" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "income" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "months" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MonthTotals"
+            }
+          },
+          "net" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "year" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      }
+    },
+    "securitySchemes" : {
+      "bearer" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  }
+}

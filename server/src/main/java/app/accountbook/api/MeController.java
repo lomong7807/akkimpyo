@@ -29,7 +29,7 @@ class MeController {
 
     /** user와 ledger의 값을 차례로 읽어 합친다. 그 사이의 짧은 시점 차이는 받아들인다(ADR 004 결정 6). */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    MeResponse me(@AuthenticationPrincipal UUID userId) {
+    MeResponse getMe(@AuthenticationPrincipal UUID userId) {
         return MeResponse.of(userId, userService.profile(userId), ledgerService.memberships(userId));
     }
 

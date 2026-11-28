@@ -1,6 +1,7 @@
 package app.accountbook.api;
 
 import app.accountbook.transaction.TransactionPage;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,6 +26,7 @@ record TransactionSearchResponse(List<TransactionResponse> items, String nextCur
      * @param count   목록에 나오는 거래 수(휴지통 제외, 취소 포함). D-03의 "결과 N건"이다
      * @param income  수입 합계, {@code expense}는 지출 합계(양수). 취소·이체는 빠진다(P-205)
      */
+    @Schema(name = "TransactionSearchTotals")
     record Totals(long count, long income, long expense) {
     }
 

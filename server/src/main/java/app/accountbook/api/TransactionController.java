@@ -10,6 +10,7 @@ import app.accountbook.transaction.TransactionPage;
 import app.accountbook.transaction.TransactionService;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.user.UserService;
+import io.swagger.v3.oas.annotations.Parameter;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -54,12 +55,12 @@ class TransactionController {
      * {@link TransactionListRequest}에 있다.
      */
     @GetMapping
-    TransactionListResponse list(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    TransactionListResponse listTransactions(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                  @RequestParam(name = "month", required = false) String month,
                                  @RequestParam(name = "date", required = false) String date,
                                  @RequestParam(name = "limit", required = false) String limit,
                                  @RequestParam(name = "cursor", required = false) String cursor,
-                                 @RequestParam MultiValueMap<String, String> query) {
+                                 @Parameter(hidden = true) @RequestParam MultiValueMap<String, String> query) {
         TransactionListRequest request = TransactionListRequest.of(ledgerId, month, date, limit, cursor, query);
         TransactionPage page = transactionListQuery.page(actorId, ledgerId, request.scope(), request.filter(),
                 request.after(), request.limit());
@@ -74,8 +75,8 @@ class TransactionController {
      * {@link LedgerMemberInterceptor}가 먼저 404로 답한다. 경로는 {@code /{transactionId}}보다 이것이 먼저 맞는다.
      */
     @GetMapping("/duplicates")
-    TransactionDuplicatesResponse duplicates(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
-                                             @RequestParam MultiValueMap<String, String> query) {
+    TransactionDuplicatesResponse findDuplicateTransactions(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                                             @Parameter(hidden = true) @RequestParam MultiValueMap<String, String> query) {
         TransactionDuplicateRequest request = TransactionDuplicateRequest.of(query);
         List<TransactionView> found = transactionListQuery.duplicates(actorId, ledgerId, request.occurredOn(),
                 request.amount(), request.payee(), request.exclude());
@@ -88,7 +89,7 @@ class TransactionController {
      * 서비스가 트랜잭션을 스스로 열므로 여기서 열지 않는다. 이름은 저장한 뒤 따로 읽는다(ADR 004 결정 6).
      */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<TransactionResponse> create(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    ResponseEntity<TransactionResponse> createTransaction(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                                @RequestHeader(name = DEVICE_HEADER, required = false) String device,
                                                @RequestBody TransactionRequest request) {
         TransactionCommand command = request.command();
@@ -111,7 +112,7 @@ class TransactionController {
      * 거래(내가 그 장부의 구성원이어도), 완전히 지운 거래는 구분하지 않고 404다.
      */
     @GetMapping("/{transactionId}")
-    TransactionResponse get(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    TransactionResponse getTransaction(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                             @PathVariable UUID transactionId) {
         TransactionView tx = transactionService.get(actorId, transactionId);
         if (!tx.ledgerId().equals(ledgerId)) {

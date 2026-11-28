@@ -52,7 +52,7 @@ class ExportController {
 
     /** 200은 파일, 기간(또는 장부 전체)에 내보낼 거래가 없으면 204(본문 없음)다. 둘 다 저장하지 않게 한다. */
     @GetMapping("/api/v1/ledgers/{ledgerId}/exports")
-    ResponseEntity<byte[]> export(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    ResponseEntity<byte[]> exportTransactions(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                   @RequestParam(name = "format", required = false) String format,
                                   @RequestParam(name = "from", required = false) String from,
                                   @RequestParam(name = "to", required = false) String to) throws IOException {

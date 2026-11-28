@@ -31,6 +31,8 @@ dependencies {
     implementation 'org.springframework.security:spring-security-oauth2-jose'
     // 장부 거래 내보내기의 엑셀(xlsx) 쓰기(#57). 쓰기 artifact만 쓴다(읽기인 fastexcel-reader는 넣지 않는다).
     implementation 'org.dhatim:fastexcel:0.20.3'
+    // OpenAPI 문서의 어노테이션(ADR 003 결정 2). 컴파일에만 쓰고 운영 jar와 bootRun에는 들어가지 않는다.
+    compileOnly 'io.swagger.core.v3:swagger-annotations:3.0.0'
     runtimeOnly 'org.postgresql:postgresql'
     // Argon2PasswordEncoder가 실행할 때 요구한다. Spring Boot가 버전을 관리하지 않아 직접 적는다.
     runtimeOnly 'org.bouncycastle:bcprov-jdk18on:1.87'
@@ -39,6 +41,8 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation 'org.testcontainers:testcontainers-postgresql'
     testImplementation 'com.tngtech.archunit:archunit-junit6:1.5.1'
+    // 문서 테스트(OpenApiDocTest)가 server/openapi.json을 만든다(ADR 003 결정 1, 2). 테스트에만 둔다.
+    testImplementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:3.2.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -58,4 +62,22 @@ tasks.named('test') {
                     "${result.failedTestCount} failed, ${result.skippedTestCount} skipped")
         }
     }
+}
+
+// 운영 jar(bootJar)의 실행 경로에 OpenAPI 문서 라이브러리(springdoc, swagger)가 없다(ADR 003 결정 2, security 권고).
+// 의존성 범위가 implementation으로 바뀌어도 테스트는 모두 통과하므로 여기서 막는다.
+def noOpenApiInProduction = tasks.register('noOpenApiInProduction') {
+    def classpath = configurations.named('productionRuntimeClasspath')
+    inputs.files(classpath)
+    doLast {
+        def found = classpath.get().incoming.resolutionResult.allComponents
+                .collect { it.moduleVersion }
+                .findAll { it.group in ['org.springdoc', 'io.swagger.core.v3'] }
+        if (found) {
+            throw new GradleException("운영 실행 경로에 OpenAPI 문서 라이브러리가 있다: ${found.join(', ')}")
+        }
+    }
+}
+tasks.named('check') {
+    dependsOn noOpenApiInProduction
 }

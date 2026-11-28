@@ -2,6 +2,7 @@ package app.accountbook.api;
 
 import app.accountbook.account.Account;
 import app.accountbook.account.AccountType;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -22,6 +23,7 @@ record AccountResponse(UUID id, String name, AccountType type, long balance, lon
     }
 
     /** 계좌 목록. 숨긴 계좌도 담고 {@code hidden}으로 가른다(F-501). 나누지 않고 전부 담는다(ADR 002 3절). */
+    @Schema(name = "AccountItems")
     record Items(List<AccountResponse> items) {
     }
 }
