@@ -6,14 +6,12 @@ import { uuidV7 } from '../../lib/uuid'
 import type { Account } from '../accounts/accounts'
 import type { Category } from '../categories/categories'
 import { useConnection } from '../connection/useConnection'
-import type { PanelFailure } from './ConflictPanel'
 import { duplicateQueryOf, findDuplicates, type DuplicateQuery } from './duplicates'
-import { isUncategorized } from './formDefaults'
-import { nameBookOf } from './listedText'
+import { choiceListsOf } from './choiceLists'
+import { KEPT_TOAST, RESEND_NOTICE, SAVE_FAILED, SAVE_LOST, type Choice } from './IdConflictChoice'
 import { isConnectionLoss, QUEUED_TOAST, queueNewTransaction } from './pendingTransactions'
 import {
   hasSameContent,
-  savedTransactionValues,
   toNewTransaction,
   toTransactionUpdate,
   validateTransaction,
@@ -41,18 +39,7 @@ import { useUpdateTransaction } from './useUpdateTransaction'
  * 화면은 보내는 동안 떠나는 길을 막는다(D-04 useLeaveGuard, D-05 architect #233).
  */
 
-/** 같은 id로 다시 보낸 거래가 이미 고쳐졌거나 휴지통·취소였을 때(200, ADR 006 결정 3)의 토스트(designer #239) */
-const RESEND_NOTICE = '이미 저장된 거래라 저장된 내용으로 두었어요'
-
-/* 선택 판(ADR 006 결정 3)의 문구(designer #239, #102). 화면에 "서버"라는 말을 쓰지 않는다 */
-export const CHOICE_TITLE = '이미 저장된 거래가 있어요'
-export const CHOICE_DESCRIPTION = '먼저 저장된 내용과 지금 입력이 달라요. 어느 쪽으로 할지 골라 주세요.'
-const KEPT_TOAST = '저장된 내용으로 두었어요'
-export const KEPT_NOTICE = '저장된 거래는 그대로 남아요'
-/* 선택 판의 실패와 비활성 문구는 D-04 저장의 것을 쓴다(designer #239 D1) */
-export const SAVE_FAILED = '문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
-const SAVE_LOST = '연결이 끊겨 저장하지 못했어요. 연결되면 다시 시도해 주세요.'
-export const SAVE_OFFLINE = '연결되면 저장할 수 있어요'
+/* 선택 판(ADR 006 결정 3)의 문구와 모양은 IdConflictChoice에 있다(B-05 #280과 같이 쓴다) */
 
 /** 저장 버튼(중복 경고 판의 "그래도 저장" 포함), 실패 문구의 버튼("다시 시도", "새 거래로 저장"), 또는 선택 판의 주 버튼 */
 export type Sender = 'save' | 'message' | 'choice'
@@ -69,16 +56,6 @@ type Failure =
   | { kind: 'id-unusable' }
   /** 연결이 없는데 기기에 쌓지 못했다(저장소를 쓸 수 없음). "다시 시도"는 연결이 없는 동안 비활성이다 */
   | { kind: 'not-queued' }
-
-/** 선택 판에 보이는 저장된 거래와 그 판의 실패 */
-export interface Choice {
-  current: TransactionDetail
-  /** 판을 연 때의 기기의 오늘 */
-  today: string
-  /** 새 저장된 내용으로 다시 그린 횟수 */
-  redraws: number
-  failure?: PanelFailure
-}
 
 interface NewTransactionSaveOptions {
   form: TransactionForm
@@ -159,14 +136,10 @@ export function useNewTransactionSave({
       mounted.current = false
     }
   }, [])
-  const lists = useMemo(() => {
-    if (!accounts || !categories) return undefined
-    return {
-      names: nameBookOf(accounts, categories),
-      valuesOf: (saved: TransactionDetail) =>
-        savedTransactionValues(saved, (categoryId) => isUncategorized(categories, categoryId)),
-    }
-  }, [accounts, categories])
+  const lists = useMemo(
+    () => (accounts && categories ? choiceListsOf(accounts, categories) : undefined),
+    [accounts, categories],
+  )
 
   const busy =
     checking || creation.isPending || creation.isSuccess || queueing || updating.isPending || updating.isSuccess

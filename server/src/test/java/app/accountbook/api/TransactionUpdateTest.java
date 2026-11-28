@@ -119,6 +119,25 @@ class TransactionUpdateTest {
                 .containsExactly("null REFUND", "REFUND REFUND", "REFUND REIMBURSEMENT", "REIMBURSEMENT null");
     }
 
+    /** 일반 지출을 고쳐 환불로 바꾸면 양수 라인이 된다. 수입·이체를 고칠 때 구분을 보내면 400이고 바꾸지 않는다(#46). */
+    @Test
+    void 일반_지출을_환불로_고칠_수_있고_수입과_이체를_고칠_때_구분을_보내면_400이다() throws Exception {
+        JsonNode spent = create(expense(cash, food, 12_000, "null"));
+        JsonNode earned = create(expense(bank, null, 3_000_000, "null").replace("EXPENSE", "INCOME"));
+        JsonNode moved = create(transfer(bank, cash, 50_000, "null"));
+
+        Reply refunded = update(spent, withRefundKind(expense(cash, food, 12_000, "null"), "\"REFUND\""), 1);
+
+        assertThat(refunded.status()).as(refunded.body()).isEqualTo(200);
+        assertThat(refunded.json().get("refundKind").asString()).isEqualTo("REFUND");
+        assertThat(history(spent)).containsExactly("CREATE unknown null -12000", "UPDATE unknown -12000 12000");
+        update(earned, withRefundKind(expense(bank, null, 3_000_000, "null").replace("EXPENSE", "INCOME"),
+                "\"REFUND\""), 1).assertFieldErrors("refundKind:NOT_ALLOWED");
+        update(moved, withRefundKind(transfer(bank, cash, 50_000, "null"), "\"REIMBURSEMENT\""), 1)
+                .assertFieldErrors("refundKind:NOT_ALLOWED");
+        assertThat(List.of(history(earned), history(moved))).allSatisfy(log -> assertThat(log).hasSize(1));
+    }
+
     /** 수정 때 시각이 반영되고, 비우면 옛 값이 남지 않고 시각 없음이 된다(#36 테스트 보강). 기기 헤더가 없으면 unknown이다. */
     @Test
     void 이체를_고치면_계좌와_금액이_바뀌고_시각을_비우면_시각_없음이_된다() throws Exception {
