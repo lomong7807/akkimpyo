@@ -11,7 +11,7 @@ afterEach(() => {
 })
 
 describe('앱을 한 번 그리고 버린다', () => {
-  it('화면, 기기 저장소, 바꾼 전역, fetch를 그리기 전으로 되돌린다', async () => {
+  it('화면, local·session 저장소, 바꾼 전역, fetch를 그리기 전으로 되돌린다', async () => {
     localStorage.setItem('kept', 'local')
     sessionStorage.setItem('kept', 'session')
     const fetchBefore = globalThis.fetch

@@ -66,7 +66,8 @@ export async function drawAppOnce() {
 
     const { routes } = await import('../../src/app/routes')
     renderRoutes(routes, '/transactions?month=2026-11', queryClient)
-    await screen.findByRole('link', { name: new RegExp(`^${PAYEE}`) }, { timeout: 10_000 })
+    // hook 한도(10초)보다 먼저 끝나, 못 그렸을 때 무엇을 못 찾았는지가 남는다
+    await screen.findByRole('link', { name: new RegExp(`^${PAYEE}`) }, { timeout: 8_000 })
     // 그린 앱이 보낸 요청과 받는 코드가 다 끝난 뒤에 버린다
     await vi.dynamicImportSettled()
     while (pending.size > 0) await nextTurn()
