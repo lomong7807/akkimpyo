@@ -2,14 +2,15 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import Amount from '../../components/Amount'
 import { Button } from '../../components/Button'
 import ErrorMessage from '../../components/ErrorMessage'
+import StatusChip from '../../components/StatusChip'
 import { formatDate } from '../../lib/calendarDate'
 import type { CompareRow, CompareValue } from './conflictValues'
 import { detailOf, titleOf, type NameBook } from './listedText'
-import type { ListedTransaction } from './transactions'
+import type { ListedTransaction, TransactionDetail } from './transactions'
 import styles from './ConflictPanel.module.css'
 
 /*
- * 수정 충돌 안내(N-04)와 같은 거래를 다시 보낸 결과의 선택 판(ADR 006 결정 3)의 내용. 틀(바닥 시트, 가운데 창)은
+ * 수정 충돌 안내(N-04), 같은 거래를 다시 보낸 결과의 선택 판(ADR 006 결정 3), 중복 경고 판(F-209)의 내용. 틀(바닥 시트, 가운데 창)은
  * DialogFrame이 그리고, 이 파일은 그 안을 그린다. 수정·상세·새 입력 화면의 조각에만 들어간다(첫 화면 묶음에 넣지 않는다).
  */
 
@@ -39,10 +40,14 @@ interface ConflictPanelProps {
   action?: PanelAction
   /** 주 버튼으로 보내는 중. 그 버튼 안에 돌아가는 원, 두 버튼은 비활성이다 */
   busy?: boolean
+  /** busy인 것이 보조 버튼이다(B-05의 "저장된 내용 그대로", #280). 돌아가는 원이 보조 버튼 안에 있다 */
+  closeBusy?: boolean
   /** 버튼 바로 위의 한 줄(비활성인 이유, 누르면 일어날 일) */
   notice?: string
   /** 버튼 바로 위의 실패 문구(00-common 4.3) */
   failure?: PanelFailure
+  /** 실패한 뒤 초점을 줄 버튼. 기본은 실행 버튼(없으면 보조 버튼)이다. 보조 버튼이 실패했으면 'close'(designer #280 D3) */
+  failureFocus?: 'action' | 'close'
   /** 새 최신 내용으로 다시 그린 횟수. 바뀌면 처음과 같이 초점을 판 제목으로 옮긴다 */
   redraws?: number
 }
@@ -54,8 +59,10 @@ export default function ConflictPanel({
   onCloseAction,
   action,
   busy = false,
+  closeBusy = false,
   notice,
   failure,
+  failureFocus = 'action',
   redraws = 0,
 }: ConflictPanelProps) {
   const descriptionText = useRef<HTMLParagraphElement>(null)
@@ -71,10 +78,12 @@ export default function ConflictPanel({
     title?.focus()
   }, [redraws])
 
-  // 실패마다 실행 버튼("다시 시도")으로 옮긴다(5.6, designer #239 D1)
+  // 실패마다 실행 버튼("다시 시도")으로 옮긴다(5.6, designer #239 D1). 보조 버튼의 실패면 그 버튼이다(designer #280 D3)
   useEffect(() => {
-    if (failure) (actionButton.current ?? closeButton.current)?.focus()
-  }, [failure])
+    if (!failure) return
+    const target = failureFocus === 'close' ? closeButton.current : (actionButton.current ?? closeButton.current)
+    target?.focus()
+  }, [failure, failureFocus])
 
   return (
     <>
@@ -90,7 +99,7 @@ export default function ConflictPanel({
       )}
       <div className={styles.actions}>
         <div>
-          <Button ref={closeButton} kind="secondary" disabled={busy} onClick={onCloseAction}>
+          <Button ref={closeButton} kind="secondary" busy={closeBusy} disabled={busy} onClick={onCloseAction}>
             {closeLabel}
           </Button>
         </div>
@@ -99,8 +108,8 @@ export default function ConflictPanel({
             <Button
               ref={actionButton}
               kind={action.kind}
-              busy={busy}
-              disabled={action.disabled}
+              busy={busy && !closeBusy}
+              disabled={action.disabled || closeBusy}
               onClick={action.onClick}
             >
               {action.label}
@@ -195,3 +204,56 @@ export function AgainQuestion({ children }: { children: string }) {
   return <p className={styles.sentence}>{children}</p>
 }
 
+/** 중복 경고 판에 보이는 맞는 거래 수(D-04 (30)). 더 있으면 "외 {N}건"이다 */
+const SHOWN_DUPLICATES = 3
+
+interface DuplicateRowsProps {
+  /** 최근 저장 순의 맞는 거래(서버는 5건까지 준다) */
+  items: TransactionDetail[]
+  /** "입력한 사람: 나"를 가르는 사용자(입력의 주인) */
+  me: string | undefined
+  today: string
+}
+
+/**
+ * F-209 중복 경고 판(D-04 (30))의 맞는 거래. 최근 저장 순으로 3건까지, 더 있으면 "외 {N}건"이다. 줄은 N-04 (5) 최신 거래 줄과
+ * 같은 모양이다: 첫 줄 날짜와 가맹점, 둘째 줄 "입력한 사람", 오른쪽 끝 금액. 취소 거래는 셋째 줄에 "취소" 칩(거래 줄 0.4의 칩
+ * 자리). 누르는 줄이 아니다(designer #241 D1).
+ */
+export function DuplicateRows({ items, me, today }: DuplicateRowsProps) {
+  const more = items.length - SHOWN_DUPLICATES
+  return (
+    <>
+      <ul className={styles.duplicates}>
+        {items.slice(0, SHOWN_DUPLICATES).map((item) => (
+          <li key={item.id} className={styles.latest}>
+            <div className={styles.latestBody}>
+              <p className={styles.latestFirst}>{`${formatDate(item.occurredOn, today)} ${titleOfDuplicate(item)}`}</p>
+              <p className={styles.latestDetail}>{`입력한 사람: ${createdByName(item, me)}`}</p>
+              {item.status === 'CANCELED' && (
+                <p className={styles.duplicateStatus}>
+                  <StatusChip>취소</StatusChip>
+                </p>
+              )}
+            </div>
+            <p className={styles.latestAmount}>
+              <Amount kind={amountKinds[item.type]} value={item.amount} canceled={item.status === 'CANCELED'} />
+            </p>
+          </li>
+        ))}
+      </ul>
+      {more > 0 && <p className={styles.more}>{`외 ${more}건`}</p>}
+    </>
+  )
+}
+
+/** 맞는 거래는 지출·수입이고 가맹점이 있다(#59) */
+function titleOfDuplicate(item: TransactionDetail): string {
+  return item.type === 'TRANSFER' ? '' : (item.payee ?? '')
+}
+
+/** 입력한 사람: 나, 다른 구성원의 이름, 탈퇴했으면 "탈퇴한 사용자"(거래 상세의 작성자와 같다, designer #241 D2) */
+function createdByName({ createdBy }: TransactionDetail, me: string | undefined): string {
+  if (createdBy === null) return '탈퇴한 사용자'
+  return me !== undefined && createdBy.id.toLowerCase() === me.toLowerCase() ? '나' : createdBy.displayName
+}

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { currentUserId } from '../../api/session'
-import { addDays, isDate, isMonth, monthOf, today } from '../../lib/calendarDate'
+import { addDays, isDate, isMonth, today } from '../../lib/calendarDate'
 import { useReceivedAt } from '../connection/receivedAt'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { fetchKeepingCopy, useKeptCopy, type Kept } from '../me/ledgerCopy'
@@ -13,7 +13,7 @@ import {
   type IncomeAndExpense,
   type ListedTransaction,
 } from './transactions'
-import { monthTotalsQuery, TRANSACTION_LIST_STALE_MS } from './useTransactionList'
+import { monthTotalsQuery, TRANSACTION_LIST_STALE_MS } from './transactionListQueries'
 
 /*
  * 기기에 남기는 장부의 최근 한 달 내역(P-902, ADR 006 결정 1, #238). 연결되어 받을 때마다 통째로 바꾸고, 연결이 없을 때와
@@ -70,27 +70,6 @@ export function parseLastMonth(value: unknown): LastMonth | undefined {
 function isMonthTotals(value: unknown): value is MonthTotals {
   const { month, totals } = (value ?? {}) as Partial<Record<keyof MonthTotals, unknown>>
   return typeof month === 'string' && isMonth(month) && isIncomeAndExpense(totals)
-}
-
-/** 기기의 최근 한 달 가운데 한 달 */
-export interface KeptMonth {
-  totals: IncomeAndExpense
-  items: ListedTransaction[]
-  days: DayTotal[]
-  /** 그 달의 앞쪽 일부가 저장 범위 밖이다(목록 끝에 "연결되면 볼 수 있어요", D-01) */
-  partial: boolean
-}
-
-/** 저장 범위가 그 달에 걸치면 그 달의 합계와 거래. 걸치지 않으면(저장 범위 밖의 달) 없다. */
-export function keptMonthOf(kept: LastMonth, month: string): KeptMonth | undefined {
-  const totals = kept.months.find((each) => each.month === month)?.totals
-  if (!totals) return undefined
-  return {
-    totals,
-    items: kept.items.filter(({ occurredOn }) => monthOf(occurredOn) === month),
-    days: kept.days.filter(({ date }) => monthOf(date) === month),
-    partial: `${month}-01` < kept.from,
-  }
 }
 
 /** 최근 한 달 조회의 캐시 키. 장부 앞부분 아래라 거래를 저장하면(장부 무효화) 다시 받는다. 목록의 달·상세의 id와 섞이지 않는다 */

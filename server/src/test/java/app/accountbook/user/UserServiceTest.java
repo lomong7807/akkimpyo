@@ -197,11 +197,11 @@ class UserServiceTest {
 
     @Test
     void createUser_rejectsEmailDifferingOnlyByCaseAndSurroundingSpace() {
-        userService.createUser("A@x.com", PASSWORD, "처음");
+        userService.createUser("A@example.com", PASSWORD, "처음");
 
-        assertThatThrownBy(() -> userService.createUser(" a@X.com ", "password2", "두번째"))
+        assertThatThrownBy(() -> userService.createUser(" a@EXAMPLE.com ", "password2", "두번째"))
                 .isInstanceOf(DuplicateEmailException.class);
-        assertThat(userRepository.findAll()).extracting(User::getEmail).containsOnlyOnce("a@x.com");
+        assertThat(userRepository.findAll()).extracting(User::getEmail).containsOnlyOnce("a@example.com");
     }
 
     @Test
@@ -210,9 +210,9 @@ class UserServiceTest {
         // 터키어 로캘에서는 "I".toLowerCase()가 점 없는 ı(U+0131)가 된다.
         Locale.setDefault(Locale.forLanguageTag("tr-TR"));
         try {
-            User user = userService.createUser("INFO@MAIL.COM", PASSWORD, "주인");
+            User user = userService.createUser("INFO@EXAMPLE.COM", PASSWORD, "주인");
 
-            assertThat(user.getEmail()).isEqualTo("info@mail.com");
+            assertThat(user.getEmail()).isEqualTo("info@example.com");
         } finally {
             Locale.setDefault(original);
         }

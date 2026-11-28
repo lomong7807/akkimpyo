@@ -17,11 +17,14 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 /**
  * 프로파일별 설정 파일(application.yml, application-local.yml)이 정한 동작.
  * DB에 접속하지 않는다: 설정 파일을 읽고 DataSource 자동 설정까지만 올린다.
- * 환경 변수 DB_URL, DB_USERNAME, DB_PASSWORD가 없는 환경(CI와 평소 개발 환경)을 전제로 한다.
+ * 환경 변수 DB_URL, DB_USERNAME, DB_PASSWORD, WEB_ORIGIN, ACCESS_TOKEN_SIGNING_KEY가 없는 환경(CI와 평소 개발 환경)을
+ * 전제로 한다.
  */
 class ProfileConfigTest {
 
     private static final String LOCAL_DB_URL = "jdbc:postgresql://localhost:5433/accountbook";
+    /** web/vite.config.ts의 개발 서버 포트. */
+    private static final String LOCAL_WEB_ORIGIN = "http://localhost:5173";
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withInitializer(new ConfigDataApplicationContextInitializer())
@@ -96,5 +99,31 @@ class ProfileConfigTest {
             assertThat(env.getProperty("spring.datasource.password")).isEqualTo("accountbook");
             assertThat(env.getProperty("server.address")).isEqualTo("127.0.0.1");
         });
+    }
+
+    @Test
+    void localProfileSuppliesTheWebDevServerOriginButNoSigningKey() {
+        runner.withPropertyValues("spring.profiles.active=local").run(context -> {
+            var env = context.getEnvironment();
+            assertThat(env.getProperty("WEB_ORIGIN")).isEqualTo(LOCAL_WEB_ORIGIN);
+            assertThat(env.getProperty("ACCESS_TOKEN_SIGNING_KEY")).isNull();
+        });
+    }
+
+    @Test
+    void localProfileLetsTheVariableOverrideTheWebOrigin() {
+        runner.withPropertyValues("spring.profiles.active=local", "WEB_ORIGIN=http://localhost:4173")
+                .run(context -> assertThat(context.getEnvironment().getProperty("WEB_ORIGIN"))
+                        .isEqualTo("http://localhost:4173"));
+    }
+
+    @Test
+    void defaultProfileHasNoWebOriginOrSigningKey() {
+        runner.withPropertyValues("DB_URL=" + LOCAL_DB_URL, "DB_USERNAME=someone", "DB_PASSWORD=secret")
+                .run(context -> {
+                    var env = context.getEnvironment();
+                    assertThat(env.getProperty("WEB_ORIGIN")).isNull();
+                    assertThat(env.getProperty("ACCESS_TOKEN_SIGNING_KEY")).isNull();
+                });
     }
 }

@@ -8,7 +8,16 @@ import { isInstantMs, isUserId, resultOf, transact } from './deviceDb'
  */
 
 /** 쓰던 값을 남기는 입력 화면 */
-export type DraftForm = 'transaction-new' | 'transaction-edit' | 'account-add' | 'first-account' | 'pending-fix'
+export type DraftForm =
+  | 'transaction-new'
+  | 'transaction-edit'
+  | 'account-add'
+  /** 계좌 수정(G-02 수정 모드, #243). 주소에 계좌 id가 있어 그 계좌의 화면에만 채운다 */
+  | 'account-edit'
+  | 'first-account'
+  | 'pending-fix'
+  /** 홈의 한 줄 입력칸 글과 열려 있거나 보내는 중인 결과 확인(D-05, #233) */
+  | 'one-line'
 
 /** 남긴 때부터 이만큼 지나면 앱을 열 때 지운다(security 권고, planner Q12) */
 export const KEEP_DRAFTS_MS = 30 * 24 * 60 * 60 * 1000

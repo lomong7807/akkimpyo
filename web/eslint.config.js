@@ -32,8 +32,8 @@ const libPackages = {
 }
 
 const apiInternals = {
-  regex: '^\\.\\.?/(.*/)?api(/(?!(request|session|apiError|connection)(\\.ts)?$)|$)',
-  message: '화면은 api의 request, session, apiError, connection만 쓴다. 나머지는 api 안의 구현이다.',
+  regex: '^\\.\\.?/(.*/)?api(/(?!(request|fileRequest|session|apiError|connection)(\\.ts)?$)|$)',
+  message: '화면은 api의 request, fileRequest, session, apiError, connection만 쓴다. 나머지는 api 안의 구현이다.',
 }
 
 // 화면은 연결 상태를 읽기만 한다. 상태는 api 안의 요청 결과(http)와 앱 시작(app)이 바꾼다(4.3, architect #234 B).
@@ -64,9 +64,16 @@ const mswPackage = {
   message: '가짜 응답은 테스트에서만 쓴다.',
 }
 
+// react-router의 Link·NavLink는 앱이 쓰지 않는 prefetch 부품을 첫 화면 JS로 끌어온다(#355, architect).
+const routerLinks = {
+  regex: '^react-router(/dom)?$',
+  importNames: ['Link', 'NavLink'],
+  message: 'react-router의 Link·NavLink 대신 components/Link를 쓴다. 다시 불러오면 첫 화면 JS가 커진다(#355).',
+}
+
 /** 파일마다 마지막에 맞는 설정 하나만 걸리므로 앱 코드 전체의 규칙을 폴더마다 함께 적는다. */
 function restrictedImports(files, patterns = []) {
-  return { files, rules: { 'no-restricted-imports': ['error', { patterns: [mswPackage, ...patterns] }] } }
+  return { files, rules: { 'no-restricted-imports': ['error', { patterns: [mswPackage, routerLinks, ...patterns] }] } }
 }
 
 export default tseslint.config(

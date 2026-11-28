@@ -3,6 +3,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Button, ButtonLink } from '../src/components/Button'
+import { Plus, X } from '../src/components/icons'
 import { readCssRule } from './support/cssRule'
 import { readWebFile } from './support/webFile'
 
@@ -20,7 +21,7 @@ const buttons: Record<string, (state: object) => ReactElement> = {
       ),
     ]),
   ),
-  icon: (state: object) => <Button kind="icon" icon="X" aria-label="저장" {...state} />,
+  icon: (state: object) => <Button kind="icon" icon={X} aria-label="저장" {...state} />,
 }
 const kinds = Object.keys(buttons)
 
@@ -207,7 +208,7 @@ describe('이동하는 버튼', () => {
         <ButtonLink kind="primary" to="/home">
           홈으로
         </ButtonLink>
-        <ButtonLink kind="icon" icon="Plus" aria-label="추가" to="/new" />
+        <ButtonLink kind="icon" icon={Plus} aria-label="추가" to="/new" />
       </MemoryRouter>,
     )
     const home = screen.getByRole('link', { name: '홈으로' })

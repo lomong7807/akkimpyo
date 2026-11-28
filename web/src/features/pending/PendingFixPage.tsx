@@ -11,7 +11,7 @@ import { useGoBack } from '../../components/useGoBack'
 import { useLeaveGuard } from '../../components/useLeaveGuard'
 import { refilePending, type PendingTransaction } from '../../device/pendingQueue'
 import { isUuid, uuidV7 } from '../../lib/uuid'
-import { useKeepDraft } from '../drafts/keepDraft'
+import { useKeepDraft } from '../drafts/useKeepDraft'
 import { useRestoredDraft } from '../drafts/restoreDraft'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { ledgerScope } from '../me/ledgerKey'
@@ -26,7 +26,7 @@ import TransactionFields from '../transactions/TransactionFields'
 import { fixTransactionDraftOf } from '../transactions/transactionDraft'
 import { toNewTransaction, validateTransaction } from '../transactions/transactionForm'
 import { useMoreFold, useTransactionForm } from '../transactions/useTransactionForm'
-import { bandText, fixOpeningOf, type FixOpening } from './fixOpening'
+import { bandText, CHANGED_ELSEWHERE, fixOpeningOf, type FixOpening } from './fixOpening'
 
 /*
  * 보낼 수 없는 입력 고쳐서 다시 보내기(F-108, B-05 (7), D-04 (33), P-226, #237). 보내지 않은 입력 목록(B-05)의 "고쳐서 보내기"가
@@ -40,8 +40,6 @@ import { bandText, fixOpeningOf, type FixOpening } from './fixOpening'
 
 /** 저장한 뒤의 토스트(D-04 상태 "성공 뒤") */
 export const FIXED = '고쳐서 다시 보낼게요'
-/** 그사이 다른 탭이 버렸거나 먼저 고쳐 보낸 입력(designer #237 D7) */
-export const CHANGED_ELSEWHERE = '다른 곳에서 먼저 바뀐 입력이에요. 목록에서 확인해 주세요.'
 /** 기기 저장소를 쓸 수 없어 고친 값을 넣지 못했다(designer #237 D8, D-04 서버 오류와 같은 문구) */
 const SAVE_TROUBLE = '문제가 생겨 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
 

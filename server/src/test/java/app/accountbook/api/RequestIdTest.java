@@ -100,9 +100,11 @@ class RequestIdTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/nope", ThrowingFilter.THROW, "/actuator/health"})
+    @ValueSource(strings = {"/nope", "//nope", ThrowingFilter.THROW, "/actuator/health"})
     void 어느_단계에서_끝나도_같은_값이_응답에_있다(String path) throws Exception {
         assertThat(server.get(path, "X-Request-Id", "stage-1").header("X-Request-Id")).isEqualTo("stage-1");
+        assertThat(ServerClient.anonymous(port).get(path, "X-Request-Id", "stage-2").header("X-Request-Id"))
+                .isEqualTo("stage-2");
     }
 
     @Test
@@ -145,7 +147,8 @@ class RequestIdTest {
         assertThat(UUID.fromString(id)).hasToString(id);
     }
 
-    private static String request(String path, String headers) {
-        return "GET " + path + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n" + headers + "\r\n";
+    private String request(String path, String headers) {
+        return "GET " + path + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n" + server.authorizationLine()
+                + headers + "\r\n";
     }
 }
