@@ -76,9 +76,9 @@ record TransactionListRequest(TransactionScope scope, TransactionFilter filter, 
                 after.orElse(null));
     }
 
-    /** 필터의 형식. 틀린 이름이 하나라도 있으면 비어 있다. */
-    private static Optional<TransactionFilter> filter(MultiValueMap<String, String> query,
-                                                      List<InvalidRequestException> errors) {
+    /** 필터의 형식. 틀린 이름이 하나라도 있으면 비어 있다. 거래 검색(#64)도 같은 이름과 규칙으로 읽는다. */
+    static Optional<TransactionFilter> filter(MultiValueMap<String, String> query,
+                                              List<InvalidRequestException> errors) {
         int before = errors.size();
         Set<UUID> accountIds = values(query, "accountId",
                 text -> parsed(TransactionRequest.UUID_TEXT, text, UUID::fromString), "accountId는 계좌 id입니다.", errors);

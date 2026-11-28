@@ -12,6 +12,7 @@ import app.accountbook.transaction.TransactionExportQuery;
 import app.accountbook.user.UserService;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -49,14 +50,16 @@ class ExportController {
         this.userService = userService;
     }
 
-    /** 200은 파일, 기간에 내보낼 거래가 없으면 204(본문 없음)다. 둘 다 저장하지 않게 한다. */
+    /** 200은 파일, 기간(또는 장부 전체)에 내보낼 거래가 없으면 204(본문 없음)다. 둘 다 저장하지 않게 한다. */
     @GetMapping("/api/v1/ledgers/{ledgerId}/exports")
     ResponseEntity<byte[]> export(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                   @RequestParam(name = "format", required = false) String format,
                                   @RequestParam(name = "from", required = false) String from,
                                   @RequestParam(name = "to", required = false) String to) throws IOException {
         ExportRequest request = ExportRequest.of(format, from, to);
-        List<ExportedTransaction> found = exportQuery.transactions(actorId, ledgerId, request.from(), request.to());
+        List<ExportedTransaction> found = request.wholeLedger()
+                ? exportQuery.allTransactions(actorId, ledgerId)
+                : exportQuery.transactions(actorId, ledgerId, request.from(), request.to());
         if (found.isEmpty()) {
             return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
         }
@@ -72,10 +75,13 @@ class ExportController {
                 .findFirst().orElseThrow(NotLedgerMemberException::new);
         ByteArrayOutputStream file = new ByteArrayOutputStream();
         request.format().write(ExportRow.of(found, names), file);
+        // 조회는 날짜 순이라 장부 전체이면 첫 거래와 마지막 거래의 날짜가 가장 이른 날과 가장 늦은 날이다(#379).
+        LocalDate start = request.wholeLedger() ? found.getFirst().occurredOn() : request.from();
+        LocalDate end = request.wholeLedger() ? found.getLast().occurredOn() : request.to();
         return ResponseEntity.ok()
                 .contentType(request.format().contentType)
                 .header(HttpHeaders.CONTENT_DISPOSITION, ExportFileName.attachment(
-                        ExportFileName.of(ledgerName, request.from(), request.to(), request.format().extension())))
+                        ExportFileName.of(ledgerName, start, end, request.format().extension())))
                 .cacheControl(CacheControl.noStore())
                 .body(file.toByteArray());
     }
