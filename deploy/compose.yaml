@@ -74,6 +74,8 @@ services:
       ACCESS_TOKEN_SIGNING_KEY: ${ACCESS_TOKEN_SIGNING_KEY:?ACCESS_TOKEN_SIGNING_KEY가 없다}
       # 프록시의 사이트 주소와 같은 변수다(위 proxy의 SITE_ADDRESS).
       WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN이 없다}
+      # 가입 허용 목록(P-102). 쉼표로 나눈 이메일이나 @도메인. 비어 있으면 서버는 뜨지만 아무도 가입할 수 없다.
+      SIGNUP_ALLOWLIST: ${SIGNUP_ALLOWLIST:-}
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

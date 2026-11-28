@@ -380,6 +380,7 @@ rm -r "$tmp"
 | `PROXY_HTTP_PORT` | 선택 | 비워 둔다(기본 80) | 다른 서비스와 겹칠 때만 바꾼다 |
 | `PROXY_HTTPS_PORT` | 선택 | 비워 둔다(기본 443) | 위와 같다 |
 | `ACCESS_LOG_KEEP_DAYS` | 선택 | 비워 둔다(기본 14) | 접근 로그(IP가 남는다)를 남겨 두는 날 수. #23에서 정하는 값으로 바꾼다 |
+| `SIGNUP_ALLOWLIST` | 선택 | `<가입을 허용할 이메일이나 @도메인, 쉼표로 구분>` | 비어 있으면 서버는 뜨지만 아무도 가입할 수 없다. 이메일도 @도메인도 아닌 항목이 있으면 서버가 뜨지 않는다. 레포에 실제 값을 적지 않는다 |
 
 - 넣지 않는 것: `SERVER_IMAGE`, `WEB_IMAGE`, `SW_DISABLE`(배포 파일에서 온다), `SPRING_PROFILES_ACTIVE`, `JDK_JAVA_OPTIONS`(compose에 고정돼 있다).
 - 형식: `이름=값` 한 줄에 하나. 값에 따옴표, 공백, `$`를 쓰지 않는다.
