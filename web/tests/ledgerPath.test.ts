@@ -4,7 +4,7 @@ import { ApiError } from '../src/api/apiError'
 import { createAccount, fetchAccounts } from '../src/features/accounts/accounts'
 import { fetchCategories } from '../src/features/categories/categories'
 import { ledgerPath } from '../src/features/me/ledgerPath'
-import { createTransaction } from '../src/features/transactions/transactions'
+import { createTransaction } from '../src/features/transactions/transactionWrites'
 import { startMockServer } from './support/mockServer'
 
 const server = startMockServer()

@@ -15,6 +15,7 @@ import app.accountbook.support.IntegrationTest;
 import app.accountbook.user.User;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,11 @@ class MonthlyStatsQueryTest {
         return categoryService.create(owner.getId(), ledgerId, new CategoryCommand(name, kind, null));
     }
 
+    private Category subcategory(String name, Category parent) {
+        return categoryService.create(owner.getId(), ledgerId,
+                new CategoryCommand(name, CategoryKind.EXPENSE, parent.getId()));
+    }
+
     private MonthlySummary november() {
         return monthlyStatsQuery.monthly(owner.getId(), ledgerId, NOVEMBER);
     }
@@ -81,6 +87,20 @@ class MonthlyStatsQueryTest {
         assertThat(summary.income()).isZero();
         assertThat(summary.categories()).containsExactly(
                 new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 10_000));
+    }
+
+    /** 돌려받음은 환불과 같이 그 카테고리의 지출을 줄이고 수입에 들지 않는다(P-210, #8). */
+    @Test
+    void monthly_reimbursementReducesExpenseAndIsNotIncome() {
+        fixtures.expense(owner, ledgerId, cash.getId(), food.getId(), NOV_18, 12_000);
+        fixtures.reimbursement(owner, ledgerId, cash.getId(), food.getId(), NOV_18, 8_000);
+
+        MonthlySummary summary = november();
+
+        assertThat(summary.expense()).isEqualTo(4_000);
+        assertThat(summary.income()).isZero();
+        assertThat(summary.categories()).containsExactly(
+                new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 4_000));
     }
 
     @Test
@@ -143,6 +163,64 @@ class MonthlyStatsQueryTest {
                 new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 3_000));
         assertThat(monthlyStatsQuery.monthly(owner.getId(), ledgerId, YearMonth.of(2026, 10)).expense())
                 .isEqualTo(4_000);
+    }
+
+    /** 윤년과 평년의 2월. 1일과 말일은 들고, 앞 달의 말일과 다음 달 1일은 들지 않는다. */
+    @Test
+    void monthly_februaryBoundaries() {
+        for (String day : List.of("2024-01-31", "2024-02-01", "2024-02-29", "2024-03-01", "2025-02-28", "2025-03-01")) {
+            fixtures.expense(owner, ledgerId, cash.getId(), food.getId(), LocalDate.parse(day),
+                    LocalDate.parse(day).getDayOfMonth());
+        }
+
+        assertThat(monthlyStatsQuery.monthly(owner.getId(), ledgerId, YearMonth.of(2024, 2)).expense())
+                .as("1일 + 29일").isEqualTo(30);
+        assertThat(monthlyStatsQuery.monthly(owner.getId(), ledgerId, YearMonth.of(2025, 2)).expense())
+                .as("28일").isEqualTo(28);
+    }
+
+    /**
+     * 하위 카테고리의 지출은 상위 카테고리 하나로 모이고, 하위별 금액과 상위에 바로 넣은 금액은 펼친 금액에 있다(F-302).
+     * 하위끼리 지워져 0이 된 상위는 넣지 않는다.
+     */
+    @Test
+    void monthly_addsSubcategoriesToTheirTopLevelCategory() {
+        Category lunch = subcategory("점심", food);
+        Category cafe = category("카페", CategoryKind.EXPENSE);
+        Category coffee = subcategory("커피", cafe);
+        fixtures.expense(owner, ledgerId, cash.getId(), lunch.getId(), NOV_18, 3_000);
+        fixtures.expense(owner, ledgerId, cash.getId(), food.getId(), NOV_18, 1_000);
+        fixtures.expense(owner, ledgerId, cash.getId(), coffee.getId(), NOV_18, 2_000);
+        fixtures.refund(owner, ledgerId, cash.getId(), cafe.getId(), NOV_18, 2_000);
+
+        MonthlySummary summary = november();
+
+        assertThat(summary.expense()).isEqualTo(4_000);
+        assertThat(summary.categories()).containsExactly(new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 4_000,
+                List.of(new CategoryTotal(lunch.getId(), CategoryKind.EXPENSE, 3_000),
+                        new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 1_000))));
+    }
+
+    /** 환불이 지출보다 큰 카테고리는 음수 그대로 합계에 든다(P-205, F-302). 지출이 큰 카테고리에는 없다(F-301). */
+    @Test
+    void monthly_keepsNegativeCategoryWhenRefundIsLarger() {
+        Category cafe = category("카페", CategoryKind.EXPENSE);
+        fixtures.expense(owner, ledgerId, cash.getId(), food.getId(), NOV_18, 10_000);
+        fixtures.expense(owner, ledgerId, cash.getId(), cafe.getId(), NOV_18, 1_000);
+        fixtures.refund(owner, ledgerId, cash.getId(), cafe.getId(), NOV_18, 3_000);
+        fixtures.refund(owner, ledgerId, cash.getId(), food.getId(), LocalDate.of(2026, 10, 5), 5_000);
+
+        MonthlySummary summary = november();
+
+        assertThat(summary.categories()).containsExactly(
+                new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 10_000),
+                new CategoryTotal(cafe.getId(), CategoryKind.EXPENSE, -2_000));
+        assertThat(summary.expense()).isEqualTo(8_000);
+        assertThat(summary.topExpenses()).containsExactly(
+                new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 10_000));
+        MonthlySummary october = monthlyStatsQuery.monthly(owner.getId(), ledgerId, YearMonth.of(2026, 10));
+        assertThat(List.of(october.expense(), october.net())).as("환불만 있는 달").containsExactly(-5_000L, 5_000L);
+        assertThat(october.topExpenses()).isEmpty();
     }
 
     @Test

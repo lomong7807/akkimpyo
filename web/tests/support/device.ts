@@ -4,18 +4,36 @@ import { nowOnDevice } from './clock'
 
 /*
  * 기기 저장소(#234)에 미리 넣어 두는 값과 남은 값. 앱과 같은 IndexedDB를 쓰므로 앱을 열기 전에도 뒤에도 부를 수 있다.
- * device 모듈은 처음 쓴 저장소에 묶이므로 부를 때마다 새로 불러와 지금 테스트의 저장소에 닿게 한다. 그래서 이것을 부른 뒤에
- * 앱 모듈을 불러오면 화면과 다른 모듈이 온다. 앱 모듈은 앱을 연 직후에 불러 둔다.
+ * device 모듈은 처음 쓴 저장소에 묶이고 저장소는 테스트마다 바뀐다(setup). 그래서 테스트의 저장소마다 한 번만 모듈을 새로 불러와
+ * (vi.resetModules) 그 테스트 안에서는 그것을 다시 쓴다. 앱이 열린 뒤에 모듈을 새로 불러오면 앱이 늦게 싣는 조각(#238의
+ * fetchLastMonth 등)이 화면과 다른 모듈(토큰이 없는 세션)과 이어진다(#292). 앱을 여는 도우미(openApp)는 앱을 불러오기 전에
+ * loadDeviceHelpers()로 먼저 불러 둔다.
  */
 
-async function device() {
-  vi.resetModules()
+async function importDevice() {
   return {
     db: await import('../../src/device/deviceDb'),
     copies: await import('../../src/device/copies'),
     record: await import('../../src/device/loginRecord'),
     userData: await import('../../src/device/userData'),
+    pending: await import('../../src/device/pendingQueue'),
   }
+}
+
+let loaded: { store: IDBFactory | undefined; modules: ReturnType<typeof importDevice> } | undefined
+
+function device() {
+  const store: IDBFactory | undefined = globalThis.indexedDB
+  if (loaded?.store !== store) {
+    vi.resetModules()
+    loaded = { store, modules: importDevice() }
+  }
+  return loaded.modules
+}
+
+/** 이 테스트의 저장소에 닿는 도우미 모듈을 불러 둔다. 앱을 열기 전(vi.resetModules 전)에 부른다. */
+export async function loadDeviceHelpers(): Promise<void> {
+  await device()
 }
 
 const LOGIN = 'akkimpyo-login'
@@ -86,16 +104,14 @@ export async function ledgerCopy(userId: string, ledgerId: string, kind: 'accoun
 
 /** 그 사용자의 대기열(오래된 것부터) */
 export async function queueOf(userId = 'user-1') {
-  vi.resetModules()
-  const { pendingOf } = await import('../../src/device/pendingQueue')
-  return pendingOf(userId)
+  const { pending } = await device()
+  return pending.pendingOf(userId)
 }
 
 /** 대기열에 둔다. */
 export async function seedPending(item: { userId: string; ledgerId: string; body: { id: string; type: 'EXPENSE' | 'INCOME' | 'TRANSFER' } & Record<string, unknown>; queuedAt: number }) {
-  vi.resetModules()
-  const { queueTransaction } = await import('../../src/device/pendingQueue')
-  await queueTransaction(item)
+  const { pending } = await device()
+  await pending.queueTransaction(item)
 }
 
 /** 내 정보 사본 */

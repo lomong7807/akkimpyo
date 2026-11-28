@@ -8,7 +8,7 @@ import { accountOf, accountsBody, startAccounts, type Accounts } from './support
 import { delayed, ledgerIdOf, startBackend, type Backend } from './support/backend'
 import { readCssRule } from './support/cssRule'
 import { startMockServer } from './support/mockServer'
-import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/useTransactionList'
+import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/transactionListQueries'
 import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
@@ -56,6 +56,8 @@ const group = (name: string) => content().getByRole('list', { name })
 const rowsOf = (name: string) => texts(within(group(name)).getAllByRole('listitem'))
 /** 묶음 이름과 같은 줄에 있는 묶음 합계 */
 const headOf = (name: string) => content().getByRole('heading', { level: 2, name }).parentElement!
+/** 묶음의 첫 계좌 줄. 줄 전체가 계좌 수정으로 가는 링크다(1B, #243) */
+const firstRowOf = (name: string) => within(group(name)).getAllByRole('link')[0]
 const totalRow = () => screen.getByText('자산 합계').parentElement!
 const styleOf = (element: Element) => getComputedStyle(element)
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
@@ -96,10 +98,15 @@ describe('계좌 목록(G-01)', () => {
     expect(styleOf(link).color).toBe('var(--color-accent)')
   })
 
-  it('내용에 누를 것이 없다', async () => {
+  it('내용에서 누를 것은 계좌 줄(수정으로 가는 링크)뿐이다. 자산 합계와 묶음 머리는 누르지 않는다(#243)', async () => {
     await open()
     expect(content().queryAllByRole('button')).toEqual([])
-    expect(content().queryAllByRole('link')).toEqual([])
+    const links = content().queryAllByRole('link')
+    expect(links).toHaveLength(everyType.length)
+    expect(links.every((link) => link.parentElement!.tagName === 'LI')).toBe(true)
+    expect(totalRow().closest('a')).toBeNull()
+    expect(headOf('은행').closest('a')).toBeNull()
+    // 줄에 화살표(>)를 두지 않는다(designer #243)
     expect(main().querySelector('[tabindex], [onclick], svg')).toBeNull()
   })
 
@@ -223,7 +230,7 @@ describe('계좌 목록의 모양', () => {
 
   it('계좌 줄은 높이 56px 이상이고 이름은 본문, 잔액은 굵은 본문이다', async () => {
     await open()
-    const [row] = within(group('은행')).getAllByRole('listitem')
+    const row = firstRowOf('은행')
     expect(styleOf(row).minHeight).toBe('var(--size-row)')
     expect(styleOf(row).alignContent).toBe('center')
     const [name, amount] = row.children
@@ -231,11 +238,24 @@ describe('계좌 목록의 모양', () => {
     expect(styleOf(amount).font).toBe('var(--text-body-strong)')
   })
 
-  it('계좌 줄에는 눌림과 마우스 올림 바탕, 줄 사이 선이 없다', async () => {
+  it('계좌 줄은 누르면 눌림 바탕이고 올림 바탕은 마우스가 있을 때만이며, 글자는 본문색에 밑줄이 없다. 줄 사이 선은 없다', async () => {
     await open()
     const css = readWebFile(CSS)
-    expect(css).not.toMatch(/:hover|:active|cursor|color-press|box-shadow|border-radius|background/)
+    expect(readCssRule(CSS, '.link:active')).toContain('background-color: var(--color-press)')
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.link:hover \{\s*background-color: var\(--color-press\);/)
+    expect(css.match(/:hover|:active/g)).toEqual([':active', ':hover'])
+    expect(styleOf(firstRowOf('은행')).color).toBe('var(--color-text)')
+    expect(styleOf(firstRowOf('은행')).textDecoration).toBe('none')
+    expect(css).not.toMatch(/cursor|box-shadow|border-radius/)
     expect(css.match(/border[\w-]*:/g)).toEqual(['border-top:'])
+  })
+
+  it('휴대폰에서는 줄이 화면 끝까지 닿아 초점 표시를 안쪽에 그리고, 내용 폭 배치(768px 이상)에서는 바깥에 그린다', async () => {
+    await open()
+    expect(readCssRule(CSS, '.link:focus-visible')).toContain('outline-offset: calc(-1 * var(--focus-ring-width))')
+    expect(readWebFile(CSS)).toMatch(
+      /@media \(width >= 768px\) \{\s*\.link:focus-visible \{\s*outline-offset: var\(--focus-ring-offset\);/,
+    )
   })
 
   it('묶음마다 위에 1px 선을 긋고 선 위아래는 24px이다', async () => {
@@ -264,7 +284,7 @@ describe('계좌 목록의 모양', () => {
 
   it('이름은 줄을 바꾸고 줄임표를 쓰지 않는다. 띄어쓰기가 없어도 칸 안에서 줄을 바꾼다', async () => {
     await open()
-    for (const row of [totalRow(), headOf('은행'), within(group('은행')).getAllByRole('listitem')[0]]) {
+    for (const row of [totalRow(), headOf('은행'), firstRowOf('은행')]) {
       const name = styleOf(row.children[0])
       expect(name.getPropertyValue('overflow-wrap')).toBe('anywhere')
       expect(name.textOverflow).not.toBe('ellipsis')
@@ -275,7 +295,7 @@ describe('계좌 목록의 모양', () => {
 
   it('금액은 이름의 첫 줄에 맞추고, 이름 자리가 줄의 절반보다 좁아지면 다음 줄 오른쪽으로 내린다', async () => {
     await open()
-    for (const row of [totalRow(), headOf('은행'), within(group('은행')).getAllByRole('listitem')[0]]) {
+    for (const row of [totalRow(), headOf('은행'), firstRowOf('은행')]) {
       expect(styleOf(row).display).toBe('flex')
       expect(styleOf(row).flexWrap).toBe('wrap')
       expect(styleOf(row).alignItems).toBe('baseline')
@@ -288,7 +308,7 @@ describe('계좌 목록의 모양', () => {
 
   it('금액은 줄 폭을 넘지 않고, 줄 폭보다 길면 오른쪽에 맞춰 줄을 바꾼다', async () => {
     await open()
-    for (const row of [totalRow(), headOf('은행'), within(group('은행')).getAllByRole('listitem')[0]]) {
+    for (const row of [totalRow(), headOf('은행'), firstRowOf('은행')]) {
       const amount = styleOf(row.children[1])
       expect(amount.flex).toBe('0 1 auto')
       expect(amount.textAlign).toBe('end')
@@ -297,7 +317,7 @@ describe('계좌 목록의 모양', () => {
 
   it('계좌 줄은 여러 줄이면 위아래 안쪽 8px을 지키고 커진다', async () => {
     await open()
-    const [row] = within(group('은행')).getAllByRole('listitem')
+    const row = firstRowOf('은행')
     expect(styleOf(row).getPropertyValue('padding-block')).toBe('var(--space-8)')
     expect(styleOf(row).height).toBe('auto')
     expect(styleOf(row).maxHeight).toBe('none')
@@ -378,9 +398,11 @@ describe('불러오는 중', () => {
     answer.answer(accountsBody(...everyType))
     releaseClock()
     await screen.findByText('자산 합계')
-    const realRows = [totalRow(), headOf('은행'), within(group('은행')).getAllByRole('listitem')[0]]
+    const realRows = [totalRow(), headOf('은행'), firstRowOf('은행')]
     const realParts = [totalRow().parentElement!, realRows[0], headOf('은행').parentElement!, realRows[1], realRows[2]]
-    expect(classes).toEqual(realParts.map(read))
+    // 계좌 줄의 링크 모양(눌림, 초점)은 뼈대에 없다
+    const withoutLink = (classes: string) => classes.replace(/ \S*_link_\S*/, '')
+    expect(classes).toEqual(realParts.map(read).map(withoutLink))
     // 굵기만 다른 본문 두 글자 토큰은 줄 높이가 같다
     const sameHeight = (font: string) => font.replace('-strong', '')
     expect(fonts.flat()).toEqual(realRows.map(fontsOf).flat().map(sameHeight))

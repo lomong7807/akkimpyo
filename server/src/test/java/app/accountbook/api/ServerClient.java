@@ -2,6 +2,8 @@ package app.accountbook.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import app.accountbook.support.SignedInUser;
+import app.accountbook.support.TestAccessTokens;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.Socket;
@@ -10,10 +12,13 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -21,10 +26,33 @@ import tools.jackson.databind.json.JsonMapper;
 final class ServerClient {
 
     private final int port;
+    /** 요청마다 붙이는 Authorization 헤더의 값. 없으면 붙이지 않는다. */
+    private final String authorization;
     private final HttpClient http = HttpClient.newHttpClient();
 
+    /** {@link SignedInUser}로 로그인해 부른다. */
     ServerClient(int port) {
+        this(port, "Bearer " + TestAccessTokens.valid(SignedInUser.ID, Instant.now()));
+    }
+
+    private ServerClient(int port, String authorization) {
         this.port = port;
+        this.authorization = authorization;
+    }
+
+    /** 로그인하지 않고 부른다. Authorization 헤더는 부르는 쪽이 적는 것뿐이다. */
+    static ServerClient anonymous(int port) {
+        return new ServerClient(port, null);
+    }
+
+    /** 그 사용자로 로그인해 부른다. 토큰은 issuedAt에 발급한 것이다(서버의 시계가 멈춰 있으면 그 시각을 준다). */
+    static ServerClient signedIn(int port, UUID userId, Instant issuedAt) {
+        return new ServerClient(port, "Bearer " + TestAccessTokens.valid(userId, issuedAt));
+    }
+
+    /** {@link #raw}의 요청에 직접 적을 Authorization 헤더 한 줄. */
+    String authorizationLine() {
+        return "Authorization: " + authorization + "\r\n";
     }
 
     /** @param headers 이름, 값이 번갈아 나온다 */
@@ -34,6 +62,9 @@ final class ServerClient {
                         ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
         if (headers.length > 0) {
             request.headers(headers);
+        }
+        if (authorization != null) {
+            request.header("Authorization", authorization);
         }
         HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
         Map<String, List<String>> received = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
@@ -97,9 +128,19 @@ final class ServerClient {
             assertThat(this.status).as(body).isEqualTo(status);
             assertThat(header("Content-Type")).isEqualTo("application/problem+json");
             JsonNode problem = json();
-            assertThat(problem.propertyNames()).containsExactlyInAnyOrderElementsOf(code.equals("VALIDATION_FAILED")
-                    ? Set.of("type", "title", "status", "detail", "code", "requestId", "fieldErrors")
-                    : Set.of("type", "title", "status", "detail", "code", "requestId"));
+            Set<String> names = new HashSet<>(Set.of("type", "title", "status", "detail", "code", "requestId"));
+            if (code.equals("VALIDATION_FAILED")) {
+                names.add("fieldErrors");
+            }
+            // 같은 장부에서 내가 만든 거래와 내용이 다를 때만 있다(ADR 006 결정 3). 있는지는 부르는 쪽이 본다.
+            if (code.equals("ID_CONFLICT") && problem.has("current")) {
+                names.add("current");
+            }
+            // 수정 충돌에는 늘 있다(ADR 002 5절).
+            if (code.equals("STALE_VERSION")) {
+                names.add("current");
+            }
+            assertThat(problem.propertyNames()).containsExactlyInAnyOrderElementsOf(names);
             assertThat(problem.get("type").asString()).isEqualTo("about:blank");
             assertThat(problem.get("title").asString()).isEqualTo(title);
             assertThat(problem.get("status").isInt()).isTrue();

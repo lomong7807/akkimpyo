@@ -1,0 +1,44 @@
+/*
+ * 전환 줄(00-common 5.11). 칸은 글자 폭이고 줄 폭을 넘으면 줄을 가로로 밀어 본다(칸을 줄이거나 줄을 바꾸지 않는다).
+ * 고른 칸만 강조색 글자와 아래 2px 강조색 선이다. 선 자리는 모든 칸이 같이 가져 고른 칸이 바뀌어도 글자가 움직이지 않는다.
+ */
+.list {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  list-style: none;
+}
+
+.list > li {
+  flex: none;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  padding-inline: var(--space-12);
+  border-bottom: var(--border-width-strong) solid transparent;
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform var(--motion-press-duration);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cell:active {
+  transform: scale(var(--motion-press-scale));
+}
+
+/* 굵기는 바꾸지 않고 색만 바꾼다(하단 탭과 같다) */
+.cell[aria-current="page"] {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* 밀어 보는 줄(overflow)이 바깥에 그린 테두리를 자르므로 칸 안쪽에 그린다 */
+.cell:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}

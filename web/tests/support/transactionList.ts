@@ -58,6 +58,16 @@ export interface ListRequest {
   names: string[]
 }
 
+/** 화면이 보낸 하루 모드의 목록 요청 하나(`date=YYYY-MM-DD`) */
+export interface DayRequest {
+  ledgerId: string
+  user: string | undefined
+  date: string
+  limit: string | null
+  cursor: string | null
+  names: string[]
+}
+
 /**
  * `items` 가운데 `start`부터 `limit`건을 한 쪽으로 준다. 합계와 그날 합계는 `sums`가 정한 값이 앞선다.
  * `month`가 null이면 장부 전체의 쪽이라 합계(totals)가 없다(#15).
@@ -110,6 +120,18 @@ function byServerOrder(a: Listed, b: Listed): number {
  * (#15, planner 결정 2026-11-26).
  */
 export function startTransactionList(server: SetupServer, backend: Backend) {
+  /** 하루 모드(`date=YYYY-MM-DD`, #15). 넣어 둔 모든 달에서 그날의 거래를 서버의 순서로 준다. 합계(totals)는 그날 합계다 */
+  function dayPage(sent: DayRequest) {
+    const start = sent.cursor === null ? 0 : Number(sent.cursor.split('|')[1])
+    const items = [...list.months.values()]
+      .flat()
+      .filter(({ occurredOn, deletedAt }) => occurredOn === sent.date && deletedAt === null)
+      .sort(byServerOrder)
+    return pageOf(sent.date, items, start, Number(sent.limit ?? 50), {
+      totals: list.days.get(sent.date),
+      days: list.days,
+    })
+  }
   const list = {
     /** 달(`YYYY-MM`)마다 서버가 주는 순서의 거래 */
     months: new Map<string, Listed[]>(),
@@ -120,10 +142,28 @@ export function startTransactionList(server: SetupServer, backend: Backend) {
     /** 정해 두면 그 응답을 준다. */
     response: undefined as ((sent: ListRequest) => Response | Promise<Response> | undefined) | undefined,
     requests: [] as ListRequest[],
+    /** 정해 두면 하루 모드 요청에 그 응답을 준다. */
+    dayResponse: undefined as ((sent: DayRequest) => Response | Promise<Response> | undefined) | undefined,
+    /** 하루 모드 요청. 달·장부 전체 요청(requests)과 따로 센다 */
+    dayRequests: [] as DayRequest[],
   }
   server.use(
     http.get('/api/v1/ledgers/:ledgerId/transactions', async ({ request, params }) => {
       const query = new URL(request.url).searchParams
+      const date = query.get('date')
+      if (date !== null) {
+        const day: DayRequest = {
+          ledgerId: String(params.ledgerId),
+          user: backend.userOf(request),
+          date,
+          limit: query.get('limit'),
+          cursor: query.get('cursor'),
+          names: [...query.keys()],
+        }
+        list.dayRequests.push(day)
+        if (!day.user) return problem(401, 'UNAUTHENTICATED')
+        return (await list.dayResponse?.(day)) ?? HttpResponse.json(dayPage(day))
+      }
       const sent: ListRequest = {
         ledgerId: String(params.ledgerId),
         user: backend.userOf(request),
@@ -158,3 +198,53 @@ export function startTransactionList(server: SetupServer, backend: Backend) {
 }
 
 export type TransactionList = ReturnType<typeof startTransactionList>
+
+/** 화면이 보낸 달력용 날짜별 합계 요청 하나 */
+export interface DailyRequest {
+  ledgerId: string
+  user: string | undefined
+  month: string | null
+  names: string[]
+}
+
+/**
+ * 달력용 날짜별 합계(`GET .../stats/daily?month=YYYY-MM`, #66의 응답 계약)가 되는 가짜 서버. 거래 목록의 가짜 서버(`list`)에 넣어 둔
+ * 그 달의 거래로 센다: 합계에 드는 거래(이체, 취소, 휴지통 제외)가 있는 날만, 날짜 순. `list.days`에 정해 둔 그날 합계가 앞선다.
+ */
+export function startDailyTotals(server: SetupServer, backend: Backend, list: TransactionList) {
+  const daily = {
+    /** 정해 두면 그 응답을 준다. */
+    response: undefined as ((sent: DailyRequest) => Response | Promise<Response> | undefined) | undefined,
+    requests: [] as DailyRequest[],
+  }
+  server.use(
+    http.get('/api/v1/ledgers/:ledgerId/stats/daily', async ({ request, params }) => {
+      const query = new URL(request.url).searchParams
+      const sent: DailyRequest = {
+        ledgerId: String(params.ledgerId),
+        user: backend.userOf(request),
+        month: query.get('month'),
+        names: [...query.keys()],
+      }
+      daily.requests.push(sent)
+      if (!sent.user) return problem(401, 'UNAUTHENTICATED')
+      const answered = await daily.response?.(sent)
+      if (answered) return answered
+      if (sent.month === null) return problem(400, 'INVALID_REQUEST')
+      const counted = (list.months.get(sent.month) ?? []).filter(
+        ({ type, status, deletedAt }) => type !== 'TRANSFER' && status !== 'CANCELED' && deletedAt === null,
+      )
+      const dates = [...new Set(counted.map(({ occurredOn }) => String(occurredOn)))].sort()
+      return HttpResponse.json({
+        month: sent.month,
+        days: dates.map((date) => ({
+          date,
+          ...(list.days.get(date) ?? sumsOf(counted.filter(({ occurredOn }) => occurredOn === date))),
+        })),
+      })
+    }),
+  )
+  return daily
+}
+
+export type DailyTotals = ReturnType<typeof startDailyTotals>

@@ -123,8 +123,13 @@ export async function settlePending(seen: PendingTransaction, outcome: Outcome):
  * 쌓은 시각은 그대로 둬 원래 순서 자리에서 보낸다. 거래 id가 바뀌면(current 없는 409, ADR 006 결정 3) 옛 줄을 지우고 새 id의 줄을
  * 같은 트랜잭션에서 넣는다(둘 다 있거나 둘 다 없는 때가 없게, architect #237). 탭 사이 잠금은 잡지 않는다. 보낼 수 없음 줄은
  * 어느 탭의 보내기도 건드리지 않고, 버리기·다른 탭의 고치기와 겹치는 것은 위 비교가 막는다(architect #237).
+ * B-05의 "새 거래로 저장"(#280)은 새 id의 줄을 서버가 거부한 그 이유의 보낼 수 없음(`state`)으로 넣기도 한다.
  */
-export async function refilePending(seen: PendingTransaction, body: PendingBody): Promise<boolean> {
+export async function refilePending(
+  seen: PendingTransaction,
+  body: PendingBody,
+  state: PendingState = { kind: 'waiting' },
+): Promise<boolean> {
   const refiled = await transact(
     ['queue'],
     'readwrite',
@@ -133,7 +138,7 @@ export async function refilePending(seen: PendingTransaction, body: PendingBody)
       const row = pendingOfRow(await resultOf(store.get([seen.userId, seen.id])))
       if (!row || !isSameRow(row, seen)) return false
       if (body.id !== seen.id) store.delete([seen.userId, seen.id])
-      const next: PendingTransaction = { ...row, id: body.id, state: { kind: 'waiting' }, body }
+      const next: PendingTransaction = { ...row, id: body.id, state, body }
       store.put(next)
       return true
     },
@@ -161,8 +166,11 @@ function changed(): void {
   announce('queue')
 }
 
-/** 읽은 두 줄이 같은지. 둘 다 pendingOfRow로 읽어 칸의 순서가 같다. 줄은 JSON으로 만든 값만 담는다 */
-function isSameRow(a: PendingTransaction, b: PendingTransaction): boolean {
+/**
+ * 읽은 두 줄이 같은지. 둘 다 pendingOfRow로 읽어 칸의 순서가 같다. 줄은 JSON으로 만든 값만 담는다. B-05의 비교해서 고르기(#280)가
+ * 서버에 보내기 전에 판을 연 때 본 줄이 그대로인지 본다
+ */
+export function isSameRow(a: PendingTransaction, b: PendingTransaction): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 

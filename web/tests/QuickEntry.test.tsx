@@ -61,10 +61,10 @@ async function untilForm(opened: Opened) {
 }
 
 describe('하단 탭의 거래 입력 칸(휴대폰 배치)', () => {
-  it('1A는 홈, 내역, 거래 입력, 더보기 네 칸이 같은 폭으로 놓인다(거래 입력은 칸 순서의 자리)', async () => {
+  it('1단계는 홈, 내역, 거래 입력, 통계, 더보기 다섯 칸이 같은 폭으로 놓인다(거래 입력은 내역과 통계 사이)', async () => {
     await openAt('/more')
     const cells = within(tabBar()).getAllByRole('listitem')
-    expect(cells.map((cell) => cell.textContent)).toEqual(['홈', '내역', '', '더보기'])
+    expect(cells.map((cell) => cell.textContent)).toEqual(['홈', '내역', '', '통계', '더보기'])
     expect(cells[2].contains(quickEntry())).toBe(true)
     expect(styleOf(within(tabBar()).getByRole('list')).gridAutoColumns).toBe('minmax(0, 1fr)')
   })
@@ -227,7 +227,7 @@ describe('권한', () => {
     backend.meResponse = () =>
       HttpResponse.json({ ...meOf('user-1'), ledgers: [{ ...meOf('user-1').ledgers[0], role: 'VIEWER' }] })
     await openAt('/more')
-    expect(within(tabBar()).getAllByRole('listitem').map((cell) => cell.textContent)).toEqual(['홈', '내역', '더보기'])
+    expect(within(tabBar()).getAllByRole('listitem').map((cell) => cell.textContent)).toEqual(['홈', '내역', '통계', '더보기'])
     setViewportWidth(1280)
     expect(screen.queryByRole('link', { name: '거래 입력', hidden: true })).toBeNull()
   })

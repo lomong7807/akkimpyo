@@ -1,0 +1,11 @@
+# 운영 compose와 프록시 시험(deploy/tests/proxy-run)을 돌리는 환경. 백업 시험(Dockerfile)과 같은 Docker CLI와 Ubuntu에
+# compose·buildx 플러그인(판 바꾸기 시험의 웹 이미지)과 HTTP 시험 도구를 더한다.
+FROM docker:29.9.2-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb AS docker
+
+FROM ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl jq openssl shellcheck \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=docker /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-buildx \
+    /usr/local/libexec/docker/cli-plugins/

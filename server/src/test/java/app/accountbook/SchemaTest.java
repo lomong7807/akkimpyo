@@ -392,6 +392,27 @@ class SchemaTest {
                 () -> jdbc.update("delete from category where id = ?", mine.category()));
     }
 
+    /** 저장된 라인을 고쳐 다른 장부의 계좌, 카테고리, 장부를 가리키게 해도 DB가 거부한다(#14 테스트 보강, qa #170·#166). */
+    @Test
+    void lineUpdatedToPointAtAnotherLedgerIsRejectedByDatabase() {
+        LedgerRows mine = insertLedgerRows();
+        LedgerRows other = insertLedgerRows();
+        insertLine(mine.transaction(), mine.ledger(), mine.account(), mine.category());
+
+        assertRejectedBy("fk_transaction_line_account", () -> jdbc.update(
+                "update transaction_line set account_id = ? where transaction_id = ?", other.account(),
+                mine.transaction()));
+        assertRejectedBy("fk_transaction_line_category", () -> jdbc.update(
+                "update transaction_line set category_id = ? where transaction_id = ?", other.category(),
+                mine.transaction()));
+        // 계좌와 카테고리를 장부와 함께 옮겨도 거래의 장부와 어긋난다.
+        assertRejectedBy("fk_transaction_line_transaction", () -> jdbc.update(
+                "update transaction_line set ledger_id = ?, account_id = ?, category_id = ? where transaction_id = ?",
+                other.ledger(), other.account(), other.category(), mine.transaction()));
+        assertThat(jdbc.queryForObject("select account_id from transaction_line where transaction_id = ?", UUID.class,
+                mine.transaction())).isEqualTo(mine.account());
+    }
+
     @Test
     void transactionAccountOrCategoryWithLineCannotMoveToAnotherLedgerInDatabase() {
         // 거래 하나는 장부 하나에만 속한다(P-314). 옮기면 라인이 다른 장부를 가리키게 된다.
