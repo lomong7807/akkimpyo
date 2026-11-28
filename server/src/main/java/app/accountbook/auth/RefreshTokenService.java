@@ -89,8 +89,12 @@ final class RefreshTokenService {
      */
     Optional<IssuedRefreshToken> rotate(String value) {
         return transactionTemplate.execute(status -> findToken(value).flatMap(token -> {
-            Family family = jdbc.sql(FAMILY + " for no key update").param("id", token.familyId())
-                    .query(RefreshTokenService::family).single();
+            Optional<Family> locked = jdbc.sql(FAMILY + " for no key update").param("id", token.familyId())
+                    .query(RefreshTokenService::family).optional();
+            if (locked.isEmpty()) {
+                return Optional.empty(); // 토큰을 찾은 뒤 정리 작업(RefreshTokenCleanup)이 계열을 지웠다. 모르는 값과 같다.
+            }
+            Family family = locked.get();
             Instant now = now(); // 잠금을 기다린 뒤의 시각으로 판단한다.
             switch (judge(token, family, now)) {
                 case CURRENT -> {
