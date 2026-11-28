@@ -11,8 +11,8 @@ import { TRANSACTION_LIST_STALE_MS } from './transactionListQueries'
 /*
  * 달력용 날짜별 합계(#66의 응답 계약). 경로, 쿼리, 필드 이름은 이 파일에만 있다.
  * `GET /api/v1/ledgers/{ledgerId}/stats/daily?month=YYYY-MM` → `{ month, days: [{ date, income, expense }] }`.
- * 합계는 P-205(이체, 취소, 휴지통 제외)이고 지출도 양수다. 합계에 드는 거래가 있는 날만 날짜 순으로 오고, 날짜는 거래 날짜 그대로다
- * (시간대 변환 없음).
+ * 합계는 P-205(이체, 취소, 휴지통 제외)이고 지출도 양수로 센다. 환불이 더 큰 날은 음수다(#390). 합계에 드는 거래가 있는 날만
+ * 날짜 순으로 오고, 날짜는 거래 날짜 그대로다(시간대 변환 없음).
  */
 
 /**

@@ -53,11 +53,24 @@ describe('달력용 날짜별 합계(GET .../stats/daily, #66 응답 계약)', (
     expect(await fetchDailyTotals(ledgerId, '2026-11')).toEqual([])
   })
 
+  it('환불이 더 큰 날의 음수 합계(#390)를 그대로 받는다. 환불만 있는 날, 0원이 된 날, 달의 첫날과 마지막 날', async () => {
+    const days = [
+      { date: '2026-11-01', income: 0, expense: -12000 },
+      { date: '2026-11-15', income: 0, expense: 0 },
+      { date: '2026-11-30', income: -3000, expense: -(2 ** 53 - 1) },
+    ]
+    respondAt(path, { month: '2026-11', days })
+    expect(await fetchDailyTotals(ledgerId, '2026-11')).toEqual(days)
+  })
+
   it.each([
     ['다른 달', { ...body, month: '2026-10' }],
     ['다른 달의 날짜', { ...body, days: [{ date: '2026-10-31', income: 0, expense: 1 }] }],
     ['없는 날짜', { ...body, days: [{ date: '2026-11-31', income: 0, expense: 1 }] }],
-    ['음수 금액', { ...body, days: [{ date: '2026-11-01', income: 0, expense: -1 }] }],
+    ['음수인 다른 달의 날짜', { ...body, days: [{ date: '2026-10-31', income: 0, expense: -1 }] }],
+    ['음수인 다음 달의 날짜', { ...body, days: [{ date: '2026-12-01', income: 0, expense: -1 }] }],
+    ['안전한 정수 범위 밖의 음수', { ...body, days: [{ date: '2026-11-01', income: 0, expense: -(2 ** 53) }] }],
+    ['음수 소수 금액', { ...body, days: [{ date: '2026-11-01', income: 0, expense: -0.5 }] }],
     ['소수 금액', { ...body, days: [{ date: '2026-11-01', income: 0.5, expense: 0 }] }],
     ['글자 금액', { ...body, days: [{ date: '2026-11-01', income: '0', expense: 0 }] }],
     ['같은 날 두 번', { ...body, days: [body.days[0], body.days[0]] }],

@@ -98,6 +98,30 @@ describe('거래 목록(GET /api/v1/ledgers/{ledgerId}/transactions)', () => {
     expect(page.items[0].status).toBe('CANCELED')
   })
 
+  it('환불이 더 큰 달과 날의 음수 합계(#390)를 그대로 받는다. 환불만 있는 날, 0원이 된 날, 달의 첫날과 마지막 날', async () => {
+    const spend = (occurredOn: string) => expenseOf({ occurredOn, accountId: account, categoryId: food, amount: 1000 })
+    const days = new Map([
+      ['2026-11-30', { income: -3000, expense: -(2 ** 53 - 1) }],
+      ['2026-11-15', { income: 0, expense: 0 }],
+      ['2026-11-01', { income: 0, expense: -12000 }],
+    ])
+    const totals = { income: -3000, expense: -12000 }
+    respondWith(pageOf('2026-11', [spend('2026-11-30'), spend('2026-11-15'), spend('2026-11-01')], 0, 50, { totals, days }))
+    const page = await fetchTransactionPage(ledgerId, '2026-11', null)
+    expect(page.totals).toEqual(totals)
+    expect(page.days).toEqual([...days].map(([date, sums]) => ({ date, ...sums })))
+  })
+
+  it.each([null, 'REFUND', 'REIMBURSEMENT'])(
+    '거래에 refund가 없고 refundKind(%s)가 있어도 받는다(서버 #8, 웹은 둘 다 읽지 않는다)',
+    async (refundKind) => {
+      const changed = { ...Object.fromEntries(Object.entries(lunch).filter(([key]) => key !== 'refund')), refundKind }
+      respondWith({ ...firstPage(), items: [changed, salary, payment] })
+      const page = await fetchTransactionPage(ledgerId, '2026-11', null)
+      expect(page.items[0]).toEqual(changed)
+    },
+  )
+
   it('모르는 필드가 있어도 된다', async () => {
     const body = firstPage()
     respondWith({ ...body, added: 1, items: [{ ...lunch, added: 2 }], days: [{ ...body.days[0], added: 3 }] })
@@ -140,7 +164,10 @@ describe('거래 목록(GET /api/v1/ledgers/{ledgerId}/transactions)', () => {
     ['다음 cursor가 숫자', { ...firstPage(), nextCursor: 1 }],
     ['첫 쪽의 합계가 없음', { ...firstPage(), totals: null }],
     ['합계의 지출이 없음', { ...firstPage(), totals: { income: 0 } }],
-    ['합계가 음수', { ...firstPage(), totals: { income: 0, expense: -1 } }],
+    ['합계가 음수 소수', { ...firstPage(), totals: { income: 0, expense: -0.5 } }],
+    ['합계가 안전한 정수 범위 밖', { ...firstPage(), totals: { income: -(2 ** 53), expense: 0 } }],
+    ['그날 합계가 안전한 정수 범위 밖', withDay({ date: '2026-11-01', income: 0, expense: -(2 ** 53) })],
+    ['음수인 그날 합계의 날짜가 다음 달', withDay({ date: '2026-12-01', income: 0, expense: -1 })],
     ['그날 합계가 없음', { ...firstPage(), days: undefined }],
     ['거래가 있는 날의 합계가 빠짐', { ...firstPage(), days: firstPage().days.slice(1) }],
     ['그날 합계의 날짜가 다른 달', withDay({ date: '2026-10-31', income: 0, expense: 1 })],

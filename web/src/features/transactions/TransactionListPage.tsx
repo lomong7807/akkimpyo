@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router'
 import Amount from '../../components/Amount'
+import { totalKind } from '../../components/amountDisplay'
 import { ButtonLink } from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
 import { CalendarBlank } from '../../components/icons'
@@ -338,13 +339,13 @@ function TotalFigures({ totals }: { totals: IncomeAndExpense }) {
       <div className={styles.total}>
         <dt className={styles.totalName}>수입</dt>
         <dd className={styles.totalAmount}>
-          <Amount kind={totals.income > 0 ? 'income' : 'balance'} value={totals.income} />
+          <Amount kind={totalKind('income', totals.income)} value={totals.income} />
         </dd>
       </div>
       <div className={styles.total}>
         <dt className={styles.totalName}>지출</dt>
         <dd className={styles.totalAmount}>
-          <Amount kind="expense" value={totals.expense} />
+          <Amount kind={totalKind('expense', totals.expense)} value={totals.expense} />
         </dd>
       </div>
     </dl>
