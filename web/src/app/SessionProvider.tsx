@@ -14,6 +14,7 @@ import {
 } from '../api/session'
 import { sweepExpiredCopies } from '../device/copies'
 import { sweepExpiredDrafts } from '../device/drafts'
+import { readLoginRecord } from '../device/loginRecord'
 import { askToKeepStorage } from '../device/persistence'
 import type { SignIn } from '../features/auth/useLogin'
 import type { SignUp } from '../features/auth/useSignup'
@@ -21,6 +22,7 @@ import { keepOpenDrafts } from '../features/drafts/keepDraft'
 import { readMeCopy } from '../features/me/meCopy'
 import { now } from '../lib/clock'
 import { refetchOnReconnect } from './queryClient'
+import { loginScreen } from './screens'
 import { initialSession, nextSession, type SessionEvent } from './sessionState'
 import { SessionContext } from './SessionContext'
 import { uncoverPage, watchSession } from './sessionWatch'
@@ -59,6 +61,14 @@ export default function SessionProvider({ children }: { children: ReactNode }) {
     // 서버에 닿지 못한 로그아웃은 앱을 열 때와 다시 연결될 때만 또 보낸다
     resendLogout()
     check()
+    // 기기에 로그인 기록이 없으면 갱신의 답은 거의 '로그인 필요'다. 답을 기다리지 않고 로그인 화면 코드를 받기 시작해 로그인 전
+    // 첫 방문이 한 박자 늦어지지 않게 한다. 기록을 읽지 못해도 받는다(작다). modulepreload로 싣지 않는다(#355, architect)
+    readLoginRecord().then(
+      (record) => {
+        if (record === undefined) void loginScreen.preload()
+      },
+      () => void loginScreen.preload(),
+    )
     return () => {
       stopEnding()
       stopListening()

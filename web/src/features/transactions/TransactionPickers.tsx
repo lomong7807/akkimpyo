@@ -19,10 +19,15 @@ interface PickerProps {
   onChange: (value: string) => void
   readOnly: boolean
   error?: string
+  /** 칸 아래의 도움말(카테고리 제안, 숨긴 계좌) */
+  help?: string
   ref?: Ref<HTMLButtonElement>
 }
 
-/** 카테고리(D-04 (5)). 그 유형의 구분만 나오고 상위와 하위 모두 고를 수 있다. 미분류는 맨 아래이고 빈 값이다. */
+/**
+ * 카테고리(D-04 (5)). 그 유형의 구분만 나오고 상위와 하위 모두 고를 수 있다. 미분류는 맨 아래이고 빈 값이다.
+ * 새 지출은 칸 아래에 카테고리 제안의 도움말을 둔다(D-04 (4), D-05 (6)).
+ */
 export function CategoryField({ kind, value, onChange, ...field }: PickerProps & { kind: CategoryKind }) {
   const categories = useEntryCategories()
   const valueText = value === '' ? UNCATEGORIZED : (categoryName(categories.data ?? [], value) ?? '')
@@ -52,7 +57,6 @@ export function CategoryField({ kind, value, onChange, ...field }: PickerProps &
 
 interface AccountFieldProps extends PickerProps {
   label: string
-  help?: string
 }
 
 /** 계좌(D-04 (6), (17), (18)). 은행, 카드, 현금 묶음이고 줄에는 이름만 있다. 1A에는 숨긴 계좌가 없다. */

@@ -12,10 +12,11 @@ import app.accountbook.category.Category;
 import app.accountbook.category.CategoryCommand;
 import app.accountbook.category.CategoryKind;
 import app.accountbook.category.CategoryService;
+import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.common.InvalidStateException;
 import app.accountbook.common.NotFoundException;
 import app.accountbook.common.NotLedgerMemberException;
-import app.accountbook.common.StaleVersionException;
 import app.accountbook.ledger.LedgerRole;
 import app.accountbook.support.Fixtures;
 import app.accountbook.support.IntegrationTest;
@@ -40,6 +41,7 @@ class TransactionServiceTest {
     static final String DEVICE = "iphone.safari";
 
     @Autowired TransactionService transactionService;
+    @Autowired TransactionTrashQuery transactionTrashQuery;
     @Autowired TransactionRepository transactionRepository;
     @Autowired AccountService accountService;
     @Autowired CategoryService categoryService;
@@ -79,11 +81,16 @@ class TransactionServiceTest {
 
     private Entry expense(UUID id, long amount, UUID categoryId) {
         return new Entry(id, TransactionType.EXPENSE, DAY, LocalTime.of(12, 30), cash.getId(), categoryId,
-                amount, false, "김밥천국", "점심", null);
+                amount, null, "김밥천국", "점심", null);
     }
 
     private TransactionView create(TransactionCommand cmd) {
         return transactionService.create(owner.getId(), ledgerId, cmd, DEVICE);
+    }
+
+    /** 이 장부의 거래 수. 테이블 전체를 세지 않아 커밋하는 테스트의 흔적이 남아도 깨지지 않는다(#14 테스트 보강). */
+    private long storedCount() {
+        return jdbc.queryForObject("select count(*) from transaction where ledger_id = ?", Long.class, ledgerId);
     }
 
     /** 영속성 컨텍스트를 비워 다음 조회가 DB에 저장된 값을 읽게 한다. */
@@ -130,9 +137,10 @@ class TransactionServiceTest {
         UUID id = UUID.randomUUID();
 
         TransactionView view = create(new Entry(id, TransactionType.EXPENSE, DAY, null, cash.getId(),
-                food.getId(), 2_000, true, "김밥천국", "환불", null));
+                food.getId(), 2_000, RefundKind.REFUND, "김밥천국", "환불", null));
 
         assertThat(view.type()).isEqualTo(TransactionType.EXPENSE);
+        assertThat(view.refundKind()).isEqualTo(RefundKind.REFUND);
         assertThat(view.lines()).containsExactly(new Line(cash.getId(), food.getId(), 2_000));
     }
 
@@ -141,7 +149,7 @@ class TransactionServiceTest {
         UUID id = UUID.randomUUID();
 
         TransactionView view = create(new Entry(id, TransactionType.INCOME, DAY, null, bank.getId(),
-                salary.getId(), 50_000, false, "회사", null, null));
+                salary.getId(), 50_000, null, "회사", null, null));
 
         assertThat(view.type()).isEqualTo(TransactionType.INCOME);
         assertThat(view.paidBy()).isEqualTo(owner.getId());
@@ -172,7 +180,7 @@ class TransactionServiceTest {
         flushAndClear();
         TransactionView second = transactionService.create(owner.getId(), ledgerId, cmd, "macbook-1");
 
-        assertThat(transactionRepository.count()).isEqualTo(1);
+        assertThat(storedCount()).isEqualTo(1);
         assertThat(transactionService.history(owner.getId(), id)).hasSize(1);
         assertThat(first.version()).isEqualTo(1);
         assertThat(second.version()).isEqualTo(1);
@@ -193,7 +201,7 @@ class TransactionServiceTest {
         Account otherCash = account(other, otherLedgerId, "현금", AccountType.CASH);
         assertThatThrownBy(() -> transactionService.create(other.getId(), otherLedgerId,
                 new Entry(id, TransactionType.EXPENSE, DAY, LocalTime.of(12, 30), otherCash.getId(), null,
-                        12_000, false, "김밥천국", "점심", null), DEVICE))
+                        12_000, null, "김밥천국", "점심", null), DEVICE))
                 .isInstanceOf(IdConflictException.class);
 
         TransactionView stored = transactionService.get(owner.getId(), id);
@@ -210,7 +218,7 @@ class TransactionServiceTest {
                 .isInstanceOf(InvalidRequestException.class);
         assertThatThrownBy(() -> create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(), cash.getId(), 0, null)))
                 .isInstanceOf(InvalidRequestException.class);
-        assertThat(transactionRepository.count()).isZero();
+        assertThat(storedCount()).isZero();
     }
 
     @Test
@@ -226,12 +234,12 @@ class TransactionServiceTest {
         Account othersCash = account(other, fixtures.personalLedgerId(other), "현금", AccountType.CASH);
 
         assertThatThrownBy(() -> create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                othersCash.getId(), null, 12_000, false, null, null, null)))
+                othersCash.getId(), null, 12_000, null, null, null, null)))
                 .isInstanceOf(InvalidRequestException.class);
         assertThatThrownBy(() -> create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(),
                 othersCash.getId(), 10_000, null)))
                 .isInstanceOf(InvalidRequestException.class);
-        assertThat(transactionRepository.count()).isZero();
+        assertThat(storedCount()).isZero();
     }
 
     @Test
@@ -252,16 +260,16 @@ class TransactionServiceTest {
     @Test
     void create_rejectsRefundOnIncomeAndTooLongText() {
         assertThatThrownBy(() -> create(new Entry(UUID.randomUUID(), TransactionType.INCOME, DAY, null,
-                bank.getId(), salary.getId(), 1_000, true, null, null, null)))
+                bank.getId(), salary.getId(), 1_000, RefundKind.REFUND, null, null, null)))
                 .isInstanceOf(InvalidRequestException.class);
         assertThatThrownBy(() -> create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                cash.getId(), null, 1_000, false, "가".repeat(101), null, null)))
+                cash.getId(), null, 1_000, null, "가".repeat(101), null, null)))
                 .isInstanceOf(InvalidRequestException.class);
         assertThatThrownBy(() -> create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                cash.getId(), null, 1_000, false, null, "가".repeat(501), null)))
+                cash.getId(), null, 1_000, null, null, "가".repeat(501), null)))
                 .isInstanceOf(InvalidRequestException.class);
         assertThatCode(() -> create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                cash.getId(), null, 1_000, false, "가".repeat(100), "가".repeat(500), null)))
+                cash.getId(), null, 1_000, null, "가".repeat(100), "가".repeat(500), null)))
                 .doesNotThrowAnyException();
     }
 
@@ -272,7 +280,7 @@ class TransactionServiceTest {
         assertThatThrownBy(() -> transactionService.create(outsider.getId(), ledgerId,
                 expense(UUID.randomUUID(), 12_000), DEVICE))
                 .isInstanceOf(NotLedgerMemberException.class);
-        assertThat(transactionRepository.count()).isZero();
+        assertThat(storedCount()).isZero();
     }
 
     @Test
@@ -282,11 +290,11 @@ class TransactionServiceTest {
         fixtures.addMember(ledgerId, member, LedgerRole.MEMBER);
 
         assertThatThrownBy(() -> create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                cash.getId(), null, 12_000, false, null, null, outsider.getId())))
+                cash.getId(), null, 12_000, null, null, null, outsider.getId())))
                 .isInstanceOf(InvalidRequestException.class);
 
         TransactionView paidByMember = create(new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null,
-                cash.getId(), null, 12_000, false, null, null, member.getId()));
+                cash.getId(), null, 12_000, null, null, null, member.getId()));
         assertThat(paidByMember.paidBy()).isEqualTo(member.getId());
         assertThat(paidByMember.createdBy()).isEqualTo(owner.getId());
     }
@@ -315,7 +323,7 @@ class TransactionServiceTest {
 
         UUID expense = create(expense(UUID.randomUUID(), 12_000)).id();
         UUID income = create(new Entry(UUID.randomUUID(), TransactionType.INCOME, DAY, null, bank.getId(),
-                salary.getId(), 50_000, false, "회사", null, null)).id();
+                salary.getId(), 50_000, null, "회사", null, null)).id();
         UUID transfer = create(new Transfer(UUID.randomUUID(), DAY, null, bank.getId(), cash.getId(), 30_000,
                 null)).id();
         UUID others = fixtures.expense(other, otherLedgerId, othersCash.getId(), null, DAY, 1_000).id();
@@ -359,7 +367,10 @@ class TransactionServiceTest {
         transactionService.update(owner.getId(), id, 1, expense(id, 15_000), DEVICE);
 
         assertThatThrownBy(() -> transactionService.update(owner.getId(), id, 1, expense(id, 20_000), DEVICE))
-                .isInstanceOf(StaleVersionException.class);
+                .isInstanceOfSatisfying(StaleVersionException.class, stale -> {
+                    assertThat(stale.current().version()).isEqualTo(2);
+                    assertThat(stale.current().lines()).extracting(Line::amount).containsExactly(-15_000L);
+                });
 
         flushAndClear();
         TransactionView stored = transactionService.get(owner.getId(), id);
@@ -377,8 +388,12 @@ class TransactionServiceTest {
         // 메모리 비교는 통과하므로 조건부 UPDATE의 영향 행 수(0)가 막아야 한다.
         jdbc.update("update transaction set version = 2 where id = ?", id);
 
+        // current는 메모리의 낡은 거래(version 1)가 아니라 다시 읽은 것이다.
         assertThatThrownBy(() -> transactionService.update(owner.getId(), id, 1, expense(id, 15_000), DEVICE))
-                .isInstanceOf(StaleVersionException.class);
+                .isInstanceOfSatisfying(StaleVersionException.class, stale -> {
+                    assertThat(stale.current().version()).isEqualTo(2);
+                    assertThat(stale.current().lines()).extracting(Line::amount).containsExactly(-12_000L);
+                });
 
         flushAndClear();
         TransactionView stored = transactionService.get(owner.getId(), id);
@@ -393,16 +408,20 @@ class TransactionServiceTest {
         create(expense(id, 12_000));
 
         assertThatThrownBy(() -> transactionService.update(owner.getId(), id, 1,
-                new Entry(id, TransactionType.INCOME, DAY, null, cash.getId(), salary.getId(), 12_000, false,
+                new Entry(id, TransactionType.INCOME, DAY, null, cash.getId(), salary.getId(), 12_000, null,
                         null, null, null), DEVICE))
-                .isInstanceOf(InvalidRequestException.class);
+                .isInstanceOfSatisfying(InvalidRequestException.class, e -> assertTypeNotAllowed(e));
         assertThatThrownBy(() -> transactionService.update(owner.getId(), id, 1,
                 new Transfer(id, DAY, null, cash.getId(), bank.getId(), 12_000, null), DEVICE))
-                .isInstanceOf(InvalidRequestException.class);
+                .isInstanceOfSatisfying(InvalidRequestException.class, e -> assertTypeNotAllowed(e));
 
         TransactionView stored = transactionService.get(owner.getId(), id);
         assertThat(stored.type()).isEqualTo(TransactionType.EXPENSE);
         assertThat(stored.version()).isEqualTo(1);
+    }
+
+    private static void assertTypeNotAllowed(InvalidRequestException e) {
+        assertThat(List.of(e.field(), e.code())).containsExactly("type", FieldErrorCode.NOT_ALLOWED);
     }
 
     @Test
@@ -427,18 +446,18 @@ class TransactionServiceTest {
         UUID id = UUID.randomUUID();
         create(expense(id, 12_000));
         assertThatThrownBy(() -> transactionService.restore(owner.getId(), id, 1, DEVICE))
-                .isInstanceOf(InvalidRequestException.class);
+                .isInstanceOf(InvalidStateException.class);
 
         TransactionView deleted = transactionService.delete(owner.getId(), id, 1, DEVICE);
         assertThat(deleted.deleted()).isTrue();
         assertThat(deleted.version()).isEqualTo(2);
-        assertThat(transactionService.listDeleted(owner.getId(), ledgerId)).extracting(TransactionView::id)
+        assertThat(transactionTrashQuery.page(owner.getId(), ledgerId, null).items()).extracting(TransactionView::id)
                 .containsExactly(id);
 
         TransactionView restored = transactionService.restore(owner.getId(), id, 2, DEVICE);
         assertThat(restored.deleted()).isFalse();
         assertThat(restored.version()).isEqualTo(3);
-        assertThat(transactionService.listDeleted(owner.getId(), ledgerId)).isEmpty();
+        assertThat(transactionTrashQuery.page(owner.getId(), ledgerId, null).items()).isEmpty();
         flushAndClear();
         assertThat(transactionService.get(owner.getId(), id).lines()).extracting(Line::amount)
                 .containsExactly(-12_000L);
@@ -451,9 +470,11 @@ class TransactionServiceTest {
         transactionService.delete(owner.getId(), id, 1, DEVICE);
 
         assertThatThrownBy(() -> transactionService.update(owner.getId(), id, 2, expense(id, 15_000), DEVICE))
-                .isInstanceOf(InvalidRequestException.class);
+                .isInstanceOf(InvalidStateException.class);
         assertThatThrownBy(() -> transactionService.cancel(owner.getId(), id, 2, DEVICE))
-                .isInstanceOf(InvalidRequestException.class);
+                .isInstanceOf(InvalidStateException.class);
+        assertThatThrownBy(() -> transactionService.delete(owner.getId(), id, 2, DEVICE))
+                .isInstanceOf(InvalidStateException.class);
 
         flushAndClear();
         TransactionView stored = transactionService.get(owner.getId(), id);
@@ -476,7 +497,40 @@ class TransactionServiceTest {
         TransactionView stored = transactionService.get(owner.getId(), id);
         assertThat(stored.deleted()).isFalse();
         assertThat(stored.version()).isEqualTo(2);
-        assertThat(transactionService.listDeleted(owner.getId(), ledgerId)).isEmpty();
+        assertThat(transactionTrashQuery.page(owner.getId(), ledgerId, null).items()).isEmpty();
+    }
+
+    @Test
+    void cancel_rejectsCanceledTransactionAsState() {
+        UUID id = UUID.randomUUID();
+        create(expense(id, 12_000));
+        transactionService.cancel(owner.getId(), id, 1, DEVICE);
+
+        assertThatThrownBy(() -> transactionService.cancel(owner.getId(), id, 2, DEVICE))
+                .isInstanceOf(InvalidStateException.class);
+
+        flushAndClear();
+        assertThat(transactionService.history(owner.getId(), id)).hasSize(2);
+    }
+
+    /** 휴지통의 거래도 version이 먼저다. 낡은 version이면 상태 오류가 아니라 충돌이고 current에 deletedAt이 있다(ADR 002 5절). */
+    @Test
+    void staleVersionComesBeforeStateAndCarriesDeletedCurrent() {
+        UUID id = UUID.randomUUID();
+        create(expense(id, 12_000));
+        TransactionView deleted = transactionService.delete(owner.getId(), id, 1, DEVICE);
+
+        for (Runnable stale : List.<Runnable>of(
+                () -> transactionService.update(owner.getId(), id, 1, expense(id, 15_000), DEVICE),
+                () -> transactionService.delete(owner.getId(), id, 1, DEVICE),
+                () -> transactionService.restore(owner.getId(), id, 1, DEVICE))) {
+            assertThatThrownBy(stale::run).isInstanceOfSatisfying(StaleVersionException.class, e -> {
+                assertThat(e.current().version()).isEqualTo(2);
+                assertThat(e.current().deletedAt()).isEqualTo(deleted.deletedAt()).isNotNull();
+            });
+        }
+        assertThatThrownBy(() -> transactionService.restore(owner.getId(), UUID.randomUUID(), 1, DEVICE))
+                .isInstanceOf(NotFoundException.class);
     }
 
     @Test
@@ -494,6 +548,8 @@ class TransactionServiceTest {
         assertThat(history).extracting(ChangeLogView::action).containsExactly(
                 ChangeAction.CREATE, ChangeAction.UPDATE, ChangeAction.CANCEL, ChangeAction.DELETE,
                 ChangeAction.RESTORE);
+        assertThat(history).extracting(entry -> entry.after().at("/version").asLong())
+                .containsExactly(1L, 2L, 3L, 4L, 5L);
         assertThat(history).allSatisfy(entry -> {
             assertThat(entry.transactionId()).isEqualTo(id);
             assertThat(entry.actorId()).isEqualTo(owner.getId());

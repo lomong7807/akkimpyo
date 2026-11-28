@@ -38,12 +38,8 @@ export async function sendForResponse(
   path: `/${string}`,
   options: SendOptions = {},
 ): Promise<{ status: number; body: unknown }> {
-  const { response, text } = await exchange(path, options)
-  if (!response.ok) {
-    const problem = parseProblem(response.headers.get('Content-Type'), text)
-    const retryAfter = response.status === 429 ? retryAfterOf(response.headers.get('Retry-After'), now()) : undefined
-    throw ApiError.response(response.status, problem, retryAfter)
-  }
+  const { response, body: text } = await exchange(path, options, (received) => received.text())
+  if (!response.ok) throw failureOf(response, text)
   if (options.successStatus !== undefined && response.status !== options.successStatus) {
     throw ApiError.unreadable(response.status)
   }
@@ -55,10 +51,22 @@ export async function sendForResponse(
   }
 }
 
-async function exchange(
+/** 실패한 응답의 오류. problem+json이 아니면 상태 코드로만 나눈다 */
+export function failureOf(response: Response, text: string): ApiError {
+  const problem = parseProblem(response.headers.get('Content-Type'), text)
+  const retryAfter = response.status === 429 ? retryAfterOf(response.headers.get('Retry-After'), now()) : undefined
+  return ApiError.response(response.status, problem, retryAfter)
+}
+
+/**
+ * 요청을 보내고 `read`로 본문을 다 읽는다. 읽는 동안에도 지연과 중단을 잰다. 화면은 send와 sendForResponse를 쓰고,
+ * 이것은 본문을 다르게 읽는 api 계층(파일로 받기, fileRequest.ts)만 쓴다.
+ */
+export async function exchange<Body>(
   path: `/${string}`,
   { method = 'GET', body, headers: extraHeaders = {}, accessToken, signal, timeoutMs = TIMEOUT_MS, keepalive }: SendOptions,
-) {
+  read: (response: Response) => Promise<Body>,
+): Promise<{ response: Response; body: Body }> {
   if (signal?.aborted) throw ApiError.timeout()
 
   // 더 붙인 헤더를 먼저 넣어 아래의 헤더가 덮어쓰게 한다
@@ -89,7 +97,7 @@ async function exchange(
       keepalive,
     })
     reportResponse(response.headers)
-    return { response, text: await response.text() }
+    return { response, body: await read(response) }
   } catch {
     if (aborter.signal.aborted) throw ApiError.timeout()
     reportNoResponse()

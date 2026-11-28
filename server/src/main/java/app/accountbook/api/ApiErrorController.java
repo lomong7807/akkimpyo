@@ -4,11 +4,14 @@ import jakarta.servlet.DispatcherType;
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.webmvc.error.ErrorController;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.web.header.HeaderWriter;
+import org.springframework.security.web.header.writers.CacheControlHeadersWriter;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -18,13 +21,25 @@ class ApiErrorController implements ErrorController {
 
     private static final Logger log = LoggerFactory.getLogger(ApiErrorController.class);
 
+    private static final String CODE_ATTRIBUTE = ErrorCode.class.getName();
+
+    /** 필터 체인이 헤더를 쓰기 전에 끝난 요청(읽지 않은 경로, 바깥 필터의 예외, TRACE)도 캐시하지 않게 한다. 이미 있으면 쓰지 않는다. */
+    private final HeaderWriter noCache = new CacheControlHeadersWriter();
+
+    /** 컨트롤러에 닿기 전에 필터가 요청을 거절한다. 상태가 같은 오류가 여럿이라(403 등) 종류를 함께 알린다. */
+    static void send(ErrorCode code, HttpServletRequest request, HttpServletResponse response) throws IOException {
+        request.setAttribute(CODE_ATTRIBUTE, code);
+        response.sendError(code.status().value());
+    }
+
     @RequestMapping("/error")
     ResponseEntity<Problem> error(HttpServletRequest request, HttpServletResponse response) {
         if (response.isCommitted()) {
             return null;
         }
+        noCache.writeHeaders(request, response);
         int status = errorStatus(request);
-        ErrorCode code = ErrorCode.of(status);
+        ErrorCode code = request.getAttribute(CODE_ATTRIBUTE) instanceof ErrorCode given ? given : ErrorCode.of(status);
         if (code != ErrorCode.INTERNAL_ERROR) {
             log.debug("{} (상태 {})", code, status);
         } else if (status != code.status().value()) {

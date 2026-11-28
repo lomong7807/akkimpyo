@@ -58,22 +58,26 @@ final class InvalidFields {
         return switch (e.getCause()) {
             case InputCoercionException tooBig ->
                     Optional.of(InvalidField.of(path(tooBig), FieldErrorCode.OUT_OF_RANGE));
-            case DatabindException wrongType when !isAfterBody(wrongType) ->
+            case DatabindException wrongType when rootValues(wrongType) == 1 ->
                     Optional.of(InvalidField.of(path(wrongType), FieldErrorCode.INVALID_FORMAT));
             case null, default -> Optional.empty();
         };
     }
 
-    /** 본문의 JSON 하나를 다 읽은 뒤에 값이 더 있다({@code {} {}}). 최상위에서 몇 번째 값을 읽던 중인지로 안다. */
-    private static boolean isAfterBody(DatabindException e) {
+    /**
+     * 최상위에서 읽기 시작한 값의 수. 본문의 JSON 하나를 다 읽은 뒤에 값이 더 있으면({@code {} {}}) 2 이상이고,
+     * 본문이 공백뿐이라 값을 하나도 읽지 못했으면 0이다. 둘 다 형이 틀린 값이 아니라 읽을 수 없는 본문이다
+     * (공백뿐인 본문은 architect 결정 2026-11-26, #102. 아무것도 없는 본문은 스프링이 먼저 거른다). 파서를 모르면 1로 본다.
+     */
+    private static int rootValues(DatabindException e) {
         if (!(e.processor() instanceof JsonParser parser)) {
-            return false;
+            return 1;
         }
         TokenStreamContext context = parser.streamReadContext();
         while (!context.inRoot()) {
             context = context.getParent();
         }
-        return context.getCurrentIndex() > 0;
+        return context.getEntryCount();
     }
 
     private static InvalidField ofError(ObjectError error) {

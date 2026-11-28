@@ -5,13 +5,8 @@ import { currentUserId } from '../../api/session'
 import { useToast } from '../../components/ToastContext'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { ledgerScope } from '../me/ledgerKey'
-import {
-  deleteTransaction,
-  isInvalidState,
-  restoreTransaction,
-  staleVersionOf,
-  type SavedTransaction,
-} from './transactions'
+import type { SavedTransaction } from './transactions'
+import { deleteTransaction, isInvalidState, restoreTransaction, staleVersionOf } from './transactionWrites'
 import { transactionKey } from './useTransactionDetail'
 
 /** 되돌리기가 실패했을 때의 토스트(planner 결정 2026-11-26, 1A에는 휴지통 화면이 없어 "휴지통에서 복원" 안내를 뺀다) */

@@ -15,17 +15,29 @@ type LayerProps = {
  * 화면 전체를 덮는 모달 층. 초점을 가두는 것, 뒤 화면을 쓸 수 없게 하는 것, 맨 위에 그리는 것,
  * 연 곳으로 초점을 돌리는 것은 브라우저가 한다.
  */
-export default function Overlay({ open, ...layer }: LayerProps & { open: boolean }) {
+export default function Overlay({
+  open,
+  instantClose = false,
+  ...layer
+}: LayerProps & {
+  open: boolean
+  /**
+   * 닫힘을 기다리지 않고 닫는 그 처리 안에서 층을 뺀다(움직임 없음). 닫은 처리 안에서 뒤 화면의 입력칸에 초점을 줘야 할 때 쓴다:
+   * 모달이 떠 있는 동안 뒤 화면은 초점을 받지 못한다(D-05 저장, iPhone 키보드).
+   */
+  instantClose?: boolean
+}) {
   const ref = useRef<HTMLDialogElement>(null)
-  const shown = useClosing(open, ref)
+  const shown = useClosing(open, ref, instantClose)
   usePressShield(open)
   return shown ? <Layer {...layer} ref={ref} closing={!open} /> : null
 }
 
-/** 닫히는 움직임이 끝나면 층을 뺀다. */
-function useClosing(open: boolean, layer: RefObject<HTMLDialogElement | null>): boolean {
+/** 닫히는 움직임이 끝나면 층을 뺀다. `instant`면 바로 뺀다. */
+function useClosing(open: boolean, layer: RefObject<HTMLDialogElement | null>, instant: boolean): boolean {
   const [shown, setShown] = useState(open)
   if (open && !shown) setShown(true)
+  if (!open && shown && instant) setShown(false)
   const closing = !open && shown
 
   useEffect(() => {

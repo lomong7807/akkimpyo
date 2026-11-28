@@ -77,6 +77,7 @@ const widths = {
   '--width-dialog': 480,
   '--width-toast': 480,
   '--width-welcome': 480,
+  '--width-content-form': 480,
 } as const
 
 const heights = {

@@ -1,6 +1,6 @@
 import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import { HttpResponse } from 'msw'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { delayed, meOf, type Backend } from './support/backend'
 import { nowOnDevice, setDeviceClock } from './support/clock'
 import { goOffline } from './support/connection'
@@ -73,6 +73,24 @@ describe('남기는 때', () => {
     expect(kept.data.to).toBe('2026-11-26')
     expect(kept.data.months.map(({ month }) => month)).toEqual(['2026-10', '2026-11'])
     expect(kept.receivedAt).toBe(nowOnDevice())
+  })
+
+  it('받는 코드(따로 싣는 조각)가 홈을 그린 뒤에 와도 그 탭의 로그인으로 받아 남긴다(#292)', async () => {
+    // 조각을 붙잡아 두고 그동안 기기의 사본을 읽어, 부하로 조각이 홈 제목보다 늦게 오는 때를 매번 만든다. 사본을 읽는 도우미가
+    // 앱이 열린 뒤에 앱 모듈을 다시 읽으면(vi.resetModules) 늦게 온 조각이 화면과 다른 모듈(토큰이 없는 세션)과 이어져 받기를
+    // 보내지 않는다(support/device)
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    vi.doMock('../src/features/transactions/fetchLastMonth', async (importOriginal) => {
+      await gate
+      return importOriginal()
+    })
+    onTestFinished(() => void vi.doUnmock('../src/features/transactions/fetchLastMonth'))
+    list.months.set('2026-11', [spend('2026-11-26', '오늘')])
+    await openHome()
+    expect(await lastMonthOf()).toBeUndefined()
+    await act(async () => release())
+    await waitFor(async () => expect(await payees()).toEqual(['오늘']))
   })
 
   it.each([

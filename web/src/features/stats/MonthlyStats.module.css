@@ -1,0 +1,174 @@
+/*
+ * E-01 월별 통계(#242). 휴대폰 배치에서는 내용의 좌우 여백만큼 넓혀 합계 아래 선이 화면 끝까지 닿게 하고, 글은 안쪽 16px로
+ * 내용의 선에 맞춘다. 내용을 가운데로 모으는 폭(768px 이상)에서는 선이 내용 폭이다(내역과 같다).
+ * 값과 배치는 designer 결정(#242, #102 2026-11-27): 기준 시각은 합계 위 한 줄, 넓은 화면 합계는 세 칸, 카테고리 줄은 목록 줄 규칙.
+ */
+.stats {
+  --bleed: var(--space-16);
+
+  margin-inline: calc(-1 * var(--bleed));
+}
+
+@media (width >= 768px) {
+  .stats {
+    --bleed: 0px;
+  }
+}
+
+/* 화면 이름 "통계". 상단 바에 제목을 두지 않고(00-common 6.1) 넓은 화면에서도 와이어프레임처럼 보이지 않게 화면 읽기에만 둔다 */
+.title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 상단 바 아래 8px. 버튼 안쪽 여백만큼 바깥에 붙여 화살표를 글의 선 가까이 둔다(내역과 같다) */
+.monthNavigation {
+  margin: var(--space-8) var(--space-4) 0;
+}
+
+/* 연결이 없거나 새로 받지 못했을 때 합계 바로 위 한 줄 오른쪽 끝의 "10:42 기준"(F-908, 내역과 같은 자리) */
+.basis {
+  margin: var(--space-8) 0 0;
+  padding: 0 var(--space-16);
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  text-align: end;
+}
+
+.basis + .totals {
+  margin-top: var(--space-4);
+}
+
+/* (5) 수입, 지출, 차액. 휴대폰 배치는 세 줄이고 이름이 왼쪽, 금액이 오른쪽 끝이다 */
+.totals {
+  display: flex;
+  flex-direction: column;
+  row-gap: var(--space-8);
+  margin: var(--space-8) 0 0;
+  padding: 0 var(--space-16) var(--space-24);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* 금액이 줄에 안 들어가면(글자 200%) 다음 줄 오른쪽으로 내린다 */
+.total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-12);
+}
+
+.totalName {
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+}
+
+.totalAmount {
+  margin: 0;
+  margin-inline-start: auto;
+  font: var(--text-body-strong);
+  text-align: end;
+}
+
+/* 넓은 화면은 세 칸을 가로로 나란히 두고 칸마다 이름 아래 금액이다(와이어프레임 E-01 넓은 화면) */
+@media (width >= 1024px) {
+  .totals {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: var(--space-24);
+  }
+
+  .total {
+    flex-direction: column;
+    align-items: flex-start;
+    row-gap: var(--space-4);
+  }
+
+  .totalAmount {
+    margin-inline-start: 0;
+    text-align: start;
+  }
+}
+
+/* (6) 지출이 큰 카테고리. 합계 아래 선 뒤 24px에 머리가 온다 */
+.top {
+  padding-top: var(--space-24);
+}
+
+.topHead {
+  margin: 0;
+  padding: 0 var(--space-16);
+  font: var(--text-body-strong);
+}
+
+/*
+ * 칸(이름, 막대, 금액)은 목록이 정하고 줄은 그 칸을 나눠 쓴다(subgrid). 그래야 금액 글자 폭이 줄마다 달라도 막대 바탕의 폭이
+ * 모든 줄에서 같아, 막대 길이가 금액에 비례한다.
+ */
+.topList {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-12);
+  margin: var(--space-8) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * 누를 수 없는 목록 줄(1B, designer #242): 눌림·올림 바탕과 초점이 없다. 줄 높이와 여백은 목록 줄과 같아 1C에 누를 수 있게 될 때
+ * ">"와 누름만 더한다. 휴대폰 배치는 이름과 금액 한 줄 아래 4px에 막대가 줄 폭 전체다.
+ */
+.topRow {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-areas: "name amount" "bar bar";
+  grid-template-columns: subgrid;
+  align-content: center;
+  align-items: center;
+  row-gap: var(--space-4);
+  min-height: var(--size-row);
+  padding: var(--space-8) var(--space-16);
+}
+
+.topName {
+  grid-area: name;
+  min-width: 0;
+  font: var(--text-body);
+  overflow-wrap: anywhere;
+}
+
+.topAmount {
+  grid-area: amount;
+  font: var(--text-body-strong);
+  text-align: end;
+}
+
+/* 넓은 화면은 한 줄에 이름(25%), 막대(남는 폭), 금액이다 */
+@media (width >= 1024px) {
+  .topList {
+    grid-template-columns: 25% minmax(0, 1fr) auto;
+  }
+
+  .topRow {
+    grid-template-areas: "name bar amount";
+  }
+}
+
+/* 막대(00-common 2.6): 바탕은 color-border, 지출 채움은 보조 글자색, 모서리 0. 폭은 화면이 --share로 넘긴다 */
+.bar {
+  display: block;
+  grid-area: bar;
+  height: var(--space-8);
+  background-color: var(--color-border);
+}
+
+.barFill {
+  display: block;
+  width: var(--share);
+  height: 100%;
+  background-color: var(--color-text-secondary);
+}
