@@ -192,7 +192,7 @@ run_drill --store "$STORE" --server-jar "$WORK/app.jar" --keep-copy "$WORK/copy"
 assert '통과하고 0으로 끝난다' equal 0 "$rc"
 sed -n '/^복원 훈련 결과/,$p' "$LOG" | sed 's/^/    /'
 assert '명세표를 맞춰 봤다' logged '^- 명세표: 통과'
-assert '점검 13개를 돌렸다' logged '^- 점검 쿼리: 통과 (13개 모두 0건)'
+assert '점검 16개를 돌렸다' logged '^- 점검 쿼리: 통과 (16개 모두 0건)'
 assert 'Flyway validate를 봤다' logged '^- Flyway validate: 통과 (Successfully validated'
 assert '서버가 떴다' logged '^- 서버 기동: 통과'
 assert '쿼리 파일이 같으면 말하지 않는다' not logged '쿼리 파일'

@@ -20,7 +20,8 @@ import org.springframework.context.annotation.Import;
 @Documented
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT,
         properties = {"spring.datasource.hikari.maximum-pool-size=2", "WEB_ORIGIN=" + HttpServerTest.ORIGIN,
-                HttpServerTest.SIGNUP_ALLOWLIST, HttpServerTest.NO_SCHEDULED_JOBS})
+                HttpServerTest.SIGNUP_ALLOWLIST, HttpServerTest.NO_SCHEDULED_JOBS,
+                HttpServerTest.NO_REFRESH_TOKEN_CLEANUP})
 @Import({PostgresContainerConfig.class, TestPasswordHasherConfig.class, TestAccessTokens.KeyConfig.class,
         SignedInUser.class})
 public @interface HttpServerTest {
@@ -33,4 +34,7 @@ public @interface HttpServerTest {
 
     /** 매일 도는 작업(30일 자동 삭제)을 끈다. 테스트는 작업 메서드를 직접 부른다(TrashAutoPurgeTest). */
     String NO_SCHEDULED_JOBS = "accountbook.trash-purge.cron=-";
+
+    /** 매일 도는 refresh token 정리를 끈다. 테스트는 작업 메서드를 직접 부른다(RefreshTokenCleanupTest). */
+    String NO_REFRESH_TOKEN_CLEANUP = "accountbook.refresh-token-cleanup.cron=-";
 }

@@ -107,6 +107,22 @@ class RefreshTokenRaceTest {
     }
 
     /**
+     * 정리 작업(RefreshTokenCleanup, #132)이 계열과 토큰을 지우고 커밋하기 전에 그 계열의 토큰으로 온 갱신은, 토큰은 찾지만
+     * 계열 잠금을 기다리다 계열이 없어진 것을 본다. 모르는 값과 같이 거부되고 500이 되지 않는다. 정리 작업은 모든 사용자의
+     * 행을 지우므로 같은 잠금을 잡는 이 사용자의 삭제로 대신한다.
+     */
+    @Test
+    void 계열이_지워지는_사이_온_갱신은_모르는_값과_같이_거부된다() {
+        Optional<IssuedRefreshToken> result = whileLocked(() -> {
+            jdbc.update("delete from refresh_token where family_id in (select id from refresh_token_family where user_id = ?)",
+                    userId);
+            jdbc.update("delete from refresh_token_family where user_id = ?", userId);
+        }, () -> service.rotate(current.value()), () -> { });
+
+        assertThat(result).isEmpty();
+    }
+
+    /**
      * 먼저 잠근 갱신이 회전하고, 기다린 갱신은 5초 뒤(허용 시간 안)에 그 결과를 보고 재발급을 받는다. 회전은 한 번이라
      * 회전 시각과 바로 앞 토큰은 먼저 온 갱신의 것이고, 지금 토큰은 기다린 갱신이 받은 것이다.
      */
