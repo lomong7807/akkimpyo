@@ -25,9 +25,15 @@ concurrency:
 
 jobs:
   server:
-    name: server (Gradle build)
+    name: server (Gradle build) ${{ matrix.mode }} ${{ matrix.n }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # 진단 전용(#413, 머지하지 않는다): 느린 러너에서 끝까지 보도록 늘리고 여러 러너에 동시에 돌린다.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [full, alone]
+        n: [1, 2, 3]
     defaults:
       run:
         working-directory: server
@@ -48,5 +54,15 @@ jobs:
           cache-provider: basic
 
       # 테스트는 Testcontainers로 PostgreSQL을 띄우므로 러너의 Docker를 그대로 쓴다.
+      - name: Runner info
+        run: |
+          nproc; free -m | head -2; lscpu | grep -E 'Model name|^CPU\(s\)'; cat /proc/loadavg
+          df -h / | tail -1; docker info --format 'docker cpus={{.NCPU}} mem={{.MemTotal}} storage={{.Driver}}'
+
       - name: Build and test
+        if: matrix.mode == 'full'
         run: ./gradlew build
+
+      - name: List plan test alone
+        if: matrix.mode == 'alone'
+        run: ./gradlew test --tests 'app.accountbook.transaction.TransactionListPlanTest'
