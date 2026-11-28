@@ -34,7 +34,8 @@ import org.springframework.test.context.TestPropertySource;
             HttpMessageConvertersAutoConfiguration.class, JacksonAutoConfiguration.class,
             ConfigurationPropertiesAutoConfiguration.class})
     @Import({RequestBoundaryFilter.class, ApiErrorController.class, ApiExceptionHandler.class,
-            TomcatErrorConfig.class, RequestBodyConfig.class, BodyProbeController.class, BodyProbeFilters.class})
+            TomcatErrorConfig.class, RequestBodyConfig.class, JsonOnlyConverterConfig.class, BodyProbeController.class,
+            BodyProbeFilters.class})
     class Server {
     }
 }
