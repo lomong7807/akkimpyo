@@ -52,7 +52,7 @@ class ChangeLogJsonSettingsTest {
         assertThat(plain.readTree(stored)).isEqualTo(plain.readTree("""
                 {"id": "%s", "ledgerId": "%s", "type": "TRANSFER", "occurredOn": "2026-11-18", "occurredTime": null,
                  "payee": null, "memo": null, "status": "POSTED", "createdBy": "%s", "paidBy": null,
-                 "version": 1, "deleted": false, "createdAt": "%s", "updatedAt": "%s",
+                 "refundKind": null, "version": 1, "deleted": false, "createdAt": "%s", "updatedAt": "%s",
                  "lines": [{"accountId": "%s", "categoryId": null, "amount": -30000},
                            {"accountId": "%s", "categoryId": null, "amount": 30000}]}
                 """.formatted(created.id(), ledgerId, owner.getId(), created.createdAt(), created.createdAt(), bank,

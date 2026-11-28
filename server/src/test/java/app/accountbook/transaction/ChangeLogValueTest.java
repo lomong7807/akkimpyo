@@ -20,7 +20,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 변경 이력 전후 값의 모양을 고정한다(ADR 007 결정 3, 4의 버전 1, 이슈 #108).
+ * 변경 이력 전후 값의 모양을 고정한다(ADR 007 결정 3, 4의 버전 2, 이슈 #108, #8).
  * 실패하면 저장 형식이 바뀐 것이다. 이미 쌓인 이력은 고칠 수 없으므로, 바꾸려던 것이라면 기대를 맞추기 전에
  * 형식 버전을 올리고 읽는 쪽이 지난 버전을 해석하게 한다.
  */
@@ -40,16 +40,16 @@ class ChangeLogValueTest {
     static final Instant UPDATED = Instant.parse("2027-01-02T08:30:43.292603Z");
 
     @Test
-    void 형식_버전은_1이다() {
-        assertThat(ChangeLogValue.FORMAT_VERSION).isEqualTo((short) 1);
+    void 형식_버전은_2이다() {
+        assertThat(ChangeLogValue.FORMAT_VERSION).isEqualTo((short) 2);
     }
 
-    /** 금액과 version은 32비트를 넘는 값이다. 전체 복원이 version을 크게 올린다(ADR 008 결정 10). */
+    /** 금액과 version은 32비트를 넘는 값이다. 전체 복원이 version을 크게 올린다(ADR 008 결정 10). 환불이라 금액이 양수다. */
     @Test
     void 모든_값이_있는_거래의_JSON() {
         Transaction tx = transaction(TransactionType.EXPENSE, LocalTime.of(23, 59, 59, 999_000_000), "김밥천국", "점심",
-                PAYER);
-        tx.addLine(ACCOUNT, CATEGORY, -9_999_999_999L);
+                PAYER, RefundKind.REFUND);
+        tx.addLine(ACCOUNT, CATEGORY, 9_999_999_999L);
         tx.cancel();
         tx.markDeleted(UPDATED);
         tx.applyVersion(3_590_000_000L, UPDATED);
@@ -66,6 +66,7 @@ class ChangeLogValueTest {
                   "status": "CANCELED",
                   "createdBy": "0a000000-0000-4000-8000-000000000003",
                   "paidBy": "0a000000-0000-4000-8000-000000000004",
+                  "refundKind": "REFUND",
                   "version": 3590000000,
                   "deleted": true,
                   "createdAt": "2026-12-31T15:00:00Z",
@@ -74,7 +75,7 @@ class ChangeLogValueTest {
                     {
                       "accountId": "0a000000-0000-4000-8000-000000000005",
                       "categoryId": "0a000000-0000-4000-8000-000000000007",
-                      "amount": -9999999999
+                      "amount": 9999999999
                     }
                   ]
                 }
@@ -99,6 +100,7 @@ class ChangeLogValueTest {
                   "status": "POSTED",
                   "createdBy": "0a000000-0000-4000-8000-000000000003",
                   "paidBy": null,
+                  "refundKind": null,
                   "version": 1,
                   "deleted": false,
                   "createdAt": "2026-12-31T15:00:00Z",
@@ -124,7 +126,8 @@ class ChangeLogValueTest {
     void 필드의_이름과_형은_정해진_것뿐이다() {
         assertThat(fields(ChangeLogValue.class)).containsExactlyInAnyOrder("UUID id", "UUID ledgerId",
                 "TransactionType type", "LocalDate occurredOn", "LocalTime occurredTime", "String payee",
-                "String memo", "TransactionStatus status", "UUID createdBy", "UUID paidBy", "long version",
+                "String memo", "TransactionStatus status", "UUID createdBy", "UUID paidBy",
+                "RefundKind refundKind", "long version",
                 "boolean deleted", "Instant createdAt", "Instant updatedAt", "List lines");
         assertThat(fields(ChangeLogValue.Line.class)).containsExactlyInAnyOrder("UUID accountId", "UUID categoryId",
                 "long amount");
@@ -197,8 +200,13 @@ class ChangeLogValueTest {
 
     private static Transaction transaction(TransactionType type, LocalTime time, String payee, String memo,
                                            UUID paidBy) {
+        return transaction(type, time, payee, memo, paidBy, null);
+    }
+
+    private static Transaction transaction(TransactionType type, LocalTime time, String payee, String memo,
+                                           UUID paidBy, RefundKind refundKind) {
         Transaction tx = Transaction.of(ID, LEDGER, type, LocalDate.of(2026, 12, 31), time, payee, memo, AUTHOR,
-                paidBy);
+                paidBy, refundKind);
         ReflectionTestUtils.setField(tx, "createdAt", CREATED);
         tx.applyVersion(Transaction.INITIAL_VERSION, CREATED);
         return tx;
