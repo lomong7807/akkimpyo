@@ -133,7 +133,7 @@ KEY_VALUE=$(openssl rand -base64 32)
 install -m 600 /dev/null "$ENV_FILE"
 printf '%s\n' WEB_ORIGIN=https://localhost DB_URL=jdbc:postgresql://db:5432/accountbook DB_USERNAME=accountbook \
   "DB_PASSWORD=$DB_PASSWORD_VALUE" "ACCESS_TOKEN_SIGNING_KEY=$KEY_VALUE" \
-  PROXY_HTTP_PORT=127.0.0.1: PROXY_HTTPS_PORT=127.0.0.1: ACCESS_LOG_KEEP_DAYS= >"$ENV_FILE"
+  PROXY_HTTP_PORT=127.0.0.1: PROXY_HTTPS_PORT=127.0.0.1: ACCESS_LOG_KEEP_DAYS= SIGNUP_ALLOWLIST= >"$ENV_FILE"
 # 시험에서만: 요청 id가 든 서버 로그를 보려고 오류 응답의 DEBUG 로그를 켠다. 운영 compose에는 없다.
 printf '%s\n' 'services:' '  server:' '    environment:' '      LOGGING_LEVEL_APP_ACCOUNTBOOK_API: DEBUG' >"$WORK/override.yaml"
 
