@@ -145,6 +145,7 @@ class AccountAccessTest {
                 new Case("중복 경고(금액 없음)", (client, ledger) ->
                         client.get(transactions(ledger) + "/duplicates?occurredOn=2026-11-18"), 400),
                 new Case("휴지통", (client, ledger) -> client.get(transactions(ledger) + "/trash"), 200),
+                new Case("거래 상세", (client, ledger) -> client.get(transactions(ledger) + "/" + bExpense), 200),
                 new Case("변경 이력", (client, ledger) ->
                         client.get(transactions(ledger) + "/" + bExpense + "/history"), 200),
                 new Case("휴지통(틀린 cursor)", (client, ledger) -> client.get(transactions(ledger) + "/trash?cursor=x"), 400),
@@ -153,6 +154,8 @@ class AccountAccessTest {
                         client.get(suggestions(ledger) + "?payee=" + "x".repeat(101)), 400),
                 new Case("월별 통계", (client, ledger) ->
                         client.get("/api/v1/ledgers/" + ledger + "/stats/monthly?month=2026-11"), 200),
+                new Case("일별 합계", (client, ledger) ->
+                        client.get("/api/v1/ledgers/" + ledger + "/stats/daily?month=2026-11"), 200),
                 new Case("카테고리별 통계", (client, ledger) ->
                         client.get("/api/v1/ledgers/" + ledger + "/stats/categories?month=2026-11"), 200),
                 new Case("연 단위 통계", (client, ledger) ->
