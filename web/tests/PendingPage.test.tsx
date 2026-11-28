@@ -488,7 +488,8 @@ describe('(3) 입력 줄과 (4) 상태', () => {
     await seedPending(expense({ payee: null, categoryId: id.dining }))
     await seedPending(expense({ payee: '', categoryId: null }))
     await openPending()
-    expect(titles()).toEqual(['외식', '미분류'])
+    // 카테고리 이름은 사본이나 서버에서 늦게 온다. 받은 뒤에 읽는다(8절 8번)
+    await waitFor(() => expect(titles()).toEqual(['외식', '미분류']))
   })
 
   it('이체는 둘째 줄 왼쪽에 "이체", 그 아래 보조 글자 "{보내는 계좌}에서 {받는 계좌}로"다', async () => {
