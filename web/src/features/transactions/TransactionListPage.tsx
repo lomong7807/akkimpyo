@@ -27,7 +27,7 @@ import { groupByDate } from './groupByDate'
 import { keptMonthOf } from './keptMonth'
 import { useKeptLastMonth } from './lastMonth'
 import { nameBookOf, type NameBook } from './listedText'
-import { useListMemory } from './listMemory'
+import { listKeyOf, useListMemory } from './listMemory'
 import { mergeMonth, pendingRow, pendingSums, usePendingTransactions, withPendingDays } from './pendingTransactions'
 import ListEnd from './ListEnd'
 import TransactionListSkeleton from './TransactionListSkeleton'
@@ -65,10 +65,11 @@ export default function TransactionListPage() {
     if (month) memory.rememberMonth(month)
   }, [month, memory])
 
-  // 이 항목에서 연 달력이 옮긴 달. 같은 항목으로 돌아왔을 때만 쓴다. 바꿔 가면 항목의 key가 바뀌어 다시 쓰지 않는다
-  const handed = memory.handedMonth(location.key)
+  // 이 항목에서 연 달력이 옮긴 달. 같은 항목으로 돌아왔을 때만 쓴다. 바꿔 가도 표시를 이어 가 그 뒤 다시 연 달력의 것도 받는다(#342)
+  const listKey = listKeyOf(location)
+  const handed = memory.handedMonth(listKey)
   if (month && handed && handed !== month && isSelectable(handed, range)) {
-    return <Navigate to={addressOf(handed)} replace />
+    return <Navigate to={addressOf(handed)} replace state={{ listKey }} />
   }
 
   if (!month) {
@@ -100,7 +101,7 @@ export default function TransactionListPage() {
             icon={CalendarBlank}
             aria-label="달력"
             to={calendarAddressOf(month)}
-            state={{ listKey: location.key }}
+            state={{ listKey }}
           />
         </div>
         <MonthTransactions
