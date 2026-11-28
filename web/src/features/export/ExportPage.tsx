@@ -21,7 +21,6 @@ import {
   END_REQUIRED,
   outOfRangeText,
   START_REQUIRED,
-  wholeRange,
   type ExportRange,
   type RangeErrors,
 } from './exportRange'
@@ -101,7 +100,8 @@ export default function ExportPage() {
 
   function start(from: 'export' | 'retry') {
     if (busy || !online) return
-    const asked = showRange ? range : wholeRange(today())
+    // "전체"는 기간 없이 보낸다. 서버가 장부 전체를 내보내고 첫·마지막 거래일로 이름을 짓는다(#379)
+    const asked = showRange ? range : undefined
     if (showRange) {
       const found = checkRange(range)
       setErrors(found)
@@ -115,7 +115,7 @@ export default function ExportPage() {
     setSender(from)
     const asPeriod = period
     exporting.mutate(
-      { request: { format, ...asked }, user: currentUserId() },
+      { request: { format, range: asked }, user: currentUserId() },
       { onSuccess: (result) => finish(result, asPeriod), onError: showFailure },
     )
   }

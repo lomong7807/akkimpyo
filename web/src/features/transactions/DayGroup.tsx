@@ -94,6 +94,9 @@ function DaySums({ total }: { total: DayTotal }) {
 
 const amountKinds = { EXPENSE: 'expense', INCOME: 'income', TRANSFER: 'transfer' } as const
 
+/** 환불 구분의 칩 글자(00-common 2.2, 판단 7) */
+const refundChips = { REFUND: '환불', REIMBURSEMENT: '돌려받음' } as const
+
 interface TransactionRowProps {
   transaction: ShownTransaction
   names: NameBook
@@ -111,6 +114,8 @@ interface TransactionRowProps {
  * 오류 칩 "보낼 수 없음"을 붙인다(D-01 (11), designer #235 Q2). 칩은 "취소"와 같은 자리다(0.4, designer #234 B). 이 줄은 서버에
  * 없어 상세를 열 수 없으므로 누르면 보내지 않은 입력 목록(B-05)으로 간다(0.4, C-01 (10), 작성자 판단 42, #236).
  * 제목과 둘째 줄은 한 덩어리(lead)다. 휴대폰 배치는 둘째 줄이 금액 아래로 내려가고, 넓은 화면 내역은 제목 옆에 둔다(D-01 넓은 화면).
+ * 환불·돌려받음 지출은 수입과 같은 강조색과 "+"이고 칩 글자로 수입과 구분한다(00-common 2.2, 판단 7, #395). 칩이 여럿이면
+ * 0.4의 순서(보내지 않음·보낼 수 없음, 취소, 환불·돌려받음)로 한 자리에 놓는다.
  */
 function TransactionRow({ transaction, names, dateId, highlighted, selected, preventScrollReset }: TransactionRowProps) {
   const id = useId()
@@ -118,13 +123,26 @@ function TransactionRow({ transaction, names, dateId, highlighted, selected, pre
   const detail = detailOf(transaction, names)
   const time = transaction.occurredTime
   const canceled = transaction.status === 'CANCELED'
+  const refund = transaction.type === 'TRANSFER' || !transaction.refundKind ? undefined : refundChips[transaction.refundKind]
+  const chips = [
+    transaction.pending &&
+      (transaction.rejected ? (
+        <StatusChip key="pending" danger>
+          보낼 수 없음
+        </StatusChip>
+      ) : (
+        <StatusChip key="pending">보내지 않음</StatusChip>
+      )),
+    canceled && <StatusChip key="canceled">취소</StatusChip>,
+    refund && <StatusChip key="refund">{refund}</StatusChip>,
+  ].filter(Boolean)
   const labelledBy = [
     `${id}-title`,
     `${id}-amount`,
     dateId,
     time && `${id}-time`,
     detail && `${id}-detail`,
-    (canceled || transaction.pending) && `${id}-status`,
+    chips.length > 0 && `${id}-status`,
   ]
     .filter(Boolean)
     .join(' ')
@@ -148,17 +166,12 @@ function TransactionRow({ transaction, names, dateId, highlighted, selected, pre
             )}
           </span>
           <span id={`${id}-amount`} className={styles.amount}>
-            <Amount kind={amountKinds[transaction.type]} value={transaction.amount} canceled={canceled} />
+            <Amount kind={refund ? 'income' : amountKinds[transaction.type]} value={transaction.amount} canceled={canceled} />
           </span>
         </span>
-        {canceled && (
+        {chips.length > 0 && (
           <span id={`${id}-status`} className={styles.status}>
-            <StatusChip>취소</StatusChip>
-          </span>
-        )}
-        {transaction.pending && (
-          <span id={`${id}-status`} className={styles.status}>
-            {transaction.rejected ? <StatusChip danger>보낼 수 없음</StatusChip> : <StatusChip>보내지 않음</StatusChip>}
+            {chips}
           </span>
         )}
       </span>

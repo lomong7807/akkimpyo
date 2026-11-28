@@ -6,7 +6,7 @@ import { setDeviceClock } from './support/clock'
 import { goOffline, goOnline } from './support/connection'
 import { untilOpened } from './support/dialog'
 import { watchDownloads } from './support/download'
-import { attachment, exportFile, noTransactions, startExports, XLSX } from './support/exports'
+import { attachment, exportFile, LEDGER_SPAN, noTransactions, startExports, XLSX } from './support/exports'
 import { startMockServer } from './support/mockServer'
 import { openApp } from './support/openApp'
 import { problem } from './support/problem'
@@ -18,6 +18,7 @@ import { readWebFile } from './support/webFile'
 /*
  * K-01 엑셀·CSV 내보내기(#240, F-701, P-228). 서버 계약은 #57: 200 파일(Content-Disposition의 filename*), 거래가 없으면 204,
  * 형식·기간 오류 400 VALIDATION_FAILED(쿼리 이름의 입력란), 구성원이 아니면 404.
+ * "전체"는 from·to를 둘 다 보내지 않고, 서버가 첫 거래일과 마지막 거래일로 이름을 짓는다. 하나만 비우면 비운 쪽의 REQUIRED다(PR #388, #393).
  */
 
 const saved = '파일을 내려받았어요'
@@ -29,6 +30,8 @@ const gone = '이 장부를 볼 수 없어요.'
 const endBeforeStart = '종료일은 시작일과 같거나 뒤여야 해요'
 const startRequired = '시작일을 골라 주세요'
 const endRequired = '종료일을 골라 주세요'
+/** 서버가 장부 전체에 짓는 이름의 기간(첫 거래일_마지막 거래일) */
+const wholeSpan = `${LEDGER_SPAN.first.replaceAll('-', '')}_${LEDGER_SPAN.last.replaceAll('-', '')}`
 
 const server = startMockServer()
 let backend: Backend
@@ -201,19 +204,20 @@ describe('처음 열 때', () => {
 })
 
 describe('내보내기', () => {
-  it('"전체"이면 2000년 1월 1일부터 오늘로부터 1년 뒤까지를 엑셀로 받아, 서버가 정한 한글 이름으로 저장하고 토스트를 보인다', async () => {
+  it('"전체"이면 from·to 없이 엑셀로 받아, 서버가 첫·마지막 거래일로 정한 한글 이름으로 저장하고 토스트를 보인다', async () => {
     const opened = await open()
     await opened.user.click(exportButton())
     await untilSaved()
     expect(exports.requests).toHaveLength(1)
     const [request] = exports.requests
     expect(request.ledgerId).toBe(ledgerIdOf('user-1'))
-    expect(request.query).toEqual({ format: 'xlsx', from: '2000-01-01', to: '2027-11-26' })
+    // 빈 값(from=&to=)도 보내지 않는다
+    expect(request.query).toEqual({ format: 'xlsx' })
     expect(request.user).toBe('user-1')
     expect(request.authorization).toMatch(/^Bearer /)
     expect(downloads.saved).toHaveLength(1)
     const [file] = downloads.saved
-    expect(file.name).toBe('user-1의 장부_20000101_20271126.xlsx')
+    expect(file.name).toBe(`user-1의 장부_${wholeSpan}.xlsx`)
     expect(file.connected).toBe(true)
     expect(file.revokedBeforeClick).toBe(false)
     expect(await file.file!.text()).toBe('xlsx 파일')
@@ -262,10 +266,11 @@ describe('내보내기', () => {
   })
 
   it.each([
-    ['filename*이 없으면 장부 이름과 기간으로 짓는다', undefined, 'user-1의 장부_20000101_20271126.xlsx'],
-    ['읽을 수 없는 filename*이면 장부 이름과 기간으로 짓는다', `attachment; filename*=UTF-8''%E0%A4%A`, 'user-1의 장부_20000101_20271126.xlsx'],
-    ['UTF-8이 아닌 filename*이면 장부 이름과 기간으로 짓는다', `attachment; filename*=ISO-8859-1''a.xlsx`, 'user-1의 장부_20000101_20271126.xlsx'],
-    ['filename만 있어도 장부 이름과 기간으로 짓는다(ASCII 밖은 _라)', 'attachment; filename="____20000101_20271126.xlsx"', 'user-1의 장부_20000101_20271126.xlsx'],
+    // "전체"는 첫·마지막 거래일을 서버만 알므로 장부 이름만으로 짓는다
+    ['filename*이 없으면 장부 이름으로 짓는다', undefined, 'user-1의 장부.xlsx'],
+    ['읽을 수 없는 filename*이면 장부 이름으로 짓는다', `attachment; filename*=UTF-8''%E0%A4%A`, 'user-1의 장부.xlsx'],
+    ['UTF-8이 아닌 filename*이면 장부 이름으로 짓는다', `attachment; filename*=ISO-8859-1''a.xlsx`, 'user-1의 장부.xlsx'],
+    ['filename만 있어도 장부 이름으로 짓는다(ASCII 밖은 _라)', `attachment; filename="____${wholeSpan}.xlsx"`, 'user-1의 장부.xlsx'],
     [
       '푼 이름의 경로와 못 쓰는 글자는 _로 바꾼다',
       `attachment; filename*=UTF-8''..%2Fa%2Fb%5Cc%3Ad%2Ae%3Ff%22g%3Ch%3Ei%7Cj%07.xlsx`,
@@ -281,6 +286,15 @@ describe('내보내기', () => {
     expect(downloads.saved[0].name).toBe(name)
   })
 
+  it('"기간 정하기"에서 filename*이 없으면 장부 이름과 고른 기간으로 짓는다', async () => {
+    exports.response = () => exportFile('파일')
+    const { user } = await open()
+    await user.click(choice('기간 정하기'))
+    await user.click(exportButton())
+    await untilSaved()
+    expect(downloads.saved[0].name).toBe('user-1의 장부_20260101_20261126.xlsx')
+  })
+
   it('장부 이름으로 지을 때도 못 쓰는 글자는 _로 바꾼다', async () => {
     backend.meResponse = () =>
       HttpResponse.json({
@@ -294,7 +308,7 @@ describe('내보내기', () => {
     await user.click(choice('CSV'))
     await user.click(exportButton())
     await untilSaved()
-    expect(downloads.saved[0].name).toBe('우리_집_가계부__20000101_20271126.csv')
+    expect(downloads.saved[0].name).toBe('우리_집_가계부_.csv')
   })
 
   it('보내는 동안 "내보내기"가 처리 중 표시로 바뀌고 비활성이며, 고르는 칸도 바꿀 수 없다. 두 번 누르지 않는다', async () => {
@@ -392,7 +406,7 @@ describe('기간 검사', () => {
     await user.click(choice('전체'))
     await user.click(exportButton())
     await untilSaved()
-    expect(exports.requests[0].query).toMatchObject({ from: '2000-01-01', to: '2027-01-05' })
+    expect(exports.requests[0].query).toEqual({ format: 'xlsx' })
   })
 
   it('날짜 칸은 2000년 1월 1일부터 오늘로부터 1년 뒤까지만 고를 수 있다', async () => {
@@ -412,6 +426,9 @@ describe('서버가 거부했을 때(400 VALIDATION_FAILED)', () => {
     ['from의 OUT_OF_RANGE', [['from', 'OUT_OF_RANGE']], ['2000년 1월 1일부터 2027년 11월 26일까지 고를 수 있어요', undefined]],
     ['to의 OUT_OF_RANGE', [['to', 'OUT_OF_RANGE']], [undefined, '2000년 1월 1일부터 2027년 11월 26일까지 고를 수 있어요']],
     ['from과 to의 REQUIRED', [['from', 'REQUIRED'], ['to', 'REQUIRED']], [startRequired, endRequired]],
+    // 한쪽만 비운 요청의 400(PR #388). 화면이 보내기 전에 막을 때와 같은 문구다
+    ['from의 REQUIRED', [['from', 'REQUIRED']], [startRequired, undefined]],
+    ['to의 REQUIRED', [['to', 'REQUIRED']], [undefined, endRequired]],
   ] as const)('%s이면 그 칸 아래에 문구를 보이고 버튼 위에는 없다', async (_, fieldErrors, [start, end]) => {
     exports.response = () => validation(...(fieldErrors as unknown as [string, string][]))
     const { user } = await open()
@@ -436,8 +453,12 @@ describe('서버가 거부했을 때(400 VALIDATION_FAILED)', () => {
     expect(retryButton()).toBeTruthy()
   })
 
-  it('"전체"인데 기간을 거부하면 숨긴 칸 대신 버튼 위에 실패 문구다', async () => {
-    exports.response = () => validation(['to', 'OUT_OF_RANGE'])
+  it.each([
+    ['to의 OUT_OF_RANGE', [['to', 'OUT_OF_RANGE']]],
+    // 장부 전체를 모르는 서버(PR #388 앞)는 기간 없는 요청을 이렇게 거부했다
+    ['from과 to의 REQUIRED', [['from', 'REQUIRED'], ['to', 'REQUIRED']]],
+  ] as const)('"전체"인데 기간을 거부하면(%s) 숨긴 칸 대신 버튼 위에 실패 문구다', async (_, fieldErrors) => {
+    exports.response = () => validation(...(fieldErrors as unknown as [string, string][]))
     const { user } = await open()
     await user.click(exportButton())
     expect((await screen.findByRole('alert')).textContent).toBe(failed)
@@ -475,16 +496,14 @@ describe('날짜 경계(기기의 오늘)', () => {
   })
 
   it.each([
-    ['연말 23:59', '2026-12-31T23:59:59+09:00', 'Asia/Seoul', '2027-12-31'],
-    ['연초 00:00', '2027-01-01T00:00:00+09:00', 'Asia/Seoul', '2028-01-01'],
-    ['기기 시간대가 로스앤젤레스', '2027-01-01T08:00:00+09:00', 'America/Los_Angeles', '2027-12-31'],
-    ['윤년 2월 29일', '2028-02-29T12:00:00+09:00', 'Asia/Seoul', '2029-02-28'],
-  ])('%s: "전체"는 오늘로부터 1년 뒤까지 보낸다', async (_, at, zone, to) => {
+    ['연말 23:59', '2026-12-31T23:59:59+09:00', 'Asia/Seoul'],
+    ['기기 시간대가 로스앤젤레스', '2027-01-01T08:00:00+09:00', 'America/Los_Angeles'],
+  ])('%s: "전체"는 기기의 오늘과 무관하게 from·to를 보내지 않는다', async (_, at, zone) => {
     setDeviceClock(at, zone)
     const { user } = await open()
     await user.click(exportButton())
     await untilSaved()
-    expect(exports.requests[0].query).toMatchObject({ from: '2000-01-01', to })
+    expect(exports.requests[0].query).toEqual({ format: 'xlsx' })
   })
 
   it('범위 밖 문구의 끝 날짜는 기기의 오늘로부터 1년 뒤다(연말)', async () => {

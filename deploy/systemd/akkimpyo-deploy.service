@@ -1,0 +1,25 @@
+[Unit]
+Description=아낌표 배포 (main의 deploy/production.env를 보고 이미지를 바꾼다)
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/akkimpyo/bin/deploy
+# 이미지 받기 토큰(ghcr.io)은 root 전용 폴더의 docker 설정에 둔다. /root는 아래 ProtectHome으로 가려진다.
+Environment=DOCKER_CONFIG=/etc/akkimpyo/docker
+# 직전 백업(다른 백업을 최대 10분 기다린다), 이미지 받기, 상태 확인, 되돌리기까지 넉넉히 둔다.
+# 이 시간 안에 끝나지 않으면 systemd가 끊는다. 끊긴 배포는 실패로 남고 알린다.
+TimeoutStartSec=60min
+UMask=0077
+# 교체 직전 백업(/opt/akkimpyo/bin/backup)을 이 서비스 안에서 부르므로 백업의 폴더도 쓸 수 있어야 한다.
+# 백업 서비스가 같은 /run 폴더를 쓰고 있을 수 있어 이 서비스가 끝날 때 지우지 않는다.
+RuntimeDirectory=akkimpyo-backup
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+StateDirectory=akkimpyo-deploy akkimpyo-backup
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes

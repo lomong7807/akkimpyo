@@ -1,0 +1,12 @@
+[Unit]
+Description=아낌표 배포 확인 (5분마다)
+
+[Timer]
+# 타이머가 켜지고 1분 뒤, 그 뒤로는 앞의 실행이 끝나고 5분마다 돈다. 배포가 길어져도 겹쳐 돌지 않는다.
+# 복원할 때는 이 타이머를 멈춘다(deploy/deploy.md).
+OnActiveSec=1min
+OnUnitInactiveSec=5min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

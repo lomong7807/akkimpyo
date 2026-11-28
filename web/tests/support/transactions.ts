@@ -28,7 +28,8 @@ export function savedOf(body: Record<string, unknown>, user = 'user-1', changes:
     amount: body.amount,
     payee: transfer ? null : (body.payee ?? null),
     memo: body.memo ?? null,
-    refund: transfer ? null : false,
+    // 환불 구분(서버 #8, PR #397). 일반 지출과 수입·이체는 null이다
+    refundKind: null,
     paidBy: transfer ? null : person,
     fromAccountId: transfer ? body.fromAccountId : null,
     toAccountId: transfer ? body.toAccountId : null,

@@ -112,15 +112,19 @@ describe('거래 목록(GET /api/v1/ledgers/{ledgerId}/transactions)', () => {
     expect(page.days).toEqual([...days].map(([date, sums]) => ({ date, ...sums })))
   })
 
-  it.each([null, 'REFUND', 'REIMBURSEMENT'])(
-    '거래에 refund가 없고 refundKind(%s)가 있어도 받는다(서버 #8, 웹은 둘 다 읽지 않는다)',
-    async (refundKind) => {
-      const changed = { ...Object.fromEntries(Object.entries(lunch).filter(([key]) => key !== 'refund')), refundKind }
-      respondWith({ ...firstPage(), items: [changed, salary, payment] })
-      const page = await fetchTransactionPage(ledgerId, '2026-11', null)
-      expect(page.items[0]).toEqual(changed)
-    },
-  )
+  it.each([null, 'REFUND', 'REIMBURSEMENT'])('지출의 환불 구분 refundKind(%s)를 받는다(서버 #8, PR #397)', async (refundKind) => {
+    const changed = { ...lunch, refundKind }
+    respondWith({ ...firstPage(), items: [changed, salary, payment] })
+    const page = await fetchTransactionPage(ledgerId, '2026-11', null)
+    expect(page.items[0]).toEqual(changed)
+  })
+
+  it('refundKind가 없는 거래(전에 받아 기기에 남긴 사본)도 받는다. 환불이 아니다', async () => {
+    const without = Object.fromEntries(Object.entries(lunch).filter(([key]) => key !== 'refundKind'))
+    respondWith({ ...firstPage(), items: [without, salary, payment] })
+    const page = await fetchTransactionPage(ledgerId, '2026-11', null)
+    expect(page.items[0]).toEqual(without)
+  })
 
   it('모르는 필드가 있어도 된다', async () => {
     const body = firstPage()
@@ -157,6 +161,10 @@ describe('거래 목록(GET /api/v1/ledgers/{ledgerId}/transactions)', () => {
     ['지출의 계좌가 없음', withItem({ accountId: null })],
     ['지출의 카테고리가 없음', withItem({ categoryId: undefined })],
     ['가맹점이 글자가 아님', withItem({ payee: 1 })],
+    ['모르는 환불 구분', withItem({ refundKind: 'RETURN' })],
+    ['환불 구분이 글자가 아님', withItem({ refundKind: true })],
+    ['수입의 환불 구분', { ...firstPage(), items: [lunch, { ...salary, refundKind: 'REFUND' }] }],
+    ['이체의 환불 구분', withPayment({ refundKind: 'REIMBURSEMENT' })],
     ['이체의 보내는 계좌가 없음', withPayment({ fromAccountId: null })],
     ['이체의 받는 계좌가 없음', withPayment({ toAccountId: undefined })],
     ['다음 cursor가 없음(undefined)', { ...firstPage(), nextCursor: undefined }],
