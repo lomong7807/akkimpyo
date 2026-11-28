@@ -1,27 +1,25 @@
 {
   "1": {
-    "load": false,
-    "runs": [{ "tz": "Pacific/Pago_Pago", "file": "tests/LastMonthCopy.test.tsx", "repeats": 29 }]
+    "load": true,
+    "runs": [{ "tz": "Pacific/Pago_Pago", "file": "tests/LastMonthCopy.test.tsx", "processes": 10, "repeats": 2 }]
   },
   "2": {
     "load": true,
     "runs": [
-      { "tz": "Pacific/Pago_Pago", "file": "tests/LastMonthCopy.test.tsx", "repeats": 14 },
-      { "tz": "Pacific/Pago_Pago", "file": "tests/LastMonthCopyBefore366.test.tsx", "repeats": 14 }
+      { "tz": "Asia/Seoul", "file": "tests/LastMonthCopy.test.tsx", "processes": 10, "repeats": 2 },
+      { "tz": "UTC", "file": "tests/LastMonthCopy.test.tsx", "processes": 10, "repeats": 2 }
     ]
   },
   "3": {
     "load": true,
     "runs": [
-      { "tz": "Pacific/Pago_Pago", "file": "tests/LastMonthCopy.test.tsx", "repeats": 14 },
-      { "tz": "Pacific/Pago_Pago", "file": "tests/LastMonthCopyBefore366.test.tsx", "repeats": 14 }
+      { "tz": "America/Los_Angeles", "file": "tests/LastMonthCopy.test.tsx", "processes": 10, "repeats": 2 },
+      { "tz": "Pacific/Kiritimati", "file": "tests/LastMonthCopy.test.tsx", "processes": 10, "repeats": 2 }
     ]
   },
   "4": {
-    "load": true,
-    "runs": [
-      { "tz": "Asia/Seoul", "file": "tests/LastMonthCopy.test.tsx", "repeats": 14 },
-      { "tz": "Asia/Seoul", "file": "tests/LastMonthCopyBefore366.test.tsx", "repeats": 14 }
-    ]
+    "full": true,
+    "load": false,
+    "runs": [{ "tz": "Pacific/Pago_Pago", "file": "tests/LastMonthCopy.test.tsx", "processes": 10, "repeats": 2 }]
   }
 }
