@@ -213,13 +213,22 @@ describe('계좌(G-01)의 "추가"(G-02 넓은 화면)', () => {
     return opened
   }
 
+  /**
+   * 칸이 닫혀 안내 문구로 돌아올 때까지 기다린다. 라우터는 주소를 먼저 바꾸고 칸은 나중에 그리므로
+   * 주소가 /accounts가 된 것으로 칸이 닫혔다고 보지 않는다(test-strategy 8절 8번). 안내 문구는 닫힌 칸에만 있다.
+   */
+  async function untilPaneClosed() {
+    await waitFor(() => expect(within(pane()).queryByText('계좌를 고르면 여기에 자세히 보여요')).toBeTruthy())
+    expect(paneHeading('계좌 추가')).toBeNull()
+  }
+
   it('오른쪽 칸에 계좌 추가를 연다. 머리 왼쪽 "닫기"는 칸을 닫는다', async () => {
     const opened = await openAddInPane()
     expect(address(opened)).toBe('/accounts/new')
     expect(within(main().children[0] as HTMLElement).getByText('자산 합계')).toBeTruthy()
     await opened.user.click(within(pane()).getByRole('button', { name: '닫기' }))
     await waitFor(() => expect(address(opened)).toBe('/accounts'))
-    expect(within(pane()).getByText('계좌를 고르면 여기에 자세히 보여요')).toBeTruthy()
+    await untilPaneClosed()
   })
 
   it('저장하면 칸을 닫고 토스트를 띄운다', async () => {
@@ -230,7 +239,7 @@ describe('계좌(G-01)의 "추가"(G-02 넓은 화면)', () => {
     await opened.user.keyboard('350000')
     await opened.user.click(saveButton())
     await waitFor(() => expect(address(opened)).toBe('/accounts'))
+    await untilPaneClosed()
     expect(toastRegion().textContent).toBe("'급여통장' 계좌를 추가했어요")
-    expect(within(pane()).getByText('계좌를 고르면 여기에 자세히 보여요')).toBeTruthy()
   })
 })
