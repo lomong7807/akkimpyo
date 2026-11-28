@@ -5,6 +5,7 @@ import app.accountbook.transaction.TransactionStatus;
 import app.accountbook.transaction.TransactionType;
 import app.accountbook.transaction.TransactionView;
 import app.accountbook.transaction.TransactionView.Line;
+import app.accountbook.transaction.TrashAutoPurge;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -31,7 +32,7 @@ record TransactionResponse(UUID id, TransactionType type, LocalDate occurredOn, 
                            String deletedAt, String purgeAt) {
 
     /** 휴지통에 두는 기간(IA 5절 1번). */
-    static final Duration TRASH_RETENTION = Duration.ofDays(30);
+    static final Duration TRASH_RETENTION = TrashAutoPurge.RETENTION;
 
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
     /** 서버가 기록한 시각: ISO 8601, UTC, 밀리초 3자리 고정(ADR 002 2절). */

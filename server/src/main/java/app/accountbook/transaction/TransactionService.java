@@ -42,7 +42,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 거래 쓰기(생성·수정·취소·취소 되돌리기·삭제·복원)와 조회. 모든 쓰기는 change_log에 1행을 남긴다.
+ * 거래 쓰기(생성·수정·취소·취소 되돌리기·삭제·복원·완전 삭제)와 조회. 모든 쓰기는 change_log에 1행을 남긴다(완전 삭제는
+ * 그 거래의 이력을 지운 뒤에 남긴다).
  * 수정 계열은 version이 맞을 때만 조건부 UPDATE로 반영하고, 아니면 아무것도 바꾸지 않는다.
  */
 @Service
@@ -62,6 +63,7 @@ public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final ChangeLogRepository changeLogRepository;
+    private final TransactionPurgeRepository purgeRepository;
     private final AccountRepository accountRepository;
     private final CategoryRepository categoryRepository;
     private final CategoryService categoryService;
@@ -72,12 +74,13 @@ public class TransactionService {
     private final EntityManager entityManager;
 
     TransactionService(TransactionRepository transactionRepository, ChangeLogRepository changeLogRepository,
-                       AccountRepository accountRepository, CategoryRepository categoryRepository,
-                       CategoryService categoryService, LedgerAccess ledgerAccess,
+                       TransactionPurgeRepository purgeRepository, AccountRepository accountRepository,
+                       CategoryRepository categoryRepository, CategoryService categoryService, LedgerAccess ledgerAccess,
                        LedgerRepository ledgerRepository, Clock clock, TransactionTemplate transactionTemplate,
                        EntityManager entityManager) {
         this.transactionRepository = transactionRepository;
         this.changeLogRepository = changeLogRepository;
+        this.purgeRepository = purgeRepository;
         this.accountRepository = accountRepository;
         this.categoryRepository = categoryRepository;
         this.categoryService = categoryService;
@@ -249,6 +252,27 @@ public class TransactionService {
             throw new InvalidStateException("삭제된 거래만 복원할 수 있습니다.");
         }
         return write(tx, expectedVersion, ChangeAction.RESTORE, actorId, deviceId, now -> tx.restore());
+    }
+
+    /**
+     * 휴지통의 거래를 완전히 지운다(F-231). 거래와 라인, 그 거래의 이력을 모두 지우고 "누가 언제 지웠다" 기록 한 행만
+     * 더한다. 셋은 한 트랜잭션이다. 기록의 version은 거래 행의 version + 1이고 전후 값과 기기 값은 없다(ADR 007 결정 2, 7).
+     * 다른 쓰기처럼 호출자가 본 version이 맞아야 한다. 그사이 고친 거래를 모르고 지우지 않게 한다.
+     */
+    @Transactional
+    public void purge(UUID actorId, UUID txId, long expectedVersion) {
+        Transaction tx = loadAccessible(actorId, txId);
+        requireVersion(tx, expectedVersion);
+        if (!tx.isDeleted()) {
+            throw new InvalidStateException("휴지통에 있는 거래만 완전히 지울 수 있습니다.");
+        }
+        entityManager.detach(tx);
+        if (purgeRepository.deleteTrashed(tx.getId(), expectedVersion) == 0) {
+            throw changedMeanwhile(tx);
+        }
+        purgeRepository.deleteLogs(List.of(tx.getId()));
+        changeLogRepository.save(ChangeLog.of(tx.getId(), tx.getLedgerId(), expectedVersion + 1, ChangeAction.PURGE,
+                actorId, null, null, null, Times.now()));
     }
 
     /** 삭제된 거래도 돌려준다(deleted=true). */

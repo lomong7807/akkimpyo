@@ -528,7 +528,9 @@ class CrossLedgerAccessTest {
                 denied("삭제: B의 취소한 거래", NotFoundException.class, bCanceled.id(),
                         (actor, tx) -> transactionService.delete(actor, tx, bCanceled.version(), DEVICE)),
                 denied("복원: B의 삭제한 거래", NotFoundException.class, bDeleted.id(),
-                        (actor, tx) -> transactionService.restore(actor, tx, bDeleted.version(), DEVICE)));
+                        (actor, tx) -> transactionService.restore(actor, tx, bDeleted.version(), DEVICE)),
+                denied("완전 삭제: B의 삭제한 거래", NotFoundException.class, bDeleted.id(),
+                        (actor, tx) -> transactionService.purge(actor, tx, bDeleted.version())));
     }
 
     /**
@@ -596,6 +598,8 @@ class CrossLedgerAccessTest {
                         (actor, tx) -> transactionService.delete(actor, tx, bDeleted.version(), DEVICE)),
                 denied("순서: B의 삭제하지 않은 거래를 복원", notFound, bExpense.id(), state,
                         (actor, tx) -> transactionService.restore(actor, tx, bExpense.version(), DEVICE)),
+                denied("순서: B의 삭제하지 않은 거래를 완전 삭제", notFound, bExpense.id(), state,
+                        (actor, tx) -> transactionService.purge(actor, tx, bExpense.version())),
                 denied("순서: B의 취소하지 않은 거래를 되돌리기", notFound, bExpense.id(), state,
                         (actor, tx) -> transactionService.uncancel(actor, tx, bExpense.version(), DEVICE)),
                 denied("순서: B의 취소한 거래를 낡은 version으로 되돌리기", notFound, bCanceled.id(),

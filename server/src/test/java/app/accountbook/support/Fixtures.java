@@ -138,7 +138,7 @@ public class Fixtures {
     }
 
     /**
-     * 거래를 완전히 지운 기록 한 행을 DB에 바로 넣는다. 완전 삭제 기능(#9)이 아직 없어 그 결과만 만든다.
+     * 거래를 완전히 지운 기록 한 행을 DB에 바로 넣는다. 완전 삭제({@code TransactionService.purge})를 거치지 않고 결과만 만든다.
      * 만들고(1) 휴지통에 넣고(2) 완전히 지운(3) 거래라 번호가 3이고, 전후 값과 기기 값이 없다(ADR 007 결정 2, 7).
      */
     public void purgeRecord(UUID transactionId, UUID ledgerId, ChangeAction action, UUID actorId) {
@@ -149,7 +149,8 @@ public class Fixtures {
     }
 
     /**
-     * 완전 삭제(#9)가 한 트랜잭션에서 할 일을 DB에 바로 한다. 기능이 아직 없어서다. 그 거래의 이력과 거래를 지우고
+     * 완전 삭제(#9)가 한 트랜잭션에서 할 일을 DB에 바로 한다. 서비스와 달리 휴지통에 있는지와 version을 보지 않아
+     * HTTP·경합 테스트가 어느 상태의 거래든 지운 상태로 만들 수 있다. 그 거래의 이력과 거래를 지우고
      * (라인은 거래와 같이 지워진다) 기록 한 행만 남긴다. 기록의 번호는 지우기 전 거래의 version + 1이다(ADR 007 결정 2, 7).
      */
     public void purge(UUID transactionId, UUID actorId) {
