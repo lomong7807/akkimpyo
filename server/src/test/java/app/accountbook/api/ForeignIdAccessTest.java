@@ -119,6 +119,8 @@ class ForeignIdAccessTest {
                         c.send("DELETE", transactions() + "/" + ids.transaction() + "?version=1", null)),
                 notFound("거래 되살리기", (c, ids) ->
                         c.postJson(transactions() + "/" + ids.transaction() + "/restore", "{\"version\":1}")),
+                notFound("거래 완전히 지우기", (c, ids) ->
+                        c.postJson(transactions() + "/" + ids.transaction() + "/purge", "{\"version\":1}")),
                 notFound("거래 승인취소", (c, ids) ->
                         c.postJson(transactions() + "/" + ids.transaction() + "/cancel", "{\"version\":1}")),
                 notFound("거래 취소 되돌리기", (c, ids) ->
