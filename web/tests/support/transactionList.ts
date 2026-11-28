@@ -38,11 +38,11 @@ export function transferOf(fields: Fields, changes: object = {}): Listed {
   return savedOf({ id: nextId(), type: 'TRANSFER', occurredTime: null, ...fields }, 'user-1', changes)
 }
 
-/** P-205: 이체와 취소를 빼고 지출과 수입을 더한다. 지출은 양수다. */
+/** P-205: 이체와 취소를 빼고 지출과 수입을 더한다. 지출은 양수이고 환불·돌려받음은 지출에서 뺀다(서버 #8, #102). */
 export function sumsOf(items: Listed[]): Sums {
   const counted = items.filter(({ status }) => status !== 'CANCELED')
-  const total = (type: string) =>
-    counted.filter((item) => item.type === type).reduce((sum, item) => sum + Number(item.amount), 0)
+  const signed = (item: Listed) => ((item as { refundKind?: unknown }).refundKind ? -1 : 1) * Number(item.amount)
+  const total = (type: string) => counted.filter((item) => item.type === type).reduce((sum, item) => sum + signed(item), 0)
   return { income: total('INCOME'), expense: total('EXPENSE') }
 }
 
