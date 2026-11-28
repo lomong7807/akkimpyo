@@ -9,8 +9,10 @@ import type { ExportRange } from './exportRange'
 
 export type ExportFormat = 'xlsx' | 'csv'
 
-export interface ExportRequest extends ExportRange {
+export interface ExportRequest {
   format: ExportFormat
+  /** 고른 기간. 없으면 장부 전체이고 from·to를 보내지 않는다(빈 값도 아니다, #379) */
+  range?: ExportRange
 }
 
 /** saved: 파일을 저장하게 했다. empty: 그 기간에 내보낼 거래가 없어 파일이 없다(204) */
@@ -23,16 +25,16 @@ export type ExportResult = { kind: 'saved'; fileName: string } | { kind: 'empty'
  */
 export async function exportLedger(
   ledger: Pick<Ledger, 'id' | 'name'>,
-  { format, from, to }: ExportRequest,
+  { format, range }: ExportRequest,
   startedBy: string | undefined,
 ): Promise<ExportResult> {
-  const query = new URLSearchParams({ format, from, to })
+  const query = new URLSearchParams({ format, ...range })
   const { status, file, disposition } = await requestFile(`${ledgerPath(ledger.id, 'exports')}?${query}`, {}, { startedBy })
   if (status === 204) return { kind: 'empty' }
   if (status !== 200 || file === undefined) throw ApiError.unreadable(status)
   // 받는 사이 로그아웃하거나 다른 계정으로 바뀌었으면 앞 사용자의 장부 파일을 이 기기에 남기지 않는다(api/apiError의 timeout)
   if (currentUserId() !== startedBy) throw ApiError.timeout()
-  const fileName = fileNameOf(disposition) ?? defaultFileName(ledger.name, { format, from, to })
+  const fileName = fileNameOf(disposition) ?? defaultFileName(ledger.name, { format, range })
   saveFile(file, fileName)
   return { kind: 'saved', fileName }
 }
@@ -44,10 +46,14 @@ function usable(name: string): string {
   return name.replace(UNUSABLE, '_')
 }
 
-/** "장부 이름_시작일_종료일.확장자", 날짜는 `20260101` 꼴(K-01 (5), 작성자 판단 29) */
-export function defaultFileName(ledgerName: string, { format, from, to }: ExportRequest): string {
+/**
+ * "장부 이름_시작일_종료일.확장자", 날짜는 `20260101` 꼴(K-01 (5), 작성자 판단 29). "전체"의 첫·마지막 거래일은 서버만 알므로
+ * 서버가 지은 이름을 읽지 못하면 "장부 이름.확장자"다.
+ */
+export function defaultFileName(ledgerName: string, { format, range }: ExportRequest): string {
   const day = (date: string) => date.replaceAll('-', '')
-  return `${usable(ledgerName)}_${day(from)}_${day(to)}.${format}`
+  const period = range ? `_${day(range.from)}_${day(range.to)}` : ''
+  return `${usable(ledgerName)}${period}.${format}`
 }
 
 /**

@@ -1,6 +1,9 @@
 import { formatDate, selectableRange } from '../../lib/calendarDate'
 
-/* K-01 (2)·(3)의 기간(F-701, P-202). 날짜는 `YYYY-MM-DD`이고 오늘은 기기의 오늘이다(lib/calendarDate의 today). */
+/*
+ * K-01 (3)의 기간(F-701, P-202). 날짜는 `YYYY-MM-DD`이고 오늘은 기기의 오늘이다(lib/calendarDate의 today).
+ * (2)의 "전체"는 기간을 보내지 않는다(exportFile의 range, #393).
+ */
 
 /** 시작일과 종료일(둘 다 포함). 고르지 않은 날은 빈 글자다 */
 export interface ExportRange {
@@ -21,15 +24,9 @@ export function defaultRange(today: string): ExportRange {
 }
 
 /**
- * "전체"로 보내는 기간. 날짜 칸이 고를 수 있는 범위 전체(2000년 1월 1일부터 오늘로부터 1년 뒤까지)라 장부의 모든 거래가 든다.
- * API는 기간을 늘 받고 받은 기간으로 파일 이름을 짓는다(#57). 첫·마지막 거래일로 짓는 것은 서버 후속 #379다.
+ * 비었는지, 앞뒤가 맞는지(00-common 5.8). 시작일이 종료일보다 늦으면 종료일 칸의 오류다. 하나만 빈 기간은 서버가 400 REQUIRED로
+ * 거부하므로(#379) 보내기 전에 여기서 막는다. 서버의 REQUIRED도 같은 문구다(ExportPage의 rejectedFields).
  */
-export function wholeRange(today: string): ExportRange {
-  const { first, last } = selectableRange(today)
-  return { from: first, to: last }
-}
-
-/** 비었는지, 앞뒤가 맞는지(00-common 5.8). 시작일이 종료일보다 늦으면 종료일 칸의 오류다. */
 export function checkRange({ from, to }: ExportRange): RangeErrors {
   const errors: RangeErrors = {}
   if (from === '') errors.from = START_REQUIRED

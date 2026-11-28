@@ -483,6 +483,22 @@ describe('고른 날의 머리와 거래 목록', () => {
     expect(dayTotals()).toBe(totals)
   })
 
+  it('환불·돌려받음 줄은 내역과 같이 강조색과 "+"의 금액, "환불"·"돌려받음" 칩이다(00-common 2.2, #395)', async () => {
+    const on26 = { occurredOn: '2026-11-26', accountId: id.card, categoryId: id.food }
+    list.months.set('2026-11', [
+      expenseOf({ ...on26, occurredTime: '15:40', amount: 12000, payee: '올래국수' }, { refundKind: 'REFUND' }),
+      expenseOf({ ...on26, occurredTime: '09:00', amount: 3000, payee: '모임 회비' }, { refundKind: 'REIMBURSEMENT' }),
+    ])
+    await openCalendar()
+    await waitFor(() => expect(rows()).toHaveLength(2))
+    expect(rows().map((row) => row.textContent)).toEqual([
+      '15:40올래국수+12,000원식비 · 신한카드환불',
+      '09:00모임 회비+3,000원식비 · 신한카드돌려받음',
+    ])
+    expect(getComputedStyle(within(rows()[0]).getByText('+12,000원')).color).toBe('var(--color-accent)')
+    expect(getComputedStyle(within(rows()[1]).getByText('+3,000원')).color).toBe('var(--color-accent)')
+  })
+
   it('머리의 합계는 그날 목록 응답의 합계다', async () => {
     november()
     list.days.set('2026-11-26', { income: 0, expense: 777 })

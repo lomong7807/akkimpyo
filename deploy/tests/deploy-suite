@@ -1,0 +1,579 @@
+#!/usr/bin/env bash
+# deploy/tests/deploy-run이 시험 컨테이너 안에서 부른다. 하나라도 어긋나면 그 자리에서 1로 끝난다.
+# 배포 스크립트는 운영과 같은 경로(/opt/akkimpyo, /etc/akkimpyo, /var/lib/akkimpyo-deploy)에 설치해 돌린다.
+set -euo pipefail
+export LC_ALL=C.UTF-8
+
+: "${TEST_ID:?}" "${REPO:?}"
+FIX=$REPO/deploy/tests/deploy-fixture
+BIN=/opt/akkimpyo/bin
+STATE=/var/lib/akkimpyo-deploy
+APP_ENV=/etc/akkimpyo/app.env
+REMOTE=/tmp/remote.git
+SRC=/tmp/src
+ALERTS=/tmp/alerts
+ALL_ALERTS=/tmp/all-alerts
+LOG=/tmp/log
+ALL_LOG=/tmp/all-log
+REGISTRY_IMAGE=registry@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c # 3.1.2
+
+section() { printf '\n[%3d초] %s\n' "$SECONDS" "$1"; }
+
+# assert 설명 명령...
+assert() {
+  local what=$1
+  shift
+  if ! "$@"; then
+    printf '  실패: %s\n--- 로그\n' "$what"
+    cat "$LOG"
+    printf -- '--- 알림\n'
+    cat "$ALERTS"
+    exit 1
+  fi
+  printf '  ok: %s\n' "$what"
+}
+not() { ! "$@"; }
+equal() { [[ $1 == "$2" ]] || { printf '    기대 "%s", 실제 "%s"\n' "$1" "$2"; false; }; }
+alerted() { grep -q -- "$1" "$ALERTS"; }
+no_alert() { [[ ! -s $ALERTS ]]; }
+logged() { grep -q -- "$1" "$LOG"; }
+pending() { [[ -e $STATE/pending ]]; }
+failed_marker() { [[ -e $STATE/failed ]]; }
+backups() { wc -l </tmp/backup-calls; }
+last_result() { tail -n 1 "$STATE/history" | cut -f 2; }
+present() { docker image inspect "$1" >/dev/null 2>&1; }
+
+run_deploy() {
+  : >"$ALERTS"
+  rc=0
+  "$BIN/deploy" >"$LOG" 2>&1 </dev/null || rc=$?
+  cat "$LOG" >>"$ALL_LOG"
+}
+
+# 알림을 보내고 기다리는 실행, 교체하는 실행(WAIT_SECONDS=0).
+deploy_cycle() {
+  run_deploy
+  assert "시작 알림을 보냈다($(head -n 1 "$ALERTS"))" alerted '배포 파일이 바뀌었다'
+  assert '  아직 교체하지 않고 기다린다' pending
+  run_deploy
+}
+
+cid() {
+  docker ps --all --quiet --no-trunc --filter "label=com.docker.compose.project=$TEST_ID" \
+    --filter "label=com.docker.compose.service=$1" --filter label=com.docker.compose.oneoff=False
+}
+image_of() { docker inspect --format '{{.Config.Image}}' "$(cid "$1")"; }
+env_of() { docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$(cid "$1")" | sed -n "s/^$2=//p"; }
+prev_assets() { docker exec "$(cid proxy)" ls /srv-prev/assets | paste -sd ' '; }
+
+config() {
+  printf '%s\n' "COMPOSE_PROJECT=$TEST_ID" "SERVER_REPOSITORY=$REG/$TEST_ID-server" "WEB_REPOSITORY=$REG/$TEST_ID-web" \
+    WAIT_SECONDS=0 HEALTH_TRIES=6 HEALTH_INTERVAL_SECONDS=1 HEALTH_REQUEST_SECONDS=5 PROXY_WAIT_SECONDS=20 "$@" \
+    >/etc/akkimpyo/deploy.env
+}
+
+# 시험용 레포. 배포 스크립트는 가짜 ssh를 거쳐 이 저장소를 GitHub인 것처럼 읽는다.
+commit() {
+  git -C "$SRC" add -A
+  git -C "$SRC" -c user.name=test -c user.email=test@example.invalid commit --quiet -m "$1"
+  git -C "$SRC" push --quiet origin HEAD:main
+  git -C "$SRC" rev-parse HEAD
+}
+
+# set_deploy 서버 웹 ROLLBACK_SAFE SW_DISABLE 커밋제목
+set_deploy() {
+  mkdir -p "$SRC/deploy"
+  printf 'SERVER_IMAGE=%s\nWEB_IMAGE=%s\nROLLBACK_SAFE=%s\nSW_DISABLE=%s\n' "$1" "$2" "$3" "$4" >"$SRC/deploy/production.env"
+  commit "$5" >/dev/null
+}
+
+# build 이름 Dockerfile 빌드인자...: 레지스트리에 올리고 digest 이름을 낸다. 배포 스크립트가 받도록 로컬 태그는 지운다.
+# 레지스트리가 막 떴을 수 있어 올리기는 몇 번 다시 한다.
+build() {
+  local name=$1 file=$2 ref digest i
+  shift 2
+  ref=$REG/$TEST_ID-$name:$RANDOM
+  docker build --quiet --provenance=false --label "akkimpyo.test=$TEST_ID" --file "$FIX/$file" "$@" --tag "$ref" "$FIX" \
+    >/dev/null || return 1
+  for ((i = 0; i < 20; i++)); do
+    docker push --quiet "$ref" >/dev/null 2>&1 && break
+    sleep 0.5
+  done
+  digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ref" |
+    grep "^$REG/$TEST_ID-$name@sha256:") || return 1
+  docker image rm "$ref" >/dev/null || return 1
+  printf '%s\n' "$digest"
+}
+
+# ---------------------------------------------------------------------------
+section 'shellcheck'
+: >"$LOG"
+: >"$ALERTS"
+assert 'shellcheck' shellcheck --external-sources --source-path="$REPO" \
+  "$REPO"/deploy/bin/deploy "$REPO"/deploy/tests/deploy-run "$REPO"/deploy/tests/deploy-suite
+
+section '설치(운영과 같은 경로)'
+install -d -m 755 "$BIN" /opt/akkimpyo/deploy
+install -m 755 "$REPO/deploy/bin/deploy" "$BIN/"
+install -m 644 "$FIX/compose.yaml" /opt/akkimpyo/deploy/compose.yaml
+install -m 644 "$REPO/deploy/github-known-hosts" /opt/akkimpyo/deploy/
+if [[ -f $REPO/deploy/env.allowlist ]]; then
+  install -m 644 "$REPO/deploy/env.allowlist" /opt/akkimpyo/deploy/
+else
+  # 운영 허용 목록(PR #306의 deploy/env.allowlist)이 아직 이 체크아웃에 없을 때. 같은 이름이다.
+  printf '%s\n' ACCESS_LOG_KEEP_DAYS ACCESS_TOKEN_SIGNING_KEY DB_PASSWORD DB_URL DB_USERNAME \
+    PROXY_HTTP_PORT PROXY_HTTPS_PORT WEB_ORIGIN >/opt/akkimpyo/deploy/env.allowlist
+  chmod 644 /opt/akkimpyo/deploy/env.allowlist
+fi
+install -d -m 700 /etc/akkimpyo
+install -m 644 "$REPO"/deploy/systemd/akkimpyo-deploy.* /etc/systemd/system/
+# 이번 시험에서만 쓰는 값. 끝나면 컨테이너와 함께 사라진다.
+DB_PASSWORD_VALUE=test-db-$(openssl rand -hex 12)
+SIGNING_KEY_VALUE=$(openssl rand -base64 32)
+SECRET_MARK=secret-$(openssl rand -hex 8)
+write_app_env() {
+  install -m 600 /dev/null "$APP_ENV"
+  printf '%s\n' '# 시험용' "DB_URL=jdbc:postgresql://db:5432/accountbook" DB_USERNAME=accountbook \
+    "DB_PASSWORD=$DB_PASSWORD_VALUE" "ACCESS_TOKEN_SIGNING_KEY=\"$SIGNING_KEY_VALUE\"" \
+    'WEB_ORIGIN=https://akkimpyo.test' "$@" >"$APP_ENV"
+}
+write_app_env
+install -m 600 /dev/null /etc/akkimpyo/deploy-key
+echo '시험용 자리. 가짜 ssh는 키를 읽지 않는다' >/etc/akkimpyo/deploy-key
+# 가짜 전송기. /tmp/notify-fails가 있으면 전송에 실패한다.
+cat >"$BIN/notify-telegram" <<'SH'
+#!/bin/sh
+[ ! -e /tmp/notify-fails ] || exit 1
+text=$(cat)
+printf '%s\n' "$text" >>/tmp/alerts
+printf '%s\n' "$text" >>/tmp/all-alerts
+SH
+# 가짜 백업. 부른 횟수를 남기고 객체 이름을 낸다.
+cat >"$BIN/backup" <<'SH'
+#!/bin/sh
+date +%s >>/tmp/backup-calls
+[ ! -e /tmp/backup-sleep ] || sleep 4
+if [ -e /tmp/backup-fails ]; then
+  echo '가짜 백업 실패' >&2
+  exit 1
+fi
+echo "daily/akkimpyo-test-$(wc -l </tmp/backup-calls).tar.age"
+SH
+# 가짜 ssh. 배포 스크립트가 준 옵션을 남기고, GitHub의 레포 대신 시험 저장소로 git-upload-pack을 돌린다.
+mkdir -p /tmp/fake-bin
+cat >/tmp/fake-bin/ssh <<'SH'
+#!/bin/bash
+printf '%s\n' "$@" >/tmp/ssh-args
+if [[ -e /tmp/ssh-fails ]]; then
+  echo 'ssh: connect to host github.com port 22: Connection timed out' >&2
+  exit 255
+fi
+[[ ${!#} == "git-upload-pack 'lomong7807/akkimpyo.git'" ]] || { echo "모르는 명령: ${!#}" >&2; exit 1; }
+exec git-upload-pack /tmp/remote.git
+SH
+chmod 755 "$BIN/notify-telegram" "$BIN/backup" /tmp/fake-bin/ssh
+export PATH=/tmp/fake-bin:$PATH
+: >/tmp/backup-calls
+: >"$ALL_ALERTS"
+: >"$ALL_LOG"
+
+section 'systemd 단위 파일'
+assert '형식이 맞다' systemd-analyze verify /etc/systemd/system/akkimpyo-deploy.{service,timer}
+assert '서비스는 배포 스크립트를 인자 없이 부른다' grep -qx 'ExecStart=/opt/akkimpyo/bin/deploy' /etc/systemd/system/akkimpyo-deploy.service
+assert '타이머는 앞의 실행이 끝나고 5분마다다' grep -qx 'OnUnitInactiveSec=5min' /etc/systemd/system/akkimpyo-deploy.timer
+
+# ---------------------------------------------------------------------------
+section '배포 파일 형식(--check, CI의 Deploy PR 검사와 같은 코드)'
+D1=$(printf 'a%.0s' {1..64})
+D2=$(printf 'b%.0s' {1..64})
+good=$(printf 'SERVER_IMAGE=ghcr.io/lomong7807/akkimpyo-server@sha256:%s\nWEB_IMAGE=ghcr.io/lomong7807/akkimpyo-web@sha256:%s\nROLLBACK_SAFE=yes\nSW_DISABLE=no' "$D1" "$D2")
+check() {
+  printf '%s' "$1" >/tmp/check.env
+  rc=0
+  "$REPO/deploy/bin/deploy" --check /tmp/check.env >"$LOG" 2>&1 || rc=$?
+}
+check "$good"$'\n'
+assert '정해진 네 줄은 받는다' equal 0 "$rc"
+check "$good"
+assert '마지막 줄바꿈이 없어도 받는다' equal 0 "$rc"
+check "${good/ROLLBACK_SAFE=yes/ROLLBACK_SAFE=no}"$'\n'
+assert 'ROLLBACK_SAFE=no도 받는다' equal 0 "$rc"
+refuse() {
+  check "$2"
+  assert "$1: 받지 않는다($(tail -n 1 "$LOG"))" [ "$rc" -ne 0 ]
+}
+refuse '줄이 하나 더 있다(주석)' "$good"$'\n# note\n'
+refuse '빈 줄이 더 있다' $'\n'"$good"$'\n'
+refuse '변수가 하나 더 있다' "$good"$'\nJAVA_TOOL_OPTIONS=-Dx=1\n'
+refuse 'SW_DISABLE 줄이 없다' "$(head -n 3 <<<"$good")"$'\n'
+refuse '순서가 다르다' "$(awk 'NR == 1 { first = $0; next } NR == 2 { print; print first; next } { print }' <<<"$good")"$'\n'
+refuse 'digest가 아니라 태그다' "${good/@sha256:$D1/:latest}"
+refuse '다른 저장소의 이미지다' "${good/lomong7807\/akkimpyo-server/someone\/akkimpyo-server}"
+refuse 'digest에 대문자가 있다' "${good/$D1/${D1^^}}"
+refuse 'digest가 63자다' "${good/$D1/${D1:1}}"
+refuse 'ROLLBACK_SAFE가 두 값이 아니다' "${good/ROLLBACK_SAFE=yes/ROLLBACK_SAFE=maybe}"
+refuse 'SW_DISABLE이 대문자다' "${good/SW_DISABLE=no/SW_DISABLE=NO}"
+refuse '줄 끝에 CR이 있다' "${good//$'\n'/$'\r\n'}"
+refuse '줄 끝에 공백이 있다' "${good/ROLLBACK_SAFE=yes/ROLLBACK_SAFE=yes }"
+refuse '비어 있다' ''
+rc=0
+"$REPO/deploy/bin/deploy" --check /tmp/no-such-file >"$LOG" 2>&1 || rc=$?
+assert '파일이 없으면 실패다' [ "$rc" -ne 0 ]
+
+# ---------------------------------------------------------------------------
+section '준비: 시험 레지스트리(호스트 네트워크의 127.0.0.1), 시험 레포, 이미지 두 판 이상'
+# 호스트 네트워크라 데몬이 127.0.0.1로 닿는다(Docker Desktop에서도). 포트가 겹쳐 레지스트리가 끝나면 다른 포트로 다시 띄운다.
+for _ in 1 2 3 4 5; do
+  REG=127.0.0.1:$((20000 + RANDOM % 20000))
+  docker rm --force --volumes "$TEST_ID-registry" >/dev/null 2>&1 || true
+  docker run --detach --name "$TEST_ID-registry" --network host --env "REGISTRY_HTTP_ADDR=$REG" \
+    "$REGISTRY_IMAGE" >/dev/null
+  sleep 1
+  [[ $(docker inspect --format '{{.State.Running}}' "$TEST_ID-registry") == true ]] && break
+done
+config
+git init --quiet --bare --initial-branch=main "$REMOTE"
+git clone --quiet "$REMOTE" "$SRC" 2>/dev/null
+mkdir -p "$SRC/deploy" "$SRC/server/src/main/resources/db/migration" "$SRC/docs"
+echo '# 레포의 compose. 서버는 이것을 쓰지 않는다' >"$SRC/deploy/compose.yaml"
+echo 'CREATE TABLE t (id int);' >"$SRC/server/src/main/resources/db/migration/V1__init.sql"
+C1=$(commit '첫 커밋 (#1)')
+echo 'ALTER TABLE t ADD COLUMN c int;' >"$SRC/server/src/main/resources/db/migration/V2__add_column.sql"
+C2=$(commit '두 번째 마이그레이션 (#2)')
+echo '문서' >"$SRC/docs/note.md"
+C3=$(commit '문서만 (#3)')
+# 시험 컨테이너는 호스트 네트워크에 없어 레지스트리에 직접 닿지 못한다. 올리기는 데몬이 한다.
+S1=$(build server server.Dockerfile --build-arg HEALTH=up --build-arg "REVISION=$C1")
+S2=$(build server server.Dockerfile --build-arg HEALTH=up --build-arg "REVISION=$C2")
+S_DOWN=$(build server server.Dockerfile --build-arg HEALTH=down --build-arg "REVISION=$C2")
+S_CRASH=$(build server server.Dockerfile --build-arg HEALTH=crash --build-arg "REVISION=$C3")
+W1=$(build web web.Dockerfile --build-arg VERSION=v1 --build-arg "REVISION=$C1")
+W2=$(build web web.Dockerfile --build-arg VERSION=v2 --build-arg "REVISION=$C2")
+W3=$(build web web.Dockerfile --build-arg VERSION=v3 --build-arg "REVISION=$C3")
+# 정리 대상이 아닌 이미지. 배포가 지우면 안 된다.
+docker build --quiet --label "akkimpyo.test=$TEST_ID" --file "$FIX/web.Dockerfile" --build-arg VERSION=other \
+  --tag "$TEST_ID-other:keep" "$FIX" >/dev/null
+assert '이미지 일곱 개가 digest로 있다' equal 7 "$(printf '%s\n' "$S1" "$S2" "$S_DOWN" "$S_CRASH" "$W1" "$W2" "$W3" | grep -c '@sha256:')"
+
+# ---------------------------------------------------------------------------
+section '배포 파일이 아직 없으면 아무것도 하지 않는다'
+run_deploy
+assert '0으로 끝난다' equal 0 "$rc"
+assert '알림이 없다' no_alert
+assert '컨테이너가 없다' equal '' "$(cid server)"
+
+section '형식이 틀리면 배포하지 않고 알린다. 같은 알림을 되풀이하지 않는다'
+printf 'SERVER_IMAGE=%s:latest\nWEB_IMAGE=%s\nROLLBACK_SAFE=yes\nSW_DISABLE=no\n' "$REG/$TEST_ID-server" "$W1" \
+  >"$SRC/deploy/production.env"
+commit '태그로 적은 배포 (#100)' >/dev/null
+run_deploy
+assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+assert "알린다($(head -n 1 "$ALERTS"))" alerted '받지 않는다(배포하지 않는다): 1번째 줄은 SERVER_IMAGE='
+assert '기다리기 시작하지 않는다' not pending
+run_deploy
+assert '다음 확인 때는 다시 알리지 않는다' no_alert
+assert '  그래도 0이 아닌 코드다' [ "$rc" -ne 0 ]
+
+# ---------------------------------------------------------------------------
+section '첫 배포: 알리고 기다린 뒤 올린다. DB가 없어 백업하지 않는다'
+set_deploy "$S1" "$W1" yes no '배포: 첫 판 (#101)'
+run_deploy
+assert '0으로 끝난다' equal 0 "$rc"
+assert '시작 알림에 PR 번호가 있다' alerted '^PR: #101$'
+assert '  새 서버 digest가 있다' alerted "^서버: 없음(첫 배포) → ${S1#*@}$"
+assert '  마이그레이션(첫 배포라 모두)' alerted '^마이그레이션: 첫 배포라 모두 적용된다: V1__init.sql$'
+assert '  ROLLBACK_SAFE' alerted '^ROLLBACK_SAFE=yes: 상태 확인이 실패하면 이전 이미지로 되돌린다'
+assert '아직 아무것도 띄우지 않았다' equal '' "$(cid server)"
+assert '기다린다' pending
+assert '가짜 ssh에 배포 키를 준다' grep -qx /etc/akkimpyo/deploy-key /tmp/ssh-args
+assert '  호스트 키를 확인한다' grep -qx StrictHostKeyChecking=yes /tmp/ssh-args
+assert '  고정한 GitHub 호스트 키 파일' grep -qx UserKnownHostsFile=/opt/akkimpyo/deploy/github-known-hosts /tmp/ssh-args
+assert '  묻지 않는다' grep -qx BatchMode=yes /tmp/ssh-args
+assert '  GitHub의 레포' grep -qx git@github.com /tmp/ssh-args
+run_deploy
+assert '교체한 실행도 0으로 끝난다' equal 0 "$rc"
+assert '서버가 digest 이름으로 돈다' equal "$S1" "$(image_of server)"
+assert '웹이 digest 이름으로 돈다' equal "$W1" "$(image_of proxy)"
+assert 'SW_DISABLE를 넘겼다' equal no "$(env_of proxy SW_DISABLE)"
+assert 'compose가 서버의 env 파일에서 WEB_ORIGIN을 읽었다' equal https://akkimpyo.test "$(env_of proxy SITE_ADDRESS)"
+assert '백업을 부르지 않았다' equal 0 "$(backups)"
+assert '  첫 배포라고 남겼다' logged '첫 배포라 백업할 DB가 없다'
+assert '완료를 알렸다' alerted '^\[아낌표 배포\] 배포가 끝났다'
+assert '이력: 성공' equal 성공 "$(last_result)"
+assert '기다리던 것이 끝났다' not pending
+first_server=$(cid server)
+
+section '배포 파일과 돌고 있는 것이 같으면 아무것도 하지 않는다'
+run_deploy
+assert '0으로 끝난다' equal 0 "$rc"
+assert '알림이 없다' no_alert
+assert '서버 컨테이너가 그대로다' equal "$first_server" "$(cid server)"
+
+section '레포의 compose를 바꿔도 서버에서 도는 구성은 바뀌지 않는다'
+printf 'services:\n  extra:\n    image: %s\n' "$S1" >"$SRC/deploy/compose.yaml"
+commit 'compose에 서비스를 더한다 (#102)' >/dev/null
+run_deploy
+assert '0으로 끝난다' equal 0 "$rc"
+assert '알림이 없다' no_alert
+assert '서버 컨테이너가 그대로다' equal "$first_server" "$(cid server)"
+assert '레포 compose의 서비스는 없다' equal '' "$(cid extra)"
+
+# ---------------------------------------------------------------------------
+section '정상 배포 v1 → v2: 마이그레이션을 알리고, 백업 뒤 교체, 앞 판 assets를 남긴다'
+set_deploy "$S2" "$W2" yes no '배포: 두 번째 판 (#103)'
+deploy_cycle
+assert '시작 알림에 새 마이그레이션이 있다' grep -q '^마이그레이션: 있음 — 새로 적용: V2__add_column.sql$' "$ALL_ALERTS"
+assert '0으로 끝난다' equal 0 "$rc"
+assert '서버 v2' equal "$S2" "$(image_of server)"
+assert '웹 v2' equal "$W2" "$(image_of proxy)"
+assert '교체 직전에 백업했다' equal 1 "$(backups)"
+assert '  완료 알림에 백업 객체 이름' alerted '^직전 백업: daily/akkimpyo-test-1.tar.age$'
+assert '앞 판(v1)의 assets가 assets-prev에 있다' equal index-v1.js "$(prev_assets)"
+assert '이력: 성공' equal 성공 "$(last_result)"
+
+section '웹만 v3: 서버는 그대로, assets-prev는 한 판(v2)만, 아낌표 옛 이미지만 정리'
+server_before=$(cid server)
+set_deploy "$S2" "$W3" yes no '배포: 웹만 (#104)'
+deploy_cycle
+assert '시작 알림: 서버 이미지가 그대로라 마이그레이션 없음' grep -q '^마이그레이션: 없음(서버 이미지가 그대로다)$' "$ALL_ALERTS"
+assert '웹 v3' equal "$W3" "$(image_of proxy)"
+assert '서버 컨테이너를 다시 만들지 않았다' equal "$server_before" "$(cid server)"
+assert 'assets-prev에는 v2만 있다(v1은 지워졌다)' equal index-v2.js "$(prev_assets)"
+assert '되돌리기에 쓸 직전 웹(v2)은 남긴다' present "$W2"
+assert '지금 서버와 웹은 남긴다' present "$S2"
+assert '그보다 앞의 서버(v1)는 지운다' not present "$S1"
+assert '그보다 앞의 웹(v1)은 지운다' not present "$W1"
+assert '아낌표가 아닌 이미지는 그대로다' present "$TEST_ID-other:keep"
+assert '레지스트리 이미지도 그대로다' present "$REGISTRY_IMAGE"
+
+section 'SW_DISABLE만 바꾸면 프록시만 다시 만든다'
+proxy_before=$(cid proxy)
+set_deploy "$S2" "$W3" yes yes '배포: service worker 끄기 (#105)'
+deploy_cycle
+assert 'SW_DISABLE=yes' equal yes "$(env_of proxy SW_DISABLE)"
+assert '프록시를 다시 만들었다' not equal "$proxy_before" "$(cid proxy)"
+assert '서버는 그대로다' equal "$server_before" "$(cid server)"
+assert '웹 이미지가 같아 assets-prev는 그대로다' equal index-v2.js "$(prev_assets)"
+
+# ---------------------------------------------------------------------------
+section '대기 시간 안에 배포 파일을 되돌리면 교체하지 않는다'
+config WAIT_SECONDS=3600
+set_deploy "$S2" "$W2" yes yes '번호 없이 바로 올린 배포'
+run_deploy
+assert '시작 알림: 60분 뒤' alerted '60분 뒤'
+assert '  PR 번호가 없다는 것을 알린다' alerted '^PR: 없음(커밋 제목에 (#번호)가 없다)$'
+run_deploy
+assert '기다리는 중이다' logged '기다리는 중이다'
+assert '  교체하지 않았다' equal "$W3" "$(image_of proxy)"
+set_deploy "$S2" "$W3" yes yes 'Revert "번호 없이 바로 올린 배포" (#107)'
+run_deploy
+assert '0으로 끝난다' equal 0 "$rc"
+assert '취소를 알린다' alerted '대기 중이던 배포를 취소했다'
+assert '기다리던 것을 지웠다' not pending
+assert '웹은 그대로 v3' equal "$W3" "$(image_of proxy)"
+assert '이력: 취소' equal 취소 "$(last_result)"
+
+section '기다리는 동안 다시 바뀌면 새 값으로 다시 기다리고, 앞의 값은 교체하지 않는다'
+set_deploy "$S2" "$W2" yes yes '배포: 앞의 값 (#108)'
+run_deploy
+assert '시작 알림' alerted '배포 파일이 바뀌었다'
+set_deploy "$S2" "$W1" yes yes '배포: 새 값 (#109)'
+run_deploy
+assert '다시 기다린다고 알린다' alerted '기다리는 동안 배포 파일이 다시 바뀌었다'
+assert '  새 값의 PR' alerted '^PR: #109$'
+config
+run_deploy
+assert '새 값(웹 v1)으로 교체했다' equal "$W1" "$(image_of proxy)"
+assert '이력: 성공' equal 성공 "$(last_result)"
+
+section '시작 알림을 보내지 못하면 교체하지 않는다'
+touch /tmp/notify-fails
+set_deploy "$S2" "$W2" yes yes '배포: 알림 실패 (#110)'
+run_deploy
+assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+assert '기다리기 시작하지 않는다' not pending
+run_deploy
+assert '대기 시간(0초)이 지나도 교체하지 않는다' equal "$W1" "$(image_of proxy)"
+rm /tmp/notify-fails
+deploy_cycle
+assert '알림이 되면 알리고 기다린 뒤 교체한다' equal "$W2" "$(image_of proxy)"
+
+section '완료 알림을 보내지 못하면 남겨 두고 다음 실행이 보낸다'
+set_deploy "$S2" "$W3" yes yes '배포: 완료 알림 실패 (#111)'
+run_deploy
+touch /tmp/notify-fails
+run_deploy
+rm /tmp/notify-fails
+assert '교체는 됐다' equal "$W3" "$(image_of proxy)"
+assert '보내지 못한 알림이 남았다' compgen -G "$STATE/unsent.*"
+run_deploy
+assert '다음 실행이 보냈다' alerted '(늦게 보낸 알림) 배포가 끝났다'
+assert '  남은 것이 없다' not compgen -G "$STATE/unsent.*"
+
+# ---------------------------------------------------------------------------
+section 'env 파일 검사: 알림 전에 거부하고 이름만 알린다(값을 내지 않는다)'
+set_deploy "$S2" "$W2" yes yes '배포: env 검사 (#112)'
+# rejected 설명 알림에_나올_글: 거부하고, 기다리기 시작하지 않고, 값이 알림과 로그에 없다.
+rejected() {
+  run_deploy
+  assert "$1: 거부한다" [ "$rc" -ne 0 ]
+  assert "  알린다($(grep -- '^- ' "$ALERTS" | paste -sd ' '))" alerted "$2"
+  assert '  기다리기 시작하지 않는다' not pending
+  assert '  값이 알림에 없다' not grep -q -- "$SECRET_MARK" "$ALERTS"
+  assert '  값이 로그에 없다' not logged "$SECRET_MARK"
+}
+write_app_env "JAVA_TOOL_OPTIONS=-Dpassword=$SECRET_MARK"
+rejected '허용 목록에 없는 이름' '허용 목록에 없는 이름: JAVA_TOOL_OPTIONS'
+write_app_env "DB_USERNAME=$SECRET_MARK"
+rejected '같은 이름이 두 번' '두 번 이상 나온 이름: DB_USERNAME'
+write_app_env
+sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=/' "$APP_ENV"
+rejected '빈 값' '없거나 빈 값: DB_PASSWORD'
+write_app_env
+sed -i "s|^DB_URL=.*|DB_URL=jdbc:postgresql://db:5432/accountbook?logServerErrorDetail=true\&password=$SECRET_MARK|" "$APP_ENV"
+rejected 'DB_URL에 금지한 항목' 'DB_URL에 logServerErrorDetail이 있다'
+write_app_env "SPRING_PROFILES_ACTIVE=prod,local"
+rejected 'local 프로파일' 'SPRING_PROFILES_ACTIVE에 local이 있다'
+write_app_env
+sed -i 's|^WEB_ORIGIN=.*|WEB_ORIGIN=http://akkimpyo.test|' "$APP_ENV"
+rejected 'https가 아닌 WEB_ORIGIN' 'WEB_ORIGIN이 https://로 시작하지 않는다'
+write_app_env "DB_URL2=$SECRET_MARK"
+chmod 644 "$APP_ENV"
+rejected '권한이 600이 아니다' '권한 600인 파일이 아니다'
+write_app_env
+run_deploy
+assert '고치면 다음 확인 때 알리고 기다린다' pending
+
+section 'env 파일 검사: 기다리는 동안 env 파일이 틀려지면 교체 직전에 멈춘다'
+write_app_env "LOGGING_LEVEL_ROOT=$SECRET_MARK"
+run_deploy
+assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+assert '알린다' alerted '교체하지 않았다: env 파일 검사'
+assert '  이름만' alerted '허용 목록에 없는 이름: LOGGING_LEVEL_ROOT'
+assert '  값이 없다' not grep -q -- "$SECRET_MARK" "$ALERTS"
+assert '교체하지 않았다' equal "$W3" "$(image_of proxy)"
+assert '실패로 남겼다' failed_marker
+assert '이력: 중단' equal 중단 "$(last_result)"
+write_app_env
+run_deploy
+assert '같은 배포 파일로는 다시 하지 않는다' logged '실패한 적이 있어 다시 하지 않는다'
+assert '  알림이 없다' no_alert
+rm "$STATE/failed"
+deploy_cycle
+assert 'failed를 지우면 다시 알리고 기다린 뒤 교체한다' equal "$W2" "$(image_of proxy)"
+
+section '직전 백업이 실패하면 교체하지 않는다'
+touch /tmp/backup-fails
+calls=$(backups)
+set_deploy "$S2" "$W3" yes yes '배포: 백업 실패 (#113)'
+deploy_cycle
+rm /tmp/backup-fails
+assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+assert '백업을 불렀다' equal $((calls + 1)) "$(backups)"
+assert '알린다' alerted '교체하지 않았다: 직전 백업이 실패했다'
+assert '교체하지 않았다' equal "$W2" "$(image_of proxy)"
+assert '이력: 중단' equal 중단 "$(last_result)"
+
+# ---------------------------------------------------------------------------
+section '상태 확인 실패, ROLLBACK_SAFE=yes: 이전 이미지로 되돌린다. 웹은 바꾸지 않았다'
+set_deploy "$S_DOWN" "$W3" yes yes '배포: DOWN인 서버 (#114)'
+deploy_cycle
+assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+assert '서버가 이전 이미지(v2)로 돌아왔다' equal "$S2" "$(image_of server)"
+assert '웹은 바꾸지 않았다(서버를 먼저 본다)' equal "$W2" "$(image_of proxy)"
+assert '되돌렸다고 알린다' alerted '이전 이미지로 되돌렸다'
+assert '  마지막 결과(DOWN)' alerted 'status가 UP이 아니다'
+assert '  자동 되돌림의 한계' alerted '이미 적용된 마이그레이션은 그대로다'
+assert '  로그에도 한계를 남긴다' logged '이미 적용된 마이그레이션은 그대로다'
+assert 'DOWN을 세 번 받으면 남은 횟수(6번)를 기다리지 않는다' equal 3 \
+  "$(grep -c '^상태 확인 [0-9]*번째: HTTP 200, status가 UP이 아니다' "$LOG")"
+assert '이력: 되돌림' equal 되돌림 "$(last_result)"
+run_deploy
+assert '같은 배포 파일로 다시 하지 않는다' equal 0 "$rc"
+assert '  알림이 없다' no_alert
+assert '  서버는 v2 그대로' equal "$S2" "$(image_of server)"
+
+section '새 서버가 뜨지 않는다(마이그레이션 실패 흉내), ROLLBACK_SAFE=yes: 되돌린다'
+set_deploy "$S_CRASH" "$W2" yes yes '배포: 뜨지 않는 서버 (#115)'
+deploy_cycle
+assert '서버가 v2로 돌아왔다' equal "$S2" "$(image_of server)"
+assert '마지막 결과: 돌고 있지 않다' alerted '서버 컨테이너가 돌고 있지 않다'
+assert '이력: 되돌림' equal 되돌림 "$(last_result)"
+
+section '상태 확인 실패, ROLLBACK_SAFE=no: 되돌리지 않고 멈춘다'
+set_deploy "$S_DOWN" "$W2" no yes '배포: 되돌리면 안 되는 판 (#116)'
+deploy_cycle
+assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+assert '되돌리지 않았다' equal "$S_DOWN" "$(image_of server)"
+assert '멈췄다고 알린다' alerted 'ROLLBACK_SAFE=no라 되돌리지 않고 멈췄다'
+assert '이력: 멈춤' equal 멈춤 "$(last_result)"
+
+section '배포 PR을 되돌리는 PR을 머지하면 다시 빌드하지 않고 돌아온다'
+calls=$(backups)
+set_deploy "$S2" "$W2" yes yes 'Revert "배포: 되돌리면 안 되는 판" (#117)'
+deploy_cycle
+assert '0으로 끝난다' equal 0 "$rc"
+assert '서버 v2' equal "$S2" "$(image_of server)"
+assert '백업 뒤에 바꿨다' equal $((calls + 1)) "$(backups)"
+assert '이력: 성공' equal 성공 "$(last_result)"
+
+# ---------------------------------------------------------------------------
+section '잠금: 진행 중인 배포를 끊지 않고, 겹친 실행은 아무것도 하지 않는다'
+set_deploy "$S2" "$W3" yes yes '배포: 겹친 실행 (#118)'
+run_deploy
+touch /tmp/backup-sleep
+: >"$ALERTS"
+"$BIN/deploy" >/tmp/log-first 2>&1 </dev/null &
+first=$!
+sleep 1
+rc=0
+"$BIN/deploy" >"$LOG" 2>&1 </dev/null || rc=$?
+assert '겹친 실행은 0으로 끝난다' equal 0 "$rc"
+assert '  다른 배포가 돈다고 남긴다' logged '다른 배포가 돌고 있다'
+rc=0
+wait "$first" || rc=$?
+rm /tmp/backup-sleep
+cp /tmp/log-first "$LOG"
+assert '먼저 시작한 배포는 끝까지 갔다' equal 0 "$rc"
+assert '  웹 v3' equal "$W3" "$(image_of proxy)"
+assert '  알림은 완료 하나다' equal 1 "$(grep -c '^\[아낌표 배포\] 배포가 끝났다' "$ALERTS")"
+
+# ---------------------------------------------------------------------------
+section '가져오기가 계속 실패하면 30분이 지나서 알린다'
+touch /tmp/ssh-fails
+run_deploy
+assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+assert '처음에는 알리지 않는다' no_alert
+printf 'since=%s\n' $(($(date +%s) - 1801)) >"$STATE/fetch-failing"
+run_deploy
+assert '30분이 지나면 알린다' alerted '분째 main의 deploy/production.env 를 받아 오지 못한다'
+run_deploy
+assert '  같은 알림을 되풀이하지 않는다' no_alert
+rm /tmp/ssh-fails
+run_deploy
+assert '되살아나면 0으로 끝난다' equal 0 "$rc"
+assert '  실패 기록을 지웠다' not test -e "$STATE/fetch-failing"
+
+section '배포 키가 root 전용이 아니면 가져오지 않는다'
+chmod 644 /etc/akkimpyo/deploy-key
+rm -f /tmp/ssh-args
+run_deploy
+chmod 600 /etc/akkimpyo/deploy-key
+assert '0이 아닌 코드로 끝난다' [ "$rc" -ne 0 ]
+assert '  ssh를 부르지 않았다' not test -e /tmp/ssh-args
+assert '  이유를 남긴다' logged 'root 소유, 권한 600인 파일이 아니다'
+
+# ---------------------------------------------------------------------------
+section '배포 이력'
+sed 's/^/    /' "$STATE/history"
+assert '줄마다 시각, 결과, 이미지, SW_DISABLE, 커밋, 걸린 시간, 단계가 있다' equal '' \
+  "$(grep -vP '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+09:00\t\S+( \S+)?\tserver=sha256:[0-9a-f]{64}\tweb=sha256:[0-9a-f]{64}\tsw=(yes|no)\tcommit=[0-9a-f]{40}\tseconds=\d+\tstep=' "$STATE/history" || true)"
+assert '결과 다섯 가지가 모두 남았다' equal '되돌림 멈춤 성공 중단 취소' "$(cut -f 2 "$STATE/history" | sort -u | paste -sd ' ')"
+
+section '비밀값이 어디에도 나오지 않는다'
+for value in "$DB_PASSWORD_VALUE" "$SIGNING_KEY_VALUE" "$SECRET_MARK"; do
+  assert "로그에 없다(${value:0:4}…)" not grep -qF -- "$value" "$ALL_LOG"
+  assert "알림에 없다(${value:0:4}…)" not grep -qF -- "$value" "$ALL_ALERTS"
+done
+
+section '끝'
