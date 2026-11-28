@@ -227,6 +227,41 @@ describe('월 이동', () => {
     expect(await screen.findByRole('heading', { level: 1, name: '12월' })).toBeTruthy()
   })
 
+  // 내역은 넘겨받은 달로 바꿔 가며(replace) 항목의 key가 바뀐다. 앞으로 가기로 다시 연 달력의 달 이동도 그 내역에 적용한다(#342)
+  it.each([
+    ['상단 바의 "뒤로"', (opened: Opened) => opened.user.click(within(screen.getByRole('banner')).getByRole('button', { name: '뒤로' }))],
+    ['브라우저의 뒤로 가기', (opened: Opened) => act(() => opened.router.navigate(-1))],
+  ])('내역이 넘겨받은 달로 바뀐 뒤 앞으로 가기로 연 달력에서 달을 옮기고 %s로 돌아가도 내역이 그 달이다', async (_, back) => {
+    november()
+    const opened = await openFromHistory('2026-11')
+    await opened.user.click(monthButton('이전 달')!)
+    await waitFor(() => expect(monthHeading().textContent).toBe('10월'))
+    await back(opened)
+    await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-10'))
+    await screen.findByRole('heading', { level: 1, name: '10월' })
+
+    await act(() => opened.router.navigate(1))
+    await waitFor(() => expect(monthHeading().textContent).toBe('10월'))
+    await opened.user.click(monthButton('이전 달')!)
+    await waitFor(() => expect(monthHeading().textContent).toBe('9월'))
+    await back(opened)
+    await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-09'))
+    expect(await screen.findByRole('heading', { level: 1, name: '9월' })).toBeTruthy()
+  })
+
+  it('내역이 넘겨받은 달로 바뀐 뒤 내역에서 달을 옮기면 넘겨받은 달로 되돌리지 않는다', async () => {
+    november()
+    const opened = await openFromHistory('2026-11')
+    await opened.user.click(monthButton('이전 달')!)
+    await waitFor(() => expect(monthHeading().textContent).toBe('10월'))
+    await act(() => opened.router.navigate(-1))
+    await screen.findByRole('heading', { level: 1, name: '10월' })
+    await opened.user.click(within(main()).getByRole('button', { name: '다음 달' }))
+    await waitFor(() => expect(addressOf(opened)).toBe('/transactions?month=2026-11'))
+    await settle()
+    expect(addressOf(opened)).toBe('/transactions?month=2026-11')
+  })
+
   it('달을 옮기지 않고 돌아가면 내역은 들어올 때의 달이다', async () => {
     november()
     const opened = await openFromHistory('2026-11')
