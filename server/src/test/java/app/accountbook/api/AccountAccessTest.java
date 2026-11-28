@@ -182,7 +182,11 @@ class AccountAccessTest {
                 new Case("거래 되살리기(지우지 않은 거래)", (client, ledger) ->
                         client.postJson(transactions(ledger) + "/" + bExpense + "/restore", "{\"version\":1}"), 409),
                 new Case("거래 되살리기(틀린 본문)", (client, ledger) ->
-                        client.postJson(transactions(ledger) + "/" + bExpense + "/restore", "{}"), 400));
+                        client.postJson(transactions(ledger) + "/" + bExpense + "/restore", "{}"), 400),
+                new Case("거래 승인취소(낡은 version)", (client, ledger) ->
+                        client.postJson(transactions(ledger) + "/" + bExpense + "/cancel", "{\"version\":2}"), 409),
+                new Case("거래 취소 되돌리기(취소하지 않은 거래)", (client, ledger) ->
+                        client.postJson(transactions(ledger) + "/" + bExpense + "/uncancel", "{\"version\":1}"), 409));
     }
 
     private Reply putAccount(ServerClient client, UUID ledger, String json) throws Exception {
