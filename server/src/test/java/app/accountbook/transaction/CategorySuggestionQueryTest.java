@@ -201,6 +201,6 @@ class CategorySuggestionQueryTest {
 
     private static Entry entry(TransactionType type, UUID id, LocalDate on, UUID accountId, String payee,
                                UUID categoryId) {
-        return new Entry(id, type, on, null, accountId, categoryId, 1_000, false, payee, null, null);
+        return new Entry(id, type, on, null, accountId, categoryId, 1_000, null, payee, null, null);
     }
 }

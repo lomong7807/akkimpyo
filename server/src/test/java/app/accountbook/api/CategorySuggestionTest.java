@@ -110,7 +110,7 @@ class CategorySuggestionTest {
 
     private void expense(String payee) {
         transactionService.create(owner.getId(), ledgerId, new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY,
-                null, cash, food, 1_000, false, payee, null, null), "test-device");
+                null, cash, food, 1_000, null, payee, null, null), "test-device");
     }
 
     private List<List<Map<String, Object>>> rows() {

@@ -29,7 +29,7 @@ public class TransactionExportQuery {
     /** 장부의 내보낼 라인. 칸의 순서는 {@link ExportedTransaction#of}가 읽는 순서다. */
     private static final String SELECT = """
             select t.id, t.type, t.occurredOn, t.occurredTime, t.payee, t.memo, t.status, t.createdBy,
-                   l.accountId, l.categoryId, l.amount
+                   t.refundKind, l.accountId, l.categoryId, l.amount
               from TransactionLine l
               join l.transaction t
              where l.ledgerId = :ledgerId

@@ -217,7 +217,7 @@ class TransactionReadRaceTest {
     }
 
     private Entry expense(long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, amount, false, "김밥천국", null, null);
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, amount, null, "김밥천국", null, null);
     }
 
     /** 받은 값이나 던진 예외. 실패 메시지에 실제로 받은 답이 보이게 한다. */

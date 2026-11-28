@@ -99,7 +99,7 @@ class TransactionHistoryHttpTest {
         assertThat(items.get(1).get("actor")).isEqualTo(json("{\"id\":\"" + member.getId() + "\",\"displayName\":\""
                 + userService.memberDisplayNames(owner.getId(), ledgerId).get(member.getId()) + "\"}"));
         assertThat(items.get(0).get("changes")).extracting(change -> change.get("field").asString())
-                .containsExactly("type", "occurredOn", "accountId", "categoryId", "amount", "refund", "paidBy", "status");
+                .containsExactly("type", "occurredOn", "accountId", "categoryId", "amount", "paidBy", "status");
         assertThat(items.get(1).get("changes")).isEqualTo(json("[{\"field\":\"amount\",\"before\":12000,\"after\":15000}]"));
         assertThat(items.get(2).get("changes"))
                 .isEqualTo(json("[{\"field\":\"status\",\"before\":\"POSTED\",\"after\":\"CANCELED\"}]"));
@@ -158,7 +158,7 @@ class TransactionHistoryHttpTest {
     }
 
     private Entry expense(UUID id, long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, amount, false, null, null, null);
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, cash, null, amount, null, null, null, null);
     }
 
     private Reply history(UUID ledger, UUID transaction) throws Exception {

@@ -68,7 +68,7 @@ class ChangeLogStoredValueTest {
         TransactionView created = transactionService.create(owner.getId(), ledgerId, expense(12_000), DEVICE);
         flushAndClear();
         TransactionView updated = transactionService.update(member.getId(), id, 1,
-                new Entry(id, TransactionType.EXPENSE, DAY, null, bank, null, 15_000, true, null, null,
+                new Entry(id, TransactionType.EXPENSE, DAY, null, bank, null, 15_000, RefundKind.REFUND, null, null,
                         member.getId()), DEVICE);
         flushAndClear();
         TransactionView canceled = transactionService.cancel(owner.getId(), id, 2, DEVICE);
@@ -80,12 +80,12 @@ class ChangeLogStoredValueTest {
         String afterCreate = """
                 {"id": "%s", "ledgerId": "%s", "type": "EXPENSE", "occurredOn": "2026-11-18",
                  "occurredTime": "07:05:09.12", "payee": "김밥천국", "memo": "점심", "status": "POSTED",
-                 "createdBy": "%s", "paidBy": "%s", "version": 1, "deleted": false,
+                 "createdBy": "%s", "paidBy": "%s", "refundKind": null, "version": 1, "deleted": false,
                  "createdAt": "%s", "updatedAt": "%s",
                  "lines": [{"accountId": "%s", "categoryId": "%s", "amount": -12000}]}
                 """.formatted(id, ledgerId, owner.getId(), owner.getId(), created.createdAt(), created.createdAt(),
                 cash, food);
-        // 고친 뒤로는 시각, 가맹점, 메모가 없고 결제한 사람이 바뀌었다. 환불이라 금액이 양수다.
+        // 고친 뒤로는 시각, 가맹점, 메모가 없고 결제한 사람이 바뀌었다. 환불(REFUND)이라 금액이 양수다.
         String afterUpdate = changed("POSTED", 2, false, updated);
         String afterCancel = changed("CANCELED", 3, false, canceled);
         String afterDelete = changed("CANCELED", 4, true, deleted);
@@ -101,14 +101,14 @@ class ChangeLogStoredValueTest {
     void 없는_값이_가장_많은_수입이_저장한_전후_값() {
         UUID uncategorized = categoryService.uncategorized(ledgerId, CategoryKind.INCOME).getId();
         TransactionView created = transactionService.create(owner.getId(), ledgerId,
-                new Entry(id, TransactionType.INCOME, DAY, null, bank, null, 9_999_999_999L, false, null, null, null),
+                new Entry(id, TransactionType.INCOME, DAY, null, bank, null, 9_999_999_999L, null, null, null, null),
                 DEVICE);
         flushAndClear();
         TransactionView canceled = transactionService.cancel(owner.getId(), id, 1, DEVICE);
 
         String template = """
                 {"id": "%s", "ledgerId": "%s", "type": "INCOME", "occurredOn": "2026-11-18", "occurredTime": null,
-                 "payee": null, "memo": null, "status": "%s", "createdBy": "%s", "paidBy": "%s",
+                 "payee": null, "memo": null, "status": "%s", "createdBy": "%s", "paidBy": "%s", "refundKind": null,
                  "version": %d, "deleted": false, "createdAt": "%s", "updatedAt": "%s",
                  "lines": [{"accountId": "%s", "categoryId": "%s", "amount": 9999999999}]}
                 """;
@@ -129,7 +129,7 @@ class ChangeLogStoredValueTest {
         String template = """
                 {"id": "%s", "ledgerId": "%s", "type": "TRANSFER", "occurredOn": "2026-11-18",
                  "occurredTime": "00:00:00", "payee": null, "memo": "인출", "status": "POSTED",
-                 "createdBy": "%s", "paidBy": null, "version": %d, "deleted": %b,
+                 "createdBy": "%s", "paidBy": null, "refundKind": null, "version": %d, "deleted": %b,
                  "createdAt": "%s", "updatedAt": "%s",
                  "lines": [{"accountId": "%s", "categoryId": null, "amount": -30000},
                            {"accountId": "%s", "categoryId": null, "amount": 30000}]}
@@ -147,7 +147,7 @@ class ChangeLogStoredValueTest {
         String notListed = "my-device-0001";
         transactionService.create(owner.getId(), ledgerId, expense(12_000), DEVICE);
         transactionService.update(member.getId(), id, 1,
-                new Entry(id, TransactionType.EXPENSE, DAY, null, cash, food, 15_000, false, null, null,
+                new Entry(id, TransactionType.EXPENSE, DAY, null, cash, food, 15_000, null, null, null,
                         member.getId()), notListed);
         transactionService.cancel(member.getId(), id, 2, DEVICE);
         transactionService.delete(member.getId(), id, 3, notListed);
@@ -232,7 +232,7 @@ class ChangeLogStoredValueTest {
     }
 
     private Entry expense(long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, LocalTime.parse("07:05:09.120"), cash, food, amount, false,
+        return new Entry(id, TransactionType.EXPENSE, DAY, LocalTime.parse("07:05:09.120"), cash, food, amount, null,
                 "김밥천국", "점심", null);
     }
 
@@ -240,7 +240,7 @@ class ChangeLogStoredValueTest {
         return """
                 {"id": "%s", "ledgerId": "%s", "type": "EXPENSE", "occurredOn": "2026-11-18", "occurredTime": null,
                  "payee": null, "memo": null, "status": "%s", "createdBy": "%s", "paidBy": "%s",
-                 "version": %d, "deleted": %b, "createdAt": "%s", "updatedAt": "%s",
+                 "refundKind": "REFUND", "version": %d, "deleted": %b, "createdAt": "%s", "updatedAt": "%s",
                  "lines": [{"accountId": "%s", "categoryId": "%s", "amount": 15000}]}
                 """.formatted(id, ledgerId, status, owner.getId(), member.getId(), version, deleted,
                 view.createdAt(), view.updatedAt(), bank,

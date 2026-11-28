@@ -151,7 +151,7 @@ class TransactionSearchQueryTest {
 
     private UUID entry(TransactionType type, LocalDate on, long amount, String payee, String memo) {
         return transactionService.create(owner.getId(), ledgerId, new Entry(UUID.randomUUID(), type, on, null, cash,
-                null, amount, false, payee, memo, null), "a-phone").id();
+                null, amount, null, payee, memo, null), "a-phone").id();
     }
 
     private TransactionPage search(String text, LocalDate from, LocalDate to, TransactionFilter filter) {

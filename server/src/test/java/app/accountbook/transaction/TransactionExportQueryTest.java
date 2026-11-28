@@ -206,7 +206,7 @@ class TransactionExportQueryTest {
 
     private UUID expense(LocalDate on, LocalTime at) {
         return transactionService.create(owner.getId(), ledgerId, new Entry(UUID.randomUUID(),
-                TransactionType.EXPENSE, on, at, cash, null, 1_000, false, "가맹점", null, null), DEVICE).id();
+                TransactionType.EXPENSE, on, at, cash, null, 1_000, null, "가맹점", null, null), DEVICE).id();
     }
 
     private List<UUID> ids(LocalDate from, LocalDate to) {

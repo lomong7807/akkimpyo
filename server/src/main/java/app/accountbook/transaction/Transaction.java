@@ -61,6 +61,11 @@ public class Transaction extends BaseEntity {
     @Column(name = "paid_by")
     private UUID paidBy;
 
+    /** 지출의 환불 구분(#8). 일반 지출과 수입·이체는 null이다. 값이 있으면 라인 금액이 양수다. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "refund_kind")
+    private RefundKind refundKind;
+
     @Column(name = "version", nullable = false)
     private long version;
 
@@ -77,7 +82,7 @@ public class Transaction extends BaseEntity {
     }
 
     private Transaction(UUID id, UUID ledgerId, TransactionType type, LocalDate occurredOn, LocalTime occurredTime,
-                        String payee, String memo, UUID createdBy, UUID paidBy) {
+                        String payee, String memo, UUID createdBy, UUID paidBy, RefundKind refundKind) {
         super(id);
         this.ledgerId = ledgerId;
         this.type = type;
@@ -88,14 +93,23 @@ public class Transaction extends BaseEntity {
         this.status = TransactionStatus.POSTED;
         this.createdBy = createdBy;
         this.paidBy = paidBy;
+        this.refundKind = refundKind;
         this.version = INITIAL_VERSION;
         this.updatedAt = getCreatedAt();
     }
 
-    /** 새 거래. status는 POSTED, version은 1이다. 라인은 {@link #addLine}으로 붙인다. */
+    /** 환불 구분이 없는 새 거래. */
     public static Transaction of(UUID id, UUID ledgerId, TransactionType type, LocalDate occurredOn,
                                  LocalTime occurredTime, String payee, String memo, UUID createdBy, UUID paidBy) {
-        return new Transaction(id, ledgerId, type, occurredOn, occurredTime, payee, memo, createdBy, paidBy);
+        return of(id, ledgerId, type, occurredOn, occurredTime, payee, memo, createdBy, paidBy, null);
+    }
+
+    /** 새 거래. status는 POSTED, version은 1이다. 라인은 {@link #addLine}으로 붙인다. */
+    public static Transaction of(UUID id, UUID ledgerId, TransactionType type, LocalDate occurredOn,
+                                 LocalTime occurredTime, String payee, String memo, UUID createdBy, UUID paidBy,
+                                 RefundKind refundKind) {
+        return new Transaction(id, ledgerId, type, occurredOn, occurredTime, payee, memo, createdBy, paidBy,
+                refundKind);
     }
 
     /**
@@ -117,12 +131,13 @@ public class Transaction extends BaseEntity {
     }
 
     public void changeDetails(LocalDate occurredOn, LocalTime occurredTime, String payee, String memo,
-                              UUID paidBy) {
+                              UUID paidBy, RefundKind refundKind) {
         this.occurredOn = occurredOn;
         this.occurredTime = storableTime(occurredTime);
         this.payee = payee;
         this.memo = memo;
         this.paidBy = paidBy;
+        this.refundKind = refundKind;
     }
 
     public void cancel() {
@@ -186,6 +201,10 @@ public class Transaction extends BaseEntity {
 
     public UUID getPaidBy() {
         return paidBy;
+    }
+
+    public RefundKind getRefundKind() {
+        return refundKind;
     }
 
     public long getVersion() {

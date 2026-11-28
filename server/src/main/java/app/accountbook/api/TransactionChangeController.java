@@ -57,7 +57,7 @@ class TransactionChangeController {
         requireInLedger(actorId, ledgerId, transactionId);
         TransactionUpdateRequest.Change change = request.change(transactionId);
         return changed(actorId, ledgerId, () -> transactionService.update(actorId, transactionId, change.version(),
-                change.command(), deviceOf(device)));
+                change.command(), change.keepRefundKind(), deviceOf(device)));
     }
 
     /** 휴지통에 넣는다. 200이고 본문은 바뀐 거래({@code deletedAt}, {@code purgeAt}, version+1)다. 본문은 읽지 않는다. */

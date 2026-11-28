@@ -202,7 +202,7 @@ class DemoSeed implements ApplicationRunner {
         UUID category = Objects.requireNonNull(categories.get(key(kind, sample.category())),
                 () -> "기본 카테고리에 없는 이름: " + kind + " " + sample.category());
         return new TransactionCommand.Entry(UUID.randomUUID(), sample.type(), sample.date(today), null, account,
-                category, sample.amount(), false, sample.text(), null, null);
+                category, sample.amount(), null, sample.text(), null, null);
     }
 
     private static String key(CategoryKind kind, String name) {

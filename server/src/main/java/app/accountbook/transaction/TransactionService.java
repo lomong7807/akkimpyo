@@ -121,7 +121,7 @@ public class TransactionService {
     private CreateResult judgeAndCreate(UUID actorId, UUID ledgerId, TransactionCommand cmd, String deviceId) {
         ledgerAccess.requireMember(actorId, ledgerId);
         DeviceIds.requireValidFormat(deviceId);
-        Content content = normalize(ledgerId, cmd, actorId);
+        Content content = normalize(ledgerId, cmd, actorId, null);
         // 판정은 한 시점에 읽은 거래 전체로 한다(#202). 그 시점에 이미 완전히 지워졌으면 아래의 기록 확인이 거부한다.
         Optional<Transaction> existing = transactionRepository.findWithLinesById(content.id());
         if (existing.isPresent()) {
@@ -130,7 +130,8 @@ public class TransactionService {
         requireNotPurged(content.id());
         requireReferences(ledgerId, cmd, Set.of());
         Transaction tx = Transaction.of(content.id(), ledgerId, content.type(), content.occurredOn(),
-                content.occurredTime(), content.payee(), content.memo(), actorId, content.paidBy());
+                content.occurredTime(), content.payee(), content.memo(), actorId, content.paidBy(),
+                content.refundKind());
         content.lines().forEach(line -> tx.addLine(line.accountId(), line.categoryId(), line.amount()));
         // 바로 flush해서 기본키 위반을 다른 오류와 섞이기 전에 받는다.
         transactionRepository.saveAndFlush(tx);
@@ -156,6 +157,7 @@ public class TransactionService {
 
     /**
      * 내용과 라인을 통째로 바꾼다. 거래 종류는 바꿀 수 없다. paidBy가 null이면 기존 값을 유지한다.
+     * 환불 구분은 명령의 값이 그대로 저장할 값이다(null이면 일반 지출).
      *
      * <p>검사 순서(#36): 구성원 → 형식(기기 값, 입력란, 종류) → version → 상태(휴지통) → 참조 → 저장. 만들기와 같은 형식
      * 검증이다. 값 맞추기를 거친 내용이 저장된 것과 같으면 바꾸지 않고(version 그대로, 이력 없음) 지금 거래를 돌려준다.
@@ -164,9 +166,20 @@ public class TransactionService {
     @Transactional
     public TransactionView update(UUID actorId, UUID txId, long expectedVersion, TransactionCommand cmd,
                                   String deviceId) {
+        return update(actorId, txId, expectedVersion, cmd, false, deviceId);
+    }
+
+    /**
+     * {@link #update}와 같다. {@code keepRefundKind}이면 지출 명령의 환불 구분이 null일 때 저장된 값을 유지한다
+     * (요청 본문에 {@code refundKind}가 빠진 고치기, #102 계약. paidBy와 같은 규칙).
+     */
+    @Transactional
+    public TransactionView update(UUID actorId, UUID txId, long expectedVersion, TransactionCommand cmd,
+                                  boolean keepRefundKind, String deviceId) {
         Transaction tx = loadAccessible(actorId, txId);
         DeviceIds.requireValidFormat(deviceId);
-        Content content = normalize(tx.getLedgerId(), cmd, tx.getPaidBy());
+        Content content = normalize(tx.getLedgerId(), cmd, tx.getPaidBy(),
+                keepRefundKind ? tx.getRefundKind() : null);
         if (!tx.getId().equals(content.id())) {
             throw new InvalidRequestException("id", FieldErrorCode.NOT_ALLOWED, "요청의 거래 id가 수정 대상과 다릅니다.");
         }
@@ -181,7 +194,7 @@ public class TransactionService {
         }
         return write(tx, expectedVersion, ChangeAction.UPDATE, actorId, deviceId, now -> {
             tx.changeDetails(content.occurredOn(), content.occurredTime(), content.payee(), content.memo(),
-                    content.paidBy());
+                    content.paidBy(), content.refundKind());
             tx.clearLines();
             content.lines().forEach(line -> tx.addLine(line.accountId(), line.categoryId(), line.amount()));
         });
@@ -356,19 +369,19 @@ public class TransactionService {
     /**
      * 형식 검증(필수 항목, 형식, 범위)과 비교 전의 값 맞추기. 계좌와 카테고리가 장부에 있는지는 보지 않는다.
      * 가맹점과 메모의 글자 규칙(P-214, {@link UserText})도 여기서 본다. 같은 id 조회보다 앞이다(ADR 006 결정 4).
-     * 돌려주는 값은 저장할 내용이고 재전송 비교에도 쓴다.
+     * 돌려주는 값은 저장할 내용이고 재전송 비교에도 쓴다. {@code keptRefundKind}는 지출 명령에 환불 구분이 없을 때 쓸 값이다.
      */
-    private Content normalize(UUID ledgerId, TransactionCommand cmd, UUID defaultPaidBy) {
+    private Content normalize(UUID ledgerId, TransactionCommand cmd, UUID defaultPaidBy, RefundKind keptRefundKind) {
         return switch (cmd) {
             case null -> throw new InvalidRequestException(InvalidRequestException.WHOLE_BODY, FieldErrorCode.REQUIRED,
                     "거래 정보가 없습니다.");
-            case Entry entry -> normalizeEntry(ledgerId, entry, defaultPaidBy);
+            case Entry entry -> normalizeEntry(ledgerId, entry, defaultPaidBy, keptRefundKind);
             case Transfer transfer -> normalizeTransfer(ledgerId, transfer);
         };
     }
 
-    /** 라인 부호: 지출 -amount, 환불(지출) +amount, 수입 +amount. 카테고리가 없으면 미분류. */
-    private Content normalizeEntry(UUID ledgerId, Entry entry, UUID defaultPaidBy) {
+    /** 라인 부호: 지출 -amount, 환불·돌려받음(지출) +amount, 수입 +amount. 카테고리가 없으면 미분류. */
+    private Content normalizeEntry(UUID ledgerId, Entry entry, UUID defaultPaidBy, RefundKind keptRefundKind) {
         requireHeader(entry.id(), entry.occurredOn());
         requireDateInRange(ledgerId, entry.occurredOn());
         if (entry.type() == null) {
@@ -378,9 +391,13 @@ public class TransactionService {
             throw new InvalidRequestException("type", FieldErrorCode.NOT_ALLOWED, "지출 또는 수입만 입력할 수 있습니다.");
         }
         TransactionLimits.requireAmountInRange(entry.amount());
-        if (entry.refund() && entry.type() == TransactionType.INCOME) {
-            throw new InvalidRequestException("refund", FieldErrorCode.NOT_ALLOWED, "환불은 지출에만 표시할 수 있습니다.");
+        if (entry.refundKind() != null && entry.type() == TransactionType.INCOME) {
+            throw new InvalidRequestException("refundKind", FieldErrorCode.NOT_ALLOWED,
+                    "환불·돌려받음은 지출에만 표시할 수 있습니다.");
         }
+        RefundKind refundKind = entry.refundKind() != null || entry.type() != TransactionType.EXPENSE
+                ? entry.refundKind()
+                : keptRefundKind;
         String payee = UserText.payee(entry.payee(), PAYEE_MAX_LENGTH);
         String memo = UserText.memo(entry.memo(), MEMO_MAX_LENGTH);
         requireAccountGiven("accountId", entry.accountId());
@@ -388,10 +405,10 @@ public class TransactionService {
                 ? categoryService.uncategorized(ledgerId, categoryKind(entry)).getId()
                 : entry.categoryId();
         UUID paidBy = entry.paidBy() == null ? defaultPaidBy : entry.paidBy();
-        boolean increasesBalance = entry.type() == TransactionType.INCOME || entry.refund();
+        boolean increasesBalance = entry.type() == TransactionType.INCOME || refundKind != null;
         long amount = increasesBalance ? entry.amount() : -entry.amount();
         return new Content(entry.id(), entry.type(), entry.occurredOn(),
-                Transaction.storableTime(entry.occurredTime()), payee, memo, paidBy,
+                Transaction.storableTime(entry.occurredTime()), payee, memo, paidBy, refundKind,
                 List.of(new Line(entry.accountId(), categoryId, amount)));
     }
 
@@ -407,7 +424,7 @@ public class TransactionService {
             throw new InvalidRequestException("toAccountId", FieldErrorCode.NOT_ALLOWED, "같은 계좌로는 이체할 수 없습니다.");
         }
         return new Content(transfer.id(), TransactionType.TRANSFER, transfer.occurredOn(),
-                Transaction.storableTime(transfer.occurredTime()), null, memo, null,
+                Transaction.storableTime(transfer.occurredTime()), null, memo, null, null,
                 List.of(new Line(transfer.fromAccountId(), null, -transfer.amount()),
                         new Line(transfer.toAccountId(), null, transfer.amount())));
     }
@@ -495,7 +512,7 @@ public class TransactionService {
 
     /** 형식 검증을 지난 요청의 저장 내용. 재전송 비교에도 쓴다. */
     private record Content(UUID id, TransactionType type, LocalDate occurredOn, LocalTime occurredTime,
-                           String payee, String memo, UUID paidBy, List<Line> lines) {
+                           String payee, String memo, UUID paidBy, RefundKind refundKind, List<Line> lines) {
 
         /**
          * 저장된 거래를 요청과 같은 값 맞추기(P-214)에 통과시킨 내용. 이 규칙 전에 다듬지 않고 저장된 가맹점과 메모
@@ -504,10 +521,10 @@ public class TransactionService {
         static Content of(Transaction tx) {
             return new Content(tx.getId(), tx.getType(), tx.getOccurredOn(), tx.getOccurredTime(),
                     UserText.comparablePayee(tx.getPayee()), UserText.comparableMemo(tx.getMemo()), tx.getPaidBy(),
-                    tx.getLines().stream().map(Line::of).toList());
+                    tx.getRefundKind(), tx.getLines().stream().map(Line::of).toList());
         }
 
-        /** 같은 내용: type, 날짜, 시각, payee, memo, paidBy와 라인 (계좌, 카테고리, 금액)의 다중집합이 같다. */
+        /** 같은 내용: type, 날짜, 시각, payee, memo, paidBy, 환불 구분과 라인 (계좌, 카테고리, 금액)의 다중집합이 같다. */
         boolean sameAs(Content other) {
             return type == other.type
                     && Objects.equals(occurredOn, other.occurredOn)
@@ -515,6 +532,7 @@ public class TransactionService {
                     && Objects.equals(payee, other.payee)
                     && Objects.equals(memo, other.memo)
                     && Objects.equals(paidBy, other.paidBy)
+                    && refundKind == other.refundKind
                     && lineCounts().equals(other.lineCounts());
         }
 

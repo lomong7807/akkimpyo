@@ -181,7 +181,7 @@ class CrossLedgerAccessTest {
         bSpare = category(b, ledgerB, "B안쓰는분류", CategoryKind.EXPENSE, null);
         bUncategorized = categoryService.uncategorized(ledgerB, CategoryKind.EXPENSE).getId();
         bExpense = transactionService.create(b, ledgerB, new Entry(UUID.randomUUID(), TransactionType.EXPENSE,
-                DAY, null, bBank, bLunch, 73_100, false, "B단골식당", "B의메모", null), DEVICE);
+                DAY, null, bBank, bLunch, 73_100, null, "B단골식당", "B의메모", null), DEVICE);
         bTransfer = fixtures.transfer(userB, ledgerB, bBank, bCash, DAY, 41_700);
         bDeleted = fixtures.delete(userB, fixtures.expense(userB, ledgerB, bBank, bFood, DAY, 58_300));
         bCanceled = fixtures.cancel(userB, fixtures.expense(userB, ledgerB, bBank, bFood, DAY, 66_900));
@@ -443,7 +443,7 @@ class CrossLedgerAccessTest {
                 foreign("생성: A의 지출에 결제한 사람으로 B", invalid, b, a,
                         (actor, payer) -> transactionService.create(actor, ledgerA,
                                 new Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null, aBank, aFood, 1_000,
-                                        false, null, null, payer), DEVICE)),
+                                        null, null, null, payer), DEVICE)),
                 foreign("생성: A의 카테고리의 상위로 B의 카테고리", invalid, bFood, aFood,
                         (actor, parent) -> categoryService.create(actor, ledgerA,
                                 new CategoryCommand("A하위", CategoryKind.EXPENSE, parent))),
@@ -714,7 +714,7 @@ class CrossLedgerAccessTest {
     }
 
     static TransactionCommand entry(UUID id, UUID accountId, UUID categoryId, long amount) {
-        return new Entry(id, TransactionType.EXPENSE, DAY, null, accountId, categoryId, amount, false, null, null,
+        return new Entry(id, TransactionType.EXPENSE, DAY, null, accountId, categoryId, amount, null, null, null,
                 null);
     }
 

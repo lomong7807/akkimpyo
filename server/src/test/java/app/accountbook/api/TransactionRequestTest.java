@@ -3,7 +3,9 @@ package app.accountbook.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
+import app.accountbook.api.TransactionUpdateRequest.Change;
 import app.accountbook.common.InvalidRequestException;
+import app.accountbook.transaction.RefundKind;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionCommand.Entry;
 import app.accountbook.transaction.TransactionCommand.Transfer;
@@ -43,7 +45,7 @@ class TransactionRequestTest {
         TransactionCommand command = read(fields).command();
 
         assertThat(command).isEqualTo(new Entry(ID, TransactionType.EXPENSE, LocalDate.of(2026, 11, 18),
-                LocalTime.of(8, 5), ACCOUNT, OTHER_ACCOUNT, 12_000, false, "김밥천국", "점심", null));
+                LocalTime.of(8, 5), ACCOUNT, OTHER_ACCOUNT, 12_000, null, "김밥천국", "점심", null));
     }
 
     @Test
@@ -76,7 +78,7 @@ class TransactionRequestTest {
         fields.put("memo", OMIT);
 
         assertThat(read(fields).command()).isEqualTo(new Entry(ID, TransactionType.EXPENSE,
-                LocalDate.of(2026, 11, 18), null, ACCOUNT, null, 12_000, false, null, null, null));
+                LocalDate.of(2026, 11, 18), null, ACCOUNT, null, 12_000, null, null, null, null));
     }
 
     @ParameterizedTest(name = "{0} = {1} → {2}")
@@ -112,12 +114,59 @@ class TransactionRequestTest {
             amount        | 99999999999999999999             | OUT_OF_RANGE
             payee         | 1                                | INVALID_FORMAT
             memo          | {}                               | INVALID_FORMAT
+            refundKind    | "refund"                         | INVALID_FORMAT
+            refundKind    | ""                               | INVALID_FORMAT
+            refundKind    | true                             | INVALID_FORMAT
+            refundKind    | 1                                | INVALID_FORMAT
             """)
     void 지출의_한_칸을_읽을_수_없으면_그_칸의_이유다(String field, String value, String code) {
         Map<String, String> fields = expense();
         fields.put(field, value);
 
         assertRejected(json(fields), field + ":" + code);
+    }
+
+    @ParameterizedTest(name = "{0} → {1}")
+    @CsvSource(delimiterString = "|", textBlock = """
+            "REFUND"        | REFUND
+            "REIMBURSEMENT" | REIMBURSEMENT
+            null            |
+            (빠짐)          |
+            """)
+    void 지출의_refundKind는_이름이_같은_값이고_빠지거나_null이면_일반_지출이다(String value, RefundKind expected) {
+        Map<String, String> fields = expense();
+        fields.put("refundKind", value);
+
+        assertThat(((Entry) read(fields).command()).refundKind()).isEqualTo(expected);
+    }
+
+    @Test
+    void 수입과_이체에_refundKind가_있으면_NOT_ALLOWED다() {
+        Map<String, String> income = expense();
+        income.put("type", "\"INCOME\"");
+        income.put("refundKind", "\"REFUND\"");
+        Map<String, String> transfer = transfer();
+        transfer.put("refundKind", "\"REIMBURSEMENT\"");
+
+        assertRejected(json(income), "refundKind:NOT_ALLOWED");
+        assertRejected(json(transfer), "refundKind:NOT_ALLOWED");
+        income.put("refundKind", "null");
+        assertThat(((Entry) read(income).command()).refundKind()).isNull();
+    }
+
+    /** 고치기만 빠진 칸과 null이 다르다(#102 계약). */
+    @Test
+    void 고치기는_refundKind가_빠지면_저장된_값을_유지하고_null이나_값이면_그대로_바꾼다() {
+        String body = "{\"type\":\"EXPENSE\",\"occurredOn\":\"2026-11-18\",\"accountId\":" + quoted(ACCOUNT)
+                + ",\"amount\":12000,\"version\":3";
+
+        assertThat(change(body + "}").keepRefundKind()).isTrue();
+        Change cleared = change(body + ",\"refundKind\":null}");
+        assertThat(cleared.keepRefundKind()).isFalse();
+        assertThat(((Entry) cleared.command()).refundKind()).isNull();
+        Change set = change(body + ",\"refundKind\":\"REIMBURSEMENT\"}");
+        assertThat(set.keepRefundKind()).isFalse();
+        assertThat(((Entry) set.command()).refundKind()).isEqualTo(RefundKind.REIMBURSEMENT);
     }
 
     @ParameterizedTest(name = "{0} = {1} → {2}")
@@ -151,6 +200,10 @@ class TransactionRequestTest {
         assertThat(e).as(json).isNotNull();
         assertThat(e.errors()).extracting(error -> error.field() + ":" + error.code())
                 .containsExactlyInAnyOrder(expected);
+    }
+
+    private static Change change(String json) {
+        return JSON.readValue(json, TransactionUpdateRequest.class).change(ID);
     }
 
     private static TransactionRequest read(Map<String, String> fields) {

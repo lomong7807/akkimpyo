@@ -89,6 +89,20 @@ class MonthlyStatsQueryTest {
                 new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 10_000));
     }
 
+    /** 돌려받음은 환불과 같이 그 카테고리의 지출을 줄이고 수입에 들지 않는다(P-210, #8). */
+    @Test
+    void monthly_reimbursementReducesExpenseAndIsNotIncome() {
+        fixtures.expense(owner, ledgerId, cash.getId(), food.getId(), NOV_18, 12_000);
+        fixtures.reimbursement(owner, ledgerId, cash.getId(), food.getId(), NOV_18, 8_000);
+
+        MonthlySummary summary = november();
+
+        assertThat(summary.expense()).isEqualTo(4_000);
+        assertThat(summary.income()).isZero();
+        assertThat(summary.categories()).containsExactly(
+                new CategoryTotal(food.getId(), CategoryKind.EXPENSE, 4_000));
+    }
+
     @Test
     void monthly_includesTransactionsBeforeOpeningDate() {
         Account late = fixtures.account(owner, ledgerId, "새 카드", AccountType.CARD, 0, LocalDate.of(2026, 11, 10));

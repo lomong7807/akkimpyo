@@ -143,7 +143,7 @@ class DisplayNameChangeTest {
         UUID inShared = fixtures.expense(me, shared, sharedCash, null, DAY, 2_000).id();
         UUID paidByMe = transactionService.create(other.getId(), shared,
                 new TransactionCommand.Entry(UUID.randomUUID(), TransactionType.EXPENSE, DAY, null, sharedCash, null,
-                        3_000, false, null, null, me.getId()), "test-device").id();
+                        3_000, null, null, null, me.getId()), "test-device").id();
 
         assertThat(change(body("바뀐 이름")).status()).isEqualTo(200);
 

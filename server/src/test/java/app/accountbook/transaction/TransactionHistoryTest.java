@@ -85,13 +85,13 @@ class TransactionHistoryTest {
     }
 
     @Test
-    void 새_이력의_형식_버전은_1이다() {
+    void 새_이력의_형식_버전은_2이다() {
         create(id);
         transactionService.cancel(owner, id, 1, DEVICE);
         flushAndClear();
 
         assertThat(jdbc.queryForList("select format_version from change_log where transaction_id = ?", Integer.class,
-                id)).containsExactly(1, 1);
+                id)).containsExactly(2, 2);
     }
 
     /** 탈퇴한 사람의 자리와 서버가 한 일은 비어 있다(ADR 007 결정 5, 6). */
@@ -196,7 +196,7 @@ class TransactionHistoryTest {
     }
 
     private Entry expense(UUID txId, long amount) {
-        return new Entry(txId, TransactionType.EXPENSE, DAY, null, cash, null, amount, false, "김밥천국", null, null);
+        return new Entry(txId, TransactionType.EXPENSE, DAY, null, cash, null, amount, null, "김밥천국", null, null);
     }
 
     /** 전체 복원 절차가 하는 일(ADR 008 결정 10). 이력은 남기지 않는다. */
