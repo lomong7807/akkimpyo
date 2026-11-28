@@ -43,7 +43,8 @@ record ExportRequest(Format format, LocalDate from, LocalDate to) {
         return new ExportRequest(chosen.orElseThrow(), start.orElseThrow(), end.orElseThrow());
     }
 
-    private static Optional<LocalDate> date(String field, String text, List<InvalidRequestException> errors) {
+    /** 날짜 하나. 거래 검색(#64)의 기간도 같은 형식과 범위다. 틀리면 그 입력란의 오류를 더하고 비어 있다. */
+    static Optional<LocalDate> date(String field, String text, List<InvalidRequestException> errors) {
         Optional<LocalDate> parsed = text == null ? Optional.empty() : TransactionListRequest.date(text);
         if (parsed.isEmpty()) {
             errors.add(new InvalidRequestException(field,
