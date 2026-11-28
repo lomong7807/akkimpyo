@@ -30,7 +30,7 @@ dependencies {
     // access token(JWT)의 서명과 검증. 리소스 서버 스타터는 쓰지 않는다(공개 주소를 스스로 연다, ADR 001·#12).
     implementation 'org.springframework.security:spring-security-oauth2-jose'
     // 장부 거래 내보내기의 엑셀(xlsx) 쓰기(#57). 쓰기 artifact만 쓴다(읽기인 fastexcel-reader는 넣지 않는다).
-    implementation 'org.dhatim:fastexcel:0.20.2'
+    implementation 'org.dhatim:fastexcel:0.20.3'
     runtimeOnly 'org.postgresql:postgresql'
     // Argon2PasswordEncoder가 실행할 때 요구한다. Spring Boot가 버전을 관리하지 않아 직접 적는다.
     runtimeOnly 'org.bouncycastle:bcprov-jdk18on:1.87'
