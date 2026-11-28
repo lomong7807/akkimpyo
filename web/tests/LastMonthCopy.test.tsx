@@ -1,6 +1,6 @@
 import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import { HttpResponse } from 'msw'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { delayed, meOf, type Backend } from './support/backend'
 import { nowOnDevice, setDeviceClock } from './support/clock'
 import { goOffline } from './support/connection'
@@ -62,26 +62,35 @@ const lastMonthOf = async (userId = 'user-1') => (await ledgerCopy(userId, LEDGE
 
 const payees = async () => (await lastMonthOf())?.data.items.map(({ payee }) => payee)
 
-/**
- * 앱이 최근 한 달의 첫 쪽(장부 전체, 50건)을 보낼 때까지 기다린다. 받는 코드는 따로 싣는다(fetchLastMonth, #238).
- * 그 조각이 오기 전에 기기를 읽으면(ledgerCopy가 모듈을 새로 불러온다) 늦게 온 조각이 새로 불러온 모듈과 이어져 이 탭의
- * 로그인을 모른다(테스트에서만 생기는 일, #355에서 그 조각이 커져 드러났다).
- */
-const untilLastMonthRequested = () =>
-  waitFor(() => expect(list.requests.some((sent) => sent.month === null && sent.limit === '50')).toBe(true))
-
 describe('남기는 때', () => {
   it('홈을 열면 오늘을 포함한 지난 31일을 받아 그 사용자·장부의 사본으로 남기고 받은 시각을 적는다', async () => {
     list.months.set('2026-11', [spend('2026-11-26', '오늘'), spend('2026-11-01', '이달 초')])
     list.months.set('2026-10', [spend('2026-10-27', '31일째'), spend('2026-10-26', '32일째')])
     await openHome()
-    await untilLastMonthRequested()
     await waitFor(async () => expect(await payees()).toEqual(['오늘', '이달 초', '31일째']))
     const kept = (await lastMonthOf())!
     expect(kept.data.from).toBe('2026-10-27')
     expect(kept.data.to).toBe('2026-11-26')
     expect(kept.data.months.map(({ month }) => month)).toEqual(['2026-10', '2026-11'])
     expect(kept.receivedAt).toBe(nowOnDevice())
+  })
+
+  it('받는 코드(따로 싣는 조각)가 홈을 그린 뒤에 와도 그 탭의 로그인으로 받아 남긴다(#292)', async () => {
+    // 조각을 붙잡아 두고 그동안 기기의 사본을 읽어, 부하로 조각이 홈 제목보다 늦게 오는 때를 매번 만든다. 사본을 읽는 도우미가
+    // 앱이 열린 뒤에 앱 모듈을 다시 읽으면(vi.resetModules) 늦게 온 조각이 화면과 다른 모듈(토큰이 없는 세션)과 이어져 받기를
+    // 보내지 않는다(support/device)
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    vi.doMock('../src/features/transactions/fetchLastMonth', async (importOriginal) => {
+      await gate
+      return importOriginal()
+    })
+    onTestFinished(() => void vi.doUnmock('../src/features/transactions/fetchLastMonth'))
+    list.months.set('2026-11', [spend('2026-11-26', '오늘')])
+    await openHome()
+    expect(await lastMonthOf()).toBeUndefined()
+    await act(async () => release())
+    await waitFor(async () => expect(await payees()).toEqual(['오늘']))
   })
 
   it.each([
@@ -95,7 +104,6 @@ describe('남기는 때', () => {
     setDeviceClock('2026-11-26T23:30:00Z', timeZone)
     list.months.set('2026-11', [spend('2026-11-26', '26일')])
     await openHome()
-    await untilLastMonthRequested()
     await waitFor(async () => expect((await lastMonthOf())?.data.to).toBe(to))
     expect((await lastMonthOf())!.data.from).toBe(from)
     expect(await payees()).toEqual(['26일'])
@@ -112,7 +120,6 @@ describe('남기는 때', () => {
     )
     list.months.set('2026-11', [spend('2026-11-26', '새로 받음')])
     await openHome()
-    await untilLastMonthRequested()
     await waitFor(async () => expect(await payees()).toEqual(['새로 받음']))
   })
 
@@ -156,7 +163,6 @@ describe('남기는 때', () => {
   it('사본을 읽기만 하고 다시 쓰지 않는다: 새 사본을 남겨 읽어 둔 사본을 다시 읽어도 받기와 쓰기가 이어지지 않는다', async () => {
     list.months.set('2026-11', [spend('2026-11-26', '오늘')])
     await openHome()
-    await untilLastMonthRequested()
     await waitFor(async () => expect(await payees()).toEqual(['오늘']))
     const receivedAt = (await lastMonthOf())!.receivedAt
     const requests = list.requests.length
