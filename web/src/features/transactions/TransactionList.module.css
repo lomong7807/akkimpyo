@@ -210,6 +210,17 @@
   column-gap: var(--space-12);
 }
 
+/* 휴대폰 배치에서는 덩어리 없이 제목, 금액, 둘째 줄 차례로 놓는다. 둘째 줄은 제목과 금액 아래 한 줄을 다 쓴다 */
+.lead {
+  display: contents;
+}
+
+.lead .detail {
+  flex-basis: 100%;
+  order: 1;
+  min-width: 0;
+}
+
 .title {
   flex: 1 1 50%;
   min-width: 0;
@@ -232,6 +243,27 @@
   font: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * 넓은 화면 내역은 카테고리·계좌를 가맹점 옆에 둔다(D-01 넓은 화면). 가맹점이 길어 한 줄에 안 들어가면 다음 줄로 내리고,
+ * 금액은 첫 줄 오른쪽 끝에 남는다. 덩어리는 휴대폰 배치의 제목처럼 줄의 절반보다 좁아지면 금액을 다음 줄로 내린다.
+ */
+@media (width >= 1024px) {
+  .history .lead {
+    display: flex;
+    flex: 1 1 50%;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--space-12);
+    min-width: 0;
+  }
+
+  .history .title,
+  .history .detail {
+    flex: 0 1 auto;
+    order: 0;
+  }
 }
 
 /* 뼈대의 막대는 폭을 줄의 비율로 정한다 */

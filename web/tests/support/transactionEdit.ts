@@ -72,8 +72,11 @@ export const detailPath = (item: Item) => `/transactions/${String(item.id)}`
 export const editPath = (item: Item) => `${detailPath(item)}/edit`
 export const pathOf = ({ router }: Opened) => router.state.location.pathname
 export const toastText = () => document.querySelector('[class*="region"]')?.textContent ?? ''
-/** 상세의 상단 바에 있는 "수정" */
-export const editLink = () => within(screen.getByRole('banner')).queryByRole('link', { name: '수정' })
+/** 상세의 상단 바에 있는 "수정". 넓은 화면에서는 내역 오른쪽 칸(거래 상세 영역)의 머리에 있다(#244) */
+export const editLink = () =>
+  within(screen.queryByRole('region', { name: '거래 상세' }) ?? screen.getByRole('banner')).queryByRole('link', {
+    name: '수정',
+  })
 /** 상세의 항목 줄 [이름, 값] */
 export const detailItems = () =>
   [...screen.getByRole('main').querySelectorAll('dl > div')].map((row) => [
@@ -98,7 +101,8 @@ export async function untilEditForm() {
 
 /** 상세가 그려질 때까지 기다린다. */
 export async function untilDetail() {
-  await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('거래 상세'))
+  // 넓은 화면에서는 내역 오른쪽 칸의 화면이라 제목이 h2다(#244)
+  await waitFor(() => expect(screen.getByRole('heading', { name: '거래 상세' })).toBeTruthy())
   await waitFor(() => expect(within(screen.getByRole('main')).queryByText('작성자')).toBeTruthy())
 }
 

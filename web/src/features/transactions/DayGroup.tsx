@@ -24,11 +24,16 @@ interface DayGroupProps {
   names: NameBook
   /** 강조할 거래 id */
   highlighted?: string
+  /** 넓은 화면 오른쪽 칸에 상세를 연 거래 id(D-01 (13)). 지금 것으로 표시하고 면 색으로 칠한다 */
+  selected?: string
+  /** 줄을 눌러도 스크롤을 맨 위로 옮기지 않는다. 목록이 그대로 남는 두 칸 화면이 쓴다 */
+  preventScrollReset?: boolean
   /** 날짜 머리의 제목 단계. 화면 이름(h1) 바로 아래면 2, 구역 제목(h2) 아래면 3이다. 모양은 같다. */
   headingLevel: 2 | 3
 }
 
-export function DayGroup({ date, today, total, items, names, highlighted, headingLevel }: DayGroupProps) {
+export function DayGroup(props: DayGroupProps) {
+  const { date, today, total, items, names, highlighted, selected, preventScrollReset, headingLevel } = props
   const headingId = useId()
   const Heading = `h${headingLevel}` as const
   return (
@@ -49,6 +54,8 @@ export function DayGroup({ date, today, total, items, names, highlighted, headin
               names={names}
               dateId={headingId}
               highlighted={item.id === highlighted}
+              selected={item.id === selected}
+              preventScrollReset={preventScrollReset}
             />
           ))}
         </ul>
@@ -93,6 +100,8 @@ interface TransactionRowProps {
   /** 날짜 묶음 머리의 id. 링크 이름에 날짜를 넣는다. */
   dateId: string
   highlighted: boolean
+  selected: boolean
+  preventScrollReset: boolean | undefined
 }
 
 /**
@@ -101,8 +110,9 @@ interface TransactionRowProps {
  * 기기에 쌓여 아직 서버에 없는 줄은 셋째 줄에 표시 칩 "보내지 않음"을 붙이고(C-01 (10), D-01 (11)), 서버가 거부한 줄은 그 자리에
  * 오류 칩 "보낼 수 없음"을 붙인다(D-01 (11), designer #235 Q2). 칩은 "취소"와 같은 자리다(0.4, designer #234 B). 이 줄은 서버에
  * 없어 상세를 열 수 없으므로 누르면 보내지 않은 입력 목록(B-05)으로 간다(0.4, C-01 (10), 작성자 판단 42, #236).
+ * 제목과 둘째 줄은 한 덩어리(lead)다. 휴대폰 배치는 둘째 줄이 금액 아래로 내려가고, 넓은 화면 내역은 제목 옆에 둔다(D-01 넓은 화면).
  */
-function TransactionRow({ transaction, names, dateId, highlighted }: TransactionRowProps) {
+function TransactionRow({ transaction, names, dateId, highlighted, selected, preventScrollReset }: TransactionRowProps) {
   const id = useId()
   const title = titleOf(transaction, names)
   const detail = detailOf(transaction, names)
@@ -119,7 +129,7 @@ function TransactionRow({ transaction, names, dateId, highlighted }: Transaction
     .filter(Boolean)
     .join(' ')
 
-  const className = highlighted ? `${styles.row} ${styles.highlighted}` : styles.row
+  const className = highlighted || selected ? `${styles.row} ${styles.highlighted}` : styles.row
   const content = (
     <>
       <span id={`${id}-time`} className={`${styles.time} tabular-nums`}>
@@ -127,18 +137,20 @@ function TransactionRow({ transaction, names, dateId, highlighted }: Transaction
       </span>
       <span className={styles.body}>
         <span className={styles.first}>
-          <span id={`${id}-title`} className={styles.title}>
-            {title}
+          <span className={styles.lead}>
+            <span id={`${id}-title`} className={styles.title}>
+              {title}
+            </span>
+            {detail && (
+              <span id={`${id}-detail`} className={styles.detail}>
+                {detail}
+              </span>
+            )}
           </span>
           <span id={`${id}-amount`} className={styles.amount}>
             <Amount kind={amountKinds[transaction.type]} value={transaction.amount} canceled={canceled} />
           </span>
         </span>
-        {detail && (
-          <span id={`${id}-detail`} className={styles.detail}>
-            {detail}
-          </span>
-        )}
         {canceled && (
           <span id={`${id}-status`} className={styles.status}>
             <StatusChip>취소</StatusChip>
@@ -158,6 +170,8 @@ function TransactionRow({ transaction, names, dateId, highlighted }: Transaction
         to={transaction.pending ? PENDING_PATH : `/transactions/${transaction.id}`}
         className={className}
         aria-labelledby={labelledBy}
+        aria-current={selected ? 'page' : undefined}
+        preventScrollReset={preventScrollReset}
       >
         {content}
       </Link>

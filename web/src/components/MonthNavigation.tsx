@@ -49,7 +49,8 @@ export default function MonthNavigation({
       <span>
         {month > first && <Button ref={previous} kind="icon" icon={CaretLeft} aria-label="이전 달" onClick={() => move(-1)} />}
       </span>
-      <Heading id={headingId} className={`${styles.month} tabular-nums`} aria-live="polite">
+      {/* 초점을 받을 수 있게 둔다. 넓은 화면 내역에서 오른쪽 칸의 거래를 지웠는데 남은 줄이 없으면 여기로 옮긴다(D-01 (13)) */}
+      <Heading id={headingId} tabIndex={-1} className={`${styles.month} tabular-nums`} aria-live="polite">
         {label}
       </Heading>
       <span>

@@ -1,10 +1,11 @@
-import { use, type ReactNode } from 'react'
+import { use, useId, type ReactNode } from 'react'
 import { Button } from './Button'
 import layout from './layout.module.css'
 import { CaretLeft } from './icons'
 import { LedgerNameContext } from './LedgerNameContext'
 import { SCREEN_TITLE_ID } from './screenTitle'
 import { ShellContext } from './ShellContext'
+import { InPaneContext, SidePaneContext } from './sidePane'
 import { useGoBack } from './useGoBack'
 import styles from './Screen.module.css'
 
@@ -18,7 +19,6 @@ interface MainScreenProps {
 export function MainScreen({ children, fullWidth = false }: MainScreenProps) {
   const ledgerName = use(LedgerNameContext)
   const { band, syncStatus } = use(ShellContext)
-  const width = fullWidth ? `${layout.contentWidth} ${layout.fullWidth}` : layout.contentWidth
   return (
     <>
       <header className={`${layout.contentWidth} ${styles.topBar} ${styles.ledgerBar}`}>
@@ -26,7 +26,7 @@ export function MainScreen({ children, fullWidth = false }: MainScreenProps) {
         {syncStatus && <div className={styles.sync}>{syncStatus}</div>}
       </header>
       {band}
-      <main className={`${width} ${styles.content}`}>{children}</main>
+      <Content fullWidth={fullWidth}>{children}</Content>
     </>
   )
 }
@@ -43,11 +43,52 @@ interface TitleBarProps {
 
 /** 하위 화면: 목록에서 들어간 상세, 설정, 관리 화면. 상단 바에 "뒤로"와 화면 이름을 둔다. */
 export function SubScreen({ children, ...titleBarProps }: TitleBarProps & { children: ReactNode }) {
+  const inPane = use(InPaneContext)
+  const split = use(SidePaneContext) !== undefined
+  if (inPane) {
+    return (
+      <PaneScreen title={titleBarProps.title} action={titleBarProps.action}>
+        {children}
+      </PaneScreen>
+    )
+  }
+  // 두 칸 화면이면 이름 줄은 두 칸 위에 걸친다
   return (
     <>
-      <TitleBar {...titleBarProps} />
-      <main className={`${widthOf(titleBarProps.fullWidth)} ${styles.content}`}>{children}</main>
+      <TitleBar {...titleBarProps} fullWidth={titleBarProps.fullWidth || split} />
+      <Content fullWidth={titleBarProps.fullWidth}>{children}</Content>
     </>
+  )
+}
+
+/**
+ * 내용 자리. 넓은 화면의 두 칸 화면(D-01, G-01)이면 내용 영역 전체 폭을 목록 칸과 오른쪽 칸으로 나눈다(00-common 2.5, L-10).
+ * 오른쪽 칸은 목록 칸 뒤에 둔다. 초점과 화면 읽기 순서도 목록 다음이다.
+ */
+function Content({ fullWidth, children }: { fullWidth?: boolean; children: ReactNode }) {
+  const pane = use(SidePaneContext)
+  if (pane === undefined) return <main className={`${widthOf(fullWidth)} ${styles.content}`}>{children}</main>
+  return (
+    <main className={`${widthOf(true)} ${styles.content} ${styles.split}`}>
+      <div className={styles.listPane}>{children}</div>
+      <div className={styles.sidePane}>{pane}</div>
+    </main>
+  )
+}
+
+/** 오른쪽 칸 안의 하위 화면(D-06 넓은 화면). "뒤로" 없이 화면 이름(h2, 목록의 h1 아래)과 화면별 버튼만 머리에 둔다. */
+function PaneScreen({ title, action, children }: Pick<TitleBarProps, 'title' | 'action'> & { children: ReactNode }) {
+  const titleId = useId()
+  return (
+    <section aria-labelledby={titleId} className={styles.paneScreen}>
+      <div className={styles.paneHead}>
+        <h2 id={titleId} className={`${styles.title} ${styles.paneTitle}`}>
+          {title}
+        </h2>
+        {action && <div className={styles.action}>{action}</div>}
+      </div>
+      {children}
+    </section>
   )
 }
 

@@ -485,8 +485,8 @@ describe('거래 줄(0.4)', () => {
     putNovember()
     await openList()
     expect(texts(rowsOf('11월 26일 (목)'))).toEqual([
-      '12:30올래국수9,000원외식 · 신한카드',
-      '08:10이름이 아주 길어서 한 줄에 다 들어가지 않는 가맹점 이름19,500원식비 · 급여통장',
+      '12:30올래국수외식 · 신한카드9,000원',
+      '08:10이름이 아주 길어서 한 줄에 다 들어가지 않는 가맹점 이름식비 · 급여통장19,500원',
     ])
   })
 
@@ -499,10 +499,10 @@ describe('거래 줄(0.4)', () => {
     ])
     await openList()
     expect(texts(rowsOf('11월 26일 (목)'))).toEqual([
-      '교통20,000원교통 · 신한카드',
-      '외식1,000원외식 · 신한카드',
-      '미분류3,000원미분류 · 지갑',
-      '미분류+5,000원미분류 · 급여통장',
+      '교통교통 · 신한카드20,000원',
+      '외식외식 · 신한카드1,000원',
+      '미분류미분류 · 지갑3,000원',
+      '미분류미분류 · 급여통장+5,000원',
     ])
   })
 
@@ -513,8 +513,8 @@ describe('거래 줄(0.4)', () => {
     ])
     await openList()
     expect(texts(rowsOf('11월 25일 (수)'))).toEqual([
-      '이체450,000원급여통장에서 신한카드로',
-      '이체1,000원신한카드에서 비상금으로',
+      '이체급여통장에서 신한카드로450,000원',
+      '이체신한카드에서 비상금으로1,000원',
     ])
   })
 
@@ -537,7 +537,7 @@ describe('거래 줄(0.4)', () => {
     const amount = within(row).getByText('25,000원')
     expect(styleOf(amount).color).toBe('var(--color-text-secondary)')
     expect(styleOf(amount).textDecoration).toBe('line-through')
-    expect(row.textContent).toBe('13:05김밥천국25,000원식비 · 지갑취소')
+    expect(row.textContent).toBe('13:05김밥천국식비 · 지갑25,000원취소')
     const chip = within(row).getByText('취소')
     expect(styleOf(chip).borderRadius).toBe('var(--radius-full)')
     expect(readCssRule(CSS, '.status')).toContain('margin-top: var(--space-4)')
@@ -548,7 +548,7 @@ describe('거래 줄(0.4)', () => {
     await openList()
     const row = allRows().find((each) => each.getAttribute('href') === `/transactions/${bus.id}`)!
     expect(row.firstElementChild!.textContent).toBe('')
-    expect(row.textContent).toBe('교통20,000원교통 · 신한카드')
+    expect(row.textContent).toBe('교통교통 · 신한카드20,000원')
   })
 
   it('목록에 없는 계좌나 카테고리 id면 그 이름 자리를 비운다', async () => {
@@ -562,11 +562,11 @@ describe('거래 줄(0.4)', () => {
     ])
     await openList()
     expect(texts(rowsOf('11월 26일 (목)'))).toEqual([
-      '식비1,000원식비',
-      '2,000원신한카드',
-      '가게3,000원신한카드',
-      '이체4,000원신한카드로',
-      '이체5,000원신한카드에서',
+      '식비식비1,000원',
+      '신한카드2,000원',
+      '가게신한카드3,000원',
+      '이체신한카드로4,000원',
+      '이체신한카드에서5,000원',
     ])
   })
 
@@ -604,8 +604,8 @@ describe('거래 줄(0.4)', () => {
       ])
     }
     expect(styleOf(title).font).toBe('var(--text-body)')
-    expect(styleOf(title.parentElement!).columnGap).toBe('var(--space-12)')
-    const amount = title.nextElementSibling!
+    expect(styleOf(row.querySelector('[class*="first"]')!).columnGap).toBe('var(--space-12)')
+    const amount = row.querySelector('[class*="amount"]')!
     expect([styleOf(amount).font, styleOf(amount).marginInlineStart]).toEqual(['var(--text-body)', 'auto'])
   })
 
