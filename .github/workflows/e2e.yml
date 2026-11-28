@@ -1,0 +1,108 @@
+name: e2e
+
+# 핵심 흐름(docs/qa/test-strategy.md 3절)을 Chromium과 WebKit(아이폰 크기)으로 돌린다. 실행 방법은 e2e/README.md.
+# 흐름이 web, server, e2e에 걸쳐 있어 셋 중 하나나 이 파일이 바뀔 때 돈다.
+# paths와 paths-ignore는 한 이벤트에 같이 쓸 수 없어 문서 제외는 '!' 패턴으로 적는다.
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'server/**'
+      - 'e2e/**'
+      - '.github/workflows/e2e.yml'
+      - '!**/*.md'
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'server/**'
+      - 'e2e/**'
+      - '.github/workflows/e2e.yml'
+      - '!**/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  e2e:
+    name: e2e (Chromium, WebKit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # 서버가 붙는 DB. 값은 레포 루트 compose.yaml과 같은 로컬 전용 값이고 비밀값이 아니다. 작업이 끝나면 컨테이너와 함께 없어진다.
+    services:
+      db:
+        image: postgres:17
+        env:
+          POSTGRES_DB: accountbook
+          POSTGRES_USER: accountbook
+          POSTGRES_PASSWORD: accountbook
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U accountbook -d accountbook"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # 캐시는 server.yml과 같이 오픈소스(MIT) basic을 쓴다. wrapper jar 체크섬 검증은 이 액션의 기본 동작이다.
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
+
+      # 서버 테스트는 server.yml이 돌린다. 여기서는 jar만 만든다(playwright.config.ts가 java -jar로 띄운다).
+      - name: Build server jar
+        working-directory: server
+        run: ./gradlew bootJar
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.3.0'
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            e2e/package-lock.json
+
+      # 테스트가 web의 개발 서버를 띄운다
+      - name: Install web
+        working-directory: web
+        run: npm ci --ignore-scripts
+
+      - name: Install e2e
+        working-directory: e2e
+        run: npm ci --ignore-scripts
+
+      - name: Install browsers
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium webkit
+
+      # 재시도는 0이다(playwright.config.ts). 서버의 서명 키는 playwright.config.ts가 실행마다 무작위로 만든다.
+      - name: Test
+        working-directory: e2e
+        env:
+          DB_URL: jdbc:postgresql://localhost:5432/accountbook
+        run: npm test
+
+      # 실패한 테스트의 기록(trace). 화면과 요청·응답이 들어 있어 이 실행의 테스트 사용자 비밀번호와 token이 담긴다.
+      # 모두 이 실행에서만 쓴 값이다: 비밀번호는 테스트마다 새로 만들고, token은 이 실행에서 만든 서명 키로 서명했으며,
+      # DB는 작업이 끝나면 없어진다. 그래도 공개 레포라 짧게 둔다.
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-traces
+          path: e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
