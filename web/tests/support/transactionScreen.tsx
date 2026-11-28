@@ -8,6 +8,7 @@ import { expect, vi } from 'vitest'
 import { accountOf, startAccounts } from './accounts'
 import { ledgerIdOf, startBackend } from './backend'
 import { categoryWithChildren, startCategories, startCategorySuggestions } from './categories'
+import { loadDeviceHelpers } from './device'
 import { untilOpened } from './dialog'
 import { preloadLoginScreen } from './openApp'
 import { fetchScreenCodeFirst } from './screenCode'
@@ -82,6 +83,8 @@ export function startServer(server: SetupServer) {
  * 쓰는 라우터로 연다.
  */
 export async function openApp(path: string) {
+  // 앱이 열린 뒤 기기 도우미가 모듈을 새로 불러오지 않게 먼저 불러 둔다(#292)
+  await loadDeviceHelpers()
   vi.resetModules()
   window.history.replaceState(null, '', path)
   const { routes } = await import('../../src/app/routes')
