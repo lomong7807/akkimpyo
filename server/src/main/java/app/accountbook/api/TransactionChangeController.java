@@ -10,6 +10,7 @@ import app.accountbook.user.UserService;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,10 +21,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 장부의 거래 하나를 고치고(F-208, #36) 휴지통에 넣고 되살리며(F-227, F-230, #38) 승인취소하고 되돌린다(F-225, F-226, #37).
+ * 장부의 거래 하나를 고치고(F-208, #36) 휴지통에 넣고 되살리며(F-227, F-230, #38) 완전히 지우고(F-231, #45) 승인취소하고
+ * 되돌린다(F-225, F-226, #37).
  * 만들기와 조회({@link TransactionController})와 같은 경로 아래이고, 기기 값 헤더와 응답의 거래 모양이 같다. 구성원 확인은
  * {@link LedgerMemberInterceptor}가 먼저 하고 서비스가 한 번 더 한다.
  *
@@ -84,6 +87,23 @@ class TransactionChangeController {
         long expectedVersion = request.expectedVersion();
         return changed(actorId, ledgerId, () -> transactionService.restore(actorId, transactionId, expectedVersion,
                 deviceOf(device)));
+    }
+
+    /**
+     * 휴지통의 거래를 완전히 지운다(F-231, #45). 거래가 남지 않으므로 204이고 본문이 없다(ADR 002 2절). 휴지통에 없으면
+     * 409 {@code INVALID_STATE}다. 기록에 기기 값을 남기지 않으므로(ADR 007 결정 7) 기기 값 헤더는 읽지 않는다.
+     */
+    @PostMapping(path = "/purge", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void purge(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId, @PathVariable UUID transactionId,
+               @RequestBody TransactionVersionRequest request) {
+        requireInLedger(actorId, ledgerId, transactionId);
+        long expectedVersion = request.expectedVersion();
+        try {
+            transactionService.purge(actorId, transactionId, expectedVersion);
+        } catch (StaleVersionException e) {
+            throw new TransactionStaleVersion(response(actorId, ledgerId, e.current()));
+        }
     }
 
     /** 승인취소(F-225). 200이고 본문은 바뀐 거래({@code status}가 {@code CANCELED}, version+1)다. 잔액과 통계에서 빠진다. */
