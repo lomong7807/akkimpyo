@@ -485,8 +485,8 @@ describe('거래 줄(0.4)', () => {
     putNovember()
     await openList()
     expect(texts(rowsOf('11월 26일 (목)'))).toEqual([
-      '12:30올래국수9,000원외식 · 신한카드',
-      '08:10이름이 아주 길어서 한 줄에 다 들어가지 않는 가맹점 이름19,500원식비 · 급여통장',
+      '12:30올래국수외식 · 신한카드9,000원',
+      '08:10이름이 아주 길어서 한 줄에 다 들어가지 않는 가맹점 이름식비 · 급여통장19,500원',
     ])
   })
 
@@ -499,10 +499,10 @@ describe('거래 줄(0.4)', () => {
     ])
     await openList()
     expect(texts(rowsOf('11월 26일 (목)'))).toEqual([
-      '교통20,000원교통 · 신한카드',
-      '외식1,000원외식 · 신한카드',
-      '미분류3,000원미분류 · 지갑',
-      '미분류+5,000원미분류 · 급여통장',
+      '교통교통 · 신한카드20,000원',
+      '외식외식 · 신한카드1,000원',
+      '미분류미분류 · 지갑3,000원',
+      '미분류미분류 · 급여통장+5,000원',
     ])
   })
 
@@ -513,8 +513,8 @@ describe('거래 줄(0.4)', () => {
     ])
     await openList()
     expect(texts(rowsOf('11월 25일 (수)'))).toEqual([
-      '이체450,000원급여통장에서 신한카드로',
-      '이체1,000원신한카드에서 비상금으로',
+      '이체급여통장에서 신한카드로450,000원',
+      '이체신한카드에서 비상금으로1,000원',
     ])
   })
 
@@ -537,7 +537,7 @@ describe('거래 줄(0.4)', () => {
     const amount = within(row).getByText('25,000원')
     expect(styleOf(amount).color).toBe('var(--color-text-secondary)')
     expect(styleOf(amount).textDecoration).toBe('line-through')
-    expect(row.textContent).toBe('13:05김밥천국25,000원식비 · 지갑취소')
+    expect(row.textContent).toBe('13:05김밥천국식비 · 지갑25,000원취소')
     const chip = within(row).getByText('취소')
     expect(styleOf(chip).borderRadius).toBe('var(--radius-full)')
     expect(readCssRule(CSS, '.status')).toContain('margin-top: var(--space-4)')
@@ -557,7 +557,7 @@ describe('거래 줄(0.4)', () => {
     list.months.set('2026-11', [refundOf(refundKind)])
     await openList()
     const [row] = rowsOf('11월 26일 (목)')
-    expect(row.textContent).toBe(`15:40올래국수+12,000원식비 · 신한카드${chip}`)
+    expect(row.textContent).toBe(`15:40올래국수식비 · 신한카드+12,000원${chip}`)
     expect(styleOf(within(row).getByText('+12,000원')).color).toBe('var(--color-accent)')
     const shown = within(row).getByText(chip)
     expect([styleOf(shown).backgroundColor, styleOf(shown).color]).toEqual(['var(--color-border)', 'var(--color-text-secondary)'])
@@ -570,7 +570,7 @@ describe('거래 줄(0.4)', () => {
     const [row] = rowsOf('11월 26일 (목)')
     const amount = within(row).getByText('+12,000원')
     expect([styleOf(amount).color, styleOf(amount).textDecoration]).toEqual(['var(--color-text-secondary)', 'line-through'])
-    expect(row.textContent).toBe('15:40올래국수+12,000원식비 · 신한카드취소환불')
+    expect(row.textContent).toBe('15:40올래국수식비 · 신한카드+12,000원취소환불')
     const status = within(row).getByText('취소').parentElement!
     expect([...status.children].map((chip) => chip.textContent)).toEqual(['취소', '환불'])
     expect(readCssRule(CSS, '.status')).toContain('flex-wrap: wrap')
@@ -582,7 +582,7 @@ describe('거래 줄(0.4)', () => {
     // undefined인 칸은 JSON에 실리지 않는다(전에 받아 기기에 남긴 사본의 모양)
     list.months.set('2026-11', [{ ...refundOf('REFUND'), refundKind: null }, { ...refundOf('REFUND'), refundKind: undefined }])
     await openList()
-    expect(texts(rowsOf('11월 26일 (목)'))).toEqual(['15:40올래국수12,000원식비 · 신한카드', '15:40올래국수12,000원식비 · 신한카드'])
+    expect(texts(rowsOf('11월 26일 (목)'))).toEqual(['15:40올래국수식비 · 신한카드12,000원', '15:40올래국수식비 · 신한카드12,000원'])
   })
 
   it('시각이 없으면 시각 자리를 비운다', async () => {
@@ -590,7 +590,7 @@ describe('거래 줄(0.4)', () => {
     await openList()
     const row = allRows().find((each) => each.getAttribute('href') === `/transactions/${bus.id}`)!
     expect(row.firstElementChild!.textContent).toBe('')
-    expect(row.textContent).toBe('교통20,000원교통 · 신한카드')
+    expect(row.textContent).toBe('교통교통 · 신한카드20,000원')
   })
 
   it('목록에 없는 계좌나 카테고리 id면 그 이름 자리를 비운다', async () => {
@@ -604,11 +604,11 @@ describe('거래 줄(0.4)', () => {
     ])
     await openList()
     expect(texts(rowsOf('11월 26일 (목)'))).toEqual([
-      '식비1,000원식비',
-      '2,000원신한카드',
-      '가게3,000원신한카드',
-      '이체4,000원신한카드로',
-      '이체5,000원신한카드에서',
+      '식비식비1,000원',
+      '신한카드2,000원',
+      '가게신한카드3,000원',
+      '이체신한카드로4,000원',
+      '이체신한카드에서5,000원',
     ])
   })
 
@@ -646,8 +646,8 @@ describe('거래 줄(0.4)', () => {
       ])
     }
     expect(styleOf(title).font).toBe('var(--text-body)')
-    expect(styleOf(title.parentElement!).columnGap).toBe('var(--space-12)')
-    const amount = title.nextElementSibling!
+    expect(styleOf(row.querySelector('[class*="first"]')!).columnGap).toBe('var(--space-12)')
+    const amount = row.querySelector('[class*="amount"]')!
     expect([styleOf(amount).font, styleOf(amount).marginInlineStart]).toEqual(['var(--text-body)', 'auto'])
   })
 

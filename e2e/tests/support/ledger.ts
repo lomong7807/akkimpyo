@@ -249,8 +249,9 @@ export async function openRecentTransaction(page: Page, row: string) {
   await expectTransactionDetail(page)
 }
 
+/** 거래 상세가 열렸다. 넓은 화면은 내역 오른쪽 칸의 화면이라 제목이 h2다(D-01 (13), #244) */
 async function expectTransactionDetail(page: Page) {
-  await expect(page.getByRole('heading', { level: 1, name: '거래 상세' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '거래 상세', exact: true })).toBeVisible()
   await expect(page).toHaveURL(/\/transactions\/[0-9a-f-]{36}$/)
 }
 
@@ -270,7 +271,19 @@ export async function changeAmount(page: Page, from: string, to: string) {
 
   await expect(toast(page, '저장했어요')).toBeVisible()
   await expectTransactionDetail(page)
-  await expect(page.getByRole('main').getByText(`${to}원`, { exact: true })).toBeVisible()
+  await expect(transactionDetail(page).getByText(`${to}원`, { exact: true })).toBeVisible()
+}
+
+/** 거래 상세의 내용. 넓은 화면은 내역 옆 오른쪽 칸의 "거래 상세" 영역이다(내역의 줄과 합계에도 같은 금액이 있다) */
+function transactionDetail(page: Page): Locator {
+  const wide = (page.viewportSize()?.width ?? 0) >= 1024
+  return wide ? page.getByRole('region', { name: '거래 상세', exact: true }) : page.getByRole('main')
+}
+
+/** 주 메뉴(넓은 화면은 사이드바)의 "홈"으로 홈(C-01)에 간다 */
+export async function openHome(page: Page) {
+  await mainMenu(page).getByRole('link', { name: '홈', exact: true }).click()
+  await expect(page).toHaveURL('/home')
 }
 
 /** 하위 화면 상단 바의 "뒤로"로 앞 화면으로 돌아간다(00-common 6.1) */

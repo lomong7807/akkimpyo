@@ -3,6 +3,7 @@ import { MainScreen } from '../components/Screen'
 import HomePage from '../features/home/HomePage'
 import ClearStaleCaret from './ClearStaleCaret'
 import LedgerLayout from './LedgerLayout'
+import ListDetailLayout from './ListDetailLayout'
 import { accountsItem, categoriesItem, exportItem, homeItem, moreItem, statsItem, transactionsItem } from './navigation'
 import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
@@ -77,7 +78,12 @@ export const routes: RouteObject[] = [
                 children: [
                   { path: '/home', element: <HomePage />, handle: { navigationItem: homeItem } },
                   { path: '/more', element: <moreScreen.Screen />, handle: { navigationItem: moreItem } },
-                  { path: '/accounts', element: <accountsScreen.Screen />, handle: { navigationItem: accountsItem } },
+                  // 넓은 화면은 오른쪽 칸이 있는 두 칸이다(G-01 넓은 화면, #244). 1B 동안 계좌 줄은 누를 수 없어 안내만 보인다(#82)
+                  {
+                    path: '/accounts',
+                    element: <ListDetailLayout list={<accountsScreen.Screen />} empty="계좌를 고르면 여기에 자세히 보여요" />,
+                    handle: { navigationItem: accountsItem },
+                  },
                   {
                     path: '/accounts/new',
                     element: <accountAddScreen.Screen />,
@@ -96,21 +102,20 @@ export const routes: RouteObject[] = [
                   { path: '/pending', element: <pendingScreen.Screen /> },
                   // 고쳐서 보내기(planner #237 P1). 1B 임시: 넓은 화면에서도 B-05 오른쪽 칸이 아닌 한 칸이다(#244)
                   { path: '/pending/:id/edit', element: <pendingFixScreen.Screen />, handle: { fullScreen: true } },
+                  // 넓은 화면은 목록 옆 오른쪽 칸에 거래 상세(D-01 (13), D-06 넓은 화면)를 두는 두 칸이다. 상세는 자식 라우트다(#244)
                   {
                     path: '/transactions',
-                    element: <transactionListScreen.Screen />,
+                    element: (
+                      <ListDetailLayout list={<transactionListScreen.Screen />} empty="거래를 고르면 여기에 자세히 보여요" />
+                    ),
                     handle: { navigationItem: transactionsItem },
+                    children: [{ path: ':id', element: <transactionDetailScreen.Screen /> }],
                   },
                   { path: '/transactions/new', element: <transactionNewScreen.Screen />, handle: { fullScreen: true } },
                   // 거래 상세(/transactions/:id)보다 앞에 둔다(정적 경로가 이기지만 순서로도 분명히 한다, architect #300 C)
                   {
                     path: '/transactions/calendar',
                     element: <transactionCalendarScreen.Screen />,
-                    handle: { navigationItem: transactionsItem },
-                  },
-                  {
-                    path: '/transactions/:id',
-                    element: <transactionDetailScreen.Screen />,
                     handle: { navigationItem: transactionsItem },
                   },
                   {

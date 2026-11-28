@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Navigate, useLocation, useMatch, useNavigate, useSearchParams } from 'react-router'
 import Amount from '../../components/Amount'
 import { totalKind } from '../../components/amountDisplay'
 import { ButtonLink } from '../../components/Button'
@@ -8,6 +9,7 @@ import { CalendarBlank } from '../../components/icons'
 import { holdKeyboard } from '../../components/keyboardBridge'
 import MonthNavigation from '../../components/MonthNavigation'
 import { MainScreen } from '../../components/Screen'
+import { SidePaneContext } from '../../components/sidePane'
 import { formatMonth, isMonth, monthOf, moveMonth, selectableMonths, today } from '../../lib/calendarDate'
 import { parseAccounts } from '../accounts/accounts'
 import { accountsKey, useAccounts } from '../accounts/useAccounts'
@@ -23,6 +25,7 @@ import { useKeptCopy } from '../me/ledgerCopy'
 import { canEdit } from '../me/me'
 import { DayGroup } from './DayGroup'
 import { calendarAddressOf } from './calendarAddress'
+import { DetailPaneContext, type DetailPane } from './detailPane'
 import { groupByDate } from './groupByDate'
 import { keptMonthOf } from './keptMonth'
 import { useKeptLastMonth } from './lastMonth'
@@ -42,7 +45,9 @@ const HIGHLIGHT_MS = 1000
 /**
  * D-01 내역(1A). 주소의 달(`?month=YYYY-MM`)을 보인다. 달이 없거나 고를 수 없는 달이면 기억한 달이나 기기의 오늘이 속한
  * 달로 바꿔 간다. 이 항목에서 연 달력(D-02)이 달을 옮겼으면 돌아왔을 때 그 달로 바꿔 간다(D-02 (1), architect #300 B).
- * 월 이동 오른쪽의 "달력"(D-01 (2), 1B)은 지금 고른 달의 달력을 연다. 필터 줄, 검색 버튼, 넓은 화면의 상세 칸은 아직 없다.
+ * 월 이동 오른쪽의 "달력"(D-01 (2), 1B)은 지금 고른 달의 달력을 연다. 필터 줄과 검색 버튼은 아직 없다.
+ * 넓은 화면에서는 오른쪽 칸에 고른 거래의 상세를 둔다(D-01 (13), ListDetailLayout). 상세를 연 동안(`/transactions/{id}`)은
+ * 주소에 달이 없어 줄을 누를 때의 달(기억한 달)을 그대로 보이고, 고른 줄을 지금 것으로 표시한다.
  * 연결이 없거나 받지 못하면 기기에 남긴 최근 한 달(P-902)로 읽기 전용으로 보인다(F-908, #238).
  */
 export default function TransactionListPage() {
@@ -54,7 +59,27 @@ export default function TransactionListPage() {
   const [openedOn] = useState(today)
   const range = selectableMonths(openedOn)
   const requested = searchParams.get('month')
-  const month = requested !== null && isSelectable(requested, range) ? requested : undefined
+  // 넓은 화면 오른쪽 칸에 상세를 연 거래
+  const selected = useMatch('/transactions/:id')?.params.id
+  const split = use(SidePaneContext) !== undefined
+  const queryClient = useQueryClient()
+  const ledger = useCurrentLedger()
+  const history = useRef<HTMLDivElement>(null)
+  // 오른쪽 칸을 닫은 뒤 초점을 옮길 곳
+  const refocus = useRef<HTMLElement | null>(null)
+
+  // 이 항목에서 연 달력이 옮긴 달. 같은 항목으로 돌아왔을 때만 쓴다. 바꿔 가도 표시를 이어 가 그 뒤 다시 연 달력의 것도 받는다(#342)
+  const listKey = listKeyOf(location)
+  const handed = memory.handedMonth(listKey)
+  const handedMonth = handed && isSelectable(handed, range) ? handed : undefined
+  const remembered = memory.month()
+  const fallback = remembered && isSelectable(remembered, range) ? remembered : monthOf(openedOn)
+  const month =
+    selected !== undefined
+      ? (handedMonth ?? fallback)
+      : requested !== null && isSelectable(requested, range)
+        ? requested
+        : undefined
 
   // 저장 뒤 돌아왔으면 그 거래를 한 번 강조한다. 돌아간 첫 화면이 그려진 뒤에는 잊으므로 처음 그릴 때 읽어 둔다.
   // 다른 달의 거래면 이 달 목록에 그 줄이 없어 강조 없이 끝난다(토스트만 남는다)
@@ -65,26 +90,42 @@ export default function TransactionListPage() {
     if (month) memory.rememberMonth(month)
   }, [month, memory])
 
-  // 이 항목에서 연 달력이 옮긴 달. 같은 항목으로 돌아왔을 때만 쓴다. 바꿔 가도 표시를 이어 가 그 뒤 다시 연 달력의 것도 받는다(#342)
-  const listKey = listKeyOf(location)
-  const handed = memory.handedMonth(listKey)
-  if (month && handed && handed !== month && isSelectable(handed, range)) {
-    return <Navigate to={addressOf(handed)} replace state={{ listKey }} />
+  // 오른쪽 칸이 닫혀 안내 문구로 돌아간 뒤(상세가 사라진 뒤) 초점을 옮긴다
+  useEffect(() => {
+    if (selected !== undefined || !refocus.current) return
+    refocus.current.focus()
+    refocus.current = null
+  }, [selected])
+
+  const detailPane = useMemo<DetailPane | undefined>(() => {
+    if (selected === undefined || !month) return undefined
+    return {
+      closeAfterDelete() {
+        const root = history.current
+        const rows = [...(root?.querySelectorAll<HTMLElement>('li > a') ?? [])]
+        const at = rows.findIndex((row) => row.getAttribute('aria-current') === 'page')
+        const heading = root?.querySelector<HTMLElement>('h1') ?? null
+        refocus.current = at < 0 ? heading : (rows[at + 1] ?? rows[at - 1] ?? heading)
+        // 목록은 그대로 남아 있으므로 지운 줄이 빠지도록 그 달을 다시 받는다
+        void queryClient.invalidateQueries({ queryKey: transactionListKey(ledger.id, month) })
+        void navigate(addressOf(month), { replace: true, preventScrollReset: true })
+      },
+    }
+  }, [selected, month, queryClient, ledger.id, navigate])
+
+  if (selected === undefined && month && handedMonth && handedMonth !== month) {
+    return <Navigate to={addressOf(handedMonth)} replace state={{ listKey }} />
   }
 
-  if (!month) {
-    const remembered = memory.month()
-    const fallback = remembered && isSelectable(remembered, range) ? remembered : monthOf(openedOn)
-    return <Navigate to={addressOf(fallback)} replace />
-  }
+  if (!month) return <Navigate to={addressOf(fallback)} replace />
 
   function move(months: -1 | 1) {
     void navigate(addressOf(moveMonth(month!, months)), { replace: true })
   }
 
-  return (
+  const page = (
     <MainScreen>
-      <div className={styles.history}>
+      <div ref={history} className={styles.history}>
         <div className={`${styles.monthNavigation} ${styles.monthBar}`}>
           <div className={styles.monthMove}>
             <MonthNavigation
@@ -110,10 +151,14 @@ export default function TransactionListPage() {
           today={openedOn}
           highlight={highlight}
           onHighlightEnd={endHighlight}
+          selected={selected}
+          preventScrollReset={split}
         />
       </div>
     </MainScreen>
   )
+  // 오른쪽 칸은 MainScreen 안에 그려지므로 칸의 상세도 이것을 받는다
+  return <DetailPaneContext value={detailPane}>{page}</DetailPaneContext>
 }
 
 function isSelectable(month: string, { first, last }: { first: string; last: string }): boolean {
@@ -130,6 +175,10 @@ interface MonthTransactionsProps {
   /** 강조할 거래 id */
   highlight: string | undefined
   onHighlightEnd: () => void
+  /** 넓은 화면 오른쪽 칸에 상세를 연 거래 id */
+  selected: string | undefined
+  /** 줄을 눌러도 스크롤을 옮기지 않는다(두 칸 배치) */
+  preventScrollReset: boolean
 }
 
 /** 연결이 없을 때 저장 범위(최근 31일) 밖(F-908, 00-common 3.4) */
@@ -144,7 +193,8 @@ const OUT_OF_RANGE = '연결되면 볼 수 있어요'
  *   범위 밖이어도 보이고 목록 끝에 "연결되면 볼 수 있어요"를, 연결된 채 받지 못했으면 다 덮을 때만 보인다.
  * - 연결이 없고 그 달이 저장 범위 밖이면 목록 자리에 "연결되면 볼 수 있어요", 기기에 남은 것이 없으면 불러오지 못함이다.
  */
-function MonthTransactions({ month, today, highlight, onHighlightEnd }: MonthTransactionsProps) {
+function MonthTransactions(props: MonthTransactionsProps) {
+  const { month } = props
   const ledger = useCurrentLedger()
   const list = useTransactionList(month)
   const accountsQuery = useAccounts()
@@ -166,7 +216,7 @@ function MonthTransactions({ month, today, highlight, onHighlightEnd }: MonthTra
   // 다시 받는 동안에는 isError가 풀리므로 값이 없으면 이 화면에서 받아 본 적이 있는지로 본다
   const listFailed = list.data ? list.isError : list.isFetchedAfterMount
   const stale = !online || listFailed
-  const shown = { month, today, highlight, onHighlightEnd, names: names!, categories: categoryList! }
+  const shown = { ...props, names: names!, categories: categoryList! }
 
   if (names) {
     const pages = list.data?.pages
@@ -252,7 +302,8 @@ interface MonthContentProps extends MonthTransactionsProps {
  * 보내지 않은 입력을 더하고(D-01 (4)), 그날 합계에는 보이는 보내지 않음 줄을 더한다(planner Q5).
  */
 function MonthContent(props: MonthContentProps) {
-  const { month, today, rows, names, categories, highlight, onHighlightEnd, settled, basis, end } = props
+  const { month, today, rows, names, categories, highlight, onHighlightEnd, selected, preventScrollReset, settled, basis, end } =
+    props
   const pending = usePendingTransactions()
   const serverItems = rows.items
   const monthPending = useMemo(() => {
@@ -308,6 +359,8 @@ function MonthContent(props: MonthContentProps) {
             items={group.items}
             names={names}
             highlighted={highlighted}
+            selected={selected}
+            preventScrollReset={preventScrollReset}
             headingLevel={2}
           />
         ))}

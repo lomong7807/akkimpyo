@@ -76,3 +76,46 @@
     background-color: transparent;
   }
 }
+
+/* 오른쪽 칸 안의 하위 화면(D-06 넓은 화면). 머리는 넓은 화면 하위 화면의 이름 줄과 같은 높이다 */
+.paneScreen {
+  display: flex;
+  flex-direction: column;
+}
+
+.paneHead {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-topbar);
+}
+
+.paneTitle {
+  font: var(--text-title);
+}
+
+/*
+ * 넓은 화면의 두 칸 화면(D-01, G-01, L-10 designer #102). 목록 칸은 최소 360px을 지키고 자리가 모자라면 오른쪽 칸이 440px보다
+ * 좁아진다. 칸 사이는 24px이고 선이 없다. 두 칸은 함께 스크롤하고, 오른쪽 칸은 위에 붙어 목록을 내려도 보이며 창보다 길면
+ * 칸 안에서 스크롤한다.
+ */
+@media (width >= 1024px) {
+  .split {
+    display: grid;
+    grid-template-columns: minmax(var(--width-list-min), 1fr) minmax(0, var(--width-side-panel));
+    column-gap: var(--space-24);
+    align-items: start;
+  }
+
+  .listPane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .sidePane {
+    position: sticky;
+    top: 0;
+    max-height: calc(100dvh - var(--space-24));
+    overflow-y: auto;
+  }
+}

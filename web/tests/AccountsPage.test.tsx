@@ -13,7 +13,7 @@ import { addScreens, openApp } from './support/openApp'
 import { problem } from './support/problem'
 import { recordDom } from './support/recordDom'
 import { holdClock, passTime, releaseClock } from './support/testClock'
-import { resetViewport, setViewportWidth } from './support/viewport'
+import { installMatchMedia, resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
 
 const CSS = 'src/features/accounts/Accounts.module.css'
@@ -28,6 +28,7 @@ let accounts: Accounts
 
 beforeEach(() => {
   vi.stubGlobal('scrollTo', vi.fn())
+  installMatchMedia(390)
   backend = startBackend(server)
   backend.cookieUser = 'user-1'
   accounts = startAccounts(server, backend)

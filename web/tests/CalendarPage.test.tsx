@@ -492,8 +492,8 @@ describe('고른 날의 머리와 거래 목록', () => {
     await openCalendar()
     await waitFor(() => expect(rows()).toHaveLength(2))
     expect(rows().map((row) => row.textContent)).toEqual([
-      '15:40올래국수+12,000원식비 · 신한카드환불',
-      '09:00모임 회비+3,000원식비 · 신한카드돌려받음',
+      '15:40올래국수식비 · 신한카드+12,000원환불',
+      '09:00모임 회비식비 · 신한카드+3,000원돌려받음',
     ])
     expect(getComputedStyle(within(rows()[0]).getByText('+12,000원')).color).toBe('var(--color-accent)')
     expect(getComputedStyle(within(rows()[1]).getByText('+3,000원')).color).toBe('var(--color-accent)')

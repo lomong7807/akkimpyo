@@ -646,14 +646,14 @@ describe('최근 거래(F-113)', () => {
     const opened = await openHome()
     const row = within(recentRegion()).getByRole('link', { name: /^올래국수/ })
     expect(row.getAttribute('href')).toBe(`/transactions/${lunch.id}`)
-    expect(row.textContent).toBe('12:30올래국수9,000원외식 · 신한카드')
+    expect(row.textContent).toBe('12:30올래국수외식 · 신한카드9,000원')
     const day25 = within(recentRegion()).getByRole('list', { name: '11월 25일 (수)' })
     // 시각 없는 두 건은 id 역순(나중에 만든 버스가 먼저)이다
     expect(within(day25).getAllByRole('link').map((link) => link.textContent)).toEqual([
-      '18:00급여+3,200,000원급여 · 급여통장',
-      '13:05김밥천국25,000원식비 · 지갑취소',
-      '교통20,000원교통 · 신한카드',
-      '이체450,000원급여통장에서 신한카드로',
+      '18:00급여급여 · 급여통장+3,200,000원',
+      '13:05김밥천국식비 · 지갑25,000원취소',
+      '교통교통 · 신한카드20,000원',
+      '이체급여통장에서 신한카드로450,000원',
     ])
     await opened.user.click(row)
     await screen.findByRole('heading', { level: 1, name: '거래 상세' })
@@ -669,8 +669,8 @@ describe('최근 거래(F-113)', () => {
     await openHome()
     const links = within(within(recentRegion()).getByRole('list', { name: '11월 26일 (목)' })).getAllByRole('link')
     expect(links.map((link) => link.textContent)).toEqual([
-      '15:40올래국수+12,000원식비 · 신한카드환불',
-      '09:00모임 회비+3,000원식비 · 신한카드돌려받음',
+      '15:40올래국수식비 · 신한카드+12,000원환불',
+      '09:00모임 회비식비 · 신한카드+3,000원돌려받음',
     ])
     expect(styleOf(within(links[0]).getByText('+12,000원')).color).toBe('var(--color-accent)')
     expect(styleOf(within(links[1]).getByText('+3,000원')).color).toBe('var(--color-accent)')
