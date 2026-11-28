@@ -16,7 +16,7 @@ public record ExportedTransaction(UUID id, TransactionType type, LocalDate occur
                                   String payee, String memo, TransactionStatus status, UUID createdBy,
                                   List<Line> lines) {
 
-    /** @param rows 같은 거래의 라인 행. 칸의 순서는 {@code TransactionExportQuery.LINES}다 */
+    /** @param rows 같은 거래의 라인 행. 칸의 순서는 {@code TransactionExportQuery.SELECT}다 */
     static ExportedTransaction of(List<Tuple> rows) {
         Tuple first = rows.getFirst();
         return new ExportedTransaction(first.get(0, UUID.class), first.get(1, TransactionType.class),

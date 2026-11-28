@@ -31,7 +31,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #43, #34, #44, #14, #36, #38, #47, #62, #48, #64). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
+ * 다른 장부 접근 거부(#19의 표를 계좌·카테고리·거래 API의 HTTP로, #13, #33, #43, #34, #44, #14, #36, #38, #47, #62, #48, #64, #379). A가 장부 자리에 B의 장부나 B의 계좌·카테고리·거래 id를 넣으면
  * 없는 id와 같은 404이고, 응답에 B의 값이 없으며, DB가 그대로다. 대조로 B 자신은 같은 요청이 열린다(틀린 본문이면 400).
  * 틀린 본문과 B가 이미 쓰는 이름도 404라, 장부가 있는지와 그 안의 이름을 알 수 없다. B의 거래 id로 만들어도 409가 아니라 404다.
  */
@@ -159,6 +159,9 @@ class AccountAccessTest {
                         client.get("/api/v1/ledgers/" + ledger + "/stats/yearly?year=2026"), 200),
                 new Case("내보내기", (client, ledger) -> client.get(exports(ledger, "2026-11-18")), 200),
                 new Case("내보내기(종료일이 앞섬)", (client, ledger) -> client.get(exports(ledger, "2026-11-17")), 400),
+                new Case("내보내기(장부 전체)", (client, ledger) ->
+                        client.get("/api/v1/ledgers/" + ledger + "/exports?format=csv"), 200),
+                new Case("내보내기(종료일만 비움)", (client, ledger) -> client.get(exports(ledger, "")), 400),
                 new Case("거래 만들기", (client, ledger) ->
                         client.postJson(transactions(ledger), expense(UUID.randomUUID())), 201),
                 new Case("거래 만들기(B의 거래 id에 다른 내용)", (client, ledger) ->

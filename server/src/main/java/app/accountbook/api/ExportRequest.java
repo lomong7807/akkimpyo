@@ -15,10 +15,15 @@ import org.springframework.http.MediaType;
 
 /**
  * 내보내기의 쿼리 값(#57 요청 계약). 있는지, 형식, 날짜의 범위(0001-01-01~9999-12-31)를 보고 틀린 입력란을 모두 모아 한 번에
- * 알린다. 시작일과 종료일의 앞뒤는 조회가 본다. 거래 목록(#15)처럼 빈 값과 같은 이름을 두 번 보낸 값도 형식 오류다.
+ * 알린다. 시작일과 종료일의 앞뒤는 조회가 본다. 거래 목록(#15)처럼 같은 이름을 두 번 보낸 값은 형식 오류이고 {@code format}은
+ * 빈 값도 형식 오류다.
+ *
+ * <p>{@code from}과 {@code to}를 둘 다 비우면(빠지거나 빈 값) 장부 전체 기간이다(#379). 하나만 비우면 비운 쪽이
+ * {@code REQUIRED}다.
  *
  * @param format 소문자 {@code csv}와 {@code xlsx}만 받는다
- * @param from   시작일, {@code to}는 종료일(둘 다 포함). 장부 시간대의 달력 날짜이고 거래의 날짜와 그대로 비교한다(P-202)
+ * @param from   시작일, {@code to}는 종료일(둘 다 포함). 장부 시간대의 달력 날짜이고 거래의 날짜와 그대로 비교한다(P-202).
+ *               장부 전체이면 둘 다 {@code null}이다
  */
 record ExportRequest(Format format, LocalDate from, LocalDate to) {
 
@@ -35,12 +40,23 @@ record ExportRequest(Format format, LocalDate from, LocalDate to) {
             errors.add(new InvalidRequestException("format",
                     format == null ? FieldErrorCode.REQUIRED : FieldErrorCode.INVALID_FORMAT, "format은 csv나 xlsx입니다."));
         }
-        Optional<LocalDate> start = date("from", from, errors);
-        Optional<LocalDate> end = date("to", to, errors);
+        boolean wholeLedger = blank(from) && blank(to);
+        // 한쪽만 비우면 비운 쪽은 빠진 값(REQUIRED)이다. date는 거래 검색도 쓰고 거기서 빈 값은 형식 오류라 여기서 바꾼다.
+        Optional<LocalDate> start = wholeLedger ? Optional.empty() : date("from", blank(from) ? null : from, errors);
+        Optional<LocalDate> end = wholeLedger ? Optional.empty() : date("to", blank(to) ? null : to, errors);
         if (!errors.isEmpty()) {
             throw InvalidRequestException.ofAll(errors);
         }
-        return new ExportRequest(chosen.orElseThrow(), start.orElseThrow(), end.orElseThrow());
+        return new ExportRequest(chosen.orElseThrow(), start.orElse(null), end.orElse(null));
+    }
+
+    /** 장부 전체 기간인지. 그러면 파일 이름의 기간은 내보낸 첫 거래와 마지막 거래의 날짜다(K-01 (5)). */
+    boolean wholeLedger() {
+        return from == null;
+    }
+
+    private static boolean blank(String text) {
+        return text == null || text.isEmpty();
     }
 
     /** 날짜 하나. 거래 검색(#64)의 기간도 같은 형식과 범위다. 틀리면 그 입력란의 오류를 더하고 비어 있다. */
