@@ -42,7 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 거래 쓰기(생성·수정·취소·삭제·복원)와 조회. 모든 쓰기는 change_log에 1행을 남긴다.
+ * 거래 쓰기(생성·수정·취소·취소 되돌리기·삭제·복원)와 조회. 모든 쓰기는 change_log에 1행을 남긴다.
  * 수정 계열은 version이 맞을 때만 조건부 UPDATE로 반영하고, 아니면 아무것도 바꾸지 않는다.
  */
 @Service
@@ -198,6 +198,22 @@ public class TransactionService {
             throw new InvalidStateException("이미 취소된 거래입니다.");
         }
         return write(tx, expectedVersion, ChangeAction.CANCEL, actorId, deviceId, now -> tx.cancel());
+    }
+
+    /**
+     * 승인취소 되돌리기(F-226). 취소 직전 상태로 돌아가 잔액·통계에 다시 든다. 취소한 거래에만 되고, 휴지통의 거래는 안 된다.
+     * 검사 순서는 취소와 같다: 구성원 → 기기 값 → version → 휴지통 → 상태.
+     */
+    @Transactional
+    public TransactionView uncancel(UUID actorId, UUID txId, long expectedVersion, String deviceId) {
+        Transaction tx = loadAccessible(actorId, txId);
+        DeviceIds.requireValidFormat(deviceId);
+        requireVersion(tx, expectedVersion);
+        requireNotDeleted(tx, "삭제된 거래는 취소를 되돌릴 수 없습니다.");
+        if (tx.getStatus() != TransactionStatus.CANCELED) {
+            throw new InvalidStateException("취소한 거래만 되돌릴 수 있습니다.");
+        }
+        return write(tx, expectedVersion, ChangeAction.UNCANCEL, actorId, deviceId, now -> tx.uncancel());
     }
 
     /** 소프트 삭제(휴지통으로). */

@@ -41,8 +41,9 @@ record ExportRequest(Format format, LocalDate from, LocalDate to) {
                     format == null ? FieldErrorCode.REQUIRED : FieldErrorCode.INVALID_FORMAT, "format은 csv나 xlsx입니다."));
         }
         boolean wholeLedger = blank(from) && blank(to);
-        Optional<LocalDate> start = wholeLedger ? Optional.empty() : date("from", from, errors);
-        Optional<LocalDate> end = wholeLedger ? Optional.empty() : date("to", to, errors);
+        // 한쪽만 비우면 비운 쪽은 빠진 값(REQUIRED)이다. date는 거래 검색도 쓰고 거기서 빈 값은 형식 오류라 여기서 바꾼다.
+        Optional<LocalDate> start = wholeLedger ? Optional.empty() : date("from", blank(from) ? null : from, errors);
+        Optional<LocalDate> end = wholeLedger ? Optional.empty() : date("to", blank(to) ? null : to, errors);
         if (!errors.isEmpty()) {
             throw InvalidRequestException.ofAll(errors);
         }
@@ -58,11 +59,12 @@ record ExportRequest(Format format, LocalDate from, LocalDate to) {
         return text == null || text.isEmpty();
     }
 
-    private static Optional<LocalDate> date(String field, String text, List<InvalidRequestException> errors) {
-        Optional<LocalDate> parsed = blank(text) ? Optional.empty() : TransactionListRequest.date(text);
+    /** 날짜 하나. 거래 검색(#64)의 기간도 같은 형식과 범위다. 틀리면 그 입력란의 오류를 더하고 비어 있다. */
+    static Optional<LocalDate> date(String field, String text, List<InvalidRequestException> errors) {
+        Optional<LocalDate> parsed = text == null ? Optional.empty() : TransactionListRequest.date(text);
         if (parsed.isEmpty()) {
             errors.add(new InvalidRequestException(field,
-                    blank(text) ? FieldErrorCode.REQUIRED : FieldErrorCode.INVALID_FORMAT, field + "는 YYYY-MM-DD입니다."));
+                    text == null ? FieldErrorCode.REQUIRED : FieldErrorCode.INVALID_FORMAT, field + "는 YYYY-MM-DD입니다."));
         } else if (parsed.get().isBefore(FIRST) || parsed.get().isAfter(LAST)) {
             errors.add(new InvalidRequestException(field, FieldErrorCode.OUT_OF_RANGE,
                     field + "는 0001-01-01부터 9999-12-31까지입니다."));

@@ -67,6 +67,7 @@ class TransactionDeviceIdTest {
     UUID cash;
     TransactionView posted;
     TransactionView trashed;
+    TransactionView canceled;
 
     @BeforeEach
     void setUp() {
@@ -76,6 +77,7 @@ class TransactionDeviceIdTest {
         cash = fixtures.account(user, ledgerId, "현금", AccountType.CASH, 0, LocalDate.of(2026, 11, 1)).getId();
         posted = fixtures.expense(user, ledgerId, cash, null, DAY, 12_000);
         trashed = fixtures.delete(user, fixtures.expense(user, ledgerId, cash, null, DAY, 7_300));
+        canceled = fixtures.cancel(user, fixtures.expense(user, ledgerId, cash, null, DAY, 4_100));
         DETAILED_LOGGERS.forEach(logger -> logger.setLevel(Level.TRACE));
     }
 
@@ -97,7 +99,7 @@ class TransactionDeviceIdTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"update", "cancel", "delete", "restore"})
+    @ValueSource(strings = {"update", "cancel", "uncancel", "delete", "restore"})
     void 기기_값의_형식은_version보다_먼저_본다(String method) {
         assertThatThrownBy(() -> call(method, MALFORMED, true))
                 .isExactlyInstanceOf(InvalidRequestException.class)
@@ -174,6 +176,8 @@ class TransactionDeviceIdTest {
             case "update" -> transactionService.update(owner, posted.id(), posted.version() + staleBy,
                     expense(posted.id()), deviceId);
             case "cancel" -> transactionService.cancel(owner, posted.id(), posted.version() + staleBy, deviceId);
+            case "uncancel" -> transactionService.uncancel(owner, canceled.id(), canceled.version() + staleBy,
+                    deviceId);
             case "delete" -> transactionService.delete(owner, posted.id(), posted.version() + staleBy, deviceId);
             case "restore" -> transactionService.restore(owner, trashed.id(), trashed.version() + staleBy, deviceId);
             default -> throw new IllegalArgumentException("이 테스트에 없는 메서드: " + method);

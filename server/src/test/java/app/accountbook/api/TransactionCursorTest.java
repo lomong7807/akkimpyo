@@ -9,6 +9,7 @@ import app.accountbook.transaction.TransactionScope;
 import app.accountbook.transaction.TransactionScope.Day;
 import app.accountbook.transaction.TransactionScope.Month;
 import app.accountbook.transaction.TransactionScope.WholeLedger;
+import app.accountbook.transaction.TransactionSearch;
 import app.accountbook.transaction.TransactionStatus;
 import app.accountbook.transaction.TransactionType;
 import java.nio.charset.StandardCharsets;
@@ -105,6 +106,29 @@ class TransactionCursorTest {
         }
         assertThat(TransactionCursor.decode(TransactionCursor.encode(LEDGER, new Day(DAY), NONE, key), LEDGER,
                 new Day(DAY), filter)).as("필터 없이 받은 cursor").isEmpty();
+    }
+
+    /** 검색(#64)의 cursor는 범위 자리가 S이고 같은 검색어·기간·필터에서만 읽힌다. 목록의 cursor와 서로 읽히지 않는다. */
+    @Test
+    void 검색의_cursor는_같은_검색어_기간_필터에서만_읽힌다() {
+        TransactionKey key = new TransactionKey(DAY, LocalTime.of(8, 5), TX);
+        TransactionSearch search = new TransactionSearch("a|b", DAY, null);
+        String cursor = TransactionCursor.encode(LEDGER, search, NONE, key);
+
+        assertThat(cursor).matches("[A-Za-z0-9_-]+").hasSizeLessThan(176);
+        assertThat(new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8))
+                .startsWith("1|" + LEDGER + "|S|2026-11-18|08:05|" + TX + "|");
+        assertThat(TransactionCursor.decode(cursor, LEDGER, new TransactionSearch("a|b", DAY, null), NONE)).contains(key);
+        for (TransactionSearch other : List.of(new TransactionSearch("a", DAY, null), new TransactionSearch("a|b",
+                null, DAY), new TransactionSearch("a|b", null, null), new TransactionSearch(null, DAY, null))) {
+            assertThat(TransactionCursor.decode(cursor, LEDGER, other, NONE)).as(other.toString()).isEmpty();
+        }
+        assertThat(TransactionCursor.decode(cursor, OTHER_LEDGER, search, NONE)).isEmpty();
+        assertThat(TransactionCursor.decode(cursor, LEDGER, search, new TransactionFilter(Set.of(), Set.of(),
+                Set.of(TransactionType.EXPENSE), null))).isEmpty();
+        assertThat(TransactionCursor.decode(cursor, LEDGER, new WholeLedger(), NONE)).isEmpty();
+        assertThat(TransactionCursor.decode(TransactionCursor.encode(LEDGER, new WholeLedger(), NONE, key), LEDGER,
+                search, NONE)).isEmpty();
     }
 
     private static String raw(String text) {

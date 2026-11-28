@@ -498,7 +498,9 @@ class CrossLedgerAccessTest {
                 denied("취소: B의 지출", NotFoundException.class, bExpense.id(),
                         (actor, tx) -> transactionService.cancel(actor, tx, bExpense.version(), DEVICE)),
                 denied("취소: B의 이체", NotFoundException.class, bTransfer.id(),
-                        (actor, tx) -> transactionService.cancel(actor, tx, bTransfer.version(), DEVICE)));
+                        (actor, tx) -> transactionService.cancel(actor, tx, bTransfer.version(), DEVICE)),
+                denied("취소 되돌리기: B의 취소한 거래", NotFoundException.class, bCanceled.id(),
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bCanceled.version(), DEVICE)));
     }
 
     /** 삭제·복원. */
@@ -594,6 +596,13 @@ class CrossLedgerAccessTest {
                         (actor, tx) -> transactionService.delete(actor, tx, bDeleted.version(), DEVICE)),
                 denied("순서: B의 삭제하지 않은 거래를 복원", notFound, bExpense.id(), state,
                         (actor, tx) -> transactionService.restore(actor, tx, bExpense.version(), DEVICE)),
+                denied("순서: B의 취소하지 않은 거래를 되돌리기", notFound, bExpense.id(), state,
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bExpense.version(), DEVICE)),
+                denied("순서: B의 취소한 거래를 낡은 version으로 되돌리기", notFound, bCanceled.id(),
+                        StaleVersionException.class,
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bCanceled.version() - 1, DEVICE)),
+                denied("순서: B의 취소한 거래를 형식이 틀린 기기 값으로 되돌리기", notFound, bCanceled.id(), invalid,
+                        (actor, tx) -> transactionService.uncancel(actor, tx, bCanceled.version(), MALFORMED_DEVICE)),
                 denied("순서: B의 장부에 형식이 틀린 기기 값으로 지출", notMember, ledgerB, invalid,
                         (actor, ledger) -> transactionService.create(actor, ledger,
                                 entry(UUID.randomUUID(), bBank, bFood, 1_000), MALFORMED_DEVICE)),
