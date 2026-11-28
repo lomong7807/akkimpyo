@@ -16,6 +16,10 @@ FROM caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20f
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /src/dist /srv
 
+# 인증서(/data)와 설정(/config)을 아래 사용자가 쓸 수 있게 한다. 운영 compose의 이름 있는 볼륨은 처음 붙을 때
+# 이 폴더의 소유자를 물려받는다(#52).
+RUN chown -R 10001:10001 /data /config
+
 # Docker는 컨테이너 안의 1024 미만 포트도 root 없이 열게 한다(ip_unprivileged_port_start=0).
 USER 10001:10001
 
