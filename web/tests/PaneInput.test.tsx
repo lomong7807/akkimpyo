@@ -239,7 +239,7 @@ describe('계좌(G-01)의 "추가"(G-02 넓은 화면)', () => {
     await opened.user.keyboard('350000')
     await opened.user.click(saveButton())
     await waitFor(() => expect(address(opened)).toBe('/accounts'))
-    expect(toastRegion().textContent).toBe("'급여통장' 계좌를 추가했어요")
     await untilPaneClosed()
+    expect(toastRegion().textContent).toBe("'급여통장' 계좌를 추가했어요")
   })
 })
