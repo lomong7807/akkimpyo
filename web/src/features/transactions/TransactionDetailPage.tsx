@@ -33,13 +33,9 @@ import { DetailSkeleton, FieldsSkeleton } from './TransactionDetailSkeleton'
 import { purgeNoticeOf } from './purgeNotice'
 import { useKeptLastMonth } from './lastMonth'
 import { isConnectionLoss } from './pendingTransactions'
-import {
-  isInvalidState,
-  isTransactionDetail,
-  staleVersionOf,
-  type ListedTransaction,
-  type TransactionDetail,
-} from './transactions'
+import { isTransactionDetail } from './transactionDetail'
+import type { ListedTransaction, TransactionDetail } from './transactions'
+import { isInvalidState, staleVersionOf } from './transactionWrites'
 import { useDeleteTransaction, useOfferUndo } from './useDeleteTransaction'
 import { useListedTransaction, useTransactionDetail } from './useTransactionDetail'
 import styles from './TransactionDetail.module.css'

@@ -10,6 +10,7 @@ import app.accountbook.ledger.LedgerMember;
 import app.accountbook.ledger.LedgerMemberRepository;
 import app.accountbook.ledger.LedgerRole;
 import app.accountbook.transaction.ChangeAction;
+import app.accountbook.transaction.RefundKind;
 import app.accountbook.transaction.Transaction;
 import app.accountbook.transaction.TransactionCommand;
 import app.accountbook.transaction.TransactionRepository;
@@ -99,19 +100,26 @@ public class Fixtures {
     /** 지출. categoryId가 null이면 미분류. */
     public TransactionView expense(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
                                    long amount) {
-        return entry(actor, ledgerId, TransactionType.EXPENSE, false, accountId, categoryId, on, amount);
+        return entry(actor, ledgerId, TransactionType.EXPENSE, null, accountId, categoryId, on, amount);
     }
 
     /** 환불: 지출 카테고리에 양수 라인. */
     public TransactionView refund(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
                                   long amount) {
-        return entry(actor, ledgerId, TransactionType.EXPENSE, true, accountId, categoryId, on, amount);
+        return entry(actor, ledgerId, TransactionType.EXPENSE, RefundKind.REFUND, accountId, categoryId, on, amount);
+    }
+
+    /** 돌려받음: 환불과 같이 지출 카테고리에 양수 라인(P-210). */
+    public TransactionView reimbursement(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
+                                         long amount) {
+        return entry(actor, ledgerId, TransactionType.EXPENSE, RefundKind.REIMBURSEMENT, accountId, categoryId, on,
+                amount);
     }
 
     /** 수입. categoryId가 null이면 미분류. */
     public TransactionView income(User actor, UUID ledgerId, UUID accountId, UUID categoryId, LocalDate on,
                                   long amount) {
-        return entry(actor, ledgerId, TransactionType.INCOME, false, accountId, categoryId, on, amount);
+        return entry(actor, ledgerId, TransactionType.INCOME, null, accountId, categoryId, on, amount);
     }
 
     public TransactionView transfer(User actor, UUID ledgerId, UUID fromAccountId, UUID toAccountId, LocalDate on,
@@ -130,7 +138,7 @@ public class Fixtures {
     }
 
     /**
-     * 거래를 완전히 지운 기록 한 행을 DB에 바로 넣는다. 완전 삭제 기능(#9)이 아직 없어 그 결과만 만든다.
+     * 거래를 완전히 지운 기록 한 행을 DB에 바로 넣는다. 완전 삭제({@code TransactionService.purge})를 거치지 않고 결과만 만든다.
      * 만들고(1) 휴지통에 넣고(2) 완전히 지운(3) 거래라 번호가 3이고, 전후 값과 기기 값이 없다(ADR 007 결정 2, 7).
      */
     public void purgeRecord(UUID transactionId, UUID ledgerId, ChangeAction action, UUID actorId) {
@@ -141,7 +149,8 @@ public class Fixtures {
     }
 
     /**
-     * 완전 삭제(#9)가 한 트랜잭션에서 할 일을 DB에 바로 한다. 기능이 아직 없어서다. 그 거래의 이력과 거래를 지우고
+     * 완전 삭제(#9)가 한 트랜잭션에서 할 일을 DB에 바로 한다. 서비스와 달리 휴지통에 있는지와 version을 보지 않아
+     * HTTP·경합 테스트가 어느 상태의 거래든 지운 상태로 만들 수 있다. 그 거래의 이력과 거래를 지우고
      * (라인은 거래와 같이 지워진다) 기록 한 행만 남긴다. 기록의 번호는 지우기 전 거래의 version + 1이다(ADR 007 결정 2, 7).
      */
     public void purge(UUID transactionId, UUID actorId) {
@@ -156,7 +165,7 @@ public class Fixtures {
                 ChangeAction.PURGE.name(), actorId);
     }
 
-    private TransactionView entry(User actor, UUID ledgerId, TransactionType type, boolean refund, UUID accountId,
+    private TransactionView entry(User actor, UUID ledgerId, TransactionType type, RefundKind refund, UUID accountId,
                                   UUID categoryId, LocalDate on, long amount) {
         return transactionService.create(actor.getId(), ledgerId,
                 new TransactionCommand.Entry(UUID.randomUUID(), type, on, null, accountId, categoryId, amount,

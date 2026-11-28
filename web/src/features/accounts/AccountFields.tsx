@@ -30,16 +30,30 @@ const accountAddTexts: AccountFieldTexts = {
 /** 기준일 도움말(G-02 (4)). 첫 실행 안내(C-02)도 같다(planner 결정 #102) */
 const dateHelp = '이날부터의 거래가 잔액에 들어가요'
 
+/** 수정 모드에서만 기준일 아래에 늘 보이는 안내(G-02 (5), F-503) */
+const recalculationNotice = '시작 잔액이나 기준일을 바꾸면 잔액을 다시 계산해요'
+
 interface AccountFieldsProps {
   form: AccountForm
   /** 보내는 중이라 바꿀 수 없다 */
   readOnly: boolean
   texts?: AccountFieldTexts
+  /** 있는 계좌를 고친다(G-02 수정 모드). 기준일 아래에 다시 계산 안내를 둔다 */
+  editing?: boolean
 }
 
-/** 새 계좌의 이름, 종류, 시작 잔액, 기준일. 금액 칸과 종류를 바꿀 때의 안내는 어느 화면에서나 같다. */
-export default function AccountFields({ form, readOnly, texts = accountAddTexts }: AccountFieldsProps) {
+/** 계좌의 이름, 종류, 시작 잔액, 기준일. 금액 칸과 종류를 바꿀 때의 안내는 어느 화면에서나 같다. */
+export default function AccountFields({ form, readOnly, texts = accountAddTexts, editing = false }: AccountFieldsProps) {
   const { values, change, control, fieldProps, check } = form
+  const dateField = (
+    <DateField
+      {...control('openingDate')}
+      readOnly={readOnly}
+      label="기준일"
+      help={dateHelp}
+      onChange={(openingDate) => change({ openingDate })}
+    />
+  )
   return (
     <>
       <TextField
@@ -66,13 +80,15 @@ export default function AccountFields({ form, readOnly, texts = accountAddTexts 
             : { negative: values.negative, onChange: (negative) => change({ negative }) }
         }
       />
-      <DateField
-        {...control('openingDate')}
-        readOnly={readOnly}
-        label="기준일"
-        help={dateHelp}
-        onChange={(openingDate) => change({ openingDate })}
-      />
+      {editing ? (
+        // 안내는 기준일 칸(도움말 포함) 바로 아래 8px이다. 칸 사이(16px)보다 가깝게 묶는다(designer #243 D1)
+        <div className={styles.withNotice}>
+          {dateField}
+          <p className={styles.recalculation}>{recalculationNotice}</p>
+        </div>
+      ) : (
+        dateField
+      )}
     </>
   )
 }

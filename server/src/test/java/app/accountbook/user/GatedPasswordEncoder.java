@@ -13,6 +13,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 /** 문을 열어 줄 때까지 해시를 붙잡아 두는 테스트용 인코더. 동시에 몇 개가 도는지 센다. */
 final class GatedPasswordEncoder implements PasswordEncoder {
 
+    /** 무엇을 해시하든 주는 값. 비교해도 되는 모양이어야 비교도 붙잡을 수 있다. */
+    static final String HASH = "$argon2id$v=19$m=256,t=1,p=1$YWNjb3VudC1ib29rLXRzdA"
+            + "$vHygWA0jNvBLxOELjrkU6R1OAPyuN/Ro9FrihcYD2KI";
+
     private final Predicate<String> held;
     private final Semaphore gate = new Semaphore(0);
     private final Semaphore entered = new Semaphore(0);
@@ -36,7 +40,7 @@ final class GatedPasswordEncoder implements PasswordEncoder {
             sawTransaction.set(true);
         }
         if (!held.test(rawPassword.toString())) {
-            return "hash";
+            return HASH;
         }
         order.add(rawPassword.toString());
         maxRunning.accumulateAndGet(running.incrementAndGet(), Math::max);
@@ -48,7 +52,7 @@ final class GatedPasswordEncoder implements PasswordEncoder {
         } finally {
             running.decrementAndGet();
         }
-        return "hash";
+        return HASH;
     }
 
     @Override

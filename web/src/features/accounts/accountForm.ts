@@ -1,6 +1,7 @@
 import type { FieldErrors } from '../../components/useFormFields'
 import { today } from '../../lib/calendarDate'
 import { hasUnusableCharacter, lengthOf, normalizeName } from '../../lib/visibleText'
+import type { EditableAccount } from './accountEdit'
 import type { AccountType, NewAccount } from './accounts'
 
 /** 칸의 값. 오류를 보이는 칸의 이름은 보내는 값(NewAccount)과 같다. */
@@ -55,6 +56,42 @@ export function accountNameLength(name: string): number {
 /** 기준일의 처음 값은 기기의 오늘이다. */
 export function newAccountValues(): AccountValues {
   return { name: '', type: 'BANK', openingBalance: 0, negative: false, openingDate: today() }
+}
+
+/**
+ * 저장된 계좌를 칸의 값으로(G-02 수정 모드). 칸은 부호를 뺀 크기를 받는다. 은행·현금의 음수는 부호를 -로 두고,
+ * 카드는 저장된 음수(갚을 금액)를 양수로 바꿔 채운다(F-503).
+ */
+export function savedAccountValues({ name, type, openingBalance, openingDate }: EditableAccount): AccountValues {
+  return {
+    name,
+    type,
+    openingBalance: Math.abs(openingBalance),
+    negative: type !== 'CARD' && openingBalance < 0,
+    openingDate,
+  }
+}
+
+/**
+ * 고친 계좌에 보낼 값. 검사에 맞은 값만 받는다. 종류와 금액 칸이 연 때 그대로면 저장된 시작 잔액을 그대로 보낸다. 칸으로는 나타낼 수
+ * 없는 값(API로 만든 양수의 카드 시작 잔액)이 이름만 고쳐도 뒤집히지 않게 한다(planner #243 P2).
+ */
+export function toAccountUpdate(values: AccountValues, opened: EditableAccount): NewAccount {
+  const update = toNewAccount(values)
+  const before = savedAccountValues(opened)
+  const amountKept =
+    values.type === before.type && values.openingBalance === before.openingBalance && values.negative === before.negative
+  return amountKept ? { ...update, openingBalance: opened.openingBalance } : update
+}
+
+/** 보낼 값이 저장된 계좌와 같다. 칸의 글자가 달라도(앞뒤 공백, 0원의 부호) 바꾼 것이 없다. */
+export function isSameAccount(update: NewAccount, saved: EditableAccount): boolean {
+  return (
+    update.name === saved.name &&
+    update.type === saved.type &&
+    update.openingBalance === saved.openingBalance &&
+    update.openingDate === saved.openingDate
+  )
 }
 
 /** 칸마다 오류 문구. 맞는 칸은 없다. 금액의 최대는 금액 칸이, 기준일의 범위는 달력이 막는다. */

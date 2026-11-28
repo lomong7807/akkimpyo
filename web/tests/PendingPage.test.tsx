@@ -666,7 +666,7 @@ describe('(6) 거부 이유', () => {
     ['카테고리가 삭제됨', { fieldErrors: [{ field: 'categoryId', code: 'NOT_FOUND' }] }, '카테고리가 삭제되어 보낼 수 없어요. 다른 카테고리를 골라 보내 주세요.'],
     ['그 밖의 검증 실패', { fieldErrors: [{ field: 'amount', code: 'OUT_OF_RANGE' }] }, '입력한 값을 저장할 수 없어요. 고쳐서 보내 주세요.'],
     ['current가 없는 409', { status: 409, code: 'ID_CONFLICT' }, '이미 있는 다른 거래와 겹쳐 보낼 수 없어요. 고쳐서 보내면 새 거래로 보내요.'],
-    ['current가 있는 409(고르기는 #280)', { status: 409, code: 'ID_CONFLICT', current: { id: 'x', version: 1 } }, '앞서 저장한 거래와 내용이 달라 보낼 수 없어요. 내역에서 확인해 주세요.'],
+    ['current가 있는 409(비교해서 고르기, designer #280)', { status: 409, code: 'ID_CONFLICT', current: { id: 'x', version: 1 } }, '이미 저장된 거래와 내용이 달라 보낼 수 없어요. 비교해서 골라 주세요.'],
   ])('%s', async (_, refusal, text) => {
     await seedRejected(expense({ payee: '거부 줄' }), refusal)
     await openPending()

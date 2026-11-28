@@ -10,6 +10,16 @@
   font: var(--text-label);
 }
 
+/* 화면 읽기에만 두는 이름. 칸 위의 자리를 차지하지 않는다 */
+.hiddenLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .box {
   position: relative;
 }

@@ -163,6 +163,31 @@ describe('달 합계', () => {
   })
 })
 
+describe('환불이 더 큰 날과 달의 음수 합계(#390)', () => {
+  it('저장 범위가 걸친 두 달의 음수 달 합계와 환불만 있는 날의 음수 그날 합계를 받아 남기고, 사본으로 다시 읽는다', async () => {
+    const items = [spend('2026-11-01', 12000), spend('2026-10-31', 5000)]
+    const days = new Map([
+      ['2026-11-01', { income: 0, expense: -12000 }],
+      ['2026-10-31', { income: -3000, expense: 0 }],
+    ])
+    const months = new Map([
+      ['2026-10', { income: -3000, expense: -7000 }],
+      ['2026-11', { income: 0, expense: -12000 }],
+    ])
+    server.use(
+      http.get(path, ({ request }) => {
+        const month = new URL(request.url).searchParams.get('month')
+        if (month !== null) return HttpResponse.json({ ...pageOf(month, [], 0, 1), totals: months.get(month) })
+        return HttpResponse.json(pageOf(null, items, 0, 50, { days }))
+      }),
+    )
+    const kept = await fetchLastMonth(ledgerId, '2026-11-27')
+    expect(kept.days).toEqual([...days].map(([date, sums]) => ({ date, ...sums })))
+    expect(kept.months).toEqual([...months].map(([month, totals]) => ({ month, totals })))
+    expect(parseLastMonth(structuredClone(kept))).toEqual(kept)
+  })
+})
+
 describe('실패', () => {
   async function failureOf(promise: Promise<unknown>) {
     const error = await promise.catch((thrown: unknown) => thrown)
@@ -208,6 +233,11 @@ describe('기기에서 읽은 사본의 모양(parseLastMonth)', () => {
     ['범위 밖의 거래가 있다', (value: { items: object[] }) => ({ ...value, items: [{ ...value.items[0], occurredOn: '2026-10-01' }] })],
     ['그날 합계의 모양이 틀렸다', (value: object) => ({ ...value, days: [{ date: '2026-11-27', income: 0 }] })],
     ['달 합계의 모양이 틀렸다', (value: object) => ({ ...value, months: [{ month: '2026-13', totals: { income: 0, expense: 0 } }] })],
+    ['그날 합계가 음수 소수다', (value: object) => ({ ...value, days: [{ date: '2026-11-27', income: 0, expense: -0.5 }] })],
+    [
+      '달 합계가 안전한 정수 범위 밖이다',
+      (value: object) => ({ ...value, months: [{ month: '2026-11', totals: { income: 0, expense: -(2 ** 53) } }] }),
+    ],
   ])('모양이 틀리면(%s) 없다', async (_, change) => {
     const value = await kept()
     expect(parseLastMonth(change(value as never))).toBeUndefined()

@@ -56,9 +56,9 @@ class PasswordHasherLimitTest {
         assertThat(encoder.order()).endsWith("password5");
 
         encoder.open(4);
-        assertThat(fifth.result()).isEqualTo("hash");
+        assertThat(fifth.result()).isEqualTo(GatedPasswordEncoder.HASH);
         for (RunningTask<String> one : four) {
-            assertThat(one.result()).isEqualTo("hash");
+            assertThat(one.result()).isEqualTo(GatedPasswordEncoder.HASH);
         }
         assertThat(encoder.maxRunning()).isEqualTo(4);
     }
@@ -144,7 +144,7 @@ class PasswordHasherLimitTest {
         // 기다리다 끝난 것은 자리를 쓰지도 잃지도 않는다.
         encoder.open(2);
         holder.result();
-        assertThat(hasher.hash("password3")).isEqualTo("hash");
+        assertThat(hasher.hash("password3")).isEqualTo(GatedPasswordEncoder.HASH);
         assertThat(encoder.order()).containsExactly("password1", "password3");
     }
 
@@ -264,7 +264,7 @@ class PasswordHasherLimitTest {
         encoder.open(1);
         holder.result();
         encoder.open(1);
-        assertThat(hasher.hash("password3")).isEqualTo("hash");
+        assertThat(hasher.hash("password3")).isEqualTo(GatedPasswordEncoder.HASH);
     }
 
     @Test
