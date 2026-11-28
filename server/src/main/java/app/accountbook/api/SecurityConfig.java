@@ -33,7 +33,7 @@ class SecurityConfig {
     static final String CHALLENGE = "Bearer realm=\"account-book\"";
 
     /** 토큰 없이 열리는 주소. 메서드와 경로를 글자 그대로 적는다(별표를 쓰지 않는다). 더할 때는 security 검토를 받는다. */
-    private static final RequestMatcher[] PUBLIC = {
+    static final RequestMatcher[] PUBLIC = {
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/actuator/health"),
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login"),
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/signup"),

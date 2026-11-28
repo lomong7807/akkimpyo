@@ -37,6 +37,11 @@ management:
       discovery:
         # 로그인한 사람에게도 /actuator의 주소 목록을 주지 않는다.
         enabled: false
+springdoc:
+  api-docs:
+    # OpenAPI 문서 주소를 두지 않는다(ADR 003 결정 3). 운영과 bootRun에는 라이브러리가 없어 하는 일이 없고,
+    # 라이브러리가 실행 경로에 있는 테스트에서 운영과 같게 만든다. 켜는 곳은 문서 테스트(OpenApiDocTest) 하나다.
+    enabled: false
 logging:
   pattern:
     # 요청 id(ADR 005). 요청 밖의 로그에서는 빈칸이다.

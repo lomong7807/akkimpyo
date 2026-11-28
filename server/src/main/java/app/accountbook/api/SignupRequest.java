@@ -1,7 +1,12 @@
 package app.accountbook.api;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /** 빠진 값도 형식과 함께 서비스가 입력란마다 본다. 여러 칸이 틀리면 모두 알려야 해서 여기서 먼저 거르지 않는다(#29). */
-record SignupRequest(String email, String password, String displayName) {
+record SignupRequest(
+        String email,
+        @Schema(format = "password", accessMode = Schema.AccessMode.WRITE_ONLY) String password,
+        String displayName) {
 
     /** 스프링이 요청 객체를 로그에 남길 때 값이 나가지 않게 한다. */
     @Override

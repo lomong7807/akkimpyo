@@ -40,7 +40,7 @@ class StatsController {
 
     /** 달력의 날짜별 합계(F-222, #66 응답 계약). 고른 날의 거래는 거래 목록의 {@code date}로 받는다. */
     @GetMapping("/daily")
-    DailyTotalsResponse daily(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    DailyTotalsResponse getDailyStats(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                               @RequestParam(name = "month", required = false) String month) {
         YearMonth parsed = month(month);
         return DailyTotalsResponse.of(parsed, transactionListQuery.dailyTotals(actorId, ledgerId, parsed));
@@ -48,7 +48,7 @@ class StatsController {
 
     /** 월별 통계(F-301, #16 응답 계약). */
     @GetMapping("/monthly")
-    MonthlyStatsResponse monthly(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    MonthlyStatsResponse getMonthlyStats(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                  @RequestParam(name = "month", required = false) String month) {
         YearMonth parsed = month(month);
         return MonthlyStatsResponse.of(parsed, monthlyStatsQuery.monthly(actorId, ledgerId, parsed));
@@ -56,7 +56,7 @@ class StatsController {
 
     /** 달의 카테고리별 통계(F-302, #48 응답 계약). 계산은 월별 통계와 같은 조회다. */
     @GetMapping("/categories")
-    CategoryStatsResponse categories(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    CategoryStatsResponse getCategoryStats(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                      @RequestParam(name = "month", required = false) String month) {
         YearMonth parsed = month(month);
         return CategoryStatsResponse.of(parsed, monthlyStatsQuery.monthly(actorId, ledgerId, parsed));
@@ -64,7 +64,7 @@ class StatsController {
 
     /** 연 단위 통계(F-304, #48 응답 계약). */
     @GetMapping("/yearly")
-    YearlyStatsResponse yearly(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    YearlyStatsResponse getYearlyStats(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                @RequestParam(name = "year", required = false) String year) {
         return YearlyStatsResponse.of(yearlyStatsQuery.yearly(actorId, ledgerId, year(year)));
     }

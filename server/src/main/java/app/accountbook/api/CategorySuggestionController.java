@@ -3,6 +3,7 @@ package app.accountbook.api;
 import app.accountbook.common.FieldErrorCode;
 import app.accountbook.common.InvalidRequestException;
 import app.accountbook.transaction.CategorySuggestionQuery;
+import io.swagger.v3.oas.annotations.Parameter;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.MediaType;
@@ -33,8 +34,8 @@ class CategorySuggestionController {
      * 구성원이 아니면 {@code payee}가 틀려도 {@link LedgerMemberInterceptor}가 먼저 404로 답한다.
      */
     @GetMapping
-    CategorySuggestionResponse suggest(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
-                                       @RequestParam MultiValueMap<String, String> query) {
+    CategorySuggestionResponse suggestCategories(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                                       @Parameter(hidden = true) @RequestParam MultiValueMap<String, String> query) {
         List<String> payee = query.getOrDefault(PAYEE, List.of());
         if (payee.size() > 1) {
             throw new InvalidRequestException(PAYEE, FieldErrorCode.INVALID_FORMAT, "payee는 한 번만 보낼 수 있습니다.");

@@ -3,6 +3,7 @@ package app.accountbook.api;
 import app.accountbook.transaction.TransactionListQuery;
 import app.accountbook.transaction.TransactionPage;
 import app.accountbook.user.UserService;
+import io.swagger.v3.oas.annotations.Parameter;
 import java.util.UUID;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -33,12 +34,12 @@ class TransactionSearchController {
 
     /** 한 쪽은 {@value TransactionListQuery#MAX_LIMIT}건이다. 이름은 쪽마다 한 번 읽는다. */
     @GetMapping
-    TransactionSearchResponse search(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    TransactionSearchResponse searchTransactions(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                      @RequestParam(name = "q", required = false) String q,
                                      @RequestParam(name = "from", required = false) String from,
                                      @RequestParam(name = "to", required = false) String to,
                                      @RequestParam(name = "cursor", required = false) String cursor,
-                                     @RequestParam MultiValueMap<String, String> query) {
+                                     @Parameter(hidden = true) @RequestParam MultiValueMap<String, String> query) {
         TransactionSearchRequest request = TransactionSearchRequest.of(ledgerId, q, from, to, cursor, query);
         TransactionPage page = transactionListQuery.search(actorId, ledgerId, request.search(), request.filter(),
                 request.after());

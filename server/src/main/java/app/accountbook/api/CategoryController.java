@@ -48,7 +48,7 @@ class CategoryController {
      * 하위는 상위의 {@code children}에 만든 순서로 든다. 카테고리를 한 번에 읽어 수와 상관없이 조회 횟수가 같다.
      */
     @GetMapping
-    CategoryResponse.Items list(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId) {
+    CategoryResponse.Items listCategories(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId) {
         return CategoryResponse.Items.of(categoryService.list(actorId, ledgerId));
     }
 
@@ -57,7 +57,7 @@ class CategoryController {
      * 경로다. 응답할 수 없는 {@code Accept}와 JSON이 아닌 본문은 저장하기 전에 거절된다(ADR 002 5절).
      */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<CategoryResponse> create(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    ResponseEntity<CategoryResponse> createCategory(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                             @RequestBody CategoryRequest request) {
         Category category = categoryService.create(actorId, ledgerId, request.command());
         return ResponseEntity.created(URI.create("/api/v1/ledgers/" + ledgerId + "/categories/" + category.getId()))
@@ -69,7 +69,7 @@ class CategoryController {
      * 따로 구한다(ADR 004 결정 6). 이 장부의 카테고리가 아니면(내가 구성원인 다른 장부의 것, 없거나 지운 것) 본문이 틀려도 404다.
      */
     @PutMapping(path = "/{categoryId}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    CategoryResponse rename(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    CategoryResponse renameCategory(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                             @PathVariable UUID categoryId, @RequestBody CategoryRequest.Rename request) {
         CategoryRequest.Rename.Read read = request.read();
         Category category;
@@ -86,7 +86,7 @@ class CategoryController {
      * 409 {@code INVALID_STATE}, 이 장부의 카테고리가 아니면 404다. 하위 수는 목록을 따로 읽어 센다(이름 바꾸기와 같다).
      */
     @GetMapping("/{categoryId}/deletion-impact")
-    CategoryDeletionImpactResponse deletionImpact(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    CategoryDeletionImpactResponse getCategoryDeletionImpact(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                                                   @PathVariable UUID categoryId) {
         long transactionCount = categoryService.countAffectedTransactions(actorId, ledgerId, categoryId);
         return CategoryDeletionImpactResponse.of(categoryId, transactionCount, categoryService.list(actorId, ledgerId));
@@ -101,7 +101,7 @@ class CategoryController {
      */
     @DeleteMapping("/{categoryId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void delete(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId, @PathVariable UUID categoryId,
+    void deleteCategory(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId, @PathVariable UUID categoryId,
                 @RequestParam(name = TARGET_PARAM, required = false) String target,
                 @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false) String device) {
         List<InvalidRequestException> errors = new ArrayList<>();

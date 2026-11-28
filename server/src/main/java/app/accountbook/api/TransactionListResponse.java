@@ -2,6 +2,7 @@ package app.accountbook.api;
 
 import app.accountbook.transaction.TransactionPage;
 import app.accountbook.transaction.TransactionPage.DayTotals;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ record TransactionListResponse(List<TransactionResponse> items, String nextCurso
         return "TransactionListResponse[]";
     }
 
+    @Schema(name = "TransactionListTotals")
     record Totals(long income, long expense) {
     }
 

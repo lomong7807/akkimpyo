@@ -2,6 +2,7 @@ package app.accountbook.api;
 
 import app.accountbook.category.CategoryKind;
 import app.accountbook.stats.CategoryTotal;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,6 +23,7 @@ record StatsCategory(UUID categoryId, long amount, CategoryKind kind, List<Child
     }
 
     /** 펼친 줄. 칸은 상위와 같고 {@code children}이 없다. */
+    @Schema(name = "StatsCategoryChild")
     record Child(UUID categoryId, long amount, CategoryKind kind) {
 
         static Child of(CategoryTotal total) {

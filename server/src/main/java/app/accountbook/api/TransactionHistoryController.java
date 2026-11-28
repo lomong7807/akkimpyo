@@ -30,7 +30,7 @@ class TransactionHistoryController {
 
     /** 이름은 이력을 읽은 뒤 한 번 읽는다. */
     @GetMapping
-    HistoryResponse history(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+    HistoryResponse getTransactionHistory(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
                             @PathVariable UUID transactionId) {
         return HistoryResponse.of(transactionHistoryQuery.history(actorId, ledgerId, transactionId),
                 userService.memberDisplayNames(actorId, ledgerId));

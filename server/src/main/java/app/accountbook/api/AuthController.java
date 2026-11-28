@@ -2,6 +2,8 @@ package app.accountbook.api;
 
 import app.accountbook.auth.LoginService;
 import app.accountbook.auth.PasswordChangeService;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -13,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -37,6 +40,10 @@ class AuthController {
      * produces와 consumes를 적어 줄 수 없는 형식의 응답과 JSON이 아닌 본문을 비밀번호를 확인하기 전에 거절한다(ADR 002 5절).
      * 요청의 refresh 쿠키가 가리키던 계열은 로그인이 성공할 때만 폐기한다(ADR 001 결정 3).
      */
+    @SecurityRequirements
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponse(responseCode = "401", ref = "#/components/responses/Error401")
+    @ApiResponse(responseCode = "429", ref = "#/components/responses/Error429")
     @PostMapping(path = "/login", consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<AccessTokenResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
@@ -45,6 +52,9 @@ class AuthController {
     }
 
     /** 가입(F-002)하고 로그인과 같은 토큰을 준다. api는 auth만 부른다(ModuleBoundaryTest). */
+    @SecurityRequirements
+    @ResponseStatus(HttpStatus.CREATED)
+    @ApiResponse(responseCode = "429", ref = "#/components/responses/Error429")
     @PostMapping(path = "/signup", consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<AccessTokenResponse> signup(@RequestBody SignupRequest request, HttpServletRequest http) {
@@ -56,6 +66,9 @@ class AuthController {
      * 갱신(#26): refresh 쿠키만으로 인증한다. 화면은 본문과 Content-Type 없이 보낸다. 본문이 있으면 JSON만 받고 읽지 않는다
      * (본문이 필수가 아니면 본문 없는 요청은 consumes를 보지 않는다). 실패는 401이고 쿠키를 지우지 않는다(security 결정).
      */
+    @SecurityRequirements
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponse(responseCode = "401", ref = "#/components/responses/Error401")
     @PostMapping(path = "/refresh", consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<AccessTokenResponse> refresh(@RequestBody(required = false) Map<String, Object> ignored,
@@ -67,6 +80,8 @@ class AuthController {
      * 로그아웃(#28): refresh 쿠키만으로 그 계열을 폐기하고 쿠키를 지운다. 본문은 갱신과 같이 없어도 되고 있으면 JSON만 받고 읽지
      * 않는다. 쿠키가 없거나, 모르는 값이거나, 이미 폐기됐거나, 회전된 토큰이어도 204다. 화면은 204만 성공으로 본다(ADR 001 결정 3·6).
      */
+    @SecurityRequirements
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     @PostMapping(path = "/logout", consumes = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<Void> logout(@RequestBody(required = false) Map<String, Object> ignored, HttpServletRequest http) {
         loginService.logout(refreshCookie.read(http));
@@ -77,6 +92,8 @@ class AuthController {
      * 비밀번호 바꾸기(#31): access token으로 인증하고 refresh 쿠키로는 지금 기기의 계열만 알아내 그 계열만 남긴다. 쿠키가 없거나
      * 쓸 수 없으면 모두 폐기하고 그래도 204다. 지금 계열을 그대로 쓰므로 쿠키를 새로 굽지 않는다(ADR 001 결정 3·4).
      */
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @ApiResponse(responseCode = "429", ref = "#/components/responses/Error429")
     @PostMapping(path = "/password", consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<Void> changePassword(@AuthenticationPrincipal UUID userId, @RequestBody PasswordChangeRequest request,
