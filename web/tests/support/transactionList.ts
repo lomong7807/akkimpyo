@@ -38,6 +38,22 @@ export function transferOf(fields: Fields, changes: object = {}): Listed {
   return savedOf({ id: nextId(), type: 'TRANSFER', occurredTime: null, ...fields }, 'user-1', changes)
 }
 
+/** 기기에 남긴 최근 한 달(#238)의 모양. 저장 범위는 기본 2026-10-27 ~ 2026-11-26이다 */
+export function lastMonthCopyOf(items: object[], from = '2026-10-27', to = '2026-11-26') {
+  const dates = [...new Set(items.map((item) => (item as { occurredOn: string }).occurredOn))]
+  return {
+    from,
+    to,
+    items,
+    days: dates.map((date) => ({ date, income: 0, expense: 0 })),
+    months: [
+      { month: '2026-10', totals: { income: 0, expense: 0 } },
+      { month: '2026-11', totals: { income: 0, expense: 0 } },
+    ],
+    truncated: false,
+  }
+}
+
 /** P-205: 이체와 취소를 빼고 지출과 수입을 더한다. 지출은 양수다. */
 export function sumsOf(items: Listed[]): Sums {
   const counted = items.filter(({ status }) => status !== 'CANCELED')
