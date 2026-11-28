@@ -12,7 +12,7 @@ import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 
 /**
  * 변환기는 JSON 계열과 바이트만 남는다(ADR 003 결정 9). 테스트의 실행 경로에는 springdoc이 들여온 YAML과 JAXB(XML)가 있어
- * 기본 목록에 그 변환기가 생긴다. HTTP로 본 YAML·XML·CBOR 본문의 415는 {@link ContentTypeTest}가 본다.
+ * 기본 목록에 그 변환기가 생긴다. HTTP로 본 415와 400은 {@link JsonOnlyConverterTest}가 본다.
  */
 class JsonOnlyConverterConfigTest {
 
