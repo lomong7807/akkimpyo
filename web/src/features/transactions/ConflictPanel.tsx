@@ -40,10 +40,14 @@ interface ConflictPanelProps {
   action?: PanelAction
   /** 주 버튼으로 보내는 중. 그 버튼 안에 돌아가는 원, 두 버튼은 비활성이다 */
   busy?: boolean
+  /** busy인 것이 보조 버튼이다(B-05의 "저장된 내용 그대로", #280). 돌아가는 원이 보조 버튼 안에 있다 */
+  closeBusy?: boolean
   /** 버튼 바로 위의 한 줄(비활성인 이유, 누르면 일어날 일) */
   notice?: string
   /** 버튼 바로 위의 실패 문구(00-common 4.3) */
   failure?: PanelFailure
+  /** 실패한 뒤 초점을 줄 버튼. 기본은 실행 버튼(없으면 보조 버튼)이다. 보조 버튼이 실패했으면 'close'(designer #280 D3) */
+  failureFocus?: 'action' | 'close'
   /** 새 최신 내용으로 다시 그린 횟수. 바뀌면 처음과 같이 초점을 판 제목으로 옮긴다 */
   redraws?: number
 }
@@ -55,8 +59,10 @@ export default function ConflictPanel({
   onCloseAction,
   action,
   busy = false,
+  closeBusy = false,
   notice,
   failure,
+  failureFocus = 'action',
   redraws = 0,
 }: ConflictPanelProps) {
   const descriptionText = useRef<HTMLParagraphElement>(null)
@@ -72,10 +78,12 @@ export default function ConflictPanel({
     title?.focus()
   }, [redraws])
 
-  // 실패마다 실행 버튼("다시 시도")으로 옮긴다(5.6, designer #239 D1)
+  // 실패마다 실행 버튼("다시 시도")으로 옮긴다(5.6, designer #239 D1). 보조 버튼의 실패면 그 버튼이다(designer #280 D3)
   useEffect(() => {
-    if (failure) (actionButton.current ?? closeButton.current)?.focus()
-  }, [failure])
+    if (!failure) return
+    const target = failureFocus === 'close' ? closeButton.current : (actionButton.current ?? closeButton.current)
+    target?.focus()
+  }, [failure, failureFocus])
 
   return (
     <>
@@ -91,7 +99,7 @@ export default function ConflictPanel({
       )}
       <div className={styles.actions}>
         <div>
-          <Button ref={closeButton} kind="secondary" disabled={busy} onClick={onCloseAction}>
+          <Button ref={closeButton} kind="secondary" busy={closeBusy} disabled={busy} onClick={onCloseAction}>
             {closeLabel}
           </Button>
         </div>
@@ -100,8 +108,8 @@ export default function ConflictPanel({
             <Button
               ref={actionButton}
               kind={action.kind}
-              busy={busy}
-              disabled={action.disabled}
+              busy={busy && !closeBusy}
+              disabled={action.disabled || closeBusy}
               onClick={action.onClick}
             >
               {action.label}

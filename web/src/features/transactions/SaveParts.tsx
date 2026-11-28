@@ -1,19 +1,10 @@
-import type { MouseEvent, ReactNode } from 'react'
+import type { MouseEvent } from 'react'
 import DialogFrame from '../../components/DialogFrame'
 import RetryMessage from '../../components/RetryMessage'
-import ConflictPanel, { ConflictCompare, DeletedElsewhere, DuplicateRows } from './ConflictPanel'
-import { compareRows } from './conflictValues'
+import ConflictPanel, { DuplicateRows } from './ConflictPanel'
+import IdConflictChoice, { SAVE_FAILED } from './IdConflictChoice'
 import { QUEUE_FAILED } from './pendingTransactions'
-import type { TransactionType } from './transactions'
-import {
-  CHOICE_DESCRIPTION,
-  CHOICE_TITLE,
-  KEPT_NOTICE,
-  SAVE_FAILED,
-  SAVE_OFFLINE,
-  type Choice,
-  type NewTransactionSave,
-} from './useNewTransactionSave'
+import type { NewTransactionSave } from './useNewTransactionSave'
 import type { TransactionForm } from './useTransactionForm'
 
 /* 새 거래 저장(useNewTransactionSave)의 화면 부품: 저장 버튼 위의 실패 문구, 선택 판, 중복 경고 판. D-04 새 입력과 D-05가 같이 쓴다 */
@@ -81,74 +72,18 @@ interface SaveChoiceDialogProps {
 export function SaveChoiceDialog({ save, form }: SaveChoiceDialogProps) {
   const { choice, lists, choiceBusy, online } = save
   return (
-    <DialogFrame open={save.choiceOpen} title={CHOICE_TITLE} busy={choiceBusy} titleFocusable onClose={save.closeChoice}>
-      {choice && lists && (
-        <ChoiceContent
-          choice={choice}
-          mineType={form.effective.type}
-          busy={choiceBusy}
-          online={online}
-          onKeep={() => save.keepSaved(choice.current)}
-          onFix={() => save.fixSaved(choice.current)}
-          onSaveAsNew={save.saveChosenAsNew}
-        >
-          {choice.current.deletedAt === null ? (
-            <ConflictCompare
-              latestLabel="저장된 내용"
-              rows={compareRows(lists.valuesOf(choice.current), form.effective, lists.names, choice.today)}
-            />
-          ) : (
-            <DeletedElsewhere />
-          )}
-        </ChoiceContent>
-      )}
-    </DialogFrame>
-  )
-}
-
-interface ChoiceContentProps {
-  choice: Choice
-  /** 내 입력의 유형 */
-  mineType: TransactionType
-  busy: boolean
-  online: boolean
-  onKeep: () => void
-  onFix: () => void
-  onSaveAsNew: () => void
-  /** 비교 자리 */
-  children: ReactNode
-}
-
-/**
- * 선택 판의 버튼(designer #239). 유형이 같으면 주 버튼 "내 입력으로 고치기"(연결이 없는 동안 비활성), 다르면 "새 거래로 저장"과
- * 그 위의 "저장된 거래는 그대로 남아요"다. 보조 버튼은 늘 "저장된 내용 그대로"다. 처음 초점은 판 제목이다(designer #239).
- * 저장된 거래가 그사이 휴지통으로 갔으면 주 버튼을 숨긴다. 실패한 뒤의 주 버튼은 "다시 시도"다.
- */
-function ChoiceContent({ choice, mineType, busy, online, onKeep, onFix, onSaveAsNew, children }: ChoiceContentProps) {
-  const { current, failure, redraws } = choice
-  const sameType = current.type === mineType
-  const again = failure ? '다시 시도' : undefined
-  const action =
-    current.deletedAt !== null
-      ? undefined
-      : sameType
-        ? { label: again ?? '내 입력으로 고치기', kind: 'primary' as const, onClick: onFix, disabled: !online }
-        : { label: again ?? '새 거래로 저장', kind: 'primary' as const, onClick: onSaveAsNew }
-  // 연결이 없어 누를 수 없는 이유는 실패 문구가 없을 때만 보인다. 유형이 다르면 먼저 저장된 거래가 남는다는 것을 알린다
-  const notice = !action ? undefined : !sameType ? KEPT_NOTICE : !online && !failure ? SAVE_OFFLINE : undefined
-  return (
-    <ConflictPanel
-      description={CHOICE_DESCRIPTION}
-      closeLabel="저장된 내용 그대로"
-      onCloseAction={onKeep}
-      action={action}
-      busy={busy}
-      notice={notice}
-      failure={failure}
-      redraws={redraws}
-    >
-      {children}
-    </ConflictPanel>
+    <IdConflictChoice
+      open={save.choiceOpen}
+      choice={choice}
+      mine={form.effective}
+      lists={lists}
+      busy={choiceBusy && 'action'}
+      online={online}
+      onClose={save.closeChoice}
+      onKeep={() => choice && save.keepSaved(choice.current)}
+      onFix={() => choice && save.fixSaved(choice.current)}
+      onSaveAsNew={save.saveChosenAsNew}
+    />
   )
 }
 

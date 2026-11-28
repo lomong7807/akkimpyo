@@ -1,5 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type RefObject,
+} from 'react'
 import { useNavigate } from 'react-router'
 import { sessionUserId } from '../../api/session'
 import Amount from '../../components/Amount'
@@ -27,18 +37,23 @@ import { onSendFinished, sendQueue, type SendResult } from '../sync/sendQueue'
 import { resendNoticeText } from '../sync/useAutoSend'
 import { NEVER_SYNCED, syncedMoment } from '../sync/syncedText'
 import { useEveryMinute, useSyncedAt } from '../sync/useSyncState'
+import { choiceListsOf, type ChoiceLists } from '../transactions/choiceLists'
+import IdConflictChoice from '../transactions/IdConflictChoice'
 import { detailOf, nameBookOf, titleOf, type NameBook } from '../transactions/listedText'
 import { pendingRow, usePendingRead } from '../transactions/pendingTransactions'
+import { choosableOf } from './choosePending'
 import { discardPending } from './discardPending'
 import { fixOpeningOf } from './fixOpening'
 import { rejectionText } from './rejectionText'
+import { usePendingChoice, type ChoiceEnd, type ChoiceTarget } from './usePendingChoice'
 import styles from './Pending.module.css'
 
 /*
  * B-05 보내지 않은 입력 목록(화면설계서 00-common 6.6, F-106, F-107, F-109, P-226, #236). 이 기기에서 이 계정이 쌓은 입력을
  * 모든 장부에서 오래된 순으로 보인다. 기기 데이터라 뼈대 없이 바로 그린다. 연결이 없어도 목록이 보이고 버릴 수 있다.
  * 보낼 수 없음 줄은 "고쳐서 보내기"와 줄 누르기로 그 입력을 채운 거래 입력을 연다(F-108, #237, PendingFixPage). current가 있는
- * 409 줄은 그 자리에 #280의 "비교해서 고르기"가 들어오므로 그때까지 "버리기"만 있다(designer #102).
+ * 409 줄은 그 자리의 "비교해서 고르기"와 줄 누르기로 선택 판을 연다(#280, designer #102·#280, PendingChoice). 그 장부의 계좌·카테고리를
+ * 사본에서도 서버에서도 얻지 못하면 비교할 수 없어 "버리기"만 있다(planner #280 P2).
  */
 
 /** 데이터 없음(F-106). 모두 보냈다는 뜻이라 권할 동작이 없어 버튼을 두지 않는다(작성자 판단 65) */
@@ -67,6 +82,18 @@ function PendingList() {
   const sending = useSendNow()
   const [discarding, setDiscarding] = useState<PendingTransaction>()
   const discardButtons = useRef(new Map<string, HTMLButtonElement>())
+  const chooseButtons = useRef(new Map<string, HTMLButtonElement>())
+  const list = useRef<HTMLUListElement>(null)
+  const wanted = useRef<WantedFocus>(undefined)
+  const drawn = useRef<PendingTransaction[]>(undefined)
+  const choosing = usePendingChoice((end) => {
+    focusAfterChoice(end, items, { list, drawn, wanted, discardButtons, chooseButtons })
+  })
+  // 거부·대기로 바뀐 줄은 목록을 다시 읽어 그린 뒤에 그 버튼이 생긴다(designer #280 D1)
+  useEffect(() => {
+    drawn.current = items
+    focusWanted({ list, drawn, wanted, discardButtons, chooseButtons })
+  }, [items])
   const waiting = items?.filter(({ state }) => state.kind === 'waiting').length ?? 0
   const { clearProblem } = sending
   // 대기가 0건이 되면 버튼 위 문구도 지운다(designer #236 Q4). 다시 쌓여도 앞의 문구가 되살아나지 않는다
@@ -91,7 +118,7 @@ function PendingList() {
           <EmptyState description={NOTHING_LEFT} />
         ) : (
           // Safari는 점을 없앤 목록을 목록으로 알리지 않으므로 role을 적는다
-          <ul role="list" className={styles.rows}>
+          <ul ref={list} role="list" className={styles.rows}>
             {items.map((item) => (
               <PendingRow
                 key={item.id}
@@ -101,29 +128,97 @@ function PendingList() {
                   if (button) discardButtons.current.set(item.id, button)
                   else discardButtons.current.delete(item.id)
                 }}
+                chooseRef={(button) => {
+                  if (button) chooseButtons.current.set(item.id, button)
+                  else chooseButtons.current.delete(item.id)
+                }}
                 onDiscard={() => setDiscarding(item)}
+                onChoose={choosing.start}
               />
             ))}
           </ul>
         ))}
+      {choosing.dialog.mine && <IdConflictChoice {...choosing.dialog} mine={choosing.dialog.mine} />}
       <DiscardDialog
         item={discarding}
         onClose={() => setDiscarding(undefined)}
         onDiscarded={(id) => {
           // 지운 줄의 버리기가 없어지므로 창이 닫힌 뒤 다음 줄(없으면 앞 줄)의 버리기로, 마지막 줄이었으면 화면 제목으로
           // 초점을 옮긴다(designer #236)
-          const ids = items?.map((item) => item.id) ?? []
-          const index = ids.indexOf(id)
-          const neighbor = ids[index + 1] ?? ids[index - 1]
-          afterModals(() => {
-            const button = neighbor === undefined ? undefined : discardButtons.current.get(neighbor)
-            if (button) button.focus()
-            else focusScreenTitle()
-          })
+          const neighbor = neighborOf(items, id)
+          afterModals(() => focusNeighbor(discardButtons, neighbor))
         }}
       />
     </>
   )
+}
+
+/** 이웃 줄(다음 줄, 없으면 앞 줄)의 id. 그 줄이 사라지기 전의 목록에서 찾는다 */
+function neighborOf(items: PendingTransaction[] | undefined, id: string): string | undefined {
+  const ids = items?.map((item) => item.id) ?? []
+  const index = ids.indexOf(id)
+  return index < 0 ? undefined : (ids[index + 1] ?? ids[index - 1])
+}
+
+/** 사라진 줄 대신 이웃 줄의 버리기로, 마지막 줄이었으면 화면 제목으로(designer #236) */
+function focusNeighbor(discardButtons: RefObject<Map<string, HTMLButtonElement>>, neighbor: string | undefined) {
+  const button = neighbor === undefined ? undefined : discardButtons.current.get(neighbor)
+  if (button) button.focus()
+  else focusScreenTitle()
+}
+
+/** 판이 닫힌 뒤 목록을 다시 읽어야 초점을 줄 수 있는 줄. `ready`는 판이 다 닫혔다는 뜻이다 */
+interface WantedFocus {
+  end: Extract<ChoiceEnd, { kind: 'refused' | 'queued' }>
+  ready: boolean
+}
+
+interface ListFocus {
+  list: RefObject<HTMLUListElement | null>
+  /** 그려진 목록 */
+  drawn: RefObject<PendingTransaction[] | undefined>
+  wanted: RefObject<WantedFocus | undefined>
+  discardButtons: RefObject<Map<string, HTMLButtonElement>>
+  chooseButtons: RefObject<Map<string, HTMLButtonElement>>
+}
+
+/**
+ * 선택 판이 닫힌 뒤의 초점(designer #280). 고르지 않고 닫았으면 그 줄의 "비교해서 고르기", 줄이 지워졌으면 #236처럼 이웃 줄,
+ * 다른 곳에서 먼저 바뀌었으면 그 줄의 "비교해서 고르기"가 남아 있을 때 그것이고 아니면 이웃 줄이다. 거부되거나 대기가 된 줄은
+ * 목록을 다시 읽은 뒤 그 줄의 "고쳐서 보내기"(없으면 버리기)다.
+ */
+function focusAfterChoice(end: ChoiceEnd, items: PendingTransaction[] | undefined, focus: ListFocus) {
+  const { wanted, discardButtons, chooseButtons } = focus
+  wanted.current = undefined
+  if (end.kind === 'refused' || end.kind === 'queued') {
+    const next: WantedFocus = { end, ready: false }
+    wanted.current = next
+    afterModals(() => {
+      next.ready = true
+      focusWanted(focus)
+    })
+    return
+  }
+  const neighbor = end.kind === 'closed' ? undefined : neighborOf(items, end.id)
+  afterModals(() => {
+    const own = end.kind === 'removed' ? undefined : chooseButtons.current.get(end.id)
+    if (own) own.focus()
+    else if (end.kind !== 'closed') focusNeighbor(discardButtons, neighbor)
+  })
+}
+
+/** 바라는 줄이 바뀐 모양으로 그려졌으면 그 버튼에 초점을 준다. 아직이면 다음에 그린 뒤에 다시 본다 */
+function focusWanted({ list, drawn, wanted, discardButtons }: ListFocus) {
+  const next = wanted.current
+  if (!next?.ready) return
+  const { end } = next
+  const row = drawn.current?.find(({ id }) => id === end.id)
+  if (!row || (end.kind === 'refused' && (row.state.kind !== 'rejected' || choosableOf(row)))) return
+  const fix = end.kind === 'refused' ? list.current?.querySelector<HTMLElement>(`a[href="${fixPathOf(end.id)}"]`) : null
+  const target = fix ?? discardButtons.current.get(end.id)
+  if (!target) return
+  wanted.current = undefined
+  target.focus()
 }
 
 /** (1) 마지막으로 맞춘 시각. 열어 둔 채 자정이 지나면 날짜를 붙인다. 읽기 전이나 읽지 못하면 그리지 않는다 */
@@ -217,7 +312,10 @@ interface PendingRowProps {
   busy: boolean
   /** 버리기 버튼. 앞 줄을 버린 뒤 초점을 받는다 */
   discardRef: (button: HTMLButtonElement | null) => void
+  /** 비교해서 고르기 버튼. 고르지 않고 판을 닫으면 초점을 받는다(designer #280) */
+  chooseRef: (button: HTMLButtonElement | null) => void
   onDiscard: () => void
+  onChoose: (target: ChoiceTarget) => void
 }
 
 /** 고쳐서 보내기로 여는 거래 입력의 주소(planner #237 P1) */
@@ -229,13 +327,14 @@ function fixPathOf(id: string): string {
  * (3) 입력 줄. 첫 줄은 "{장부 이름} · {날짜} · {유형}", 둘째 줄은 가맹점/내용(비었으면 카테고리 이름)과 금액, 이체는 "이체"와 그
  * 아래 "{보내는 계좌}에서 {받는 계좌}로". 셋째 줄은 상태 칩(4)과 오른쪽의 고쳐서 보내기(7)·버리기(5), 보낼 수 없음이면 그 아래
  * 거부 이유(6). 고칠 수 있는 보낼 수 없음 줄은 줄 전체를 눌러도 고쳐서 보내기와 같다(F-108). 키보드는 고쳐서 보내기 버튼으로
- * 하므로 줄은 초점을 받지 않는다(designer #237 D5). 대기 줄과 current가 있는 409 줄(#280)은 누를 수 없다.
- * 지금 보내기 처리 중에는 버리기처럼 고쳐서 보내기와 줄 누르기도 막는다(designer #237 D5).
+ * 하므로 줄은 초점을 받지 않는다(designer #237 D5). current가 있는 409 줄은 고쳐서 보내기 자리에 "비교해서 고르기"가 있고 줄
+ * 누르기도 그것과 같다(designer #280). 대기 줄은 누를 수 없다.
+ * 지금 보내기 처리 중에는 버리기처럼 고쳐서 보내기·비교해서 고르기와 줄 누르기도 막는다(designer #237 D5, #280 D6).
  */
-function PendingRow({ item, busy, discardRef, onDiscard }: PendingRowProps) {
+function PendingRow({ item, busy, discardRef, chooseRef, onDiscard, onChoose }: PendingRowProps) {
   const id = useId()
   const navigate = useNavigate()
-  const { names, categories } = useNameBook(item.ledgerId)
+  const { names, categories, lists } = useNameBook(item.ledgerId)
   const ledgerName = useLedgerName(item.ledgerId)
   // 카테고리를 비운 입력은 그 장부의 미분류다(제목 "미분류")
   const shown = useMemo(() => pendingRow(item, categories), [item, categories])
@@ -246,17 +345,21 @@ function PendingRow({ item, busy, discardRef, onDiscard }: PendingRowProps) {
   const meta = [ledgerName, date, typeNames[type]].filter(Boolean).join(' · ')
   const rejected = item.state.kind === 'rejected' ? item.state : undefined
   const fixable = useMemo(() => fixOpeningOf(item) !== undefined, [item])
+  const choosable = useMemo(() => choosableOf(item), [item])
+  const target = choosable && lists ? { ...choosable, seen: item, lists } : undefined
+  const pressable = fixable || target !== undefined
   const describedBy = `${id}-title ${shown ? `${id}-amount ` : ''}${id}-meta`
 
-  /** 줄 안의 버튼과 링크는 스스로 동작한다. 그 밖의 자리를 누르면 고쳐서 보내기와 같다 */
+  /** 줄 안의 버튼과 링크는 스스로 동작한다. 그 밖의 자리를 누르면 고쳐서 보내기(비교해서 고르기)와 같다 */
   function pressRow(event: MouseEvent<HTMLLIElement>) {
     if (busy || (event.target as Element).closest('a, button')) return
-    navigate(fixPathOf(item.id))
+    if (target) onChoose(target)
+    else navigate(fixPathOf(item.id))
   }
 
-  const className = [styles.row, fixable && styles.fixable, fixable && !busy && styles.pressable].filter(Boolean).join(' ')
+  const className = [styles.row, pressable && styles.fixable, pressable && !busy && styles.pressable].filter(Boolean).join(' ')
   return (
-    <li className={className} onClick={fixable ? pressRow : undefined}>
+    <li className={className} onClick={pressable ? pressRow : undefined}>
       <p id={`${id}-meta`} className={styles.meta}>
         {meta}
       </p>
@@ -285,6 +388,17 @@ function PendingRow({ item, busy, discardRef, onDiscard }: PendingRowProps) {
               고쳐서 보내기
             </ButtonLink>
           )}
+          {target && (
+            <Button
+              ref={chooseRef}
+              kind="text"
+              disabled={busy}
+              aria-describedby={describedBy}
+              onClick={() => onChoose(target)}
+            >
+              비교해서 고르기
+            </Button>
+          )}
           <Button ref={discardRef} kind="text-danger" disabled={busy} aria-describedby={describedBy} onClick={onDiscard}>
             버리기
           </Button>
@@ -308,16 +422,23 @@ function payeeOf({ body }: PendingTransaction): string {
 /**
  * 그 장부의 계좌·카테고리 이름. 이 탭이 받아 둔 목록이 있으면 그것을, 없으면 기기 사본을 쓴다. 쌓은 입력은 이 기기가 그때 본
  * 계좌·카테고리로 만든 것이라 보통 사본에 있다. 사본도 없을 때만(30일이 지나 지워짐 등) 서버에서 받는다. 받지 못하면 이름 없이 그린다.
+ * 두 목록이 다 있을 때만 비교해서 고르기의 목록(`lists`)이 있다(planner #280 P2). 목록이 오면 그때 생긴다.
  */
-function useNameBook(ledgerId: string): { names: NameBook; categories: Category[] } {
+function useNameBook(ledgerId: string): { names: NameBook; categories: Category[]; lists?: ChoiceLists } {
   // 사본은 받은 시각과 함께 온다(#238). 여기서는 값만 쓴다. 읽는 중이면 undefined, 없으면 null이다
   const accountsCopy = useLedgerCopy(ledgerId, 'accounts', parseAccounts).data
   const categoriesCopy = useLedgerCopy(ledgerId, 'categories', parseCategories).data
   const accounts = useQuery({ ...accountsQuery(ledgerId), enabled: accountsCopy === null }).data
   const categories = useQuery({ ...categoriesQuery(ledgerId), enabled: categoriesCopy === null }).data
   return useMemo(() => {
-    const shownCategories = categories ?? categoriesCopy?.value ?? NO_CATEGORIES
-    return { names: nameBookOf(accounts ?? accountsCopy?.value ?? [], shownCategories), categories: shownCategories }
+    const accountList = accounts ?? accountsCopy?.value
+    const categoryList = categories ?? categoriesCopy?.value
+    const shownCategories = categoryList ?? NO_CATEGORIES
+    return {
+      names: nameBookOf(accountList ?? [], shownCategories),
+      categories: shownCategories,
+      lists: accountList && categoryList ? choiceListsOf(accountList, categoryList) : undefined,
+    }
   }, [accounts, accountsCopy, categories, categoriesCopy])
 }
 
