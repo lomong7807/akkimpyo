@@ -11,7 +11,14 @@ import { startMockServer } from './support/mockServer'
 import { problem } from './support/problem'
 import { holdClock, passTime } from './support/testClock'
 import { toastRegion } from './support/toast'
-import { expenseOf, incomeOf, startTransactionList, transferOf, type TransactionList } from './support/transactionList'
+import {
+  expenseOf,
+  incomeOf,
+  lastMonthCopyOf,
+  startTransactionList,
+  transferOf,
+  type TransactionList,
+} from './support/transactionList'
 import { startTransactionDetail } from './support/transactionDetail'
 import {
   accountField,
@@ -335,23 +342,7 @@ describe('연결된 상태에서 묻기가 실패하면 경고 없이 저장을 
  * 기기에 최근 한 달(#238)을 남긴다. 앱이 열리며 로그인을 확인한 뒤에 부른다(그 전에 둔 사본은 앱을 열 때 주인 확인이 없어 지운다).
  */
 async function keepLastMonth(items: object[]) {
-  await seedLedgerCopy('user-1', LEDGER, 'transactions', lastMonthOf(items))
-}
-
-/** 기기에 남긴 최근 한 달(#238)의 모양. 저장 범위는 2026-10-27 ~ 2026-11-26이다 */
-function lastMonthOf(items: object[], from = '2026-10-27', to = '2026-11-26') {
-  const dates = [...new Set(items.map((item) => (item as { occurredOn: string }).occurredOn))]
-  return {
-    from,
-    to,
-    items,
-    days: dates.map((date) => ({ date, income: 0, expense: 0 })),
-    months: [
-      { month: '2026-10', totals: { income: 0, expense: 0 } },
-      { month: '2026-11', totals: { income: 0, expense: 0 } },
-    ],
-    truncated: false,
-  }
+  await seedLedgerCopy('user-1', LEDGER, 'transactions', lastMonthCopyOf(items))
 }
 
 describe('연결이 없으면 기기의 최근 31일 내역으로만 묻는다(F-209)', () => {

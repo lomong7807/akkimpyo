@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkRange, defaultRange, outOfRangeText, wholeRange } from '../src/features/export/exportRange'
+import { checkRange, defaultRange, outOfRangeText } from '../src/features/export/exportRange'
 
 /* K-01 (3)의 기간(#240). 날짜는 기기의 오늘(`YYYY-MM-DD`)을 받아 정하므로 시간대와 무관하다. 경계는 연초, 연말, 같은 날, 윤년이다. */
 
@@ -11,18 +11,6 @@ describe('"기간 정하기"의 기본값', () => {
     ['윤년 2월 29일', '2028-02-29', { from: '2028-01-01', to: '2028-02-29' }],
   ])('%s: 올해 1월 1일부터 오늘까지', (_, today, range) => {
     expect(defaultRange(today)).toEqual(range)
-  })
-})
-
-describe('"전체"가 보내는 기간', () => {
-  it.each([
-    ['한 해 가운데', '2026-11-26', '2027-11-26'],
-    ['연말', '2026-12-31', '2027-12-31'],
-    ['연초', '2027-01-01', '2028-01-01'],
-    ['달의 끝', '2027-01-31', '2028-01-31'],
-    ['윤년 2월 29일의 1년 뒤는 2월 28일', '2028-02-29', '2029-02-28'],
-  ])('%s: 2000년 1월 1일부터 오늘로부터 1년 뒤까지(P-202)', (_, today, to) => {
-    expect(wholeRange(today)).toEqual({ from: '2000-01-01', to })
   })
 })
 
@@ -43,7 +31,7 @@ describe('기간 검사', () => {
     ['시작일', { from: '', to: '2026-11-26' }, { from: '시작일을 골라 주세요' }],
     ['종료일', { from: '2026-01-01', to: '' }, { to: '종료일을 골라 주세요' }],
     ['둘 다', { from: '', to: '' }, { from: '시작일을 골라 주세요', to: '종료일을 골라 주세요' }],
-  ])('%s이 비면 그 칸의 오류이고 앞뒤는 보지 않는다', (_, range, errors) => {
+  ])('%s이 비면 그 칸의 오류이고 앞뒤는 보지 않는다(화면은 보내지 않는다, #393)', (_, range, errors) => {
     expect(checkRange(range)).toEqual(errors)
   })
 })

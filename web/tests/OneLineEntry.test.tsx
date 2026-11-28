@@ -6,7 +6,7 @@ import type { CategorySuggestions } from './support/categories'
 import { delayed, meOf, type Backend } from './support/backend'
 import { setDeviceClock } from './support/clock'
 import { goOffline } from './support/connection'
-import { queueOf } from './support/device'
+import { ledgerCopy, queueOf } from './support/device'
 import { untilOpened, untilUnshielded } from './support/dialog'
 import { installIntersectionObserver } from './support/intersection'
 import { startMockServer } from './support/mockServer'
@@ -442,7 +442,22 @@ describe('카테고리 제안(D-05 (6), P-219)', () => {
     expect(suggestions.requests).toEqual(['점심'])
   })
 
-  it('연결이 없으면 묻지 않고 미분류다(1B 임시)', async () => {
+  it('연결이 없으면 기기의 최근 31일 사본에서 같은 가맹점의 카테고리를 채우고 도움말을 보인다. 요청은 보내지 않는다(#348)', async () => {
+    list.months.set('2026-11', [
+      expenseOf({ occurredOn: '2026-11-25', accountId: id.salary, categoryId: id.traffic, amount: 9000, payee: '점 심' }),
+    ])
+    const { user } = await openHome()
+    // 홈이 받은 최근 한 달을 기기에 남긴 뒤에 연결을 끊는다
+    const kept = async () => JSON.stringify((await ledgerCopy('user-1', LEDGER, 'transactions'))?.data)
+    await waitFor(async () => expect(await kept()).toContain(id.traffic))
+    goOffline()
+    await openResult(user)
+    await waitFor(() => expect(categoryField().textContent).toBe('교통'))
+    expect(hasSuggestedHelp()).toBe(true)
+    expect(suggestions.requests).toEqual([])
+  })
+
+  it('연결이 없고 사본이 없으면 묻지 않고 미분류다', async () => {
     const { user } = await openHome()
     goOffline()
     await openResult(user)

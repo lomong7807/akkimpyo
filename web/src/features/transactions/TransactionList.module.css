@@ -271,8 +271,11 @@
   display: flex;
 }
 
+/* 셋째 줄의 상태 칩. 취소한 환불처럼 칩이 여럿이면 8px 띄우고, 좁으면 다음 줄로 4px 띄워 내린다 */
 .status {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
   margin-top: var(--space-4);
 }
 

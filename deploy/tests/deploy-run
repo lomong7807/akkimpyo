@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# 배포 스크립트(deploy/bin/deploy)와 systemd 단위를 로컬 Docker로 시험한다(#52). Docker만 있으면 된다.
+# 운영 compose(deploy/compose.yaml), 운영 서버, GitHub, ghcr.io에 접속하지 않는다. 레포는 시험 안의 git 저장소로,
+# 레지스트리는 시험 안에서 띄운 것(호스트 네트워크의 127.0.0.1만)으로, 텔레그램과 백업은 가짜로 대신한다.
+# 이 실행이 만든 컨테이너, 볼륨, 네트워크, 이미지만 지운다(이름이나 라벨에 akkimpyo-test-deploy-<번호>가 붙는다).
+set -euo pipefail
+
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
+runner=akkimpyo-test-deploy-runner
+id=akkimpyo-test-deploy-$$-$RANDOM
+
+cleanup() {
+  docker ps --all --quiet --filter "label=com.docker.compose.project=$id" | xargs docker rm --force --volumes >/dev/null 2>&1 || true
+  docker ps --all --quiet --filter "name=^$id" | xargs docker rm --force --volumes >/dev/null 2>&1 || true
+  docker volume ls --quiet --filter "label=com.docker.compose.project=$id" | xargs docker volume rm >/dev/null 2>&1 || true
+  docker network ls --quiet --filter "label=com.docker.compose.project=$id" | xargs docker network rm >/dev/null 2>&1 || true
+  docker image ls --all --quiet --filter "label=akkimpyo.test=$id" | sort -u | xargs docker image rm --force >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+docker build --quiet --tag "$runner" --file "$repo/deploy/tests/deploy-Dockerfile" "$repo/deploy/tests" >/dev/null
+
+# 레포를 붙이지(bind mount) 않고 deploy 폴더만 표준 입력으로 넘긴다. 시험이 만드는 compose와 컨테이너는 호스트 경로를 쓰지 않는다.
+COPYFILE_DISABLE=1 tar -C "$repo" -cf - deploy |
+  docker run --rm -i --init --name "$id-suite" \
+    --volume /var/run/docker.sock:/var/run/docker.sock \
+    --env "TEST_ID=$id" --env REPO=/repo \
+    "$runner" bash -c 'mkdir /repo && tar --no-same-owner --warning=no-unknown-keyword -xf - -C /repo &&
+      exec /repo/deploy/tests/deploy-suite </dev/null'

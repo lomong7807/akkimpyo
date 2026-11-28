@@ -120,4 +120,4 @@
 6. 가짜 서버(msw)의 핸들러는 그 테스트에서 보낸 요청이 모두 핸들러에 닿은 뒤에 비운다. 공용 `web/tests/support/mockServer.ts`가 한다. 앞 테스트의 늦은 요청이 다음 테스트의 핸들러에 닿으면 안 된다(#260의 둘째 원인).
 7. 확인: 5개 시간대(Asia/Seoul, UTC, America/Los_Angeles, Pacific/Kiritimati, Pacific/Pago_Pago)에서 각각 10번 돌려 0번 실패하고, CPU 부하를 건 상태에서 한 번 돌린다(#260 수용 기준).
 8. 화면을 옮긴 뒤 새 화면을 읽을 때 주소(`router.state`)나 토스트로 그려졌다고 보지 않는다. 새 화면에만 있는 요소를 `findBy…`로 먼저 기다리고, 그런 요소가 없으면 `tests/support/shownScreen.tsx`의 `untilShown(router)`를 쓴다(#291, #336).
-9. 앱과 따로 싣는 화면의 코드를 처음 받는 시간은 `findBy…`·`waitFor` 1초 한도에 넣지 않는다. `tests/support/screenCode.ts`가 파일마다 `beforeAll`에서 미리 받는다. 한도를 늘려 덮지 않는다(#291, #336).
+9. 앱과 따로 싣는 화면의 코드를 처음 받는 시간은 `findBy…`·`waitFor` 1초 한도에 넣지 않는다. `tests/support/screenCode.ts`가 파일마다 `beforeAll`에서 미리 받는다. 파일(= vitest 프로세스)에서 앱을 처음 그리고 첫 요청을 보내는 비용도 같다. 같은 `beforeAll`에서 `tests/support/firstRun.tsx`가 내역을 따로 띄운 가짜 서버로 한 번 그리고 버린다. 한도를 늘려 덮지 않는다(#291, #336, #363).
