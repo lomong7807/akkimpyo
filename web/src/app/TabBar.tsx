@@ -1,7 +1,8 @@
-import { Link } from 'react-router'
 import Icon from '../components/Icon'
+import { Plus } from '../components/icons'
 import { holdKeyboard } from '../components/keyboardBridge'
 import layout from '../components/layout.module.css'
+import { Link } from '../components/Link'
 import { QUICK_ENTRY, type MainNavigationItem, type Navigation, type NavigationItem } from './navigation'
 import NavigationLink from './NavigationLink'
 import styles from './TabBar.module.css'
@@ -22,7 +23,7 @@ export default function TabBar({ tabs, current, quickEntry }: TabBarProps) {
             return (
               <li key={tab.to}>
                 <NavigationLink item={tab} current={tab === current} className={styles.tab}>
-                  <Icon name={tab.icon} size={24} />
+                  <Icon icon={tab.icon} size={24} />
                   <span className={styles.label}>{tab.label}</span>
                 </NavigationLink>
               </li>
@@ -48,7 +49,7 @@ export default function TabBar({ tabs, current, quickEntry }: TabBarProps) {
 function QuickEntryCell({ item }: { item: NavigationItem }) {
   return (
     <Link to={item.to} aria-label={item.label} className={styles.quickEntry} onClick={holdKeyboard}>
-      <Icon name="Plus" size={24} />
+      <Icon icon={Plus} size={24} />
     </Link>
   )
 }

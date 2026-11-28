@@ -469,8 +469,10 @@ describe('저장', () => {
     const { user } = await openFromList()
     await fillAndSave(user)
     await waitFor(() => expect(screen.getByText("'급여통장' 계좌를 추가했어요")).toBeTruthy())
+    // 토스트는 목록이 그려지기 전에 보인다. 돌아간 목록에만 있는 "추가"가 그려지기를 기다린다(#291)
+    const add = await screen.findByRole('link', { name: '추가' })
     await untilUnshielded()
-    await user.click(screen.getByRole('link', { name: '추가' }))
+    await user.click(add)
     await screen.findByRole('heading', { level: 1, name: '계좌 추가' })
     expect(screen.queryByText("'급여통장' 계좌를 추가했어요")).toBeNull()
   })
@@ -676,6 +678,40 @@ describe('서버가 거부함', () => {
     await user.click(retryButton())
     await waitFor(() => expect(errorOf(name())).toBe(nameDuplicate))
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('다시 보낸 것이 같은 이름으로 거부되면 계좌 목록을 무효로 만들어, 닫고 돌아가면 앞서 저장된 계좌가 보인다(planner #243 P1)', async () => {
+    // 앞 요청은 서버에 저장됐지만 응답을 잃었다
+    const answers = [
+      () => {
+        accounts.items = [...accounts.items, accountOf('급여통장', 'BANK', 350000)]
+        return HttpResponse.error()
+      },
+      refuse(['name', 'DUPLICATE']),
+    ]
+    accounts.addResponse = () => answers.shift()!()
+    const { user } = await openFromList()
+    await fillAndSave(user)
+    await screen.findByRole('alert')
+    act(() => goOnline())
+    await user.click(retryButton())
+    await waitFor(() => expect(errorOf(name())).toBe(nameDuplicate))
+    await untilUnshielded()
+    await user.click(closeButton())
+    await untilOpened()
+    await user.click(screen.getByRole('button', { name: '버리기' }))
+    await screen.findByRole('list', { name: '은행' })
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('list', { name: '은행' }))
+          .getAllByRole('listitem')
+          .map((row) => row.textContent),
+      ).toEqual([
+        '비상금1,000,000원',
+        '급여통장350,000원',
+      ]),
+    )
+    expect(accounts.requests).toHaveLength(2)
   })
 })
 

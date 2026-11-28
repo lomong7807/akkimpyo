@@ -23,7 +23,7 @@ import {
   startServer,
   type Opened,
 } from './support/transactionScreen'
-import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/useTransactionList'
+import { TRANSACTION_LIST_STALE_MS } from '../src/features/transactions/transactionListQueries'
 import { monthOf, today } from '../src/lib/calendarDate'
 import { resetViewport, setViewportWidth } from './support/viewport'
 import { readWebFile } from './support/webFile'
@@ -205,21 +205,24 @@ describe('주소와 공통 틀', () => {
     expect(addressOf(opened)).toBe('/home')
   })
 
-  it('구역 순서는 이번 달 합계, 계좌 잔액, 최근 거래다(1A에는 한 줄 입력, 예산, 이벤트, 확인할 거래가 없다)', async () => {
+  it('구역 순서는 한 줄 입력, 이번 달 합계, 계좌 잔액, 최근 거래다(예산, 이벤트, 확인할 거래는 2·3단계라 없다)', async () => {
     putTransactions()
     await openHome()
-    const headings = within(main()).getAllByRole('heading', { level: 2 }).map((each) => each.textContent)
-    expect(headings).toEqual(['11월 합계', '계좌 잔액', '최근 거래'])
-    expect(within(main()).queryByRole('textbox')).toBeNull()
+    const headings = within(main()).getAllByRole('heading', { level: 2 })
+    expect(headings.map((each) => each.textContent)).toEqual(['11월 합계', '계좌 잔액', '최근 거래'])
+    // 입력칸은 한 줄 입력 하나이고 맨 위 구역이다(C-01 (1), #233)
+    const [oneLine] = within(main()).getAllByRole('textbox')
+    expect(within(main()).getAllByRole('textbox')).toEqual([within(main()).getByRole('textbox', { name: '한 줄 입력' })])
+    expect(oneLine.compareDocumentPosition(headings[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
 describe('하단 탭과 사이드바의 "홈"', () => {
-  it('하단 탭은 홈, 내역, 거래 입력, 더보기 칸이고 홈은 맨 앞의 House 24px다', async () => {
+  it('하단 탭은 홈, 내역, 거래 입력, 통계, 더보기 칸이고 홈은 맨 앞의 House 24px다', async () => {
     putTransactions()
     await openHome()
     const cells = within(tabBar()).getAllByRole('listitem')
-    expect(cells.map((cell) => cell.textContent)).toEqual(['홈', '내역', '', '더보기'])
+    expect(cells.map((cell) => cell.textContent)).toEqual(['홈', '내역', '', '통계', '더보기'])
     const link = within(cells[0]).getByRole('link', { name: '홈' })
     expect(link.getAttribute('href')).toBe('/home')
     const icon = link.querySelector('svg')!
@@ -234,13 +237,13 @@ describe('하단 탭과 사이드바의 "홈"', () => {
     expect(within(tabBar()).getByRole('link', { name: '내역' }).getAttribute('aria-current')).toBeNull()
   })
 
-  it('넓은 화면의 사이드바 주 메뉴는 홈, 내역 순서이고 홈이 지금 화면이다', async () => {
+  it('넓은 화면의 사이드바 주 메뉴는 홈, 내역, 통계 순서이고 홈이 지금 화면이다', async () => {
     putTransactions()
     await openHome()
     setViewportWidth(1280)
     const menu = within(sidebar()).getAllByRole('list')[0]
     const links = within(menu).getAllByRole('link')
-    expect(links.map((link) => link.textContent)).toEqual(['홈', '내역'])
+    expect(links.map((link) => link.textContent)).toEqual(['홈', '내역', '통계'])
     expect(links[0].getAttribute('aria-current')).toBe('page')
     expect(links[0].querySelector('svg')).not.toBeNull()
   })
@@ -273,14 +276,46 @@ describe('이번 달 합계(F-111, P-205)', () => {
     expect(totalsRequests()[0].names).toEqual(['month', 'limit'])
   })
 
-  it('머리 줄은 "{달}월 합계"이고 눌리지 않는다(1A 임시). 화살표가 없다', async () => {
+  it('머리 줄은 "{달}월 합계"와 오른쪽 화살표이고, 구역 전체가 이번 달 월별 통계(E-01)로 가는 링크 하나다(#242)', async () => {
     putTransactions()
+    list.totals.set('2026-11', { income: 3200000, expense: 1245300 })
     await openHome()
     const head = within(totalsRegion()).getByRole('heading', { level: 2 })
     expect(head.textContent).toBe('11월 합계')
-    expect(within(totalsRegion()).queryByRole('link')).toBeNull()
     expect(within(totalsRegion()).queryByRole('button')).toBeNull()
-    expect(head.parentElement!.querySelector('svg')).toBeNull()
+    const [link] = within(totalsRegion()).getAllByRole('link')
+    expect(within(totalsRegion()).getAllByRole('link')).toHaveLength(1)
+    expect(link.getAttribute('href')).toBe('/stats/monthly?month=2026-11')
+    expect(link.contains(head)).toBe(true)
+    expect(head.parentElement!.querySelector('svg')).not.toBeNull()
+    expect(link.className).toMatch(/sectionLink/)
+    expect(totalsRegion().className).toMatch(/linkSection/)
+  })
+
+  it('합계 링크의 이름은 "{달}월 합계, 지출 {금액}, 수입 {금액}, 차액 {금액}"이다(designer #242)', async () => {
+    putTransactions()
+    list.totals.set('2026-11', { income: 100000, expense: 220000 })
+    await openHome()
+    expect(within(totalsRegion()).getByRole('link').getAttribute('aria-label')).toBe(
+      '11월 합계, 지출 220,000원, 수입 +100,000원, 차액 -120,000원',
+    )
+  })
+
+  it('수입이 0원이면 링크 이름에도 부호가 없다', async () => {
+    putTransactions()
+    list.totals.set('2026-11', { income: 0, expense: 0 })
+    await openHome()
+    expect(within(totalsRegion()).getByRole('link').getAttribute('aria-label')).toBe(
+      '11월 합계, 지출 0원, 수입 0원, 차액 0원',
+    )
+  })
+
+  it('불러오지 못했으면 링크가 아니고 구역 안에 "다시 시도"가 있다', async () => {
+    list.response = (sent) => (sent.limit === '1' ? problem(500, 'INTERNAL_ERROR') : undefined)
+    await openHome()
+    await waitFor(() => expect(within(totalsRegion()).getByText(failed)).toBeTruthy())
+    expect(within(totalsRegion()).queryByRole('link')).toBeNull()
+    expect(within(totalsRegion()).getByRole('button', { name: '다시 시도' })).toBeTruthy()
   })
 
   it('지출이 큰 숫자이고 그 아래 수입(강조색, +)과 차액(부호)이 한 줄씩이다', async () => {
@@ -308,6 +343,26 @@ describe('이번 달 합계(F-111, P-205)', () => {
       ['차액', '-120,000원'],
     ])
     expect(styleOf(valueOf(totalsRegion(), '수입').querySelector('span')!).color).toBe('var(--color-text)')
+  })
+
+  it('환불이 지출보다 큰 달(#390)의 음수 지출과 수입은 본문 글자색과 "-"이고(00-common 2.2), 링크 이름도 같다', async () => {
+    putTransactions()
+    list.totals.set('2026-11', { income: -3000, expense: -12000 })
+    await openHome()
+    expect(totals()).toEqual([
+      ['지출', '-12,000원'],
+      ['수입', '-3,000원'],
+      ['차액', '+9,000원'],
+    ])
+    for (const name of ['지출', '수입']) {
+      const shown = [...valueOf(totalsRegion(), name).querySelectorAll('.tabular-nums')]
+      expect(shown.map((amount) => [amount.textContent, styleOf(amount).color])).toEqual(
+        shown.map(() => [name === '지출' ? '-12,000원' : '-3,000원', 'var(--color-text)']),
+      )
+    }
+    expect(within(totalsRegion()).getByRole('link').getAttribute('aria-label')).toBe(
+      '11월 합계, 지출 -12,000원, 수입 -3,000원, 차액 +9,000원',
+    )
   })
 
   it('수입과 지출이 같으면 차액은 부호 없이 "0원"이다', async () => {
@@ -694,13 +749,17 @@ describe('배치(화면설계서 C-01, designer 결정 13·15)', () => {
     await openHome()
     setViewportWidth(390)
     const [totalsSection, accountsSection, recentSection] = [totalsRegion(), accountsRegion(), recentRegion()]
-    // 계좌 잔액은 구역의 여백을 링크가 갖는다(누름 바탕이 선과 선 사이를 채운다)
-    expect(styleOf(totalsSection).paddingTop).toBe('var(--space-24)')
-    expect(styleOf(totalsSection).paddingBottom).toBe('var(--space-24)')
-    expect(within(accountsSection).getByRole('link').className).toMatch(/sectionLink/)
+    // 이번 달 합계와 계좌 잔액은 구역의 여백을 링크가 갖는다(누름 바탕이 선과 선 사이를 채운다, #242)
+    for (const linked of [totalsSection, accountsSection]) {
+      expect(linked.className).toMatch(/linkSection/)
+      expect(within(linked).getByRole('link').className).toMatch(/sectionLink/)
+    }
     expect(readCssRule(CSS, '.sectionLink')).toContain('padding: var(--space-24) var(--inset);')
+    expect(readCssRule(CSS, '.section')).toContain('padding-top: var(--space-24);')
+    expect(readCssRule(CSS, '.section')).toContain('padding-bottom: var(--space-24);')
     // jsdom은 아래 여백 0을 건 요소의 위 여백을 계산하지 못해 같은 규칙(.section)을 쓰는지만 본다
-    expect(recentSection.className).toBe(totalsSection.className)
+    expect(recentSection.className).toMatch(/section/)
+    expect(recentSection.className).not.toMatch(/linkSection/)
     // 선은 둘째 구역(같은 칸)과 셋째 구역(다음 칸의 첫 구역) 위에 있다
     expect(accountsSection.previousElementSibling).toBe(totalsSection)
     expect(recentSection.parentElement!.previousElementSibling).toBe(accountsSection.parentElement)
@@ -731,7 +790,7 @@ describe('배치(화면설계서 C-01, designer 결정 13·15)', () => {
     expect(styleOf(main()).paddingBottom).toBe('var(--space-24)')
   })
 
-  it('넓은 화면은 두 칸이다: 칸 사이 24px을 뺀 폭을 2:3으로 나누고 함께 스크롤한다', async () => {
+  it('넓은 화면은 한 줄 입력(전체 폭) 아래 두 칸이다: 칸 사이 24px을 뺀 폭을 2:3으로 나누고 함께 스크롤한다', async () => {
     putTransactions()
     await openHome()
     setViewportWidth(1280)
@@ -739,7 +798,9 @@ describe('배치(화면설계서 C-01, designer 결정 13·15)', () => {
     expect(styleOf(home).display).toBe('grid')
     expect(styleOf(home).gridTemplateColumns).toBe('minmax(0, 2fr) minmax(0, 3fr)')
     expect(styleOf(home).columnGap).toBe('var(--space-24)')
-    const [left, right] = [...home.children]
+    const [oneLine, left, right] = [...home.children]
+    expect(within(oneLine as HTMLElement).getByRole('textbox', { name: '한 줄 입력' })).toBeTruthy()
+    expect(styleOf(oneLine).gridColumn).toBe('1 / -1')
     expect(within(left as HTMLElement).getAllByRole('heading', { level: 2 }).map((each) => each.textContent)).toEqual([
       '11월 합계',
       '계좌 잔액',

@@ -57,15 +57,17 @@ describe('더보기(M-01)', () => {
     expect(screen.queryByRole('heading')).toBeNull()
   })
 
-  it('1A에는 계좌와 카테고리 묶음, 맨 아래의 로그아웃 묶음만 있고 자리 표시가 없다', async () => {
+  it('1B에는 계좌, 카테고리, 내보내기 묶음과 맨 아래의 로그아웃 묶음만 있고 자리 표시가 없다', async () => {
     await open('/more')
+    // 더보기는 따로 싣는다. 틀(상단 바와 불러오는 중)이 아니라 화면이 그려진 뒤에 센다
+    await screen.findByRole('button', { name: '로그아웃' })
     const groups = content()
       .getAllByRole('list')
       .map((list) => within(list).getAllByRole('listitem').map((item) => item.textContent))
-    expect(groups).toEqual([['계좌', '카테고리'], ['로그아웃']])
-    expect(content().getAllByRole('link')).toHaveLength(2)
+    expect(groups).toEqual([['계좌', '카테고리', '내보내기'], ['로그아웃']])
+    expect(content().getAllByRole('link')).toHaveLength(3)
     expect(content().getAllByRole('button')).toHaveLength(1)
-    expect(screen.getByRole('main').textContent).toBe('계좌카테고리로그아웃')
+    expect(screen.getByRole('main').textContent).toBe('계좌카테고리내보내기로그아웃')
   })
 
   it('계좌 줄은 아이콘과 화살표가 있고 누르면 계좌 목록으로 간다', async () => {
@@ -152,12 +154,12 @@ describe('계좌 항목', () => {
     expect(currentNames()).toEqual(['더보기'])
   })
 
-  it('사이드바에는 아이콘 없이 이름만 있고 카테고리와 로그아웃 위에 있다', async () => {
+  it('사이드바에는 아이콘 없이 이름만 있고 카테고리, 내보내기, 로그아웃 위에 있다', async () => {
     await open('/home', 1280)
     const link = within(menu()).getByRole('link', { name: '계좌' })
     expect(link.querySelector('svg')).toBeNull()
-    const rows = within(menu()).getAllByText(/^(계좌|카테고리|로그아웃)$/)
-    expect(rows.map((row) => row.textContent)).toEqual(['계좌', '카테고리', '로그아웃'])
+    const rows = within(menu()).getAllByText(/^(계좌|카테고리|내보내기|로그아웃)$/)
+    expect(rows.map((row) => row.textContent)).toEqual(['계좌', '카테고리', '내보내기', '로그아웃'])
   })
 
   it('사이드바에서 누르면 계좌 목록으로 가고 지금 항목이 된다. 바뀌는 것은 색뿐이다', async () => {

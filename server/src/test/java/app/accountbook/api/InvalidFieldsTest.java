@@ -4,11 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import app.accountbook.api.Problem.InvalidField;
 import app.accountbook.common.FieldErrorCode;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.MapBindingResult;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 
 /** HTTP로 만들기 어려운 입력 오류. 나머지는 ControllerErrorTest가 본다. */
 class InvalidFieldsTest {
@@ -37,6 +45,29 @@ class InvalidFieldsTest {
 
         assertThat(fields).containsExactly(InvalidField.of("limit", FieldErrorCode.INVALID_FORMAT));
         assertThat(fields.toString()).doesNotContain("marker");
+    }
+
+    /** 스프링의 JSON 변환기와 같이 본문을 스트림으로 읽어 Jackson이 낸 예외를 감싼다. */
+    @ParameterizedTest
+    @ValueSource(strings = {" ", "\n", " \t\r\n "})
+    void 공백뿐인_본문은_입력란_오류가_아니라_읽을_수_없는_본문이다(String body) {
+        assertThat(InvalidFields.of(unreadable(body))).isEmpty();
+    }
+
+    @Test
+    void 값을_읽었지만_모양이_틀린_본문은_본문_전체의_형식_오류다() {
+        assertThat(InvalidFields.of(unreadable(" [] ")))
+                .contains(InvalidField.of("", FieldErrorCode.INVALID_FORMAT));
+    }
+
+    private static HttpMessageNotReadableException unreadable(String body) {
+        try {
+            new JsonMapper().readValue(new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)),
+                    TransactionRequest.class);
+        } catch (JacksonException e) {
+            return new HttpMessageNotReadableException("읽지 못함", e, new MockHttpInputMessage(new byte[0]));
+        }
+        throw new AssertionError("읽혔다: " + body);
     }
 
     @Test

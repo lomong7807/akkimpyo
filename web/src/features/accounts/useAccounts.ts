@@ -2,7 +2,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useCurrentLedger } from '../me/CurrentLedgerContext'
 import { fetchKeepingCopy } from '../me/ledgerCopy'
 import { ledgerKey, LEDGER_LIST } from '../me/ledgerKey'
-import { TRANSACTION_LIST_STALE_MS } from '../transactions/useTransactionList'
+import { TRANSACTION_LIST_STALE_MS } from '../transactions/transactionListQueries'
 import { fetchAccounts } from './accounts'
 
 /** 잔액이 바뀌는 저장을 한 뒤에는 이 키를 무효로 만든다. */

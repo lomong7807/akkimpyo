@@ -3,19 +3,23 @@ import { MainScreen } from '../components/Screen'
 import HomePage from '../features/home/HomePage'
 import ClearStaleCaret from './ClearStaleCaret'
 import LedgerLayout from './LedgerLayout'
-import LoginRoute from './LoginRoute'
-import { accountsItem, categoriesItem, homeItem, moreItem, transactionsItem } from './navigation'
+import { accountsItem, categoriesItem, exportItem, homeItem, moreItem, statsItem, transactionsItem } from './navigation'
 import PlainLayout from './PlainLayout'
 import ScreenError from './ScreenError'
 import {
   accountAddScreen,
+  accountEditScreen,
   accountsScreen,
   categoriesScreen,
+  exportScreen,
+  loginScreen,
+  monthlyStatsScreen,
   moreScreen,
   notFoundScreen,
   pendingFixScreen,
   pendingScreen,
   signupScreen,
+  transactionCalendarScreen,
   transactionDetailScreen,
   transactionEditScreen,
   transactionListScreen,
@@ -29,7 +33,7 @@ import SignedOutArea from './SignedOutArea'
 
 /**
  * 주소는 화면설계서 00-common 12절을 따른다. 화면을 만드는 이슈가 자기 주소를 더한다.
- * 로그인과 홈 말고는 화면 코드를 따로 싣는다(screens.tsx, #251). 라우트와 handle은 묶음을 받기 전에도 공통 틀이 맞게 그려지도록 여기 둔다.
+ * 홈 말고는 화면 코드를 따로 싣는다(screens.tsx, #251, 로그인은 #355). 라우트와 handle은 묶음을 받기 전에도 공통 틀이 맞게 그려지도록 여기 둔다.
  */
 export const routes: RouteObject[] = [
   {
@@ -50,7 +54,7 @@ export const routes: RouteObject[] = [
       {
         element: <SignedOutArea />,
         children: [
-          { element: <PlainLayout />, children: [{ path: '/login', element: <LoginRoute /> }] },
+          { element: <PlainLayout />, children: [{ path: '/login', element: <loginScreen.Screen /> }] },
           { path: '/signup', element: <signupScreen.Screen /> },
         ],
       },
@@ -79,7 +83,15 @@ export const routes: RouteObject[] = [
                     element: <accountAddScreen.Screen />,
                     handle: { navigationItem: accountsItem, fullScreen: true },
                   },
+                  // 1B 임시: 넓은 화면에서도 G-01 오른쪽 칸이 아닌 한 칸이다(#244)
+                  {
+                    path: '/accounts/:id/edit',
+                    element: <accountEditScreen.Screen />,
+                    handle: { navigationItem: accountsItem, fullScreen: true },
+                  },
                   { path: '/categories', element: <categoriesScreen.Screen />, handle: { navigationItem: categoriesItem } },
+                  // K-01(#240). 하단 탭은 더보기, 넓은 화면은 사이드바의 "내보내기"를 강조한다
+                  { path: '/export', element: <exportScreen.Screen />, handle: { navigationItem: exportItem } },
                   // 사이드바 항목이 없다. 주소로 열면 하단 탭은 더보기를 강조한다(00-common 6.2)
                   { path: '/pending', element: <pendingScreen.Screen /> },
                   // 고쳐서 보내기(planner #237 P1). 1B 임시: 넓은 화면에서도 B-05 오른쪽 칸이 아닌 한 칸이다(#244)
@@ -90,6 +102,12 @@ export const routes: RouteObject[] = [
                     handle: { navigationItem: transactionsItem },
                   },
                   { path: '/transactions/new', element: <transactionNewScreen.Screen />, handle: { fullScreen: true } },
+                  // 거래 상세(/transactions/:id)보다 앞에 둔다(정적 경로가 이기지만 순서로도 분명히 한다, architect #300 C)
+                  {
+                    path: '/transactions/calendar',
+                    element: <transactionCalendarScreen.Screen />,
+                    handle: { navigationItem: transactionsItem },
+                  },
                   {
                     path: '/transactions/:id',
                     element: <transactionDetailScreen.Screen />,
@@ -99,6 +117,12 @@ export const routes: RouteObject[] = [
                     path: '/transactions/:id/edit',
                     element: <transactionEditScreen.Screen />,
                     handle: { navigationItem: transactionsItem, fullScreen: true },
+                  },
+                  // E-01(#242). 1C의 카테고리별(E-02)·연 단위(E-05) 통계도 이 아래 주소에 같은 항목으로 둔다
+                  {
+                    path: '/stats/monthly',
+                    element: <monthlyStatsScreen.Screen />,
+                    handle: { navigationItem: statsItem },
                   },
                   { path: '*', element: <notFoundScreen.Screen /> },
                 ],

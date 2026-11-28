@@ -1,6 +1,7 @@
 import { useId } from 'react'
-import { Link } from 'react-router'
 import Amount from '../../components/Amount'
+import { totalKind } from '../../components/amountDisplay'
+import { Link } from '../../components/Link'
 import StatusChip from '../../components/StatusChip'
 import { formatDate } from '../../lib/calendarDate'
 import { PENDING_PATH } from '../sync/useSyncState'
@@ -38,40 +39,45 @@ export function DayGroup({ date, today, total, items, names, highlighted, headin
         </Heading>
         {total && <DaySums total={total} />}
       </div>
-      {/* Safari는 점을 없앤 목록을 목록으로 알리지 않으므로 role을 적는다 */}
-      <ul role="list" aria-labelledby={headingId} className={styles.rows}>
-        {items.map((item) => (
-          <TransactionRow
-            key={item.id}
-            transaction={item}
-            names={names}
-            dateId={headingId}
-            highlighted={item.id === highlighted}
-          />
-        ))}
-      </ul>
+      {/* Safari는 점을 없앤 목록을 목록으로 알리지 않으므로 role을 적는다. 줄이 없으면(달력의 빈 날) 목록을 두지 않는다 */}
+      {items.length > 0 && (
+        <ul role="list" aria-labelledby={headingId} className={styles.rows}>
+          {items.map((item) => (
+            <TransactionRow
+              key={item.id}
+              transaction={item}
+              names={names}
+              dateId={headingId}
+              highlighted={item.id === highlighted}
+            />
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
 
-/** 그날 합계(0.5). 지출만이면 지출, 수입만이면 수입, 둘 다면 수입과 지출, 둘 다 0이면 비운다. */
+/**
+ * 그날 합계(0.5). 지출만이면 지출, 수입만이면 수입, 둘 다면 수입과 지출, 둘 다 0이면 비운다. 환불만 있는 날의 음수 합계도
+ * 0이 아니라 보이고, 본문 글자색과 "-"다(totalKind, #390).
+ */
 function DaySums({ total }: { total: DayTotal }) {
   if (total.income === 0 && total.expense === 0) return null
   return (
     <dl className={styles.daySums}>
-      {total.income > 0 && (
+      {total.income !== 0 && (
         <div className={styles.daySum}>
           <dt className={styles.daySumName}>수입</dt>
           <dd className={styles.daySumAmount}>
-            <Amount kind="income" value={total.income} />
+            <Amount kind={totalKind('income', total.income)} value={total.income} />
           </dd>
         </div>
       )}
-      {total.expense > 0 && (
+      {total.expense !== 0 && (
         <div className={styles.daySum}>
           <dt className={styles.daySumName}>지출</dt>
           <dd className={styles.daySumAmount}>
-            <Amount kind="expense" value={total.expense} />
+            <Amount kind={totalKind('expense', total.expense)} value={total.expense} />
           </dd>
         </div>
       )}

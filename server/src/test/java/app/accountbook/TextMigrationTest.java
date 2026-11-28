@@ -113,7 +113,8 @@ class TextMigrationTest {
         insertTransaction(ledger, user, "김밥천국", "점심\n저녁");
         assertThat(problems()).isEmpty();
 
-        migrate("latest");
+        // V17·V18까지만 올린다. 뒤에 마이그레이션이 늘어도(V19, #67) 이 테스트가 보는 범위는 같다.
+        migrate("18");
 
         assertThat(schemaVersion()).isEqualTo("18");
         assertThat(jdbc.queryForObject("select display_name from users where id = ?", String.class, user))

@@ -148,6 +148,12 @@ const splits: Split[] = [
     seed: seedRejected,
   },
   {
+    name: '내보내기',
+    module: '../src/features/export/ExportPage',
+    path: '/export',
+    drawn: () => screen.findByRole('radiogroup', { name: '기간' }),
+  },
+  {
     name: '더보기',
     module: '../src/app/MoreRoute',
     path: '/more',

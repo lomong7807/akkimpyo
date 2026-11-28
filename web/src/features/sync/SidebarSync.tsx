@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router'
+import { NavLink } from '../../components/Link'
 import SyncedTime from './SyncedTime'
 import { pendingSummary, PENDING_PATH, usePendingCounts } from './useSyncState'
 import styles from './SidebarSync.module.css'
