@@ -39,14 +39,15 @@ describe('거부 이유 문구 표', () => {
     expect(rejectionText({ code: 'VALIDATION_FAILED', fieldErrors })).toBe(CATEGORY_GONE)
   })
 
-  it('문구는 설계서 B-05 표와 designer #236·#237 답 그대로다(두 문장이라 마침표)', () => {
+  it('문구는 설계서 B-05 표와 designer #236·#237·#280 답 그대로다(두 문장이라 마침표)', () => {
     expect([ACCOUNT_GONE, CATEGORY_GONE, INVALID_VALUE, TAKEN_ID, DIFFERENT_CONTENT]).toEqual([
       '계좌가 삭제되어 보낼 수 없어요. 다른 계좌를 골라 보내 주세요.',
       '카테고리가 삭제되어 보낼 수 없어요. 다른 카테고리를 골라 보내 주세요.',
       '입력한 값을 저장할 수 없어요. 고쳐서 보내 주세요.',
       // 고쳐서 보내기가 새 거래 id로 보내 준다(ADR 006 결정 3, designer #237 D2)
       '이미 있는 다른 거래와 겹쳐 보낼 수 없어요. 고쳐서 보내면 새 거래로 보내요.',
-      '앞서 저장한 거래와 내용이 달라 보낼 수 없어요. 내역에서 확인해 주세요.',
+      // 그 줄의 "비교해서 고르기"로 고른다(designer #280)
+      '이미 저장된 거래와 내용이 달라 보낼 수 없어요. 비교해서 골라 주세요.',
     ])
   })
 })
