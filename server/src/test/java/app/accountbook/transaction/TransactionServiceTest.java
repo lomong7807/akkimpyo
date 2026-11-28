@@ -548,6 +548,8 @@ class TransactionServiceTest {
         assertThat(history).extracting(ChangeLogView::action).containsExactly(
                 ChangeAction.CREATE, ChangeAction.UPDATE, ChangeAction.CANCEL, ChangeAction.DELETE,
                 ChangeAction.RESTORE);
+        assertThat(history).extracting(entry -> entry.after().at("/version").asLong())
+                .containsExactly(1L, 2L, 3L, 4L, 5L);
         assertThat(history).allSatisfy(entry -> {
             assertThat(entry.transactionId()).isEqualTo(id);
             assertThat(entry.actorId()).isEqualTo(owner.getId());
