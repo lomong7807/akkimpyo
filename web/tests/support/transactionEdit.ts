@@ -67,7 +67,8 @@ export function saving(changes: object = {}) {
 
 export type Item = ReturnType<typeof lunch>
 
-export const editHeading = () => screen.queryByRole('heading', { level: 1, name: '거래 수정' })
+/** 거래 수정의 제목. 넓은 화면 내역의 오른쪽 칸에서 열면 칸의 제목이라 h2다(#244) */
+export const editHeading = () => screen.queryByRole('heading', { name: '거래 수정' })
 export const detailPath = (item: Item) => `/transactions/${String(item.id)}`
 export const editPath = (item: Item) => `${detailPath(item)}/edit`
 export const pathOf = ({ router }: Opened) => router.state.location.pathname

@@ -1,8 +1,9 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { use, useEffect, useState, type MouseEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { sessionUserId } from '../../api/session'
 import { Button } from '../../components/Button'
 import FullScreenForm from '../../components/FullScreenForm'
+import { InPaneContext } from '../../components/sidePane'
 import { useToast } from '../../components/ToastContext'
 import { useGoBack } from '../../components/useGoBack'
 import { useLeaveGuard } from '../../components/useLeaveGuard'
@@ -15,6 +16,7 @@ import { EntryCopiesContext, useEntryAccounts, useEntryCategories } from './entr
 import { defaultAccountOf } from './formDefaults'
 import { useListMemory } from './listMemory'
 import { entryHandoffOf, returnToOneLine } from './oneLineHandoff'
+import { QUEUED_TOAST } from './pendingTransactions'
 import TransactionFields from './TransactionFields'
 import { newTransactionDraftOf } from './transactionDraft'
 import { newTransactionValues } from './transactionForm'
@@ -39,6 +41,8 @@ export default function TransactionNewPage() {
   const goBack = useGoBack(HOME)
   const navigate = useNavigate()
   const location = useLocation()
+  // 넓은 화면 내역의 오른쪽 칸에 연 입력(D-04 넓은 화면, #244)
+  const inPane = use(InPaneContext)
   // 기기에 있는 계좌로 바로 열고 서버의 목록이 오면 바꾼다(#234)
   const accounts = useEntryAccounts(true)
   const categories = useEntryCategories(true)
@@ -88,12 +92,19 @@ export default function TransactionNewPage() {
     if (draft.values.memo !== '') setMoreOpen(true)
   })
 
-  /** 저장을 마쳤다. 돌아간 화면이 내역이면 그 줄을 강조한다(D-01 성공 뒤). 주소와 방문 기록에는 넣지 않는다 */
+  /**
+   * 저장을 마쳤다. 돌아간 화면이 내역이면 그 줄을 강조한다(D-01 성공 뒤). 주소와 방문 기록에는 넣지 않는다.
+   * 오른쪽 칸이면 칸이 저장한 거래의 상세로 바뀐다(D-04 저장 표). 입력은 방문 기록에서 상세로 바꿔, 뒤로 가면 목록이다.
+   * 기기에 쌓은 입력은 아직 서버에 없어 상세를 열 수 없으므로 칸을 닫고 목록으로 돌아간다.
+   */
   function leaveAfterSave(toast: string, savedId: string) {
     if (handoff) returnToOneLine(owner, '')
     listMemory.rememberSaved(savedId)
     showToast(toast)
-    guard.leaveAfterSave(goBack)
+    const showSaved = inPane && toast !== QUEUED_TOAST
+    guard.leaveAfterSave(
+      showSaved ? () => navigate(`/transactions/${savedId}`, { replace: true, preventScrollReset: true }) : goBack,
+    )
   }
 
   /**
@@ -106,7 +117,7 @@ export default function TransactionNewPage() {
     event.preventDefault()
     // 저장을 다시 보내는 중에는 떠나지 않는다. 요청이 어디까지 갔는지 모른다
     if (save.busy) return
-    guard.leave(() => navigate(path, { replace: true }))
+    guard.leave(() => navigate(path, { replace: true, preventScrollReset: inPane }))
   }
 
   return (

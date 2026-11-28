@@ -2,6 +2,7 @@ import {
   use,
   useEffect,
   useEffectEvent,
+  useId,
   useLayoutEffect,
   useRef,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -18,6 +19,7 @@ import layout from './layout.module.css'
 import { isModalOpen } from './openModal'
 import { usePressShield } from './pressGuard'
 import { shellRiseElapsed, ShellShownContext } from './shellShown'
+import { InPaneContext } from './sidePane'
 import { ShellContext } from './ShellContext'
 import type { LeaveGuard } from './useLeaveGuard'
 import { visibleArea } from './visibleArea'
@@ -44,6 +46,8 @@ interface FullScreenFormProps {
 /**
  * 전체 화면 입력(화면설계서 00-common 5.5). 모달이 아니라 화면이다.
  * 라우트의 handle에 fullScreen을 적어 하단 탭을 없앤다.
+ * 넓은 화면에서 목록 옆 오른쪽 칸에 열면(InPaneContext) 칸 높이를 채우는 영역이다. 제목은 칸의 제목(h2)이고 "닫기"는 머리 왼쪽,
+ * 저장 자리는 칸 맨 아래다. 화면 전체의 영역(main)과 연결 없음 띠는 목록 쪽의 것을 쓴다(D-04·G-02 넓은 화면, #244).
  */
 export default function FullScreenForm({
   title,
@@ -58,6 +62,8 @@ export default function FullScreenForm({
 }: FullScreenFormProps) {
   const screen = useRef<HTMLDivElement>(null)
   const bottomArea = useRef<HTMLDivElement>(null)
+  const inPane = use(InPaneContext)
+  const titleId = useId()
   const drag = useDragDown(screen, guard.close)
   // 연결 없음 띠는 머리 바로 아래(00-common 6.1). 동기화 상태 표시(B-04)는 전체 화면 입력에 없다
   const { band } = use(ShellContext)
@@ -79,26 +85,30 @@ export default function FullScreenForm({
     onSubmit()
   }
 
+  // 오른쪽 칸은 칸의 폭을 그대로 쓴다
+  const width = inPane ? '' : `${layout.contentWidth} ${layout.fullScreenForm} `
+  const Title = inPane ? 'h2' : 'h1'
+  const Main = inPane ? 'div' : 'main'
   return (
     <div
       ref={screen}
-      className={styles.screen}
+      className={inPane ? `${styles.screen} ${styles.inPane}` : styles.screen}
+      {...(inPane && { role: 'region', 'aria-labelledby': titleId })}
       aria-busy={guard.busy || undefined}
       onMouseDown={keepFocusInField}
     >
-      <header
-        className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.head}${dragToClose ? ` ${styles.dragHandle}` : ''}`}
-        {...(dragToClose && drag)}
-      >
+      <header className={`${width}${styles.head}${dragToClose ? ` ${styles.dragHandle}` : ''}`} {...(dragToClose && drag)}>
         <div className={styles.close}>
           <Button kind="icon" icon={X} aria-label="닫기" onClick={guard.close} />
         </div>
-        <h1 className={styles.title}>{title}</h1>
+        <Title id={titleId} className={styles.title}>
+          {title}
+        </Title>
       </header>
-      {band}
-      <main className={styles.main}>
+      {!inPane && band}
+      <Main className={styles.main}>
         <form className={styles.form} noValidate onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
-          <div className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.fields}`}>
+          <div className={`${width}${styles.fields}`}>
             {/* 초점은 옮기지 않는다. 비어 있을 때 자리를 차지하지 않게 있을 때만 그린다 */}
             {notice && (
               <p role="status" className={noticeDanger ? `${styles.notice} ${styles.noticeDanger}` : styles.notice}>
@@ -111,12 +121,12 @@ export default function FullScreenForm({
           <div
             ref={bottomArea}
             hidden={bottom === undefined}
-            className={`${layout.contentWidth} ${layout.fullScreenForm} ${styles.bottom}`}
+            className={`${width}${styles.bottom}`}
           >
             {bottom}
           </div>
         </form>
-      </main>
+      </Main>
       <ConfirmDialog
         open={guard.asking}
         title="쓰던 내용을 버릴까요?"

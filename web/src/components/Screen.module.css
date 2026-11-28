@@ -113,9 +113,17 @@
   }
 
   .sidePane {
+    /* 칸 안의 입력(FullScreenForm)은 이 높이를 채워 저장 자리를 칸 맨 아래에 둔다(#244) */
+    --side-pane-height: calc(100dvh - var(--space-24));
     position: sticky;
     top: 0;
-    max-height: calc(100dvh - var(--space-24));
+    max-height: var(--side-pane-height);
     overflow-y: auto;
+  }
+
+  /* 이름 줄 아래의 두 칸(G-01). 이름 줄이 위에 붙어 있으므로 오른쪽 칸은 그 아래에 붙고 그만큼 낮다 */
+  .titleBar ~ .split .sidePane {
+    --side-pane-height: calc(100dvh - var(--size-topbar) - var(--space-24));
+    top: var(--size-topbar);
   }
 }

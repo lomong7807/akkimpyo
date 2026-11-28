@@ -74,7 +74,8 @@ export async function addCardAccount(page: Page, name: string) {
   await homeBalances(page).click()
   await expect(page).toHaveURL('/accounts')
   await page.getByRole('link', { name: '추가', exact: true }).click()
-  await expect(page.getByRole('heading', { level: 1, name: '계좌 추가' })).toBeVisible()
+  // 넓은 화면은 계좌 옆 오른쪽 칸의 입력이라 제목이 h2다(#244)
+  await expect(page.getByRole('heading', { name: '계좌 추가', exact: true })).toBeVisible()
 
   await page.getByRole('textbox', { name: '이름', exact: true }).fill(name)
   await page.getByRole('radio', { name: '카드', exact: true }).click()
@@ -262,7 +263,8 @@ async function expectTransactionDetail(page: Page) {
  */
 export async function changeAmount(page: Page, from: string, to: string) {
   await page.getByRole('link', { name: '수정', exact: true }).click()
-  await expect(page.getByRole('heading', { level: 1, name: '거래 수정' })).toBeVisible()
+  // 넓은 화면은 내역 옆 오른쪽 칸의 입력이라 제목이 h2다(#244)
+  await expect(page.getByRole('heading', { name: '거래 수정', exact: true })).toBeVisible()
   const amount = page.getByRole('textbox', { name: '금액' })
   await expect(amount).toHaveValue(from)
   await amount.fill(digitsOf(to))

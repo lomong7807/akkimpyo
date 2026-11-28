@@ -79,15 +79,12 @@ export const routes: RouteObject[] = [
                   { path: '/home', element: <HomePage />, handle: { navigationItem: homeItem } },
                   { path: '/more', element: <moreScreen.Screen />, handle: { navigationItem: moreItem } },
                   // 넓은 화면은 오른쪽 칸이 있는 두 칸이다(G-01 넓은 화면, #244). 1B 동안 계좌 줄은 누를 수 없어 안내만 보인다(#82)
+                  // 목록에서 연 계좌 추가(G-02)는 넓은 화면에서 오른쪽 칸이다(G-02 넓은 화면, #244)
                   {
                     path: '/accounts',
                     element: <ListDetailLayout list={<accountsScreen.Screen />} empty="계좌를 고르면 여기에 자세히 보여요" />,
                     handle: { navigationItem: accountsItem },
-                  },
-                  {
-                    path: '/accounts/new',
-                    element: <accountAddScreen.Screen />,
-                    handle: { navigationItem: accountsItem, fullScreen: true },
+                    children: [{ path: 'new', element: <accountAddScreen.Screen />, handle: { fullScreen: true } }],
                   },
                   // 1B 임시: 넓은 화면에서도 G-01 오른쪽 칸이 아닌 한 칸이다(#244)
                   {
@@ -108,20 +105,20 @@ export const routes: RouteObject[] = [
                     element: (
                       <ListDetailLayout list={<transactionListScreen.Screen />} empty="거래를 고르면 여기에 자세히 보여요" />
                     ),
-                    handle: { navigationItem: transactionsItem },
-                    children: [{ path: ':id', element: <transactionDetailScreen.Screen /> }],
+                    // 내역에서 누른 사이드바의 "거래 입력"은 오른쪽 칸에 연다(entryInPane)
+                    handle: { navigationItem: transactionsItem, entryInPane: true },
+                    // 목록에서 연 입력·수정(D-04)은 넓은 화면에서 오른쪽 칸이고, 아니면 전체 화면이다(00-common 5.5)
+                    children: [
+                      { path: ':id', element: <transactionDetailScreen.Screen /> },
+                      { path: 'new', element: <transactionNewScreen.Screen />, handle: { fullScreen: true } },
+                      { path: ':id/edit', element: <transactionEditScreen.Screen />, handle: { fullScreen: true } },
+                    ],
                   },
-                  { path: '/transactions/new', element: <transactionNewScreen.Screen />, handle: { fullScreen: true } },
                   // 거래 상세(/transactions/:id)보다 앞에 둔다(정적 경로가 이기지만 순서로도 분명히 한다, architect #300 C)
                   {
                     path: '/transactions/calendar',
                     element: <transactionCalendarScreen.Screen />,
                     handle: { navigationItem: transactionsItem },
-                  },
-                  {
-                    path: '/transactions/:id/edit',
-                    element: <transactionEditScreen.Screen />,
-                    handle: { navigationItem: transactionsItem, fullScreen: true },
                   },
                   // E-01(#242). 1C의 카테고리별(E-02)·연 단위(E-05) 통계도 이 아래 주소에 같은 항목으로 둔다
                   {
