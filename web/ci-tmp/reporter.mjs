@@ -1,6 +1,4 @@
 // 임시(#292): --repeats의 회마다 결과를 센다. ready 전에 ci-tmp/와 package.json의 test를 되돌린다.
-import { appendFileSync } from 'node:fs'
-
 const tz = process.env.TZ ?? '(TZ 없음)'
 
 function whereOf(error) {
@@ -36,10 +34,6 @@ export default class AttemptsReporter {
     const avg = Math.round(durations.reduce((sum, each) => sum + each, 0) / Math.max(1, durations.length))
     const max = Math.round(Math.max(0, ...durations))
     console.log(`[test] TZ=${tz} 실패=${failed.length}/${attempts.length} 평균=${avg}ms 최대=${max}ms | ${testCase.module.moduleId.slice(testCase.module.moduleId.indexOf('tests/'))} > ${testCase.fullName}`)
-    if (process.env.ATTEMPTS_OUT) {
-      const name = `${testCase.module.moduleId.slice(testCase.module.moduleId.indexOf('tests/'))} > ${testCase.fullName}`
-      appendFileSync(process.env.ATTEMPTS_OUT, `${JSON.stringify({ name, runs: attempts.length, failed: failed.length })}\n`)
-    }
     const clocks = this.clocks.get(testCase.id) ?? []
     failed.forEach((attempt, index) => {
       const error = attempt.errors?.[0]
