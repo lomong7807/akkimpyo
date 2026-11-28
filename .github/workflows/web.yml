@@ -1,6 +1,6 @@
 name: web
 
-# web/나 이 파일이 바뀔 때만 돈다. server만 바꾼 PR에서는 돌지 않는다.
+# PR과 push는 web/나 이 파일이 바뀔 때만 돈다. server만 바꾼 PR에서는 돌지 않는다.
 # paths와 paths-ignore는 한 이벤트에 같이 쓸 수 없어 문서 제외는 '!' 패턴으로 적는다.
 # docs/와 claudedocs/는 위 경로 밖이라 따로 뺄 필요가 없다.
 on:
@@ -15,6 +15,11 @@ on:
       - 'web/**'
       - '.github/workflows/web.yml'
       - '!**/*.md'
+  # 하루 한 번 main의 최신 커밋에서 web 테스트를 서쪽 시간대(America/Los_Angeles)로만 돌린다(#229).
+  # 19:17 UTC = 매일 04:17 KST. 정각은 GitHub의 schedule이 몰려 늦어지거나 빠질 수 있어 피한다.
+  # schedule에는 paths가 없어 web/가 바뀌지 않은 날에도 돈다.
+  schedule:
+    - cron: '17 19 * * *'
 
 permissions:
   contents: read
@@ -24,8 +29,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # schedule은 서쪽 시간대 테스트만 돌린다. lint, build, audit은 PR과 push에서 돈다.
   web:
     name: web (lint, build)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
@@ -54,8 +61,15 @@ jobs:
   # 테스트가 2코어 러너 한 대에서 5분을 넘어, Vitest --shard로 나눠 러너 여러 대에서 동시에 돌린다.
   # Vitest는 파일 경로의 해시 순으로 파일 수만 고르게 나누므로 shard 사이 시간은 고르지 않다.
   # shard 수를 바꿀 때는 shard 목록과 total을 함께 바꾼다.
+  #
+  # 시간대(TZ): PR과 main push에서는 서비스의 시간대(Asia/Seoul)로 돈다. 하루 한 번 schedule에서는 같은 테스트를
+  # 서쪽 시간대(America/Los_Angeles)로만 돌려 날짜 경계 실수를 알아챈다(#225, #229). 테스트는 시계와 시간대를
+  # 주입하므로(tests/support/setup.ts) 서쪽 시간대 실행은 그 주입을 건너뛴 코드를 잡는 그물이고, push마다 돌릴 만큼
+  # 분을 쓰지 않는다.
+  # 시간대는 job의 if가 아니라 이벤트로 정한 tz 목록으로 고른다. job의 if는 matrix를 볼 수 없어 job을 따로 둬야
+  # 하고, 그러면 PR마다 '건너뜀' job이 하나씩 남는다. 목록으로 정하면 PR에는 서울 job만 생긴다.
   web-test:
-    name: web (test ${{ matrix.shard }}/${{ matrix.total }})
+    name: web (test ${{ matrix.shard }}/${{ matrix.total }}, ${{ matrix.tz }})
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -63,6 +77,9 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
         total: [4]
+        tz: ${{ fromJSON(github.event_name == 'schedule' && '["America/Los_Angeles"]' || '["Asia/Seoul"]') }}
+    env:
+      TZ: ${{ matrix.tz }}
     defaults:
       run:
         working-directory: web
@@ -80,6 +97,10 @@ jobs:
       - name: Install
         run: npm ci --ignore-scripts
 
+      # Node가 TZ를 따르는지 로그에 남긴다. 따르지 않으면 테스트가 말없이 UTC로 돌므로 실패시킨다.
+      - name: Time zone
+        run: node -e 'const tz = Intl.DateTimeFormat().resolvedOptions().timeZone; console.log("TZ=" + process.env.TZ, "Node:", tz, new Date().toString()); if (tz !== process.env.TZ) process.exit(1)'
+
       - name: Test
         env:
           SHARD: ${{ matrix.shard }}/${{ matrix.total }}
@@ -88,6 +109,7 @@ jobs:
   # 새 취약점 공개로 빨개진 것과 코드 때문에 빨개진 것을 구분하려고 web과 따로 둔다.
   web-audit:
     name: web (npm audit)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
