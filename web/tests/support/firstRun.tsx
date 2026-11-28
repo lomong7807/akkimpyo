@@ -32,7 +32,11 @@ const PAYEE = '첫 실행'
 /** 앱을 한 번 그리고 버린다. screenCode.ts의 beforeAll이 화면 코드를 받은 뒤 부른다. 실제 시계로 돈다. */
 export async function drawAppOnce() {
   const storage = { local: { ...localStorage }, session: { ...sessionStorage } }
-  const globals = { IntersectionObserver: Object.getOwnPropertyDescriptor(globalThis, 'IntersectionObserver') }
+  const globals = (['IntersectionObserver', 'matchMedia'] as const).map((name) => ({
+    name,
+    descriptor: Object.getOwnPropertyDescriptor(globalThis, name),
+    value: globalThis[name] as unknown,
+  }))
   const server = setupServer()
   const pending = new Set<string>()
   server.events.on('request:start', ({ requestId }) => void pending.add(requestId))
@@ -50,6 +54,8 @@ export async function drawAppOnce() {
         return []
       }
     } as unknown as typeof IntersectionObserver
+    // 넓은 화면을 묻는다(jsdom에는 없다). 어떤 미디어 쿼리에도 맞지 않는 좁은 화면(폰)으로 둔다
+    globalThis.matchMedia = (media: string) => Object.assign(new EventTarget(), { media, matches: false }) as unknown as MediaQueryList
     const backend = startBackend(server)
     backend.cookieUser = USER
     startAccounts(server, backend).items = [{ ...accountOf('지갑', 'CASH', 20000), id: ACCOUNT }]
@@ -70,9 +76,14 @@ export async function drawAppOnce() {
     server.close()
     restore(localStorage, storage.local)
     restore(sessionStorage, storage.session)
-    for (const [name, saved] of Object.entries(globals)) {
-      if (saved) Object.defineProperty(globalThis, name, saved)
-      else Reflect.deleteProperty(globalThis, name)
+    // 테스트 환경은 전역을 jsdom 창으로 넘기는 접근자로 두기도 한다. 그때는 접근자를 다시 걸고 값도 다시 넣는다
+    for (const { name, descriptor, value } of globals) {
+      if (!descriptor) {
+        Reflect.deleteProperty(globalThis, name)
+        continue
+      }
+      Object.defineProperty(globalThis, name, descriptor)
+      if (descriptor.set || descriptor.writable) Reflect.set(globalThis, name, value)
     }
   }
 }

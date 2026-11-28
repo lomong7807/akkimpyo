@@ -15,6 +15,7 @@ describe('앱을 한 번 그리고 버린다', () => {
     localStorage.setItem('kept', 'local')
     sessionStorage.setItem('kept', 'session')
     const fetchBefore = globalThis.fetch
+    const matchMediaBefore = globalThis.matchMedia
     expect('IntersectionObserver' in globalThis).toBe(false)
 
     await drawAppOnce()
@@ -23,6 +24,7 @@ describe('앱을 한 번 그리고 버린다', () => {
     expect({ ...localStorage }).toEqual({ kept: 'local' })
     expect({ ...sessionStorage }).toEqual({ kept: 'session' })
     expect('IntersectionObserver' in globalThis).toBe(false)
+    expect(globalThis.matchMedia).toBe(matchMediaBefore)
     expect(globalThis.fetch).toBe(fetchBefore)
   })
 })
