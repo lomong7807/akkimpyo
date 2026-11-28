@@ -1,0 +1,509 @@
+#!/usr/bin/env bash
+# deploy/tests/proxy-run이 시험 컨테이너 안에서 부른다. 하나라도 어긋나면 그 자리에서 1로 끝난다.
+# 운영 compose를 서버에 설치하듯 작업 폴더에 복사해 띄우고, 프록시에 compose 네트워크 안에서 붙는다.
+set -euo pipefail
+export LC_ALL=C.UTF-8
+
+: "${TEST_ID:?}" "${REPO:?}" "${WORK:?}" "${TEST_SERVER_IMAGE:?}" "${TEST_WEB_IMAGE:?}"
+QUICK=${PROXY_TEST_QUICK:-0}
+DEPLOY=$WORK/deploy
+ENV_FILE=$WORK/app.env
+NET=${TEST_ID}_akkimpyo
+CA=$WORK/root.crt
+H=$WORK/h
+B=$WORK/b
+LOG=$WORK/log
+UUID='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+# 배포 스크립트(B, deploy/bin/deploy)가 env 파일에 꼭 있어야 한다고 보는 이름.
+B_REQUIRED=(DB_URL DB_USERNAME DB_PASSWORD ACCESS_TOKEN_SIGNING_KEY WEB_ORIGIN)
+WEB=$TEST_WEB_IMAGE
+SW=no
+: >"$LOG"
+
+section() { printf '\n[%3d초] %s\n' "$SECONDS" "$1"; }
+
+# assert 설명 명령...
+assert() {
+  local what=$1
+  shift
+  if ! "$@"; then
+    printf '  실패: %s\n' "$what"
+    if [[ -s $H ]]; then
+      printf -- '--- 마지막 응답 머리글\n'
+      cat "$H"
+    fi
+    if [[ -s $LOG ]]; then
+      printf -- '--- 마지막 출력\n'
+      tail -n 40 "$LOG"
+    fi
+    exit 1
+  fi
+  printf '  ok: %s\n' "$what"
+}
+not() { ! "$@"; }
+equal() { [[ $1 == "$2" ]] || { printf '    기대 "%s", 실제 "%s"\n' "$1" "$2"; false; }; }
+differ() { [[ $1 != "$2" ]] || { printf '    둘 다 "%s"\n' "$1"; false; }; }
+matches() { [[ $2 =~ $1 ]] || { printf '    "%s"이 %s에 맞지 않는다\n' "$2" "$1"; false; }; }
+between() { awk -v v="$1" -v lo="$2" -v hi="$3" 'BEGIN { exit !(v >= lo && v <= hi) }' || { printf '    %s이 %s~%s 밖이다\n' "$1" "$2" "$3"; false; }; }
+contains() { grep -qF -- "$2" "$1"; }
+now() { date +%s.%N; }
+since() { awk -v a="$1" -v b="$(now)" 'BEGIN { printf "%.1f", b - a }'; }
+
+# 운영과 같은 compose 사본, 같은 env 파일. 시험에서만 쓰는 덮어쓰기 파일(override.yaml)을 더한다.
+dc_prod() {
+  SERVER_IMAGE=$TEST_SERVER_IMAGE WEB_IMAGE=$WEB SW_DISABLE=$SW docker compose --progress quiet \
+    --project-name "$TEST_ID" --file "$DEPLOY/compose.yaml" --env-file "${ENV_OVERRIDE:-$ENV_FILE}" "$@"
+}
+dc() {
+  SERVER_IMAGE=$TEST_SERVER_IMAGE WEB_IMAGE=$WEB SW_DISABLE=$SW docker compose --progress quiet \
+    --project-name "$TEST_ID" --file "$DEPLOY/compose.yaml" --file "$WORK/override.yaml" --env-file "$ENV_FILE" "$@"
+}
+cid() { dc ps --all --quiet "$1"; }
+inspect() { docker inspect --format "$2" "$(cid "$1")"; }
+
+# 프록시에 붙는다. SNI와 Host는 운영과 같은 사이트 주소(localhost)다.
+web() { curl --silent --show-error --cacert "$CA" --connect-to ::proxy: "$@"; }
+# req 경로 [curl 인자...]: 머리글은 $H, 본문은 $B, 상태 코드는 $code.
+req() {
+  local path=$1
+  shift
+  code=$(web --output "$B" --dump-header "$H" --write-out '%{http_code}' "$@" "https://localhost$path")
+}
+header() { sed -n "s/\r\$//; s/^$1: //Ip" "$H" | sed -n 1p; }
+no_header() { ! grep -qi "^$1:" "$H"; }
+body_has() { grep -qF -- "$1" "$B"; }
+sha() { sha256sum | cut -d' ' -f1; }
+
+# 프록시가 붙이는 보안 헤더(#52 범위 보강 16)와 지우는 헤더(범위 보강 5). https 응답에 쓴다.
+security_headers() {
+  equal nosniff "$(header X-Content-Type-Options)" &&
+    equal DENY "$(header X-Frame-Options)" &&
+    equal "frame-ancestors 'none'" "$(header Content-Security-Policy)" &&
+    equal max-age=31536000 "$(header Strict-Transport-Security)" &&
+    no_header Server && no_header Via &&
+    matches "$UUID" "$(header X-Request-Id)"
+}
+# 프록시 자신이 낸 오류 응답.
+proxy_error() {
+  equal "$1" "$code" && security_headers && equal no-store "$(header Cache-Control)" &&
+    equal 'text/plain; charset=utf-8' "$(header Content-Type)"
+}
+# 서버가 낸 응답(ADR 002의 problem+json).
+from_server() {
+  equal application/problem+json "$(header Content-Type)" && security_headers && body_has "\"requestId\":\"$(header X-Request-Id)\""
+}
+
+wait_proxy() {
+  for _ in $(seq 60); do
+    if web --output /dev/null --fail https://localhost/ 2>/dev/null; then return 0; fi
+    sleep 0.5
+  done
+  return 1
+}
+
+# 배포 스크립트(B)의 copy_assets와 같은 명령으로, 돌고 있는 웹의 /srv/assets를 assets-prev 볼륨에 남긴다(범위 보강 21).
+keep_assets() {
+  local volume
+  volume=$(docker volume ls --quiet --filter "label=com.docker.compose.project=$TEST_ID" \
+    --filter label=com.docker.compose.volume=assets-prev)
+  docker cp "$(cid proxy):/srv/assets/." - |
+    docker run --rm -i --name "$TEST_ID-copy" --network none --user 0:0 --cap-drop ALL --security-opt no-new-privileges \
+      --read-only --memory 128m --mount "type=volume,src=$volume,dst=/dst" --entrypoint /bin/sh "$WEB" \
+      -c 'find /dst -mindepth 1 -delete && tar -x -o -f - -C /dst'
+}
+
+# web_version 이미지 파일: 웹 이미지에서 /srv/assets만 그 파일 하나로 바꾼 판을 만든다.
+web_version() {
+  printf '%s\n' "FROM $TEST_WEB_IMAGE" 'USER 0:0' \
+    "RUN rm -rf /srv/assets && mkdir /srv/assets && echo '$2' > /srv/assets/$2 && chmod 644 /srv/assets/$2" \
+    'USER 10001:10001' | docker build --quiet --tag "$1" - >/dev/null
+}
+
+# ---------------------------------------------------------------------------
+section 'shellcheck'
+assert 'shellcheck' shellcheck "$REPO"/deploy/tests/proxy-run "$REPO"/deploy/tests/proxy-suite "$REPO"/deploy/db-init.sh
+
+section '설치(서버의 /opt/akkimpyo/deploy처럼 작업 폴더에 복사)'
+install -d -m 755 "$DEPLOY"
+install -m 644 "$REPO"/deploy/compose.yaml "$REPO"/deploy/Caddyfile "$REPO"/deploy/env.allowlist "$DEPLOY/"
+install -m 755 "$REPO"/deploy/db-init.sh "$DEPLOY/"
+# 시험에서만 쓰는 값. 끝나면 proxy-run이 지운다.
+DB_PASSWORD_VALUE=$(openssl rand -hex 32)
+KEY_VALUE=$(openssl rand -base64 32)
+install -m 600 /dev/null "$ENV_FILE"
+printf '%s\n' WEB_ORIGIN=https://localhost DB_URL=jdbc:postgresql://db:5432/accountbook DB_USERNAME=accountbook \
+  "DB_PASSWORD=$DB_PASSWORD_VALUE" "ACCESS_TOKEN_SIGNING_KEY=$KEY_VALUE" \
+  PROXY_HTTP_PORT=127.0.0.1: PROXY_HTTPS_PORT=127.0.0.1: ACCESS_LOG_KEEP_DAYS= >"$ENV_FILE"
+# 시험에서만: 요청 id가 든 서버 로그를 보려고 오류 응답의 DEBUG 로그를 켠다. 운영 compose에는 없다.
+printf '%s\n' 'services:' '  server:' '    environment:' '      LOGGING_LEVEL_APP_ACCOUNTBOOK_API: DEBUG' >"$WORK/override.yaml"
+
+# ---------------------------------------------------------------------------
+section '변수 이름: compose, 허용 목록, env.example, 배포 스크립트(B)'
+compose_vars=$(grep -o "\\\${[A-Z][A-Z0-9_]*" "$REPO/deploy/compose.yaml" | cut -c3- | sort -u)
+expected=$({ cat "$REPO/deploy/env.allowlist"; printf '%s\n' SERVER_IMAGE WEB_IMAGE SW_DISABLE; } | sort -u)
+assert 'compose가 읽는 변수는 허용 목록과 배포 파일의 셋(SERVER_IMAGE, WEB_IMAGE, SW_DISABLE)뿐이다' equal "$expected" "$compose_vars"
+assert '허용 목록은 이름만 한 줄에 하나다' not grep -qvE '^[A-Z][A-Z0-9_]*$' "$REPO/deploy/env.allowlist"
+assert 'env.example의 이름은 허용 목록과 같다' equal "$(sort "$REPO/deploy/env.allowlist")" \
+  "$(sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*/\1/p' "$REPO/deploy/env.example" | sort)"
+assert 'env.example에 값이 없다' not grep -qE '^[A-Z][A-Z0-9_]*=.+' "$REPO/deploy/env.example"
+for name in "${B_REQUIRED[@]}"; do
+  assert "배포 스크립트가 요구하는 $name 이 허용 목록에 있다" grep -qx "$name" "$REPO/deploy/env.allowlist"
+done
+assert 'compose가 env_file을 쓰지 않는다' not grep -qE '^[[:space:]]*env_file:' "$REPO/deploy/compose.yaml"
+
+section 'compose 구성'
+dc_prod config --format json >"$WORK/config.json"
+cfg() { jq -r "$1" "$WORK/config.json"; }
+assert '서비스는 proxy, server, db다' equal 'db proxy server' "$(cfg '.services | keys | join(" ")')"
+assert '호스트에 포트를 여는 것은 proxy뿐이다' equal proxy "$(cfg '[.services | to_entries[] | select(.value.ports) | .key] | join(" ")')"
+assert 'proxy는 TCP 80과 443만 연다' equal '80/tcp 443/tcp' "$(cfg '[.services.proxy.ports[] | "\(.target)/\(.protocol)"] | join(" ")')"
+assert '네트워크는 akkimpyo 하나이고 외부 네트워크가 아니다' equal 'akkimpyo false' \
+  "$(cfg '(.networks | keys | join(" ")) + " " + ((.networks.akkimpyo.external // false) | tostring)')"
+for s in proxy server db; do
+  assert "$s: 메모리 상한과 memswap_limit이 같다" equal true "$(cfg ".services.$s | (.mem_limit != null and .mem_limit == .memswap_limit)")"
+  assert "$s: read_only, cap_drop ALL, no-new-privileges" equal 'true ALL no-new-privileges:true' \
+    "$(cfg ".services.$s | \"\(.read_only) \(.cap_drop | join(\",\")) \(.security_opt | join(\",\"))\"")"
+  assert "$s: 재시작 정책과 compose 안의 로그 순환" equal 'unless-stopped json-file 10m 5' \
+    "$(cfg ".services.$s | \"\(.restart) \(.logging.driver) \(.logging.options[\"max-size\"]) \(.logging.options[\"max-file\"])\"")"
+  assert "$s: akkimpyo 네트워크에만 붙는다" equal akkimpyo "$(cfg ".services.$s.networks | keys | join(\" \")")"
+done
+assert 'db 이미지는 digest로 고정돼 있다' matches '^postgres:17[^@]*@sha256:[0-9a-f]{64}$' "$(cfg .services.db.image)"
+assert 'db: shm 256m, 체크섬, shared_buffers 256MB, terse' equal '268435456 --data-checksums true true' \
+  "$(cfg '.services.db | "\(.shm_size) \(.environment.POSTGRES_INITDB_ARGS) \(.command | any(. == "shared_buffers=256MB")) \(.command | any(. == "log_error_verbosity=terse"))"')"
+assert 'server: 프로파일이 local이 아니다' not matches '(^|,)local(,|$)' "$(cfg .services.server.environment.SPRING_PROFILES_ACTIVE)"
+assert 'server: JDK_JAVA_OPTIONS가 고정돼 있다' matches 'MaxRAMPercentage' "$(cfg .services.server.environment.JDK_JAVA_OPTIONS)"
+assert 'proxy의 사이트 주소와 서버의 WEB_ORIGIN이 같은 값이다' equal https://localhost \
+  "$(cfg 'if .services.proxy.environment.SITE_ADDRESS == .services.server.environment.WEB_ORIGIN then .services.proxy.environment.SITE_ADDRESS else "다름" end')"
+config_ok() { (ENV_OVERRIDE=${1:-$ENV_FILE} TEST_SERVER_IMAGE=${2-$TEST_SERVER_IMAGE} && dc_prod config --quiet) >/dev/null 2>&1; }
+assert '시험 값으로 compose 구성이 만들어진다' config_ok
+for name in WEB_ORIGIN DB_URL DB_USERNAME DB_PASSWORD ACCESS_TOKEN_SIGNING_KEY; do
+  sed "s/^$name=.*/$name=/" "$ENV_FILE" >"$WORK/missing.env"
+  assert "$name 이 비어 있으면 compose가 멈춘다" not config_ok "$WORK/missing.env"
+done
+assert 'SERVER_IMAGE가 없으면 compose가 멈춘다' not config_ok "$ENV_FILE" ''
+rm -f "$WORK/missing.env"
+
+section 'Caddyfile'
+caddy_run() { docker run --rm --volume "$DEPLOY/Caddyfile:/etc/caddy/Caddyfile:ro" --env SITE_ADDRESS=https://localhost --env ACCESS_LOG_KEEP_DAYS=14 "$WEB" "$@"; }
+assert 'caddy fmt로 바뀌는 곳이 없다' equal "$(sha <"$DEPLOY/Caddyfile")" "$(caddy_run caddy fmt /etc/caddy/Caddyfile 2>/dev/null | sha)"
+caddy_run caddy adapt --config /etc/caddy/Caddyfile 2>/dev/null >"$WORK/caddy.json"
+assert '모든 서버(80, 443)에 머리글 읽기 10초, 요청 읽기 10초, HTTP/1.1·HTTP/2만' equal '10000000000 10000000000 h1,h2' \
+  "$(jq -r '[.apps.http.servers[] | "\(.read_header_timeout) \(.read_timeout) \(.protocols | join(","))"] | unique | join(";")' "$WORK/caddy.json")"
+assert '접근 로그는 14일 남기고 하루마다 나눈다' equal '14 86400000000000 0600' \
+  "$(jq -r '.logging.logs[] | select(.writer.output == "file") | "\(.writer.roll_keep_days) \(.writer.roll_interval) \(.writer.mode)"' "$WORK/caddy.json")"
+
+# ---------------------------------------------------------------------------
+section '세 컨테이너 띄우기'
+if ! dc up --detach --wait --wait-timeout 300 >"$LOG" 2>&1; then
+  cat "$LOG"
+  dc logs --no-color 2>&1 | tail -n 100
+  exit 1
+fi
+assert 'proxy, server, db가 돈다' equal 'db proxy server' "$(dc ps --services --status running | sort | tr '\n' ' ' | sed 's/ $//')"
+docker network connect "$NET" "$TEST_ID-suite"
+for _ in $(seq 60); do
+  dc cp proxy:/data/caddy/pki/authorities/local/root.crt "$CA" >/dev/null 2>&1 && break
+  sleep 0.5
+done
+assert '프록시가 내부 CA로 localhost 인증서를 냈다(시험에서만, 운영은 ACME)' wait_proxy
+
+section '컨테이너 강화(실행 중인 설정)'
+for s in proxy server db; do
+  assert "$s: 읽기 전용, 모든 권한 뺌, no-new-privileges, 스왑 없음" equal 'true [ALL] [no-new-privileges:true] true' \
+    "$(inspect "$s" '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}} {{.HostConfig.SecurityOpt}} {{eq .HostConfig.Memory .HostConfig.MemorySwap}}')"
+done
+assert 'server와 db는 호스트에 포트를 열지 않는다' equal '0 0' \
+  "$(inspect server '{{len .HostConfig.PortBindings}}') $(inspect db '{{len .HostConfig.PortBindings}}')"
+assert 'proxy는 root가 아닌 10001로 80·443을 연다' equal 10001 "$(dc exec -T proxy id -u)"
+assert 'proxy의 80·443이 호스트(시험에서는 127.0.0.1)에 열렸다' matches '^127\.0\.0\.1:[0-9]+ 127\.0\.0\.1:[0-9]+$' \
+  "$(dc port proxy 80) $(dc port proxy 443)"
+
+# ---------------------------------------------------------------------------
+section '정적 파일과 캐시 헤더(범위 보강 8, 22)'
+req /
+assert '/는 index.html, no-cache, 보안 헤더' equal '200 text/html; charset=utf-8 no-cache' "$code $(header Content-Type) $(header Cache-Control)"
+assert '/의 보안 헤더' security_headers
+assert 'HSTS에 includeSubDomains와 preload가 없다' not grep -qi 'includeSubDomains\|preload' "$H"
+asset_a=$(grep -o '/assets/[^"]*\.js' "$B" | sed -n 1p)
+assert '/의 HTML이 해시 붙은 묶음을 부른다' matches '^/assets/' "$asset_a"
+req /home
+assert 'SPA fallback(/home)도 index.html, no-cache' equal '200 text/html; charset=utf-8 no-cache' "$code $(header Content-Type) $(header Cache-Control)"
+req /manifest.webmanifest
+assert '/manifest.webmanifest는 application/manifest+json, no-cache' equal '200 application/manifest+json no-cache' \
+  "$code $(header Content-Type) $(header Cache-Control)"
+req /icons/icon-192.png
+assert '/icons/*는 no-cache' equal '200 image/png no-cache' "$code $(header Content-Type) $(header Cache-Control)"
+for f in /sw.js /sw-off.js; do
+  req "$f"
+  assert "$f는 JavaScript, no-cache, Service-Worker-Allowed 없음" equal '200 text/javascript; charset=utf-8 no-cache' \
+    "$code $(header Content-Type) $(header Cache-Control)"
+  assert "$f의 보안 헤더" security_headers
+  assert "$f에 Service-Worker-Allowed가 없다" no_header Service-Worker-Allowed
+done
+req /sw-x.js
+assert '없는 /sw-x.js는 index.html이 아니라 404' proxy_error 404
+req "$asset_a"
+assert '묶음은 1년 immutable' equal '200 public, max-age=31536000, immutable' "$code $(header Cache-Control)"
+req /assets/x.js
+assert '없는 /assets/x.js는 index.html이 아니라 404, 캐시하지 않음' proxy_error 404
+
+section '/actuator는 밖에 내지 않는다'
+for p in /actuator /actuator/health /Actuator/health /api/../actuator/health /api/%2e%2e/actuator/health \
+  '/api/..;/actuator/health' '/api/v1/..;/..;/actuator/health' /api/..%2factuator/health; do
+  req "$p" --path-as-is
+  assert "$p 는 상태 응답이 아니다($code)" not body_has '"status":"UP"'
+done
+req /actuator/health
+assert '/actuator/health는 프록시의 404' proxy_error 404
+
+section '80은 https로 넘기기만 한다'
+code=$(curl --silent --show-error --output "$B" --dump-header "$H" --write-out '%{http_code}' -H 'Host: localhost' 'http://proxy/x?y=1')
+assert '308로 같은 주소의 https로 넘긴다' equal '308 https://localhost/x?y=1' "$code $(header Location)"
+assert '80의 응답에 Server가 없다' no_header Server
+assert '80의 응답에 HSTS가 없다(RFC 6797 7.2절)' no_header Strict-Transport-Security
+assert '80의 응답에도 nosniff와 frame 차단이 있다' equal 'nosniff DENY' "$(header X-Content-Type-Options) $(header X-Frame-Options)"
+
+# ---------------------------------------------------------------------------
+section '/api 전달과 본문 상한(범위 보강 16, 18, 19)'
+for v in --http1.1 --http2; do
+  req /api/v1/ping "$v"
+  assert "/api는 서버가 답한다($v, $code)" from_server
+done
+server_cache=$(curl --silent --output /dev/null --dump-header - http://server:8080/api/v1/ping | tr -d '\r' | sed -n 's/^cache-control: //Ip')
+req /api/v1/ping
+assert '/api의 Cache-Control은 서버 값 그대로다' equal "$server_cache" "$(header Cache-Control)"
+head -c 65536 /dev/zero >"$WORK/64k"
+head -c 65537 /dev/zero >"$WORK/64k1"
+req /api/v1/body -X POST -H 'Content-Type: application/json' --data-binary "@$WORK/64k"
+assert '65,536바이트는 서버까지 간다' from_server
+req /api/v1/body -X POST -H 'Content-Type: application/json' --data-binary "@$WORK/64k1"
+assert '65,537바이트는 프록시가 413' proxy_error 413
+req /api/v1/body --http1.1 -X POST -H 'Content-Type: application/json' -H 'Transfer-Encoding: chunked' -T "$WORK/64k"
+assert '길이를 밝히지 않은 65,536바이트는 서버까지 간다' from_server
+for v in --http1.1 --http2; do
+  start=$(now)
+  code=$(head -c 60000000 /dev/zero | web "$v" --output "$B" --dump-header "$H" --write-out '%{http_code}' -X POST \
+    -H 'Content-Type: application/json' -H 'Transfer-Encoding: chunked' -T - https://localhost/api/v1/login) || true
+  assert "길이를 밝히지 않은 60MB는 프록시가 413($v, $(since "$start")초)" proxy_error 413
+done
+
+section 'X-Request-Id와 접근 로그(범위 보강 14, 2)'
+client_id=client-supplied-$RANDOM$RANDOM
+secret_query=query-secret-$RANDOM$RANDOM
+secret_auth=auth-secret-$RANDOM$RANDOM
+secret_cookie=cookie-secret-$RANDOM$RANDOM
+req "/api/v1/request-id?token=$secret_query" -H "X-Request-Id: $client_id" \
+  -H "Authorization: Bearer $secret_auth" -H "Cookie: s=$secret_cookie"
+rid=$(header X-Request-Id)
+assert '밖에서 보낸 값이 응답에 없다' differ "$client_id" "$rid"
+assert '응답의 값은 프록시가 만든 UUID다' matches "$UUID" "$rid"
+assert '서버의 오류 본문에도 같은 값이다' from_server
+sleep 1
+dc exec -T proxy cat /data/access-log/access.log >"$WORK/access.log"
+dc logs --no-color server >"$WORK/server.log" 2>&1
+dc logs --no-color proxy >"$WORK/proxy.log" 2>&1
+json_lines() { jq -e . "$1" >/dev/null; }
+assert '접근 로그는 줄마다 JSON이다' json_lines "$WORK/access.log"
+entry=$(jq -c --arg r "$rid" 'select(.request_id == $r)' "$WORK/access.log")
+assert '접근 로그에 그 요청 id가 한 줄 있다' equal 1 "$(grep -c . <<<"$entry")"
+assert '접근 로그의 주소에 쿼리 문자열이 없다' equal /api/v1/request-id "$(jq -r .request.uri <<<"$entry")"
+assert '접근 로그에 요청·응답 머리글이 없다' equal 'null null' "$(jq -r '"\(.request.headers) \(.resp_headers)"' <<<"$entry")"
+for s in "$client_id" "$secret_query" "$secret_auth" "$secret_cookie"; do
+  assert "접근 로그에 보낸 값($s)이 없다" not contains "$WORK/access.log" "$s"
+  assert "프록시의 컨테이너 로그에 보낸 값($s)이 없다" not contains "$WORK/proxy.log" "$s"
+done
+assert '서버 로그에 같은 요청 id가 있다' contains "$WORK/server.log" "[$rid]"
+assert '서버 로그에 밖에서 보낸 X-Request-Id가 없다' not contains "$WORK/server.log" "$client_id"
+assert '접근 로그 파일은 프록시 사용자만 읽는다' equal 600 "$(dc exec -T proxy stat -c %a /data/access-log/access.log)"
+
+# ---------------------------------------------------------------------------
+section 'service worker 긴급 끄기(범위 보강 22)'
+sw_on=$(docker run --rm --entrypoint cat "$WEB" /srv/sw.js | sha)
+sw_off=$(docker run --rm --entrypoint cat "$WEB" /srv/sw-off.js | sha)
+assert '이미지의 sw.js와 sw-off.js는 다르다' differ "$sw_on" "$sw_off"
+SW=yes
+dc up --detach proxy >"$LOG" 2>&1
+assert 'SW_DISABLE=yes로 다시 띄웠다' wait_proxy
+req /sw.js
+assert '/sw.js에 sw-off.js의 내용이 나간다' equal "$sw_off" "$(sha <"$B")"
+assert '그때도 /sw.js는 JavaScript, no-cache' equal '200 text/javascript; charset=utf-8 no-cache' "$code $(header Content-Type) $(header Cache-Control)"
+SW=no
+dc up --detach proxy >"$LOG" 2>&1
+assert 'SW_DISABLE=no로 되돌렸다' wait_proxy
+req /sw.js
+assert '/sw.js가 원래 내용으로 돌아온다' equal "$sw_on" "$(sha <"$B")"
+
+section '바로 앞 판의 /assets(범위 보강 21의 시험: 판 A → B → C)'
+web_version "$TEST_ID-web-b" b-version-B1.js
+web_version "$TEST_ID-web-c" c-version-C1.js
+keep_assets
+WEB=$TEST_ID-web-b
+dc up --detach proxy >"$LOG" 2>&1
+assert '판 B로 바꿨다' wait_proxy
+for p in "$asset_a" /assets/b-version-B1.js; do
+  req "$p"
+  assert "판 B에서 $p 는 200, 1년 immutable" equal '200 public, max-age=31536000, immutable' "$code $(header Cache-Control)"
+done
+req /assets/x.js
+assert '판 B에서도 없는 /assets/x.js는 404' proxy_error 404
+keep_assets
+WEB=$TEST_ID-web-c
+dc up --detach proxy >"$LOG" 2>&1
+assert '판 C로 바꿨다' wait_proxy
+req "$asset_a"
+assert '판 C에서 A의 묶음은 404' proxy_error 404
+for p in /assets/b-version-B1.js /assets/c-version-C1.js; do
+  req "$p"
+  assert "판 C에서 $p 는 200" equal 200 "$code"
+done
+WEB=$TEST_WEB_IMAGE
+dc up --detach proxy >"$LOG" 2>&1
+assert '원래 판으로 돌렸다' wait_proxy
+
+# ---------------------------------------------------------------------------
+section '서버가 내려가 있을 때(502)와 서버로 넘어가는 요청(대역 서버)'
+dc stop server >"$LOG" 2>&1
+req /api/v1/ping
+assert '서버를 내리면 프록시의 502, 보안 헤더' proxy_error 502
+docker run --detach --name "$TEST_ID-echo" --network "$NET" --network-alias server \
+  --volume "$REPO/deploy/tests/proxy-echo.Caddyfile:/etc/caddy/Caddyfile:ro" "$TEST_WEB_IMAGE" >/dev/null
+for _ in $(seq 40); do curl --silent --fail --output /dev/null http://server:8080/ && break; sleep 0.5; done
+echo_log() { docker logs "$TEST_ID-echo" 2>/dev/null | jq -c --arg p "$1" 'select(.msg == "handled request" and .request.uri == $p)'; }
+field() { tr '|' '\n' <"$B" | sed -n "s/^$1=//p"; }
+suite_ip=$(docker inspect --format "{{(index .NetworkSettings.Networks \"$NET\").IPAddress}}" "$TEST_ID-suite")
+req /api/v1/echo -H 'X-Forwarded-For: 203.0.113.9' -H 'X-Forwarded-Proto: http' -H 'X-Forwarded-Host: evil.example' \
+  -H 'X-Forwarded-Prefix: /evil' -H 'X-Forwarded-Port: 1234' -H 'Forwarded: for=203.0.113.9' -H "X-Request-Id: $client_id"
+assert 'X-Forwarded-For는 프록시가 본 주소 하나다' equal "$suite_ip" "$(field xff)"
+assert 'X-Forwarded-Proto, Host는 프록시가 정한다' equal 'https localhost' "$(field proto) $(field host)"
+assert '밖에서 온 X-Forwarded-Prefix, X-Forwarded-Port, Forwarded는 지운다' equal '||' "$(field prefix)|$(field port)|$(field forwarded)"
+assert '서버로 가는 X-Request-Id는 응답과 같은 새 값이다' equal "$(header X-Request-Id)" "$(field rid)"
+start=$(now)
+head -c 5000 /dev/zero | web --http1.1 --limit-rate 1000 --output "$B" -X POST -H 'Transfer-Encoding: chunked' -T - \
+  https://localhost/api/v1/slow-ok
+# 대역 서버의 로그는 처리가 끝난 시각(ts)과 처리에 걸린 시간(duration)을 남긴다. 프록시가 본문을 흘려보냈다면
+# 서버 자리가 본문을 기다리느라 duration이 몇 초가 된다.
+read -r done_at took got < <(echo_log /api/v1/slow-ok | jq -r '"\(.ts) \(.duration) \(.bytes_read)"') || true
+assert '5초에 걸쳐 나눠 보낸 본문이 서버 자리에 닿았다' equal https "$(field proto)"
+assert "프록시가 본문을 다 받은 뒤 넘겨 서버 자리는 본문을 기다리지 않았다(처리 ${took}초)" between "$took" 0 1
+assert '서버 자리에 요청이 닿은 것은 본문을 다 보낸 뒤다(시작 4초 뒤 이후)' \
+  awk -v a="$start" -v r="$done_at" 'BEGIN { exit !(r - a >= 4) }'
+assert '서버 자리가 받은 본문은 5000바이트다' equal 5000 "$got"
+head -c 60000000 /dev/zero | web --http1.1 --output /dev/null -X POST -H 'Transfer-Encoding: chunked' -T - \
+  https://localhost/api/v1/big || true
+big=$(echo_log /api/v1/big | jq -s 'map(.bytes_read) | add // 0')
+printf '    60MB 요청에서 서버 자리가 받은 본문: %s바이트\n' "$big"
+assert '60MB 요청은 서버 자리에 상한(65,536바이트)보다 많이 닿지 않는다' between "$big" 0 65536
+docker rm --force "$TEST_ID-echo" >/dev/null
+dc up --detach --wait --wait-timeout 180 server >"$LOG" 2>&1
+assert '서버를 다시 띄웠다' wait_proxy
+
+# ---------------------------------------------------------------------------
+section 'DB(범위 보강 10, 체크섬, 로그, 역할)'
+psql_admin() { dc exec -T db psql -X -q -A -t -v ON_ERROR_STOP=1 -U postgres -d postgres "$@"; }
+assert '체크섬, shared_buffers, terse, lc_messages, 값이 찍히는 로그 설정은 기본값' \
+  equal 'on|256MB|terse|en_US.utf8|none|-1|0' \
+  "$(psql_admin -c "SELECT concat_ws('|', current_setting('data_checksums'), current_setting('shared_buffers'),
+      current_setting('log_error_verbosity'), current_setting('lc_messages'), current_setting('log_statement'),
+      current_setting('log_min_duration_statement'), current_setting('log_parameter_max_length_on_error'))")"
+assert '서버의 역할은 슈퍼유저가 아니고 운영 DB의 소유자다' equal 'f|f|f|accountbook' \
+  "$(psql_admin -c "SELECT concat_ws('|', rolsuper, rolcreatedb, rolcreaterole,
+      (SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'accountbook')) FROM pg_roles WHERE rolname = 'accountbook'")"
+assert '관리 역할(postgres)에는 비밀번호가 없다' equal t "$(psql_admin -c "SELECT rolpassword IS NULL FROM pg_authid WHERE rolname = 'postgres'")"
+assert '마이그레이션은 서버의 역할로 적용됐다' equal accountbook \
+  "$(dc exec -T db psql -X -A -t -U postgres -d accountbook -c 'SELECT DISTINCT installed_by FROM flyway_schema_history')"
+db_client() {
+  docker run --rm --name "$TEST_ID-psql" --network "$NET" --env "PGPASSWORD=$DB_PASSWORD_VALUE" --entrypoint psql \
+    "$(cfg .services.db.image)" -X -A -t -h db "$@" -c 'SELECT 1'
+}
+assert '다른 컨테이너에서 서버의 역할로 비밀번호로 접속한다' equal 1 "$(db_client -U accountbook -d accountbook 2>/dev/null)"
+admin_over_tcp() { db_client -U postgres -d postgres >/dev/null 2>&1; }
+assert '다른 컨테이너에서 관리 역할로는 접속하지 못한다' not admin_over_tcp
+printf '    마이그레이션용과 앱용(DML만) 역할 분리는 하지 않았다(dba의 정의 전, 다른 이슈). 앱 계정의 DDL 거부 시험도 그때 한다.\n'
+check_value=check-secret-$RANDOM$RANDOM
+printf '%s\n' "CREATE TEMP TABLE t (v text CHECK (v = 'ok'));" "INSERT INTO t VALUES (\$1) \\bind '$check_value' \\g" |
+  dc exec -T db psql -X -q -U accountbook -d accountbook >"$LOG" 2>&1 || true
+assert 'CHECK 위반이 났다' contains "$LOG" 'violates check constraint'
+dc logs --no-color db >"$WORK/db.log" 2>&1
+assert 'DB 로그에 CHECK 위반이 남았다' contains "$WORK/db.log" 'violates check constraint'
+assert 'DB 로그에 위반한 값이 없다' not contains "$WORK/db.log" "$check_value"
+assert 'DB 로그에 행의 값을 싣는 DETAIL이 없다(terse)' not contains "$WORK/db.log" 'Failing row'
+
+section '로그에 비밀값이 없다'
+dc logs --no-color >"$WORK/all.log" 2>&1
+assert 'DB 비밀번호가 어느 컨테이너 로그에도 없다' not contains "$WORK/all.log" "$DB_PASSWORD_VALUE"
+assert '서명 키가 어느 컨테이너 로그에도 없다' not contains "$WORK/all.log" "$KEY_VALUE"
+
+# ---------------------------------------------------------------------------
+if [[ $QUICK == 1 ]]; then
+  section '오래 걸리는 시험(느린 연결, 유지 연결, DB 내림)은 PROXY_TEST_QUICK=1이라 건너뛴다. CI에서 돈다'
+else
+  section '느린 머리글과 느린 본문은 10초 안팎에 끊기고 그동안 다른 요청이 된다(범위 보강 19, 20)'
+  mkdir -p "$WORK/slow"
+  slow_header() {
+    local start
+    start=$(now)
+    { printf 'GET / HTTP/1.1\r\nHost: localhost\r\n'; for i in $(seq 30); do sleep 1; printf 'X-Slow-%d: a\r\n' "$i"; done; } |
+      timeout 45 openssl s_client -quiet -connect proxy:443 -servername localhost -CAfile "$CA" >/dev/null 2>&1 || true
+    since "$start" >"$WORK/slow/header-$1"
+  }
+  # 1초에 1,000바이트씩 쉬지 않고 30,000바이트. 다음 바이트가 아니라 요청 전체에 제한 시간이 걸리면 10초에 끊긴다.
+  slow_body() {
+    local start
+    start=$(now)
+    head -c 30000 /dev/zero | web --http1.1 --limit-rate 1000 --max-time 45 --output /dev/null -X POST \
+      -H 'Content-Type: application/json' --data-binary @- https://localhost/api/v1/slow >/dev/null 2>&1 || true
+    since "$start" >"$WORK/slow/body-$1"
+  }
+  for i in $(seq 20); do
+    slow_header "$i" &
+    slow_body "$i" &
+  done
+  sleep 3
+  for _ in 1 2 3; do
+    t=$(web --output /dev/null --write-out '%{http_code} %{time_total}' https://localhost/) || t='실패 99'
+    assert "느린 연결 40개가 붙어 있는 동안 /가 2초 안에 온다(${t})" between "${t#* }" 0 2
+    assert '그때 /는 200이다' equal 200 "${t%% *}"
+    t=$(web --output /dev/null --write-out '%{http_code} %{time_total}' -X POST --data-binary '{}' \
+      -H 'Content-Type: application/json' https://localhost/api/v1/ping) || t='실패 99'
+    assert "그동안 /api도 서버가 2초 안에 답한다(${t})" between "${t#* }" 0 2
+    assert '그때 /api는 502가 아니다' matches '^4[0-9][0-9]$' "${t%% *}"
+    sleep 1
+  done
+  wait
+  for f in "$WORK"/slow/*; do
+    assert "$(basename "$f")가 $(cat "$f")초에 끊겼다" between "$(cat "$f")" 9 14
+  done
+
+  section '프록시와 서버 사이의 유지 연결을 쉬게 한 뒤 POST(범위 보강 20)'
+  req /api/v1/keepalive -X POST -H 'Content-Type: application/json' --data-binary '{}'
+  for gap in 6 11 15; do
+    sleep "$gap"
+    req /api/v1/keepalive -X POST -H 'Content-Type: application/json' --data-binary '{}'
+    assert "${gap}초 쉰 뒤의 POST가 502가 아니라 서버의 응답이다($code)" from_server
+  done
+
+  section 'DB를 내리면 서버는 unhealthy로만 표시되고 재시작하지 않는다(범위 보강 14 정정)'
+  dc stop db >"$LOG" 2>&1
+  # DB가 없으면 상태 확인이 DB 연결을 기다린다(Hikari의 기본 대기 30초). 그동안은 응답이 없다.
+  start=$(now)
+  health=$(dc exec -T server curl --silent --max-time 60 --write-out ' %{http_code}' http://127.0.0.1:8080/actuator/health || true)
+  assert "DB가 내려가면 /actuator/health가 503 DOWN이다($(since "$start")초 걸림: $health)" matches '"status":"DOWN".* 503$' "$health"
+  for _ in $(seq 90); do
+    [[ $(inspect server '{{.State.Health.Status}}') == unhealthy ]] && break
+    sleep 1
+  done
+  assert '서버 컨테이너가 unhealthy가 됐다' equal unhealthy "$(inspect server '{{.State.Health.Status}}')"
+  assert '서버 컨테이너는 재시작하지 않고 계속 돈다' equal 'running 0' "$(inspect server '{{.State.Status}} {{.RestartCount}}')"
+  dc start db >"$LOG" 2>&1
+  for _ in $(seq 120); do
+    [[ $(inspect server '{{.State.Health.Status}}') == healthy ]] && break
+    sleep 1
+  done
+  assert 'DB가 돌아오면 서버가 다시 healthy다' equal healthy "$(inspect server '{{.State.Health.Status}}')"
+fi
+
+section '정리'
+docker network disconnect "$NET" "$TEST_ID-suite"
+dc down --volumes >"$LOG" 2>&1
+assert '이 시험의 컨테이너가 남지 않았다' equal '' "$(docker ps --all --quiet --filter "label=com.docker.compose.project=$TEST_ID")"
+printf '\n모두 통과(%d초)\n' "$SECONDS"

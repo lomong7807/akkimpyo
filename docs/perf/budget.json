@@ -1,0 +1,9 @@
+{
+  "$comment": [
+    "첫 화면 JS 크기의 기준값. 이 값을 바꾸려면 perf 검토를 받는다.",
+    "목표는 README.md 2장의 '초기 경로 JS 150KB(gzip)'이고, 150KB는 150,000바이트로 본다(#251, PR #257).",
+    "CI의 'web (lint, build)'가 build 뒤에 scripts/check-initial-js-size.mjs로 이 값과 견주고, 넘으면 실패한다(#252).",
+    "잰 값: web/dist/index.html이 처음 싣는 JS(module script, modulepreload)와 그것이 정적으로 import하는 JS를 파일마다 gzip level 9로 압축한 크기의 합. 동적 import는 넣지 않는다."
+  ],
+  "initialJsGzipBytes": 150000
+}

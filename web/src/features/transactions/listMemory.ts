@@ -14,7 +14,7 @@ export interface ListMemory {
   /** 저장 뒤 돌아간 화면이 그려진 뒤에 부른다. 그 뒤에 연 내역은 강조하지 않는다. */
   forgetSaved(): void
   /**
-   * 달력(D-02)에서 옮긴 달을 그 달력을 연 내역의 방문 기록 항목(`listKey`, 그 항목의 location.key)에 넘긴다(D-02 (1),
+   * 달력(D-02)에서 옮긴 달을 그 달력을 연 내역의 방문 기록 항목(`listKey`, `listKeyOf`)에 넘긴다(D-02 (1),
    * architect #300 B). 넘긴 값은 하나이고 새로 넘기면 바뀐다.
    */
   handOffMonth(listKey: string, month: string): void
@@ -43,6 +43,20 @@ export function createListMemory(): ListMemory {
     },
     handedMonth: (listKey) => (handed?.listKey === listKey ? handed.month : undefined),
   }
+}
+
+/**
+ * 내역 항목이 넘겨받는 표시(`handOffMonth`의 `listKey`). 항목의 상태에 적힌 것이 있으면 그것, 없으면 그 항목의 location.key다.
+ * 내역은 넘겨받은 달로 바꿔 갈 때(replace) key가 바뀌므로 이 표시를 상태로 이어 간다. 그래야 앞으로 가기로 다시 연 달력이 옮긴
+ * 달도 같은 내역에 넘긴다(#342). 내역에서 달을 옮기면 잇지 않으므로 넘겨받았던 달로 되돌리지 않는다.
+ */
+export function listKeyOf(location: { key: string; state: unknown }): string {
+  const { state } = location
+  if (typeof state === 'object' && state !== null) {
+    const { listKey } = state as Record<string, unknown>
+    if (typeof listKey === 'string' && listKey !== '') return listKey
+  }
+  return location.key
 }
 
 export const ListMemoryContext = createContext<ListMemory | undefined>(undefined)

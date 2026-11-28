@@ -5,6 +5,7 @@
 --
 -- 점검 7은 가입 때 기본 카테고리를 만드는 #4가 들어가기 전에는 0건이 아닐 수 있다(추정).
 -- 점검 12의 "소유자 1명"은 P-306(소유권 넘기기) 기준이다.
+-- 복원 뒤에는 거래의 version이 이력보다 클 수 있다(ADR 008 결정 10). 점검 14는 그 반대만 본다.
 
 -- [명세표] 테이블별 행 수
 SELECT 'users' AS t, count(*) FROM users
@@ -109,3 +110,21 @@ HAVING count(m.id) <> 1;
 
 -- [점검 13] 정규화가 안 된 이메일(P-101)
 SELECT id FROM users WHERE (email COLLATE "C") !~ '^[\x21-\x40\x5B-\x7E]+$' OR char_length(email) > 254;
+
+-- [점검 14] 이력의 번호가 거래의 지금 version보다 크다(#60, V15)
+SELECT c.id
+  FROM change_log c
+  JOIN transaction t ON t.id = c.transaction_id
+ WHERE c.version > t.version;
+
+-- [점검 15] 거래가 있는데 이력의 장부가 거래의 장부와 다르다(#175)
+SELECT c.id
+  FROM change_log c
+  JOIN transaction t ON t.id = c.transaction_id
+ WHERE c.ledger_id <> t.ledger_id;
+
+-- [점검 16] 거래가 없는데 완전 삭제 기록이 아닌 이력(#175)
+SELECT c.id
+  FROM change_log c
+ WHERE NOT EXISTS (SELECT 1 FROM transaction t WHERE t.id = c.transaction_id)
+   AND c.action NOT IN ('PURGE', 'AUTO_PURGE');

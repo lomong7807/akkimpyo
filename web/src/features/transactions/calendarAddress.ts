@@ -11,7 +11,7 @@ export function calendarAddressOf(month: string): string {
 
 /** 달력 항목의 상태 */
 export interface CalendarState {
-  /** 달력을 연 내역 항목의 location.key. 달력에서 옮긴 달을 그 내역에 넘긴다(listMemory.handOffMonth) */
+  /** 달력을 연 내역 항목의 표시(listMemory.listKeyOf). 달력에서 옮긴 달을 그 내역에 넘긴다(listMemory.handOffMonth) */
   listKey?: string
   /** 고른 날 `YYYY-MM-DD`. 쓰기 전에 그 달의 고를 수 있는 날인지 다시 본다 */
   day?: string

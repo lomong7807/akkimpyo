@@ -1,0 +1,17 @@
+# deploy/tests/proxy-suite가 서버 자리(별칭 server, 8080)에 잠깐 띄우는 대역 서버. 운영에서 쓰지 않는다.
+# 프록시가 서버로 넘긴 머리글을 응답 본문 한 줄로 돌려주고, 받은 요청을 JSON 로그로 남긴다(받은 시각, 본문 바이트 수).
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:8080 {
+	log {
+		output stdout
+		format json
+	}
+	# 서버처럼 본문을 끝까지 읽는다(로그의 bytes_read). 응답에는 본문을 싣지 않는다.
+	vars body {http.request.body}
+	respond "xff={http.request.header.X-Forwarded-For}|proto={http.request.header.X-Forwarded-Proto}|host={http.request.header.X-Forwarded-Host}|prefix={http.request.header.X-Forwarded-Prefix}|port={http.request.header.X-Forwarded-Port}|forwarded={http.request.header.Forwarded}|rid={http.request.header.X-Request-Id}|cl={http.request.header.Content-Length}|te={http.request.header.Transfer-Encoding}"
+}
