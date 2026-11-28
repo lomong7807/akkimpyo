@@ -323,6 +323,16 @@ describe('그 달의 수입·지출 합계', () => {
     expect(styleOf(totalOf('수입').firstElementChild!).color).toBe('var(--color-text)')
   })
 
+  it('환불이 지출보다 큰 달(#390)의 음수 합계는 본문 글자색과 "-"다(00-common 2.2)', async () => {
+    putNovember()
+    list.totals.set('2026-11', { income: -3000, expense: -12000 })
+    await openList()
+    expect(totalOf('수입').textContent).toBe('-3,000원')
+    expect(totalOf('지출').textContent).toBe('-12,000원')
+    expect(styleOf(totalOf('수입').firstElementChild!).color).toBe('var(--color-text)')
+    expect(styleOf(totalOf('지출').firstElementChild!).color).toBe('var(--color-text)')
+  })
+
   it('이름은 보조 글자색 본문, 금액은 굵은 본문이다', async () => {
     putNovember()
     await openList()
@@ -394,6 +404,17 @@ describe('날짜 묶음 머리(0.5)', () => {
     expect(dayTotalsOf('11월 25일 (수)')).toBe('수입+3,200,000원지출45,000원')
     expect(dayTotalsOf('11월 24일 (화)')).toBe('수입+10,000원')
     expect(dayTotalsOf('11월 23일 (월)')).toBe('')
+  })
+
+  it('환불만 있는 날(#390)의 음수 그날 합계는 0이 아니라 보이고, 본문 글자색과 "-"다(00-common 2.2)', async () => {
+    putNovember()
+    list.days.set('2026-11-26', { income: 0, expense: -12000 })
+    list.days.set('2026-11-25', { income: -3000, expense: -500 })
+    await openList()
+    expect(dayTotalsOf('11월 26일 (목)')).toBe('지출-12,000원')
+    expect(dayTotalsOf('11월 25일 (수)')).toBe('수입-3,000원지출-500원')
+    const amounts = [...dayHeading('11월 25일 (수)').nextElementSibling!.querySelectorAll('.tabular-nums')]
+    expect(amounts.map((amount) => styleOf(amount).color)).toEqual(['var(--color-text)', 'var(--color-text)'])
   })
 
   it('그날 합계는 서버가 준 값이다(줄의 금액으로 다시 세지 않는다)', async () => {

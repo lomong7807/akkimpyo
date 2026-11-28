@@ -10,11 +10,13 @@ const ABBREVIATE_FROM = 1_000_000
 
 /**
  * 날짜 칸의 금액 글자(D-02 (3), 00-common 3.2의 예외). "원"을 붙이지 않는다. 휴대폰 배치는 칸이 좁아 999,999 이하는 쉼표 숫자,
- * 100만 이상은 만 단위 내림("320만")이다. 넓은 화면은 줄이지 않는다(designer #300 Q9). 부호는 부르는 쪽이 붙인다.
+ * 100만 이상은 만 단위 내림("320만")이다. 넓은 화면은 줄이지 않는다(designer #300 Q9). 음수(환불이 더 큰 날, #390)는 절댓값으로
+ * 줄이고 금액(Amount)과 같은 "-"를 앞에 붙인다("-320만", designer #390). 수입의 "+"는 부르는 쪽이 붙인다.
  */
 export function cellAmount(value: number, wide: boolean): string {
-  if (wide || value < ABBREVIATE_FROM) return digits.format(value)
-  return `${digits.format(Math.floor(value / 10_000))}만`
+  const size = Math.abs(value)
+  const text = wide || size < ABBREVIATE_FROM ? digits.format(size) : `${digits.format(Math.floor(size / 10_000))}만`
+  return value < 0 ? `-${text}` : text
 }
 
 /**

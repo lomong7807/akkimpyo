@@ -377,6 +377,8 @@ class CrossLedgerAccessTest {
                         (actor, ledger) -> transactionListQuery.dailyTotals(actor, ledger, NOVEMBER)),
                 denied("조회: 내보내기", NotLedgerMemberException.class, ledgerB,
                         (actor, ledger) -> transactionExportQuery.transactions(actor, ledger, DAY, DAY)),
+                denied("조회: 내보내기(장부 전체)", NotLedgerMemberException.class, ledgerB,
+                        (actor, ledger) -> transactionExportQuery.allTransactions(actor, ledger)),
                 denied("조회: 계좌 잔액", NotLedgerMemberException.class, bBank,
                         (actor, account) -> balanceQuery.balance(actor, account)),
                 denied("조회: 장부의 모든 잔액", NotLedgerMemberException.class, ledgerB,

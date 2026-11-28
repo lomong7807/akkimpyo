@@ -345,6 +345,26 @@ describe('이번 달 합계(F-111, P-205)', () => {
     expect(styleOf(valueOf(totalsRegion(), '수입').querySelector('span')!).color).toBe('var(--color-text)')
   })
 
+  it('환불이 지출보다 큰 달(#390)의 음수 지출과 수입은 본문 글자색과 "-"이고(00-common 2.2), 링크 이름도 같다', async () => {
+    putTransactions()
+    list.totals.set('2026-11', { income: -3000, expense: -12000 })
+    await openHome()
+    expect(totals()).toEqual([
+      ['지출', '-12,000원'],
+      ['수입', '-3,000원'],
+      ['차액', '+9,000원'],
+    ])
+    for (const name of ['지출', '수입']) {
+      const shown = [...valueOf(totalsRegion(), name).querySelectorAll('.tabular-nums')]
+      expect(shown.map((amount) => [amount.textContent, styleOf(amount).color])).toEqual(
+        shown.map(() => [name === '지출' ? '-12,000원' : '-3,000원', 'var(--color-text)']),
+      )
+    }
+    expect(within(totalsRegion()).getByRole('link').getAttribute('aria-label')).toBe(
+      '11월 합계, 지출 -12,000원, 수입 -3,000원, 차액 +9,000원',
+    )
+  })
+
   it('수입과 지출이 같으면 차액은 부호 없이 "0원"이다', async () => {
     putTransactions()
     list.totals.set('2026-11', { income: 50000, expense: 50000 })

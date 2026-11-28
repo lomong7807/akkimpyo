@@ -23,9 +23,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 장부의 거래 하나를 고치고(F-208, #36) 휴지통에 넣고 되살린다(F-227, F-230, #38). 만들기와 조회({@link TransactionController})와
- * 같은 경로 아래이고, 기기 값 헤더와 응답의 거래 모양이 같다. 구성원 확인은 {@link LedgerMemberInterceptor}가 먼저 하고 서비스가
- * 한 번 더 한다.
+ * 장부의 거래 하나를 고치고(F-208, #36) 휴지통에 넣고 되살리며(F-227, F-230, #38) 승인취소하고 되돌린다(F-225, F-226, #37).
+ * 만들기와 조회({@link TransactionController})와 같은 경로 아래이고, 기기 값 헤더와 응답의 거래 모양이 같다. 구성원 확인은
+ * {@link LedgerMemberInterceptor}가 먼저 하고 서비스가 한 번 더 한다.
  *
  * <p>검사 순서: 구성원과 경로의 장부의 거래인지(404) → 형식(400) → version(409 {@code STALE_VERSION}) →
  * 상태(409 {@code INVALID_STATE}) → 참조(400). 응답할 수 없는 {@code Accept}, JSON이 아닌 본문, 읽을 수 없는 JSON은
@@ -79,10 +79,36 @@ class TransactionChangeController {
                                 @PathVariable UUID transactionId,
                                 @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false)
                                 String device,
-                                @RequestBody TransactionRestoreRequest request) {
+                                @RequestBody TransactionVersionRequest request) {
         requireInLedger(actorId, ledgerId, transactionId);
         long expectedVersion = request.expectedVersion();
         return changed(actorId, ledgerId, () -> transactionService.restore(actorId, transactionId, expectedVersion,
+                deviceOf(device)));
+    }
+
+    /** 승인취소(F-225). 200이고 본문은 바뀐 거래({@code status}가 {@code CANCELED}, version+1)다. 잔액과 통계에서 빠진다. */
+    @PostMapping(path = "/cancel", consumes = MediaType.APPLICATION_JSON_VALUE)
+    TransactionResponse cancel(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                               @PathVariable UUID transactionId,
+                               @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false)
+                               String device,
+                               @RequestBody TransactionVersionRequest request) {
+        requireInLedger(actorId, ledgerId, transactionId);
+        long expectedVersion = request.expectedVersion();
+        return changed(actorId, ledgerId, () -> transactionService.cancel(actorId, transactionId, expectedVersion,
+                deviceOf(device)));
+    }
+
+    /** 승인취소 되돌리기(F-226). 200이고 본문은 취소 직전 상태로 돌아간 거래(version+1)다. 잔액과 통계에 다시 든다. */
+    @PostMapping(path = "/uncancel", consumes = MediaType.APPLICATION_JSON_VALUE)
+    TransactionResponse uncancel(@AuthenticationPrincipal UUID actorId, @PathVariable UUID ledgerId,
+                                 @PathVariable UUID transactionId,
+                                 @RequestHeader(name = TransactionController.DEVICE_HEADER, required = false)
+                                 String device,
+                                 @RequestBody TransactionVersionRequest request) {
+        requireInLedger(actorId, ledgerId, transactionId);
+        long expectedVersion = request.expectedVersion();
+        return changed(actorId, ledgerId, () -> transactionService.uncancel(actorId, transactionId, expectedVersion,
                 deviceOf(device)));
     }
 

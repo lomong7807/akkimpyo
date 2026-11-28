@@ -357,6 +357,22 @@ describe('날짜 칸의 구성', () => {
     expect(cellTexts('11월 1일')).toEqual([])
   })
 
+  it('환불이 더 큰 날(#390)의 음수 합계는 "-"와 본문 글자색이고(수입도 강조색 없이), 휴대폰 배치는 절댓값으로 줄인다', async () => {
+    november()
+    list.days.set('2026-11-18', { income: 0, expense: -12000 })
+    list.days.set('2026-11-25', { income: -3209999, expense: -20000 })
+    await openCalendar()
+    expect(cellTexts('11월 18일')).toEqual(['-12,000'])
+    expect(cellTexts('11월 25일')).toEqual(['-20,000', '-320만'])
+    const figures = [...cell('11월 25일').querySelectorAll('[class*="_figure_"]')]
+    expect(figures.map((figure) => [/_expense_/.test(figure.className), /_income_/.test(figure.className)])).toEqual([
+      [true, false],
+      [true, false],
+    ])
+    expect(cell('11월 18일').getAttribute('aria-label')).toBe('11월 18일, 지출 -12,000원, 수입 0원')
+    expect(cell('11월 25일').getAttribute('aria-label')).toBe('11월 25일, 지출 -20,000원, 수입 -3,209,999원')
+  })
+
   it('금액은 서버의 날짜별 합계다(줄의 금액으로 다시 세지 않는다)', async () => {
     november()
     list.days.set('2026-11-18', { income: 0, expense: 1009999 })
