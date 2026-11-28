@@ -15,6 +15,7 @@ import {
   moveHistoryToPreviousMonth,
   newUser,
   openHistory,
+  openHome,
   openRecentTransaction,
   pressBack,
   signUp,
@@ -127,14 +128,21 @@ test('흐름 3: 거래를 고치면 홈의 합계와 잔액이 바뀌고, 지우
   // 홈의 최근 거래 줄로 상세(D-06)를 열어 금액을 12,300 → 15,000으로 고친다. 상세에서 "뒤로"면 홈이다
   await openRecentTransaction(page, `미분류 12,300원 ${day.dayName} 12:00 미분류 · 월급 통장`)
   await changeAmount(page, '12,300', '15,000')
-  await pressBack(page)
+  // 넓은 화면은 상세가 내역의 오른쪽 칸이라(D-01 (13), #244) "뒤로"가 없고 주 메뉴로 홈에 간다
+  if (isMobile) await pressBack(page)
+  else await openHome(page)
   // 1,000,000 - 15,000 = 985,000. 이번 달 지출 15,000, 차액 -15,000
   await expectHomeBalances(page, [['은행', '985,000원']], '985,000원')
   await expectMonthTotals(page, day.monthName, { expense: '15,000원', income: '0원', difference: '-15,000원' })
 
-  // 지우면 이전 화면(홈)으로 돌아간다(D-06 (21)). 휴지통의 거래는 잔액과 합계에서 빠져 거래 전 값이다(P-205)
+  // 휴대폰은 지우면 이전 화면(홈)으로 돌아간다(D-06 (21)). 휴지통의 거래는 잔액과 합계에서 빠져 거래 전 값이다(P-205)
   await openRecentTransaction(page, `미분류 15,000원 ${day.dayName} 12:00 미분류 · 월급 통장`)
   await deleteTransaction(page)
+  // 넓은 화면은 칸이 안내 문구로 돌아가고 내역에 남는다(designer #102)
+  if (!isMobile) {
+    await expect(page.getByText('거래를 고르면 여기에 자세히 보여요', { exact: true })).toBeVisible()
+    await openHome(page)
+  }
   await expectHomeBalances(page, [['은행', '1,000,000원']], '1,000,000원')
   await expectMonthTotals(page, day.monthName, { expense: '0원', income: '0원', difference: '0원' })
 
