@@ -1,4 +1,5 @@
 import { beforeAll, vi } from 'vitest'
+import { drawAppOnce } from './firstRun'
 
 /*
  * 앱과 따로 싣는 화면의 코드(#251)를 파일마다 처음 받는 일을 테스트 밖에서 먼저 끝낸다(#291).
@@ -27,5 +28,7 @@ export function fetchScreenCodeFirst() {
     for (const screen of Object.values(screens)) screen.preload()
     // 받는 중인 모듈이 모두 실행될 때까지 기다린다. 실제 시계로 기다리고 한도는 이 hook의 시간 한도다
     await vi.dynamicImportSettled()
+    // 코드를 받은 뒤 앱을 한 번 그리고 버린다. 첫 테스트가 그 프로세스에서 처음 그리는 일을 하지 않게 한다(#363)
+    await drawAppOnce()
   })
 }

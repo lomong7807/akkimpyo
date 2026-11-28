@@ -32,6 +32,7 @@ import {
   startServer,
   time,
   typeRadio,
+  untilDefaultAccount,
   type Opened,
   type User,
 } from './support/transactionScreen'
@@ -142,7 +143,8 @@ describe('저장에 성공', () => {
     await saveAmount(opened.user)
     await waitFor(() => expect(path(opened)).toBe('/more'))
     await act(() => opened.router.navigate('/transactions/new'))
-    await screen.findByRole('heading', { level: 1, name: '거래 입력' })
+    // 제목은 코드를 받는 동안의 틀에도 있다. 기본 계좌가 채워진 뒤에 저장한다(8절 9번)
+    await untilDefaultAccount()
     await saveAmount(opened.user)
     await waitFor(() => expect(sentIds()).toHaveLength(2))
     expect(sentIds()[1]).not.toBe(sentIds()[0])
